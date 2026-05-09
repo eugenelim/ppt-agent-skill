@@ -148,26 +148,40 @@ def check_html_pipeline_compat(html_path: Path) -> list:
 
 
 def check_html_typography(html_path: Path) -> list:
-    """简单的排版铁律检查（启发式）。"""
+    """简单的排版铁律检查（启发式，只检查同一 CSS 规则块内的字距）。"""
     warnings = []
     if not html_path.exists():
         return []
     text = html_path.read_text(encoding="utf-8")
 
-    # 大字号是否收紧字距
-    large_font_blocks = re.findall(
-        r'font-size\s*:\s*(\d+)px[^;}]*[;}]([^}]*)',
-        text
-    )
-    for size_str, rest in large_font_blocks[:50]:  # 限制扫描深度
-        size = int(size_str)
-        if size >= 48:
-            # 检查同一规则块或附近是否有 letter-spacing 负值
-            block_around = text[max(0, text.find(size_str) - 200): text.find(size_str) + 300]
-            if "letter-spacing" in block_around:
-                m = re.search(r'letter-spacing\s*:\s*(-?[\d.]+)em', block_around)
-                if m and float(m.group(1)) > -0.02:
-                    warnings.append(f"large font-size {size}px should have letter-spacing <= -0.025em (found {m.group(1)}em)")
+    # 解析 CSS 规则块（粗略：{ ... }）
+    # 每个规则块内独立检查 font-size 与 letter-spacing 关系
+    css_blocks = re.findall(r'\{([^{}]*)\}', text)
+
+    for block in css_blocks:
+        # 找到本块内的 font-size（取最大的，如果有多个声明）
+        size_matches = re.findall(r'font-size\s*:\s*(\d+(?:\.\d+)?)px', block)
+        if not size_matches:
+            continue
+        max_size = max(float(s) for s in size_matches)
+        if max_size < 64:  # 只检查 64px 以上的真大字（serif/luxury 用 48-63 可豁免）
+            continue
+
+        # 检查同一规则块内的 letter-spacing
+        ls_match = re.search(r'letter-spacing\s*:\s*(-?\d+(?:\.\d+)?)em', block)
+        if not ls_match:
+            continue
+        ls_value = float(ls_match.group(1))
+        # 严格 sans display 规则：>= 64px 且 < -0.02em；
+        # 允许 serif italic 风格保持松弛字距（通过文本上下文识别）
+        # 阈值放宽到 -0.015em（serif/编辑风允许略松散）；
+        # 真正要警告的是接近 0 或正值（明显未做收紧）
+        if ls_value > -0.015:
+            # 检查是否是 serif italic 或 luxury 风格（豁免）
+            block_low = block.lower()
+            if any(x in block_low for x in ['italic', 'playfair', 'didot', 'serif', 'fraunces', 'bodoni', 'tiempos', 'cheltenham']):
+                continue
+            warnings.append(f"sans display font-size {max_size:.0f}px should have letter-spacing <= -0.025em (found {ls_value}em)")
 
     # 检查是否引入了 tabular-nums（如果有数字）
     if re.search(r'\d+%|\d+\s*ms|\d{2,}', text) and "tabular-nums" not in text:

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>liquid_glass · 液态玻璃 · visionOS · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255, 255, 255, 0.85);
+    --text-tertiary: rgba(255, 255, 255, 0.65);
+    --glass-bg: rgba(255, 255, 255, 0.15);
+    --glass-bg-strong: rgba(255, 255, 255, 0.22);
+    --glass-border: rgba(255, 255, 255, 0.35);
+    --glass-border-soft: rgba(255, 255, 255, 0.22);
+    --display-font: -apple-system, 'SF Pro Display', 'Inter Tight', BlinkMacSystemFont, sans-serif;
+    --body-font: -apple-system, 'SF Pro Text', 'Inter', BlinkMacSystemFont, sans-serif;
+    --serif-italic-font: 'Instrument Serif', 'Fraunces', Georgia, serif;
+    --mono-font: 'SF Mono', 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: linear-gradient(135deg, #1a73e8 0%, #34a0ff 38%, #ff6b9d 78%, #ffb74d 100%);
+    color: var(--text-primary);
+    font-family: var(--body-font);
+    font-feature-settings: "kern", "liga", "ss01", "cv11", "calt", "ccmp";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .blob-1 {
+    top: -120px; left: -100px;
+    width: 460px; height: 460px;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 200, 240, 0.85) 0%, rgba(255, 160, 220, 0.55) 45%, rgba(255, 160, 220, 0) 75%);
+    filter: blur(60px);
+  }
+  .blob-2 {
+    bottom: -160px; right: 60px;
+    width: 520px; height: 520px;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 220, 120, 0.78) 0%, rgba(255, 180, 80, 0.42) 45%, rgba(255, 180, 80, 0) 78%);
+    filter: blur(70px);
+  }
+  .blob-3 {
+    top: 38%; right: -180px;
+    width: 480px; height: 480px;
+    background: radial-gradient(circle at 50% 50%, rgba(160, 210, 255, 0.7) 0%, rgba(120, 180, 255, 0.35) 45%, rgba(120, 180, 255, 0) 78%);
+    filter: blur(64px);
+  }
+  .blob-4 {
+    top: 18%; left: 36%;
+    width: 320px; height: 320px;
+    background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0) 80%);
+    filter: blur(56px);
+  }
+  .blob-5 {
+    bottom: 18%; left: -80px;
+    width: 360px; height: 360px;
+    background: radial-gradient(circle at 50% 50%, rgba(180, 130, 255, 0.55) 0%, rgba(150, 110, 230, 0.28) 50%, rgba(150, 110, 230, 0) 80%);
+    filter: blur(60px);
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 25% 30%, rgba(255,255,255,0.06) 0.6px, transparent 1.2px),
+      radial-gradient(circle at 75% 60%, rgba(255,255,255,0.04) 0.6px, transparent 1.2px);
+    background-size: 6px 6px, 8px 8px;
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 36px 56px 36px 56px;
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+
+  .top-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 22px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow:
+      0 10px 32px rgba(20, 30, 80, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+  .logo {
+    font-family: var(--display-font);
+    font-size: 16px; font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--text-primary);
+    display: flex; align-items: center; gap: 9px;
+  }
+  .logo-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #ffffff 0%, rgba(255,255,255,0.55) 60%, rgba(255,255,255,0.2) 100%);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.6), inset 0 0 4px rgba(255,255,255,0.8);
+  }
+  .nav {
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.22em;
+    font-weight: 500;
+    display: flex; gap: 22px;
+  }
+  .nav .sep { opacity: 0.55; }
+
+  .hero {
+    margin-top: 56px;
+    display: flex; flex-direction: column; gap: 18px;
+    max-width: 880px;
+  }
+  .label {
+    font-family: var(--body-font);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: 0.28em;
+    display: inline-flex; align-items: center; gap: 12px;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .label .bar {
+    display: inline-block;
+    width: 28px; height: 1px;
+    background: rgba(255, 255, 255, 0.85);
+  }
+  .label .dot {
+    display: inline-block;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-size: 96px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.045em;
+    line-height: 0.98;
+    margin-top: 6px;
+    text-shadow: 0 2px 20px rgba(20, 40, 90, 0.18);
+  }
+  .headline em {
+    font-family: var(--serif-italic-font);
+    font-style: italic;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.95);
+    letter-spacing: -0.02em;
+  }
+
+  .deck {
+    font-family: var(--body-font);
+    font-size: 19px;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    letter-spacing: -0.005em;
+    max-width: 640px;
+    margin-top: 10px;
+  }
+  .deck em {
+    font-family: var(--serif-italic-font);
+    font-style: italic;
+    color: #ffffff;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+  }
+
+  .cards {
+    margin-top: 46px;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr 1fr;
+    gap: 20px;
+    max-width: 980px;
+  }
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: 22px;
+    padding: 22px 24px 22px 24px;
+    box-shadow:
+      0 18px 40px rgba(20, 30, 80, 0.18),
+      0 2px 6px rgba(20, 30, 80, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+    position: relative;
+    overflow: hidden;
+  }
+  .glass .sheen {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 60%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0) 100%);
+    pointer-events: none;
+    border-radius: 22px 22px 0 0;
+  }
+  .card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .card-tag {
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: var(--text-secondary);
+    letter-spacing: 0.22em;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .card-glyph {
+    width: 22px; height: 22px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+  }
+  .card-glyph .inner {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 8px rgba(255,255,255,0.9);
+  }
+  .stat-row {
+    display: flex; align-items: baseline; gap: 6px;
+    position: relative;
+  }
+  .stat-num {
+    font-family: var(--display-font);
+    font-size: 56px;
+    font-weight: 600;
+    color: #ffffff;
+    letter-spacing: -0.045em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums proportional-nums;
+    text-shadow: 0 2px 14px rgba(20, 40, 90, 0.18);
+  }
+  .stat-unit {
+    font-family: var(--display-font);
+    font-size: 22px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.78);
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    margin-top: 12px;
+    font-family: var(--body-font);
+    font-size: 13px;
+    color: var(--text-secondary);
+    letter-spacing: -0.005em;
+    line-height: 1.4;
+  }
+  .stat-label em {
+    font-family: var(--serif-italic-font);
+    font-style: italic;
+    color: #ffffff;
+    letter-spacing: -0.01em;
+  }
+  .meter {
+    margin-top: 14px;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    overflow: hidden;
+    position: relative;
+  }
+  .meter > div {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0.55));
+    box-shadow: 0 0 8px rgba(255,255,255,0.55);
+  }
+
+  .badge {
+    position: absolute;
+    bottom: 60px; right: 56px;
+    z-index: 6;
+    background: rgba(255, 255, 255, 0.22);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.45);
+    border-radius: 999px;
+    padding: 10px 18px 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow:
+      0 14px 32px rgba(20, 30, 80, 0.22),
+      inset 0 1px 0 rgba(255,255,255,0.6);
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: #ffffff;
+    letter-spacing: 0.24em;
+    font-weight: 600;
+  }
+  .badge .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.28), 0 0 12px rgba(255,255,255,0.95);
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 18px; left: 56px; right: 56px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.7);
+    opacity: 0.78;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    z-index: 5;
+    font-weight: 500;
+  }
+  .footer .sep { margin: 0 10px; opacity: 0.55; }
+</style>
+</head>
+<body>
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+  <div class="blob blob-4"></div>
+  <div class="blob blob-5"></div>
+  <div class="grain"></div>
+
+  <div class="stage">
+    <div class="top-bar">
+      <div class="logo">
+        <span class="logo-dot"></span>
+        vision
+      </div>
+      <div class="nav">
+        <span>GUIDES</span>
+        <span class="sep">·</span>
+        <span>SHOWCASE</span>
+        <span class="sep">·</span>
+        <span>DEVELOPERS</span>
+      </div>
+    </div>
+
+    <div class="hero">
+      <div class="label">
+        <span class="bar"></span>
+        <span>VISIONOS</span>
+        <span class="dot"></span>
+        <span>2026</span>
+      </div>
+
+      <h1 class="headline">Liquid <em>Glass.</em></h1>
+
+      <p class="deck">把界面融入空间。<em>多层玻璃</em>，多重深度 &mdash; 让每一寸像素都<em>呼吸光线</em>。</p>
+    </div>
+
+    <div class="cards">
+      <div class="glass">
+        <div class="sheen"></div>
+        <div class="card-head">
+          <span class="card-tag">DISPLAY</span>
+          <span class="card-glyph"><span class="inner"></span></span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-num">98.4</span>
+          <span class="stat-unit">%</span>
+        </div>
+        <div class="stat-label">显示透明度 &mdash; <em>真实空间</em>感知</div>
+        <div class="meter"><div style="width:98.4%;"></div></div>
+      </div>
+
+      <div class="glass">
+        <div class="sheen"></div>
+        <div class="card-head">
+          <span class="card-tag">DEPTH</span>
+          <span class="card-glyph"><span class="inner"></span></span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-num">12</span>
+          <span class="stat-unit">layers</span>
+        </div>
+        <div class="stat-label">玻璃深度 &mdash; <em>逐层折射</em>叠加</div>
+        <div class="meter"><div style="width:72%;"></div></div>
+      </div>
+
+      <div class="glass">
+        <div class="sheen"></div>
+        <div class="card-head">
+          <span class="card-tag">RENDER</span>
+          <span class="card-glyph"><span class="inner"></span></span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-num">120</span>
+          <span class="stat-unit">fps</span>
+        </div>
+        <div class="stat-label">流畅渲染 &mdash; <em>零撕裂</em>同步</div>
+        <div class="meter"><div style="width:88%;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="badge">
+    <span class="pulse"></span>
+    LIVE NOW
+  </div>
+
+  <div class="footer">
+    <span>VISIONOS &middot; LIQUID GLASS DESIGN SYSTEM</span>
+    <span>01 / 12<span class="sep">|</span>APPLE VISION PRO</span>
+  </div>
+</body>
+</html>
