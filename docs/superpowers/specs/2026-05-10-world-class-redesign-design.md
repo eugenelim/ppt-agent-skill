@@ -95,14 +95,25 @@
 
 ### 3.2 风格 JSON Schema 升级
 
-每个风格在原有字段基础上扩展（新字段标 `[新]`）：
+参考 [sunbigfly/ppt-agent-skills](https://github.com/sunbigfly/ppt-agent-skills) 的成熟实践，引入 `mood_keywords` / `design_soul` / `variation_strategy` / `decoration_dna` 等高价值字段。每个风格在原有字段基础上扩展（新字段标 `[新]`）：
 
 ```json
 {
   "style_name": "高阶暗黑科技风",
   "style_id": "dark_tech",
-  "category": "dark_professional",  // [新] 5 板块之一
-  "inspiration": "Linear.app",      // [新] 灵感来源
+  "category": "dark_professional",          // [新] 5 板块之一
+  "inspiration": "Linear.app",              // [新] 灵感来源
+  "mood_keywords": ["深空冷寂", "精密仪器", "微光脉搏"],  // [新] 情绪标签数组
+  "design_soul": "天文台穹顶内部，深蓝黑幕中冷青的仪器扫描光有节奏地划过 -- 精密、冷寂、但每一次扫描都暗含脉搏。",  // [新] 一句话灵魂
+  "variation_strategy": "数据页用网格点阵+角标装饰线（紧张高密度），章节封面用大面积深空留白+单一光晕（释放），产品页用全屏暗底+中央悬浮发光数据面板（聚焦）",  // [新] 跨页节奏策略
+  "decoration_dna": {                        // [新] 装饰 DNA
+    "signature_move": "网格点阵底纹 + L 形角标装饰线 + 极光辉光",
+    "forbidden": ["渐变色块", "叶片装饰", "波浪分隔线"],
+    "recommended_combos": [
+      "网格点阵 + 角标 + 大号水印数字",
+      "光晕效果 + 脉冲圆点 + 半透明数字水印"
+    ]
+  },
   "background": {
     "primary": "#050b1f",
     "gradient_to": "#0a1f3d",
@@ -276,8 +287,8 @@ ppt-agent-skill/
 ├── references/
 │   ├── styles/                       # [新目录]
 │   │   ├── index.md                  # 26 风格索引 + JSON Schema + 决策矩阵
-│   │   ├── dark.md                   # 5 暗色：dark_tech, xiaomi_orange, luxury_purple, nocturne_violet, cyberpunk_neon, chrome_y2k, noir_film
-│   │   ├── light.md                  # 6 浅色：blue_white, fresh_green, minimal_gray, mocha_editorial, medical_pulse, earth_concrete, champagne_gold, liquid_glass
+│   │   ├── dark.md                   # 7 暗色：dark_tech, xiaomi_orange, luxury_purple, nocturne_violet, cyberpunk_neon, chrome_y2k, noir_film
+│   │   ├── light.md                  # 8 浅色：blue_white, fresh_green, minimal_gray, mocha_editorial, medical_pulse, earth_concrete, champagne_gold, liquid_glass
 │   │   ├── vibrant.md                # 4 活力：vibrant_rainbow, kindergarten_pop, bauhaus_block, candy_pastel
 │   │   ├── cultural.md               # 3 东方：royal_red, sakura_wabi, ink_jade
 │   │   └── natural.md                # 4 自然/复古：botanic_forest, safari_savanna, retro_70s, gov_authority
@@ -286,6 +297,8 @@ ppt-agent-skill/
 │   │   ├── basic.md                  # 8 种基础（升级版）
 │   │   ├── advanced.md               # 6 种进阶
 │   │   └── complex.md                # 4-6 种 ECharts 级
+│   ├── principles/                   # [新目录，参考 sunbigfly]
+│   │   └── failure-modes.md          # 8 种失败模式 + 修复顺序
 │   ├── typography.md                 # [新] 排版铁律（共享）
 │   ├── style-system.md               # [改造] 改为引导文件，redirect 到 styles/index.md
 │   ├── bento-grid.md                 # 保留
@@ -296,7 +309,10 @@ ppt-agent-skill/
 │   ├── html_packager.py              # 保留
 │   ├── html2svg.py                   # 保留
 │   ├── svg2pptx.py                   # 保留
-│   └── gallery.py                    # [新]
+│   ├── gallery.py                    # [新] 生成风格预览画廊
+│   └── smoke_test.py                 # [新] 端到端测试 + 失败模式扫描
+├── tests/
+│   └── smoke-results/                # [新] smoke_test.py 输出
 └── ppt-output/
     ├── style-gallery/                # [新] gallery.py 输出
     │   ├── index.html
@@ -321,8 +337,8 @@ ppt-agent-skill/
 
 - **Step 1（需求调研）**：第 7 题"补充信息"中"视觉风格偏好"的引导从"8 种预置风格"改为"26 种预置风格，可执行 gallery.py 预览"
 - **Step 5a（风格决策）**：阅读 `references/styles/index.md` 而非 `style-system.md`；引入"5 板块决策矩阵"
-- **Step 5c（HTML 设计稿）**：Prompt #4 必须注入新的 `typography` 字段；在画布规范前增加"排版铁律"小节，引用 `typography.md`
-- **质量自检**：新增"字距/数字/OpenType 三检查"
+- **Step 5c（HTML 设计稿）**：Prompt #4 必须注入新的 `typography` 字段；在画布规范前增加"排版铁律"小节，引用 `typography.md`；同时引用 `references/principles/failure-modes.md`
+- **质量自检**：新增"字距/数字/OpenType 三检查" + 失败模式扫描
 
 ### 3.9 README.md 更新点
 
@@ -332,7 +348,51 @@ ppt-agent-skill/
 - 增加"风格预览"章节链接 `ppt-output/style-gallery/index.html`
 - 工作流图保持不变
 
-### 3.10 向后兼容保证
+### 3.10 失败模式目录（参考 sunbigfly 的 runtime-failure-modes）
+
+新建 `references/principles/failure-modes.md`，沉淀 Step 4 单页生产的失败模式。它定义合同违约和修复顺序，不定义某种审美风格、不压制创新。
+
+**3 大类 8 种失败模式**：
+
+| 类别 | 失败模式 | 触发条件 |
+|------|---------|---------|
+| 内容未完成 | underfill | 页面视觉成立，但 payload 明显不足；装饰远多于有效信息 |
+| 内容未完成 | support_collapse | 支撑卡片没有承担解释/比较/证据/上下文 |
+| 内容未完成 | payload_missing | planning 或 HTML 未完整执行本页应交付的信息 |
+| 内容未完成 | source_overclaim | 页面结论强于资料支持力度 |
+| 视觉失真 | launch_drift | 封面/章节页拉向与内容不匹配的发布会语气 |
+| 视觉失真 | anchor_overexpansion | 锚点占据全部注意力，支撑内容失去存在空间 |
+| 视觉失真 | deck_rhythm_clone | 多页同构布局/装饰/锚点关系，无节奏推进 |
+| 视觉失真 | decorative_substitution | 用材质/光效/分隔线替代真实信息组织 |
+
+**修复顺序铁律**：
+1. 先补 payload
+2. 再补 support 与 context
+3. 再校正 anchor 比例与位置
+4. 最后调材质装饰
+
+不得跳过前两步，不能用装饰调整掩盖内容合同缺失。
+
+### 3.11 测试体系（新增）
+
+参考 sunbigfly 的 `smoke_skill.py`，新建 `scripts/smoke_test.py`：
+
+**测试覆盖**：
+1. **风格定义校验**：26 个风格 JSON 是否完整（必填字段、CSS 变量、字体栈）
+2. **风格 mock HTML 校验**：每个风格的 demo HTML 在 Puppeteer 中能正确渲染（无控制台错误）
+3. **pipeline-compat 检查**：26 个 mock 不含 CSS 禁止清单中的特性（mask-image / background-clip:text / 伪元素装饰 / conic-gradient / border 三角形）
+4. **图表组件渲染校验**：18-20 种图表的 HTML 模板能正确渲染
+5. **端到端 PPT 生成**：选 3 个代表风格（dark_tech / mocha_editorial / vermilion_court），生成 5 页 demo PPT，验证 preview.html / svg/ / pptx 三种产物正确性
+6. **失败模式自动检测**：扫描生成的 HTML 是否触发任何失败模式（如 underfill, decorative_substitution）
+
+**用法**：
+```bash
+python3 scripts/smoke_test.py [--style <id>] [--phase 1-5]
+```
+
+**输出**：`tests/smoke-results/<timestamp>/report.md` 含通过率 + 失败详情 + 截图证据。
+
+### 3.12 向后兼容保证
 
 | 兼容点 | 策略 |
 |--------|------|
@@ -349,9 +409,11 @@ ppt-agent-skill/
 
 **Phase 1：基础设施（先做，可独立验证）**
 1. 写 `references/typography.md`（排版铁律）
-2. 写 `references/styles/index.md`（Schema + 决策矩阵 + 26 风格元数据表）
-3. 写 1 个 pilot 风格的完整定义（建议 `dark_tech`）+ 1 个标杆 mock HTML
-4. 用户验收 pilot
+2. 写 `references/principles/failure-modes.md`（8 种失败模式 + 修复顺序）
+3. 写 `references/styles/index.md`（Schema + 决策矩阵 + 26 风格元数据表）
+4. 写 1 个 pilot 风格的完整定义（建议 `dark_tech`）+ 1 个标杆 mock HTML
+5. 写 `scripts/smoke_test.py` 骨架（可执行 Phase 1 的校验）
+6. 跑 smoke test 验证 Phase 1 通过
 
 **Phase 2：风格批量产出（按板块分批）**
 5. 暗色专业 7 个 → `references/styles/dark.md` + 7 个 mock
@@ -413,6 +475,12 @@ ppt-agent-skill/
 **Google Fonts 等价物**：Inter / Inter Tight / Source Serif 4 / Fraunces / Instrument Serif / Playfair Display / JetBrains Mono / Noto Serif SC / Quicksand
 
 **GitHub 高星参考**：shadcn-ui/ui ⭐78k · tailwindlabs/tailwindcss ⭐82k · rsms/inter ⭐18k · vercel/geist-ui ⭐4.4k · catppuccin/catppuccin ⭐15k · system-fonts/modern-font-stacks ⭐10k · slidevjs/slidev ⭐35k · hakimel/reveal.js ⭐67k
+
+**直接借鉴**：
+- [sunbigfly/ppt-agent-skills](https://github.com/sunbigfly/ppt-agent-skills) — 引入了：
+  - 风格 JSON 的 `mood_keywords` / `design_soul` / `variation_strategy` / `decoration_dna` 字段（§3.2）
+  - `runtime-failure-modes` 失败模式目录（§3.10）
+  - `smoke_skill.py` 端到端测试理念（§3.11）
 
 ---
 
