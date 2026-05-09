@@ -155,9 +155,21 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 #### 5a. 风格决策
 
-**执行**：阅读 `references/style-system.md`，选择或推断风格
+**执行**：阅读 `references/styles/index.md` 主索引（含决策矩阵），按主题关键词匹配 26 种预置风格之一
 
-根据主题关键词匹配 8 种预置风格之一（暗黑科技 / 小米橙 / 蓝白商务 / 朱红宫墙 / 清新自然 / 紫金奢华 / 极简灰白 / 活力彩虹），详细匹配规则和完整 JSON 定义见 `references/style-system.md`。
+**26 风格按 5 板块分组**（详细 JSON 定义在板块文件中）：
+
+| 板块 | 数量 | 风格 ID | 板块文件 |
+|------|------|--------|---------|
+| 暗色专业 | 7 | dark_tech / xiaomi_orange / luxury_purple / nocturne_violet / cyberpunk_neon / chrome_y2k / noir_film | `references/styles/dark.md` |
+| 浅色高级 | 8 | blue_white / fresh_green / minimal_gray / mocha_editorial / medical_pulse / earth_concrete / champagne_gold / liquid_glass | `references/styles/light.md` |
+| 活力鲜明 | 4 | vibrant_rainbow / kindergarten_pop / bauhaus_block / candy_pastel | `references/styles/vibrant.md` |
+| 东方文化 | 3 | royal_red / sakura_wabi / ink_jade | `references/styles/cultural.md` |
+| 自然/复古 | 4 | botanic_forest / safari_savanna / retro_70s / gov_authority | `references/styles/natural.md` |
+
+**风格预览**：执行 `python3 SKILL_DIR/scripts/gallery.py` 生成 `ppt-output/style-gallery/index.html`，浏览器打开可视化对比 26 风格。
+
+**也必读**：`references/typography.md`（排版铁律：字距 / tabular-nums / OpenType / serif italic 混排 / 首字下沉 / 不对称网格 / 字体栈三层降级 / 微妙纹理）
 
 **产物**：风格定义 JSON -> 保存为 `OUTPUT_DIR/style.json`
 
@@ -326,7 +338,13 @@ ppt-output/
 | 文件 | 何时阅读 | 关键内容 |
 |------|---------|---------|
 | `references/prompts.md` | 每步生成前 | 5 套 Prompt 模板（调研/大纲/策划/设计/备注）|
-| `references/style-system.md` | Step 5a | 8 种预置风格 + CSS 变量 + 风格 JSON 模型 |
+| `references/styles/index.md` | **Step 5a** | 26 种预置风格索引 + 决策矩阵 + JSON Schema |
+| `references/styles/{dark,light,vibrant,cultural,natural}.md` | Step 5a 选定风格后 | 该板块所有风格的完整 JSON + CSS 变量 + Mock 链接 |
+| `references/typography.md` | **Step 5c** | 排版铁律 14 条（字距/tabular-nums/OpenType/serif italic 混排/字体栈降级）|
+| `references/charts/index.md` | **Step 5c 涉及数据可视化时** | 18 种图表索引 + 决策矩阵 |
+| `references/charts/{basic,advanced,complex}.md` | 选定图表后 | 完整 HTML 模板（基础 8 种 / 进阶 6 种 / ECharts 级 4 种）|
+| `references/principles/failure-modes.md` | **Step 4-5 自检** | 8 种失败模式 + 修复顺序铁律 |
 | `references/bento-grid.md` | Step 5c | 7 种布局精确坐标 + 5 种卡片类型 + 决策矩阵 |
 | `references/method.md` | 初次了解 | 核心理念与方法论 |
 | `references/pipeline-compat.md` | **Step 5c 设计稿生成时** | CSS 禁止清单 + 图片路径 + 字号混排 + SVG text + 环形图 + svg2pptx 注意事项 |
+| `references/style-system.md` | （兼容引导文件） | 已升级为引导文件，redirect 到 `styles/index.md` |

@@ -2,7 +2,9 @@
 
 **[中文文档](README.md)**
 
-> A professional AI-powered presentation generation assistant that simulates the complete workflow of a top-tier PPT design company (quoted at $1,000+/page), outputting high-quality HTML presentations + editable vector PPTX files.
+> A **world-class** AI-powered presentation generator. Simulates the complete workflow of a top-tier PPT design company (quoted at $1,000+/page), outputting high-quality HTML presentations + editable vector PPTX files.
+>
+> Quality benchmarked against the actual typography practices of **Linear / Anthropic / Stripe / Apple / NYT / Tom Ford / Pitch / Mercury / Vercel** and other top brands.
 
 ## Workflow
 
@@ -15,14 +17,15 @@ Requirements Interview → Research → Outline → Planning Draft → Style + I
 | Feature | Description |
 |---------|-------------|
 | **6-Step Pipeline** | Requirements → Research → Outline → Planning → Design → Post-processing |
-| **8 Preset Styles** | Dark Tech / Xiaomi Orange / Blue White / Royal Red / Fresh Green / Luxury Purple / Minimal Gray / Vibrant Rainbow |
+| **26 World-Class Styles** | 5 categories ｜ Mirrors actual typography of Linear / Anthropic / Stripe / Apple / NYT / Tom Ford |
+| **18 Data Visualizations** | 8 basic + 6 advanced + 4 ECharts-grade (world map / network / Sankey / heatmap calendar) |
 | **Bento Grid Layout** | 7 flexible card-based layouts driven by content, not templates |
-| **Smart Illustrations** | AI-generated images with 5 visual fusion techniques (fade blend, tinted overlay, ambient background, etc.) |
-| **Typography System** | 7-level font scale + spacing hierarchy + CJK mixed typesetting rules |
-| **Color Proportion** | 60-30-10 rule enforcement + accent color constraints |
-| **Data Visualization** | 8 pure CSS/SVG chart types (progress bars, ring charts, sparklines, waffle charts, KPI cards, etc.) |
+| **World-Class Typography** | 7-level scale + letter-spacing rules + tabular-nums + OpenType features + serif italic mixing + 3-tier font fallback |
+| **Smart Illustrations** | AI-generated images with 5 visual fusion techniques |
+| **Failure Modes Catalog** | 8 documented failure modes (underfill / support_collapse / decorative_substitution etc.) + repair order |
 | **Cross-page Narrative** | Density alternation, chapter color progression, cover-ending visual echo |
-| **Footer System** | Unified footer with chapter info + page numbers across all slides |
+| **Style Preview Gallery** | `gallery.py` one-shot generates a 26-style card-wall index page |
+| **Smoke Testing** | `smoke_test.py` validates JSON / pipeline-compat / typography rules |
 | **PPTX Compatible** | HTML → SVG → PPTX pipeline, right-click "Convert to Shape" in PPT 365 for full editing |
 
 ## Output
