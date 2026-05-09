@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>vibrant_rainbow · Stripe Sessions · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255,255,255,0.85);
+    --text-tertiary: rgba(255,255,255,0.6);
+    --pink: #ff5b9d;
+    --violet: #b266ff;
+    --blue: #4a8cff;
+    --teal: #00d8d4;
+    --amber: #ffd16b;
+    --display-font: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --serif-italic-font: 'Instrument Serif', 'Fraunces', Georgia, serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: linear-gradient(135deg, #ff5b9d 0%, #b266ff 35%, #4a8cff 70%, #00d8d4 100%);
+    color: var(--text-primary);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'ss01', 'cv11', 'calt', 'ccmp';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .glow-wash {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 800px 500px at 85% 15%, rgba(255,209,107,0.35) 0%, transparent 60%),
+      radial-gradient(ellipse 700px 400px at 10% 90%, rgba(0,216,212,0.30) 0%, transparent 60%),
+      radial-gradient(ellipse 500px 400px at 50% 50%, rgba(178,102,255,0.18) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .glass-orb-large {
+    position: absolute;
+    top: -110px; right: -90px;
+    width: 360px; height: 360px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 28%,
+        rgba(255,255,255,0.95) 0%,
+        rgba(255,220,140,0.75) 18%,
+        rgba(255,140,200,0.55) 38%,
+        rgba(178,102,255,0.40) 58%,
+        rgba(74,140,255,0.30) 78%,
+        rgba(0,216,212,0.20) 92%,
+        transparent 100%);
+    box-shadow:
+      inset -28px -32px 60px rgba(120,60,180,0.45),
+      inset 12px 14px 36px rgba(255,255,255,0.35),
+      0 40px 100px rgba(60,20,100,0.35),
+      0 0 80px rgba(255,180,220,0.30);
+    z-index: 2;
+  }
+  .glass-orb-large .specular {
+    position: absolute;
+    top: 12%; left: 18%;
+    width: 90px; height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 40%, transparent 75%);
+  }
+
+  .glass-orb-small {
+    position: absolute;
+    bottom: -70px; left: -60px;
+    width: 220px; height: 220px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%,
+        rgba(255,255,255,0.90) 0%,
+        rgba(180,230,255,0.65) 22%,
+        rgba(74,140,255,0.50) 50%,
+        rgba(0,216,212,0.35) 75%,
+        transparent 95%);
+    box-shadow:
+      inset -18px -22px 42px rgba(40,80,160,0.45),
+      inset 8px 10px 24px rgba(255,255,255,0.30),
+      0 28px 70px rgba(20,40,90,0.30),
+      0 0 60px rgba(120,200,255,0.30);
+    z-index: 2;
+  }
+  .glass-orb-small .specular {
+    position: absolute;
+    top: 16%; left: 22%;
+    width: 60px; height: 38px;
+    border-radius: 50%;
+    background: radial-gradient(ellipse at center, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 45%, transparent 80%);
+  }
+
+  .glass-orb-tiny {
+    position: absolute;
+    top: 320px; right: 380px;
+    width: 70px; height: 70px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%,
+        rgba(255,255,255,0.95) 0%,
+        rgba(255,209,107,0.7) 30%,
+        rgba(255,91,157,0.50) 65%,
+        transparent 95%);
+    box-shadow:
+      inset -6px -8px 14px rgba(180,60,120,0.40),
+      0 12px 28px rgba(120,40,80,0.25);
+    z-index: 2;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 36px 64px 28px;
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+
+  .top {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .logo {
+    font-family: var(--display-font);
+    font-size: 16px; font-weight: 700; letter-spacing: -0.02em;
+    display: flex; align-items: center; gap: 10px;
+    color: #fff;
+  }
+  .logo-mark {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #fff 0%, #ffd16b 35%, #ff5b9d 70%, #b266ff 100%);
+    box-shadow: inset -2px -2px 4px rgba(120,60,180,0.5), 0 0 12px rgba(255,255,255,0.4);
+  }
+  .nav {
+    display: flex; align-items: center; gap: 28px;
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .nav .dot {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: rgba(255,255,255,0.7);
+    display: inline-block;
+  }
+  .nav-pill {
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge-row {
+    margin-top: 88px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .pill-badge {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 8px 16px 8px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.40);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-family: var(--body-font);
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+  .pill-badge .pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #ffd16b;
+    box-shadow: 0 0 10px #ffd16b, 0 0 20px rgba(255,209,107,0.6);
+  }
+  .badge-meta {
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-size: 116px;
+    font-weight: 700;
+    letter-spacing: -0.045em;
+    line-height: 0.92;
+    margin-top: 22px;
+    color: #fff;
+    text-shadow: 0 4px 30px rgba(80,30,140,0.25);
+  }
+  .headline em {
+    font-family: var(--serif-italic-font);
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    color: #ffe8b0;
+    padding-right: 6px;
+  }
+
+  .deck {
+    font-family: var(--body-font);
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    max-width: 520px;
+    margin-top: 22px;
+    letter-spacing: -0.005em;
+    font-weight: 400;
+  }
+  .deck em {
+    font-family: var(--serif-italic-font);
+    font-style: italic;
+    color: #fff;
+    font-weight: 400;
+    padding: 0 2px;
+  }
+
+  .cta-row {
+    display: flex; align-items: center; gap: 14px;
+    margin-top: 26px;
+  }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 24px;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #6b1bb3;
+    font-family: var(--display-font);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    box-shadow: 0 12px 32px rgba(60,20,120,0.30), 0 2px 0 rgba(255,255,255,0.7) inset;
+  }
+  .btn-primary .arrow { font-size: 16px; }
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 22px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.45);
+    color: #fff;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    font-family: var(--display-font);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .btn-ghost .play {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: rgba(255,255,255,0.95);
+    color: #6b1bb3;
+    font-size: 9px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 700;
+  }
+
+  .stats {
+    position: absolute;
+    left: 64px; right: 64px; bottom: 78px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 18px;
+    z-index: 5;
+  }
+  .stat {
+    padding: 20px 22px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.32);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: 0 14px 38px rgba(60,20,120,0.18), inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .stat-head {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .stat-head .swatch {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .stat .num {
+    font-family: var(--display-font);
+    font-size: 44px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums proportional-nums;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    color: #fff;
+    display: flex; align-items: baseline; gap: 4px;
+  }
+  .stat .num .unit {
+    font-family: var(--serif-italic-font);
+    font-style: italic;
+    font-size: 28px;
+    font-weight: 400;
+    color: #ffe8b0;
+    letter-spacing: -0.015em;
+  }
+  .stat .lbl {
+    font-family: var(--body-font);
+    font-size: 12px;
+    color: rgba(255,255,255,0.85);
+    letter-spacing: 0.05em;
+    font-weight: 500;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 22px; left: 64px; right: 64px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: rgba(255,255,255,0.65);
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    font-weight: 500;
+    z-index: 5;
+  }
+  .footer .pg {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .marquee-line {
+    position: absolute;
+    bottom: 56px; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+    z-index: 4;
+  }
+
+</style>
+</head>
+<body>
+  <div class="glow-wash"></div>
+  <div class="grain"></div>
+
+  <div class="glass-orb-large"><div class="specular"></div></div>
+  <div class="glass-orb-small"><div class="specular"></div></div>
+  <div class="glass-orb-tiny"></div>
+
+  <div class="stage">
+    <div class="top">
+      <div class="logo">
+        <div class="logo-mark"></div>
+        Prism
+      </div>
+      <div class="nav">
+        <span>Product</span>
+        <span class="dot"></span>
+        <span>Pricing</span>
+        <span class="dot"></span>
+        <span>Docs</span>
+        <span class="nav-pill">Sign in</span>
+      </div>
+    </div>
+
+    <div class="badge-row">
+      <div class="pill-badge"><span class="pulse"></span>Sessions 2026 · Keynote</div>
+      <div class="badge-meta">May 10 · San Francisco</div>
+    </div>
+
+    <h1 class="headline">Payments,<br><em>reimagined.</em></h1>
+
+    <p class="deck">A new programmable money stack for the internet economy — built for <em>creators</em>, scaled for <em>enterprises</em>, and tuned for the next billion transactions.</p>
+
+    <div class="cta-row">
+      <a class="btn-primary">Start now <span class="arrow">&rarr;</span></a>
+      <a class="btn-ghost"><span class="play">&#9654;</span>Watch the keynote</a>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-head"><span class="swatch" style="background:#ffd16b;"></span>Processed 2025</div>
+      <div class="num">$2.4<span class="unit">T</span></div>
+      <div class="lbl">Across the Prism network</div>
+    </div>
+    <div class="stat">
+      <div class="stat-head"><span class="swatch" style="background:#ff5b9d;"></span>YoY Growth</div>
+      <div class="num">+184<span class="unit">%</span></div>
+      <div class="lbl">Volume vs. fiscal 2024</div>
+    </div>
+    <div class="stat">
+      <div class="stat-head"><span class="swatch" style="background:#00d8d4;"></span>Countries Live</div>
+      <div class="num">47<span class="unit">/ 60</span></div>
+      <div class="lbl">Local rails in production</div>
+    </div>
+  </div>
+
+  <div class="marquee-line"></div>
+
+  <div class="footer">
+    <span>Sessions 2026 &middot; Keynote &middot; Day 01</span>
+    <span class="pg">01 / 24 &middot; Prism</span>
+  </div>
+</body>
+</html>

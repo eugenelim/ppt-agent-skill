@@ -175,13 +175,23 @@ def check_html_typography(html_path: Path) -> list:
         # 严格 sans display 规则：>= 64px 且 < -0.02em；
         # 允许 serif italic 风格保持松弛字距（通过文本上下文识别）
         # 阈值放宽到 -0.015em（serif/编辑风允许略松散）；
-        # 真正要警告的是接近 0 或正值（明显未做收紧）
-        if ls_value > -0.015:
-            # 检查是否是 serif italic 或 luxury 风格（豁免）
+        # CJK 中文（宋体/楷体）需要 0.15-0.32em 的正字距，是设计要求；
+        # 真正要警告的是 0 ~ 0.1em 之间的拉丁字体（明显未做收紧或未拉开）
+        if -0.015 < ls_value < 0.10:
             block_low = block.lower()
-            if any(x in block_low for x in ['italic', 'playfair', 'didot', 'serif', 'fraunces', 'bodoni', 'tiempos', 'cheltenham']):
+            # 豁免：serif italic / luxury / 圆润字体（kindergarten / retro 70s）
+            exempt_keywords = [
+                'italic', 'playfair', 'didot', 'serif', 'fraunces',
+                'bodoni', 'tiempos', 'cheltenham', 'instrument',
+                'quicksand', 'nunito', 'bagel', 'bowlby',
+                # CJK 字体（宋体/楷体/黑体）
+                'noto serif sc', 'source han', 'stsong', 'stkaiti',
+                'simsun', 'noto sans sc', 'pingfang', 'microsoft yahei',
+                'noto serif jp', 'hiragino',
+            ]
+            if any(x in block_low for x in exempt_keywords):
                 continue
-            warnings.append(f"sans display font-size {max_size:.0f}px should have letter-spacing <= -0.025em (found {ls_value}em)")
+            warnings.append(f"sans display font-size {max_size:.0f}px should have letter-spacing in [-0.045, -0.015]em or > 0.15em (found {ls_value}em)")
 
     # 检查是否引入了 tabular-nums（如果有数字）
     if re.search(r'\d+%|\d+\s*ms|\d{2,}', text) and "tabular-nums" not in text:

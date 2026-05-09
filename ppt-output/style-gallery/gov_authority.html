@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>gov_authority · 党政严肃 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #fffaf3;
+    --bg-warm: #fdf3e3;
+    --red: #c41e3a;
+    --red-deep: #8b1721;
+    --blue: #1a3a6e;
+    --blue-deep: #0d2a5e;
+    --ink: #1a1a1a;
+    --ink-soft: #3a3a3a;
+    --ink-mute: #6a6a6a;
+    --gold: #b8893a;
+    --line: rgba(26,26,26,0.18);
+    --display-font: 'Source Han Serif SC', 'Noto Serif SC', 'STSong', SimSun, serif;
+    --body-font: 'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --label-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'calt', 'palt';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .paper-warmth {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(196,30,58,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(26,58,110,0.05) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle, rgba(26,26,26,0.025) 1px, transparent 1px);
+    background-size: 4px 4px;
+    opacity: 0.55;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .top-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex;
+    z-index: 5;
+  }
+  .top-bar .red {
+    flex: 1; height: 6px; background: var(--red);
+  }
+  .top-bar .blue {
+    flex: 1; height: 6px; background: var(--blue);
+  }
+
+  .top-bar-thin {
+    position: absolute; top: 6px; left: 0; right: 0;
+    height: 1px;
+    background: var(--ink);
+    opacity: 0.85;
+    z-index: 5;
+  }
+
+  .bottom-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    display: flex;
+    z-index: 5;
+  }
+  .bottom-bar .blue {
+    flex: 1; height: 6px; background: var(--blue);
+  }
+  .bottom-bar .red {
+    flex: 1; height: 6px; background: var(--red);
+  }
+  .bottom-bar-thin {
+    position: absolute; bottom: 6px; left: 0; right: 0;
+    height: 1px;
+    background: var(--ink);
+    opacity: 0.85;
+    z-index: 5;
+  }
+
+  .corner-tl, .corner-tr, .corner-bl, .corner-br {
+    position: absolute;
+    width: 26px; height: 26px;
+    z-index: 4;
+  }
+  .corner-tl { top: 28px; left: 50px; border-top: 1.5px solid var(--red); border-left: 1.5px solid var(--red); }
+  .corner-tr { top: 28px; right: 50px; border-top: 1.5px solid var(--blue); border-right: 1.5px solid var(--blue); }
+  .corner-bl { bottom: 28px; left: 50px; border-bottom: 1.5px solid var(--blue); border-left: 1.5px solid var(--blue); }
+  .corner-br { bottom: 28px; right: 50px; border-bottom: 1.5px solid var(--red); border-right: 1.5px solid var(--red); }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 60px 90px 50px 90px;
+    display: flex; flex-direction: column; align-items: center;
+    z-index: 2;
+  }
+
+  .header-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 22px;
+    margin-top: 8px;
+  }
+  .emblem {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 2px solid var(--red);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .emblem .ring {
+    position: absolute; inset: 4px;
+    border-radius: 50%;
+    border: 1px solid var(--red);
+    opacity: 0.55;
+  }
+  .header-meta {
+    font-family: var(--display-font);
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: 0.32em;
+    padding-left: 0.32em;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .double-line {
+    width: 100%;
+    margin-top: 30px;
+    display: flex; flex-direction: column; gap: 3px;
+    align-items: center;
+  }
+  .double-line .l1 {
+    width: 100%; height: 1.5px; background: var(--ink); opacity: 0.85;
+  }
+  .double-line .l2 {
+    width: 100%; height: 0.75px; background: var(--ink); opacity: 0.55;
+  }
+
+  .overline {
+    margin-top: 28px;
+    font-family: var(--label-font);
+    font-size: 11px;
+    color: var(--red-deep);
+    letter-spacing: 0.45em;
+    padding-left: 0.45em;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .overline .dash {
+    display: inline-block; width: 28px; height: 1px; background: var(--red-deep);
+  }
+
+  .headline {
+    margin-top: 22px;
+    font-family: var(--display-font);
+    font-size: 64px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: 0.22em;
+    padding-left: 0.22em;
+    line-height: 1.18;
+    text-align: center;
+    font-feature-settings: 'palt';
+  }
+
+  .star-row {
+    margin-top: 30px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 18px;
+  }
+  .star-row .bar {
+    width: 90px; height: 1px; background: var(--red);
+    opacity: 0.7;
+  }
+
+  .subtitle {
+    margin-top: 22px;
+    font-family: var(--display-font);
+    font-size: 18px;
+    color: var(--ink-soft);
+    letter-spacing: 0.28em;
+    padding-left: 0.28em;
+    font-weight: 400;
+    text-align: center;
+  }
+
+  .seal-row {
+    margin-top: 32px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px;
+  }
+  .seal-box {
+    display: inline-block;
+    padding: 9px 18px;
+    border: 1.8px solid var(--red);
+    color: var(--red);
+    font-family: var(--display-font);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.5em;
+    padding-right: calc(18px + 0.5em);
+    background: rgba(196,30,58,0.04);
+  }
+  .seal-box.blue {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: rgba(26,58,110,0.04);
+  }
+
+  .meta-strip {
+    position: absolute;
+    bottom: 78px; left: 0; right: 0;
+    display: flex; justify-content: center; align-items: stretch;
+    gap: 0;
+    z-index: 3;
+  }
+  .meta-cell {
+    padding: 0 38px;
+    text-align: center;
+    border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+  }
+  .meta-cell:last-child { border-right: none; }
+  .meta-cell .num {
+    font-family: var(--display-font);
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    display: flex; align-items: baseline; gap: 4px;
+  }
+  .meta-cell .num .unit {
+    font-family: var(--body-font);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink-mute);
+    letter-spacing: 0.1em;
+  }
+  .meta-cell .num .accent {
+    color: var(--red);
+  }
+  .meta-cell .lbl {
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.32em;
+    padding-left: 0.32em;
+    font-weight: 400;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 22px; left: 0; right: 0;
+    display: flex; justify-content: center; align-items: center;
+    gap: 16px;
+    font-family: var(--display-font);
+    font-size: 13px;
+    color: var(--ink);
+    letter-spacing: 0.42em;
+    padding-left: 0.42em;
+    font-weight: 500;
+    z-index: 6;
+  }
+  .footer .dot {
+    display: inline-block;
+    width: 4px; height: 4px;
+    background: var(--red);
+    border-radius: 50%;
+  }
+  .footer .roman {
+    font-family: var(--label-font);
+    font-size: 11px;
+    color: var(--ink-mute);
+    letter-spacing: 0.42em;
+    padding-left: 0.42em;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+  }
+
+  .side-tag-l, .side-tag-r {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    font-family: var(--label-font);
+    font-size: 9.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.55em;
+    padding-left: 0.55em;
+    text-transform: uppercase;
+    z-index: 4;
+    font-weight: 500;
+  }
+  .side-tag-l { left: 18px; }
+  .side-tag-r { right: 18px; transform: translateY(-50%) rotate(90deg); }
+
+  .doc-no {
+    position: absolute;
+    top: 32px; right: 60px;
+    font-family: var(--label-font);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.32em;
+    padding-left: 0.32em;
+    font-variant-numeric: tabular-nums;
+    z-index: 6;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .doc-no .red-mark { color: var(--red); font-weight: 700; margin-right: 8px; }
+
+  .date-mark {
+    position: absolute;
+    top: 32px; left: 60px;
+    font-family: var(--label-font);
+    font-size: 10.5px;
+    color: var(--ink-mute);
+    letter-spacing: 0.32em;
+    padding-left: 0.32em;
+    font-variant-numeric: tabular-nums;
+    z-index: 6;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .date-mark .blue-mark { color: var(--blue); font-weight: 700; margin-right: 8px; }
+</style>
+</head>
+<body>
+  <div class="paper-warmth"></div>
+  <div class="grain"></div>
+
+  <div class="top-bar">
+    <div class="red"></div>
+    <div class="blue"></div>
+  </div>
+  <div class="top-bar-thin"></div>
+
+  <div class="bottom-bar">
+    <div class="blue"></div>
+    <div class="red"></div>
+  </div>
+  <div class="bottom-bar-thin"></div>
+
+  <div class="corner-tl"></div>
+  <div class="corner-tr"></div>
+  <div class="corner-bl"></div>
+  <div class="corner-br"></div>
+
+  <div class="date-mark"><span class="blue-mark">DOC</span>2026 · Q3 · 008</div>
+  <div class="doc-no"><span class="red-mark">CONFIDENTIAL</span>NO. 2026-0073</div>
+
+  <div class="side-tag-l">FOR INTERNAL CIRCULATION ONLY</div>
+  <div class="side-tag-r">PEOPLE'S REPUBLIC · MMXXVI</div>
+
+  <div class="stage">
+    <div class="header-row">
+      <div class="emblem">
+        <div class="ring"></div>
+        <svg style="width:30px; height:30px;" viewBox="0 0 20 20">
+          <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
+        </svg>
+      </div>
+      <div class="header-meta">二〇二六年度工作报告</div>
+    </div>
+
+    <div class="double-line">
+      <div class="l1"></div>
+      <div class="l2"></div>
+    </div>
+
+    <div class="overline">
+      <span class="dash"></span>
+      <span>PART · 01 &nbsp;·&nbsp; KEYNOTE ADDRESS</span>
+      <span class="dash"></span>
+    </div>
+
+    <h1 class="headline">全 面 推 进<br>高 质 量 发 展</h1>
+
+    <div class="star-row">
+      <span class="bar"></span>
+      <svg style="width:22px; height:22px;" viewBox="0 0 20 20">
+        <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
+      </svg>
+      <span class="bar"></span>
+    </div>
+
+    <div class="subtitle">—— 二〇二六年第三季度部门联合工作会议 ——</div>
+
+    <div class="seal-row">
+      <div class="seal-box">机 密 · 内 部</div>
+      <div class="seal-box blue">部 委 联 印</div>
+    </div>
+  </div>
+
+  <div class="meta-strip">
+    <div class="meta-cell">
+      <div class="num">28<span class="unit">个</span></div>
+      <div class="lbl">参会单位</div>
+    </div>
+    <div class="meta-cell">
+      <div class="num"><span class="accent">156</span><span class="unit">项</span></div>
+      <div class="lbl">议程要目</div>
+    </div>
+    <div class="meta-cell">
+      <div class="num">9.2<span class="unit">%</span></div>
+      <div class="lbl">同比增长</div>
+    </div>
+    <div class="meta-cell">
+      <div class="num">2026.09</div>
+      <div class="lbl">召开月份</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>中 共</span>
+    <svg style="width:14px; height:14px;" viewBox="0 0 20 20">
+      <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
+    </svg>
+    <svg style="width:14px; height:14px;" viewBox="0 0 20 20">
+      <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#1a3a6e"/>
+    </svg>
+    <span>部 委 员 会</span>
+    <span class="dot"></span>
+    <span class="roman">MMXXVI</span>
+  </div>
+</body>
+</html>
