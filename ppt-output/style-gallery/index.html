@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PPT Agent Skill · 26 风格预览画廊</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #0a0a0c;
+    color: #fff;
+    font-family: 'Inter', -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+  }
+  .header {
+    padding: 60px 60px 40px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .header .label {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: #22D3EE;
+    font-weight: 600;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .header .label::before {
+    content: '';
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #22D3EE;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .header h1 {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 56px;
+    font-weight: 700;
+    letter-spacing: -0.045em;
+    margin-top: 14px;
+    line-height: 1;
+  }
+  .header h1 em {
+    font-family: Georgia, 'Source Serif Pro', serif;
+    font-style: italic;
+    font-weight: 400;
+    color: #22D3EE;
+  }
+  .header .deck {
+    font-size: 16px;
+    line-height: 1.6;
+    color: rgba(255,255,255,0.65);
+    max-width: 720px;
+    margin-top: 18px;
+    letter-spacing: -0.005em;
+  }
+  .header .stats {
+    display: flex; gap: 48px; margin-top: 32px;
+  }
+  .header .stat .num {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 32px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.025em;
+  }
+  .header .stat .l {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .section {
+    padding: 50px 60px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .section-head {
+    display: flex; align-items: baseline; gap: 14px; margin-bottom: 28px;
+  }
+  .section-cn {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 22px; font-weight: 700;
+    letter-spacing: -0.025em;
+  }
+  .section-en {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .section-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    letter-spacing: 0.05em;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 18px;
+  }
+  .card {
+    background: #14141a;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, transform 0.15s;
+    display: flex;
+    flex-direction: column;
+  }
+  .card:hover {
+    border-color: rgba(34,211,238,0.4);
+    transform: translateY(-2px);
+  }
+  .frame {
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    position: relative;
+    background: #000;
+  }
+  .frame iframe {
+    border: 0;
+    width: 1280px;
+    height: 720px;
+    transform: scale(calc(100% / 1280 * 420));
+    transform-origin: top left;
+    pointer-events: none;
+    position: absolute;
+    top: 0; left: 0;
+  }
+  .meta {
+    padding: 14px 16px;
+  }
+  .row1 {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .row1 .name {
+    font-family: 'Inter Tight', sans-serif;
+    font-size: 14px; font-weight: 700;
+    letter-spacing: -0.015em;
+  }
+  .row1 .open {
+    font-size: 14px;
+    color: rgba(255,255,255,0.4);
+  }
+  .row2 {
+    display: flex; gap: 6px; align-items: center;
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 4px;
+  }
+  .row2 .id {
+    font-family: 'JetBrains Mono', monospace;
+    color: #22D3EE;
+  }
+  .row2 .dot { opacity: 0.4; }
+  .kw {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 8px;
+    line-height: 1.5;
+  }
+  .swatches {
+    display: flex; gap: 4px; margin-top: 10px;
+  }
+  .sw {
+    width: 18px; height: 18px; border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .footer {
+    padding: 40px 60px 60px;
+    text-align: center;
+    color: rgba(255,255,255,0.3);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .footer a {
+    color: rgba(255,255,255,0.5);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+  .footer a:hover { color: #22D3EE; }
+</style>
+</head>
+<body>
+  <header class="header">
+    <div class="label">PPT AGENT SKILL · WORLD-CLASS</div>
+    <h1>风格预览<em>画廊。</em></h1>
+    <p class="deck">26 个世界级演示文稿风格，按 5 板块分组。每张卡片是真实 1280×720 设计稿的缩略预览，点击打开看原尺寸。</p>
+    <div class="stats">
+      <div class="stat"><div class="num">26</div><div class="l">STYLES</div></div>
+      <div class="stat"><div class="num">5</div><div class="l">CATEGORIES</div></div>
+      <div class="stat"><div class="num">18</div><div class="l">CHART TYPES</div></div>
+    </div>
+  </header>
+
+<section class="section">
+      <div class="section-head">
+        <div class="section-cn">暗色专业</div>
+        <div class="section-en">Dark Professional</div>
+        <div class="section-count">7 风格</div>
+      </div>
+      <div class="grid">
+        <a class="card" href="dark_tech.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="dark_tech.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">暗黑科技 (Dark Tech)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">dark_tech</span>
+              <span class="dot">·</span>
+              <span class="insp">Linear.app</span>
+            </div>
+            <div class="kw">深空冷寂 · 精密仪器 · 微光脉搏</div>
+            <div class="swatches"><div class="sw" style="background:#050b1f"></div><div class="sw" style="background:#22D3EE"></div><div class="sw" style="background:#3B82F6"></div><div class="sw" style="background:#6366f1"></div><div class="sw" style="background:#FDE047"></div></div>
+          </div>
+        </a>
+<a class="card" href="xiaomi_orange.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="xiaomi_orange.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">小米橙 (Xiaomi Orange)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">xiaomi_orange</span>
+              <span class="dot">·</span>
+              <span class="insp">Apple Keynote (硬件发布会版)</span>
+            </div>
+            <div class="kw">产品舞台 · 暗夜悬浮 · 橙光辐射</div>
+            <div class="swatches"><div class="sw" style="background:#0a0a0a"></div><div class="sw" style="background:#FF6900"></div><div class="sw" style="background:#ff9d4a"></div><div class="sw" style="background:#FFFFFF"></div><div class="sw" style="background:#ffd16b"></div></div>
+          </div>
+        </a>
+<a class="card" href="luxury_purple.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="luxury_purple.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">紫金奢华 (Luxury, Tom Ford-grade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">luxury_purple</span>
+              <span class="dot">·</span>
+              <span class="insp">Tom Ford / The Row / YSL Beauty</span>
+            </div>
+            <div class="kw">极致黑金 · 对称仪式 · Didot 巨字</div>
+            <div class="swatches"><div class="sw" style="background:#060606"></div><div class="sw" style="background:#c9a960"></div><div class="sw" style="background:#f5e8c8"></div><div class="sw" style="background:#1a1a1a"></div><div class="sw" style="background:#fff"></div></div>
+          </div>
+        </a>
+<a class="card" href="nocturne_violet.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="nocturne_violet.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">紫光夜曲 (Nocturne Violet)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">nocturne_violet</span>
+              <span class="dot">·</span>
+              <span class="insp">Linear.app (紫色版) / 设计师工具</span>
+            </div>
+            <div class="kw">夜曲玻璃 · 紫色辉光 · 设计师工具</div>
+            <div class="swatches"><div class="sw" style="background:#0a0612"></div><div class="sw" style="background:#9b64ff"></div><div class="sw" style="background:#c4a8ff"></div><div class="sw" style="background:#6d3df0"></div><div class="sw" style="background:#FDE047"></div></div>
+          </div>
+        </a>
+<a class="card" href="cyberpunk_neon.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="cyberpunk_neon.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">赛博霓虹 (Cyberpunk Neon)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">cyberpunk_neon</span>
+              <span class="dot">·</span>
+              <span class="insp">Cyberpunk 2077 / 攻壳机动队 / Blade Runner 2049</span>
+            </div>
+            <div class="kw">紫青霓虹 · 扫描线 · 故障美学</div>
+            <div class="swatches"><div class="sw" style="background:#0a0014"></div><div class="sw" style="background:#00ffff"></div><div class="sw" style="background:#ff00c8"></div><div class="sw" style="background:#ffd60a"></div><div class="sw" style="background:#ff3b3b"></div></div>
+          </div>
+        </a>
+<a class="card" href="chrome_y2k.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="chrome_y2k.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">千禧铬感 (Chrome Y2K)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">chrome_y2k</span>
+              <span class="dot">·</span>
+              <span class="insp">Y2K / Vaporwave / Apple iPod (2001) / Daft Punk</span>
+            </div>
+            <div class="kw">银色铬感 · 千禧未来 · 网格透视</div>
+            <div class="swatches"><div class="sw" style="background:#0a0518"></div><div class="sw" style="background:#c0d0e0"></div><div class="sw" style="background:#00d4ff"></div><div class="sw" style="background:#ff6bcd"></div><div class="sw" style="background:#a0a0e8"></div></div>
+          </div>
+        </a>
+<a class="card" href="noir_film.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="noir_film.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">黑白胶片 (Noir Film)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">noir_film</span>
+              <span class="dot">·</span>
+              <span class="insp">Magnum Photos / Henri Cartier-Bresson / 杜可风 / 苏珊桑塔格</span>
+            </div>
+            <div class="kw">黑白对比 · 胶片颗粒 · 纪录片质感</div>
+            <div class="swatches"><div class="sw" style="background:#0a0a0a"></div><div class="sw" style="background:#fafafa"></div><div class="sw" style="background:#5a5a5a"></div><div class="sw" style="background:#2a2a2a"></div><div class="sw" style="background:#9a9a9a"></div></div>
+          </div>
+        </a>
+      </div>
+    </section>
+<section class="section">
+      <div class="section-head">
+        <div class="section-cn">浅色高级</div>
+        <div class="section-en">Light Premium</div>
+        <div class="section-count">8 风格</div>
+      </div>
+      <div class="grid">
+        <a class="card" href="blue_white.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="blue_white.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">蓝白商务 (Blue White, Apple-grade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">blue_white</span>
+              <span class="dot">·</span>
+              <span class="insp">Apple 企业页面 / 苹果开发者文档</span>
+            </div>
+            <div class="kw">极简白 · 雪松灰 · 苹果可信赖感</div>
+            <div class="swatches"><div class="sw" style="background:#ffffff"></div><div class="sw" style="background:#2563EB"></div><div class="sw" style="background:#1D4ED8"></div><div class="sw" style="background:#059669"></div><div class="sw" style="background:#047857"></div></div>
+          </div>
+        </a>
+<a class="card" href="fresh_green.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="fresh_green.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">清新自然 (Fresh Green, Aesop-grade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">fresh_green</span>
+              <span class="dot">·</span>
+              <span class="insp">Aesop / Le Labo / 高级护肤品牌</span>
+            </div>
+            <div class="kw">温润米色 · 草绿赭石 · 本草自然</div>
+            <div class="swatches"><div class="sw" style="background:#f4ede0"></div><div class="sw" style="background:#859e5a"></div><div class="sw" style="background:#6b8344"></div><div class="sw" style="background:#a85b3a"></div><div class="sw" style="background:#8b4513"></div></div>
+          </div>
+        </a>
+<a class="card" href="minimal_gray.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="minimal_gray.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">极简灰白 (NYT Magazine-grade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">minimal_gray</span>
+              <span class="dot">·</span>
+              <span class="insp">纽约时报杂志 / The Quarterly Review / 学术期刊</span>
+            </div>
+            <div class="kw">米纸杂志 · 巨型 serif · 三栏分栏</div>
+            <div class="swatches"><div class="sw" style="background:#f7f1e3"></div><div class="sw" style="background:#a0392b"></div><div class="sw" style="background:#1a1a1a"></div><div class="sw" style="background:#666"></div><div class="sw" style="background:#999"></div></div>
+          </div>
+        </a>
+<a class="card" href="mocha_editorial.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="mocha_editorial.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">Mocha 编辑器 (Mocha Editorial, Anthropic-grade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">mocha_editorial</span>
+              <span class="dot">·</span>
+              <span class="insp">Anthropic.com / claude.ai / Pantone 2025 (Mocha Mousse)</span>
+            </div>
+            <div class="kw">温暖知识 · 咖啡杂志 · serif italic</div>
+            <div class="swatches"><div class="sw" style="background:#f3ebde"></div><div class="sw" style="background:#c1502e"></div><div class="sw" style="background:#8b5a3c"></div><div class="sw" style="background:#a85b3a"></div><div class="sw" style="background:#5a4a3a"></div></div>
+          </div>
+        </a>
+<a class="card" href="medical_pulse.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="medical_pulse.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">医疗专科 (Medical Pulse)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">medical_pulse</span>
+              <span class="dot">·</span>
+              <span class="insp">Mayo Clinic / Stanford Medicine / 医疗 AI 产品页</span>
+            </div>
+            <div class="kw">纯白专业 · 医疗蓝青 · ECG 心电波</div>
+            <div class="swatches"><div class="sw" style="background:#ffffff"></div><div class="sw" style="background:#00b4d8"></div><div class="sw" style="background:#4ecdc4"></div><div class="sw" style="background:#95e1d3"></div><div class="sw" style="background:#dc2626"></div></div>
+          </div>
+        </a>
+<a class="card" href="earth_concrete.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="earth_concrete.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">大地水泥 (Earth Concrete)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">earth_concrete</span>
+              <span class="dot">·</span>
+              <span class="insp">Suisse Int'l / 建筑事务所 / Blue Bottle Coffee</span>
+            </div>
+            <div class="kw">水泥灰 · 暖橙丝带 · 网格秩序</div>
+            <div class="swatches"><div class="sw" style="background:#d4cfc4"></div><div class="sw" style="background:#ff6b35"></div><div class="sw" style="background:#1a1a1a"></div><div class="sw" style="background:#666"></div><div class="sw" style="background:#999"></div></div>
+          </div>
+        </a>
+<a class="card" href="champagne_gold.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="champagne_gold.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">香槟金喜 (Champagne Gold)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">champagne_gold</span>
+              <span class="dot">·</span>
+              <span class="insp">高端婚礼请柬 / 五星酒店宴会 / 颁奖典礼</span>
+            </div>
+            <div class="kw">香槟金 · 双线菱形 · Playfair italic</div>
+            <div class="swatches"><div class="sw" style="background:#faf6ed"></div><div class="sw" style="background:#c9a35a"></div><div class="sw" style="background:#b88d3a"></div><div class="sw" style="background:#f5e8c8"></div><div class="sw" style="background:#8e6a25"></div></div>
+          </div>
+        </a>
+<a class="card" href="liquid_glass.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="liquid_glass.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">液态玻璃 (Liquid Glass)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">liquid_glass</span>
+              <span class="dot">·</span>
+              <span class="insp">iOS 26 / visionOS / Apple Vision Pro</span>
+            </div>
+            <div class="kw">液态玻璃 · 毛玻璃 blob · 彩色渐变</div>
+            <div class="swatches"><div class="sw" style="background:#ff6b9d"></div><div class="sw" style="background:#ffb74d"></div><div class="sw" style="background:#34a0ff"></div><div class="sw" style="background:#1a73e8"></div><div class="sw" style="background:#888888"></div></div>
+          </div>
+        </a>
+      </div>
+    </section>
+<section class="section">
+      <div class="section-head">
+        <div class="section-cn">活力鲜明</div>
+        <div class="section-en">Vibrant</div>
+        <div class="section-count">4 风格</div>
+      </div>
+      <div class="grid">
+        <a class="card" href="vibrant_rainbow.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="vibrant_rainbow.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">活力彩虹 (Stripe-grade Gradient)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">vibrant_rainbow</span>
+              <span class="dot">·</span>
+              <span class="insp">Stripe Sessions / Stripe.com</span>
+            </div>
+            <div class="kw">多层渐变 · 玻璃球反光 · 高饱和高级</div>
+            <div class="swatches"><div class="sw" style="background:#ffd16b"></div><div class="sw" style="background:#ffffff"></div><div class="sw" style="background:#ff5b9d"></div><div class="sw" style="background:#00d8d4"></div><div class="sw" style="background:#888888"></div></div>
+          </div>
+        </a>
+<a class="card" href="kindergarten_pop.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="kindergarten_pop.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">儿童启蒙 (Kindergarten Pop)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">kindergarten_pop</span>
+              <span class="dot">·</span>
+              <span class="insp">高质量儿童绘本 / Notion 友好感 / Apple Kids</span>
+            </div>
+            <div class="kw">柔和阳光 · 圆润 Quicksand · 彩色 blob</div>
+            <div class="swatches"><div class="sw" style="background:#fff8e7"></div><div class="sw" style="background:#ff7eb9"></div><div class="sw" style="background:#ffd166"></div><div class="sw" style="background:#06d6a0"></div><div class="sw" style="background:#87ceeb"></div></div>
+          </div>
+        </a>
+<a class="card" href="bauhaus_block.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="bauhaus_block.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">包豪斯几何 (Bauhaus Block)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">bauhaus_block</span>
+              <span class="dot">·</span>
+              <span class="insp">Bauhaus / Swiss Design / Massimo Vignelli / IBM Eames</span>
+            </div>
+            <div class="kw">三原色 · 几何拼贴 · Helvetica 800</div>
+            <div class="swatches"><div class="sw" style="background:#f4f0e8"></div><div class="sw" style="background:#d62828"></div><div class="sw" style="background:#003049"></div><div class="sw" style="background:#ffd60a"></div><div class="sw" style="background:#1a1a1a"></div></div>
+          </div>
+        </a>
+<a class="card" href="candy_pastel.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="candy_pastel.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">马卡龙糖果 (Candy Pastel)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">candy_pastel</span>
+              <span class="dot">·</span>
+              <span class="insp">Ladurée / Pierre Hermé / Glossier</span>
+            </div>
+            <div class="kw">马卡龙圆点 · 粉嫩柔和 · Playfair italic</div>
+            <div class="swatches"><div class="sw" style="background:#fff5f0"></div><div class="sw" style="background:#f8bbd0"></div><div class="sw" style="background:#c8e6c9"></div><div class="sw" style="background:#fff59d"></div><div class="sw" style="background:#b3e5fc"></div></div>
+          </div>
+        </a>
+      </div>
+    </section>
+<section class="section">
+      <div class="section-head">
+        <div class="section-cn">东方文化</div>
+        <div class="section-en">Cultural Oriental</div>
+        <div class="section-count">3 风格</div>
+      </div>
+      <div class="grid">
+        <a class="card" href="royal_red.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="royal_red.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">朱红宫墙 (Royal Red, Beijing 2022-grade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">royal_red</span>
+              <span class="dot">·</span>
+              <span class="insp">北京 2022 冬奥开幕式 / 故宫文创 / 国家博物馆</span>
+            </div>
+            <div class="kw">朱红宫墙 · 金色角饰 · 宋体居中</div>
+            <div class="swatches"><div class="sw" style="background:#6b0a0a"></div><div class="sw" style="background:#c9a960"></div><div class="sw" style="background:#FFD700"></div><div class="sw" style="background:#c0392b"></div><div class="sw" style="background:#fff8e7"></div></div>
+          </div>
+        </a>
+<a class="card" href="sakura_wabi.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="sakura_wabi.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">侘寂樱花 (Sakura Wabi)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">sakura_wabi</span>
+              <span class="dot">·</span>
+              <span class="insp">日本侘寂 / 京都文化馆 / 谷崎润一郎《阴翳礼赞》</span>
+            </div>
+            <div class="kw">和纸米色 · 竖排墨色 · 单点樱花粉</div>
+            <div class="swatches"><div class="sw" style="background:#f5f0e8"></div><div class="sw" style="background:#ffb7c5"></div><div class="sw" style="background:#d97a87"></div><div class="sw" style="background:#c9b896"></div><div class="sw" style="background:#8b7d6b"></div></div>
+          </div>
+        </a>
+<a class="card" href="ink_jade.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="ink_jade.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">墨韵新中式 (Ink Jade)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">ink_jade</span>
+              <span class="dot">·</span>
+              <span class="insp">茶颜悦色 / 喜茶 PRO / 故宫文创年轻线 / 朴素生活馆</span>
+            </div>
+            <div class="kw">浅米和纸 · 墨色竖排 · 一笔朱红</div>
+            <div class="swatches"><div class="sw" style="background:#f5f1e8"></div><div class="sw" style="background:#c0392b"></div><div class="sw" style="background:#1a1a1a"></div><div class="sw" style="background:#c9b896"></div><div class="sw" style="background:#8b7d6b"></div></div>
+          </div>
+        </a>
+      </div>
+    </section>
+<section class="section">
+      <div class="section-head">
+        <div class="section-cn">自然/复古</div>
+        <div class="section-en">Natural / Retro</div>
+        <div class="section-count">4 风格</div>
+      </div>
+      <div class="grid">
+        <a class="card" href="botanic_forest.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="botanic_forest.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">深林秘境 (Botanic Forest)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">botanic_forest</span>
+              <span class="dot">·</span>
+              <span class="insp">Patagonia / The North Face / National Geographic</span>
+            </div>
+            <div class="kw">深森绿 · 暖橙夕阳 · 户外质感</div>
+            <div class="swatches"><div class="sw" style="background:#1a2e1f"></div><div class="sw" style="background:#ff8c42"></div><div class="sw" style="background:#e8b86d"></div><div class="sw" style="background:#5a8c3a"></div><div class="sw" style="background:#3a5e28"></div></div>
+          </div>
+        </a>
+<a class="card" href="safari_savanna.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="safari_savanna.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">萨凡纳探险 (Safari Savanna)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">safari_savanna</span>
+              <span class="dot">·</span>
+              <span class="insp">National Geographic / Lonely Planet / 萨凡纳草原日落</span>
+            </div>
+            <div class="kw">沙漠暖橙 · 探险护照 · 经纬度元数据</div>
+            <div class="swatches"><div class="sw" style="background:#f3e6cc"></div><div class="sw" style="background:#c44d2a"></div><div class="sw" style="background:#8b3a1f"></div><div class="sw" style="background:#e8b86d"></div><div class="sw" style="background:#5a4a30"></div></div>
+          </div>
+        </a>
+<a class="card" href="retro_70s.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="retro_70s.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">70 年代复古 (Retro 70s)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">retro_70s</span>
+              <span class="dot">·</span>
+              <span class="insp">Wes Anderson / 黑胶唱片 / Saul Bass / 1970s 海报</span>
+            </div>
+            <div class="kw">棕橙黄拼贴 · 圆润粗壮 · 复古颗粒</div>
+            <div class="swatches"><div class="sw" style="background:#f4e9d0"></div><div class="sw" style="background:#e07a3e"></div><div class="sw" style="background:#d4a82a"></div><div class="sw" style="background:#6b4423"></div><div class="sw" style="background:#c14d3f"></div></div>
+          </div>
+        </a>
+<a class="card" href="gov_authority.html" target="_blank" rel="noopener">
+          <div class="frame">
+            <iframe src="gov_authority.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+          </div>
+          <div class="meta">
+            <div class="row1">
+              <span class="name">庄严官方 (Government Authority)</span>
+              <span class="open">↗</span>
+            </div>
+            <div class="row2">
+              <span class="id">gov_authority</span>
+              <span class="dot">·</span>
+              <span class="insp">人民日报头版 / 新华社 / 国务院新闻办 / 国宴</span>
+            </div>
+            <div class="kw">庄严深红蓝 · 宋体居中 · 五角星章印</div>
+            <div class="swatches"><div class="sw" style="background:#fffaf3"></div><div class="sw" style="background:#c41e3a"></div><div class="sw" style="background:#1a3a6e"></div><div class="sw" style="background:#8b1721"></div><div class="sw" style="background:#0d2a5e"></div></div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+  <footer class="footer">
+    <a href="https://github.com" target="_blank">PPT AGENT SKILL · MMXXVI</a>
+  </footer>
+</body>
+</html>
