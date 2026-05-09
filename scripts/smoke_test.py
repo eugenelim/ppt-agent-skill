@@ -20,6 +20,7 @@
 import argparse
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -261,6 +262,107 @@ def phase1_tests(style_filter: str = None) -> dict:
 
 
 # -------------------------------------------------------------------
+# Phase 5 端到端测试：跑完整 HTML→SVG→PPTX 管线
+# -------------------------------------------------------------------
+
+E2E_REPRESENTATIVE_STYLES = ["dark_tech", "mocha_editorial", "royal_red"]
+
+
+def phase5_e2e_tests(style_filter: str = None) -> dict:
+    """Phase 5: 端到端管线测试。"""
+    import shutil
+    results = {
+        "phase": 5,
+        "e2e": {},
+        "summary": {"pass": 0, "fail": 0, "warn": 0},
+    }
+
+    e2e_dir = ROOT / "ppt-output" / "e2e-test"
+    slides_dir = e2e_dir / "slides"
+    svg_dir = e2e_dir / "svg"
+
+    # 清理并准备 slides + svg 目录（避免上次残留干扰计数）
+    if slides_dir.exists():
+        shutil.rmtree(slides_dir)
+    if svg_dir.exists():
+        shutil.rmtree(svg_dir)
+    slides_dir.mkdir(parents=True, exist_ok=True)
+
+    test_styles = [style_filter] if style_filter else E2E_REPRESENTATIVE_STYLES
+    for sid in test_styles:
+        src = GALLERY_DIR / f"{sid}.html"
+        if not src.exists():
+            results["e2e"][sid] = {"error": f"source mock not found: {src}"}
+            results["summary"]["fail"] += 1
+            continue
+        dst = slides_dir / f"{sid}.html"
+        shutil.copy(src, dst)
+
+    # 1. html_packager
+    pkg_result = subprocess.run(
+        ["python3", str(ROOT / "scripts" / "html_packager.py"),
+         str(slides_dir), "-o", str(e2e_dir / "preview.html")],
+        capture_output=True, text=True, timeout=60
+    )
+    results["e2e"]["html_packager"] = {
+        "rc": pkg_result.returncode,
+        "stdout": pkg_result.stdout[-200:],
+        "stderr": pkg_result.stderr[-200:],
+    }
+    if pkg_result.returncode == 0 and (e2e_dir / "preview.html").exists():
+        results["summary"]["pass"] += 1
+    else:
+        results["summary"]["fail"] += 1
+
+    # 2. html2svg
+    svg_result = subprocess.run(
+        ["python3", str(ROOT / "scripts" / "html2svg.py"),
+         str(slides_dir), "-o", str(svg_dir)],
+        capture_output=True, text=True, timeout=300
+    )
+    results["e2e"]["html2svg"] = {
+        "rc": svg_result.returncode,
+        "stdout": svg_result.stdout[-300:],
+        "stderr": svg_result.stderr[-300:],
+    }
+    svgs_count = len(list(svg_dir.glob("*.svg"))) if svg_dir.exists() else 0
+    if svg_result.returncode == 0 and svgs_count == len(test_styles):
+        results["summary"]["pass"] += 1
+    else:
+        results["summary"]["fail"] += 1
+
+    # 3. svg2pptx
+    pptx_result = subprocess.run(
+        ["python3", str(ROOT / "scripts" / "svg2pptx.py"),
+         str(svg_dir), "-o", str(e2e_dir / "presentation.pptx")],
+        capture_output=True, text=True, timeout=120
+    )
+    results["e2e"]["svg2pptx"] = {
+        "rc": pptx_result.returncode,
+        "stdout": pptx_result.stdout[-300:],
+        "stderr": pptx_result.stderr[-300:],
+    }
+    if pptx_result.returncode == 0 and (e2e_dir / "presentation.pptx").exists():
+        results["summary"]["pass"] += 1
+    else:
+        results["summary"]["fail"] += 1
+
+    # 4. 验证每个 SVG 含 <text> 元素（文字可编辑）
+    for sid in test_styles:
+        svg_path = svg_dir / f"{sid}.svg"
+        if svg_path.exists():
+            content = svg_path.read_text(errors="ignore")
+            text_count = content.count("<text ")
+            results["e2e"][f"{sid}_text_count"] = text_count
+            if text_count >= 5:
+                results["summary"]["pass"] += 1
+            else:
+                results["summary"]["warn"] += 1
+
+    return results
+
+
+# -------------------------------------------------------------------
 # 报告生成
 # -------------------------------------------------------------------
 
@@ -320,6 +422,29 @@ def generate_report(results: dict, out_dir: Path):
                     lines.append(f"  - {w}")
         lines.append("")
 
+    # E2E pipeline
+    e2e = results.get("e2e", {})
+    if e2e:
+        lines += ["## 端到端管线测试", ""]
+        for stage in ["html_packager", "html2svg", "svg2pptx"]:
+            r = e2e.get(stage, {})
+            ok = r.get("rc") == 0
+            lines.append(f"### {'✅' if ok else '❌'} {stage}")
+            if not ok and r.get("stderr"):
+                lines.append("```")
+                lines.append(r["stderr"])
+                lines.append("```")
+        lines.append("")
+        # Text 元素统计
+        text_counts = {k: v for k, v in e2e.items() if k.endswith("_text_count")}
+        if text_counts:
+            lines += ["### SVG `<text>` 可编辑文字统计", ""]
+            for k, v in text_counts.items():
+                sid = k.replace("_text_count", "")
+                marker = "✅" if v >= 5 else "⚠️"
+                lines.append(f"- {marker} {sid}: {v} 个 <text> 元素")
+            lines.append("")
+
     report.write_text("\n".join(lines), encoding="utf-8")
     return report
 
@@ -341,6 +466,8 @@ def main():
 
     if args.phase == 1:
         results = phase1_tests(style_filter=args.style)
+    elif args.phase == 5:
+        results = phase5_e2e_tests(style_filter=args.style)
     else:
         print(f"Phase {args.phase} tests not yet implemented", file=sys.stderr)
         sys.exit(1)
