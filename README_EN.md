@@ -215,7 +215,30 @@ All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipe
 
 Detailed flow in [`SKILL.md`](SKILL.md).
 
-## 📂 Architecture
+## 🏗 System Architecture
+
+<div align="center">
+  <img src="assets/architecture.png" alt="System Architecture" width="100%" />
+  <p><sub>3-tier architecture: User Entry / 6-Step Pipeline / Output Artifacts · 5 Reference Libraries injected at each step</sub></p>
+</div>
+
+**3 tiers**:
+
+- **TIER 1 · Entry** — User prompt triggers [SKILL.md](SKILL.md) (Agent entry); pulls from all `references/` rule files
+- **TIER 2 · 6-Step Pipeline** — Each step is independent, JSON contracts between steps; each step shows which references it uses
+- **TIER 3 · Outputs** — 4 final artifacts: paginated HTML / vector SVG / editable PPTX / style preview gallery
+
+**Reference Library** (injected at each step):
+
+| Module | Count | Location |
+|--------|-------|----------|
+| 📐 Style Library | 26 styles | `references/styles/` (5 categories) |
+| 📊 Chart Library | 18 charts | `references/charts/` (3 tiers) |
+| 🔤 Typography | 14 rules | `references/typography.md` |
+| ⚠ Failure Modes | 8 modes | `references/principles/failure-modes.md` |
+| 🎨 Bento Grid | 7 layouts | `references/bento-grid.md` |
+
+## 📂 File Tree
 
 ```
 ppt-agent-skill/

@@ -215,7 +215,30 @@ pip install python-pptx lxml Pillow
 
 详细流程见 [`SKILL.md`](SKILL.md)。
 
-## 📂 架构
+## 🏗 系统架构
+
+<div align="center">
+  <img src="assets/architecture.png" alt="系统架构图" width="100%" />
+  <p><sub>3 层架构：用户入口 / 6 步 Pipeline / 输出产物 · 5 大 Reference Library 注入到各步</sub></p>
+</div>
+
+**3 层架构**：
+
+- **TIER 1 · 入口** — 用户一句话 prompt 触发 [SKILL.md](SKILL.md)（Agent 入口主流程指令）；引用 `references/` 下的所有规则文件
+- **TIER 2 · 6 步 Pipeline** — 每步独立 STEP，前后用 JSON 合同传递；每步可见使用的 reference 文件
+- **TIER 3 · 输出** — 4 种最终产物：翻页 HTML / 矢量 SVG / 可编辑 PPTX / 风格预览画廊
+
+**Reference Library**（注入到各步）：
+
+| 模块 | 数量 | 位置 |
+|------|------|------|
+| 📐 Style Library | 26 风格 | `references/styles/` (5 板块) |
+| 📊 Chart Library | 18 图表 | `references/charts/` (3 层级) |
+| 🔤 Typography | 14 铁律 | `references/typography.md` |
+| ⚠ Failure Modes | 8 模式 | `references/principles/failure-modes.md` |
+| 🎨 Bento Grid | 7 布局 | `references/bento-grid.md` |
+
+## 📂 文件树
 
 ```
 ppt-agent-skill/
