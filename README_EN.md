@@ -21,7 +21,17 @@
   </p>
 
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-000?style=flat-square" alt="MIT License" /></a>
+    <a href="https://github.com/Akxan/ppt-agent-skill/stargazers"><img src="https://img.shields.io/github/stars/Akxan/ppt-agent-skill?style=for-the-badge&color=FFD700&labelColor=050b1f&logo=github&logoColor=white" alt="GitHub Stars" /></a>
+    <a href="https://github.com/Akxan/ppt-agent-skill/network/members"><img src="https://img.shields.io/github/forks/Akxan/ppt-agent-skill?style=for-the-badge&color=22D3EE&labelColor=050b1f&logo=github&logoColor=white" alt="GitHub Forks" /></a>
+    <a href="https://github.com/Akxan/ppt-agent-skill/watchers"><img src="https://img.shields.io/github/watchers/Akxan/ppt-agent-skill?style=for-the-badge&color=A855F7&labelColor=050b1f&logo=github&logoColor=white" alt="GitHub Watchers" /></a>
+    <a href="https://github.com/Akxan/ppt-agent-skill/issues"><img src="https://img.shields.io/github/issues/Akxan/ppt-agent-skill?style=for-the-badge&color=22c55e&labelColor=050b1f&logo=github&logoColor=white" alt="Issues" /></a>
+  </p>
+
+  <p>
+    <a href="LICENSE"><img src="https://img.shields.io/github/license/Akxan/ppt-agent-skill?style=flat-square&color=000" alt="MIT License" /></a>
+    <img src="https://img.shields.io/github/last-commit/Akxan/ppt-agent-skill?style=flat-square&color=blue&logo=git&logoColor=white" alt="Last commit" />
+    <img src="https://img.shields.io/github/repo-size/Akxan/ppt-agent-skill?style=flat-square&color=orange" alt="Repo size" />
+    <img src="https://img.shields.io/github/languages/top/Akxan/ppt-agent-skill?style=flat-square&color=8b5cf6" alt="Top language" />
     <img src="https://img.shields.io/badge/python-≥3.8-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
     <img src="https://img.shields.io/badge/node-≥18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
     <img src="https://img.shields.io/badge/PPTX-editable-D24726?style=flat-square&logo=microsoftpowerpoint&logoColor=white" alt="PPTX" />
