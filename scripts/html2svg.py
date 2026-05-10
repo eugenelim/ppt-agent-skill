@@ -583,10 +583,12 @@ def convert(html_dir: Path, output_dir: Path) -> bool:
     """主转换入口"""
     if html_dir.is_file():
         html_files = [html_dir]
-        work_dir = html_dir.parent.parent
     else:
         html_files = sorted(html_dir.glob("*.html"))
-        work_dir = html_dir.parent
+
+    # work_dir 固定为项目根（脚本所在目录的父目录），让 puppeteer 一次性安装可跨调用复用
+    # 否则每个 ppt-output/<test_dir>/ 都会单独装 ~55MB 的 puppeteer
+    work_dir = Path(__file__).resolve().parent.parent
 
     if not html_files:
         print(f"No HTML files in {html_dir}", file=sys.stderr)

@@ -401,6 +401,11 @@ def phase5_e2e_tests(style_filter: str = None) -> dict:
             else:
                 results["summary"]["warn"] += 1
 
+    # 5. 清理 e2e-test 测试产物（puppeteer node_modules 现在装在 ROOT，不在这里）
+    if e2e_dir.exists() and pptx_result.returncode == 0:
+        shutil.rmtree(e2e_dir)
+        results["e2e"]["cleanup"] = "ok (e2e-test removed)"
+
     return results
 
 
