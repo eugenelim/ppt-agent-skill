@@ -312,6 +312,19 @@ Full world-class redesign spec: [`docs/superpowers/specs/2026-05-10-world-class-
 
 Contains: goals & motivation / 26 style list / JSON schema upgrade / font stack strategy / typography rules / chart system design / preview gallery / file org / backward compat / 5-phase implementation / success criteria / decision log.
 
+## ⭐ Star History
+
+<div align="center">
+  <a href="https://star-history.com/#Akxan/ppt-agent-skill&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Akxan/ppt-agent-skill&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Akxan/ppt-agent-skill&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Akxan/ppt-agent-skill&type=Date&theme=dark" width="100%" />
+    </picture>
+  </a>
+  <p><sub>Real-time · powered by <a href="https://star-history.com">star-history.com</a> · auto-adapts to dark/light theme</sub></p>
+</div>
+
 ## 🤝 Contributing
 
 PRs welcome:

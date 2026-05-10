@@ -320,6 +320,19 @@ python3 scripts/smoke_test.py --phase 5
 
 包含：目标与动机 / 26 风格列表 / JSON Schema 升级 / 字体栈策略 / 排版铁律 / 图表系统设计 / 风格预览画廊 / 文件组织架构 / 向后兼容保证 / 5 阶段实施路线 / 成功标准 / 决策日志。
 
+## ⭐ Star History
+
+<div align="center">
+  <a href="https://star-history.com/#Akxan/ppt-agent-skill&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Akxan/ppt-agent-skill&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Akxan/ppt-agent-skill&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Akxan/ppt-agent-skill&type=Date&theme=dark" width="100%" />
+    </picture>
+  </a>
+  <p><sub>实时生成 · 由 <a href="https://star-history.com">star-history.com</a> 提供 · 自动适配深色/浅色主题</sub></p>
+</div>
+
 ## 🤝 贡献
 
 欢迎提 Issue / PR：
