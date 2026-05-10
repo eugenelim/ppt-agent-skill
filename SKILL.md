@@ -333,18 +333,70 @@ ppt-output/
 
 ---
 
+## 资源路由表（字段 → 文件夹）
+
+策划稿 JSON 中各字段决定从哪个目录抽取相应资源：
+
+- 字段路由：`layout_hint→layouts/`、`page_type→page-templates/`、`card_type→blocks/`、`chart_type→charts/`
+
+| 字段 | 取值 | 路由到 | 例 |
+|------|------|-------|---|
+| `layout_hint` | asymmetric / hero-top / l-shape / mixed-grid / primary-secondary / single-focus / symmetric / t-shape / three-column / waterfall | `references/layouts/<name>.md` | 主次结合 → `references/layouts/primary-secondary.md` |
+| `page_type` | cover / toc / section / end | `references/page-templates/<name>.md` | 封面 → `references/page-templates/cover.md` |
+| `card_type` | text / data / list / quote / timeline / comparison / diagram / image-hero / matrix-chart / people | `references/blocks/<name>.md` | 数据卡 → `references/blocks/card-styles.md` |
+| `chart_type` | progress-bar / ring / sparkline / radar / funnel / kpi / metric-row / waffle / rating / timeline / treemap / comparison-bar / stacked-bar | `references/charts/<name>.md` | 雷达 → `references/charts/radar.md` |
+
+## Step 0/1 采访模板规则
+
+**Step 0 默认强制模板化**：主 agent 必须先生成 `OUTPUT_DIR/runtime/prompt-interview.md`，再依据渲染结果向用户发问；采访运行时模板必须按能力在 `tpl-interview-structured-ui.md` 与 `tpl-interview-text-fallback.md` 之间二选一。
+
+**Step 0 优先结构化采访 UI**：只要当前 CLI 提供任何等价于 `AskUserQuestion` / `request_user_input` 的原生提问能力，主 agent 就必须优先使用结构化采访 UI；不支持时回退到 `tpl-interview-text-fallback.md`。
+
+**Step 0 唯一例外**：仅当 prompt 生成在 Step 0 发生真实脚本接口故障，并已判定 `BLOCKED_SCRIPT_INTERFACE` 时，才允许主 agent 直接发问；但覆盖维度不得低于 `prompt-interview.md` 的最终要求。
+
+详细模板：[`references/prompts/tpl-interview.md`](references/prompts/tpl-interview.md) · [`references/prompts/tpl-interview-structured-ui.md`](references/prompts/tpl-interview-structured-ui.md) · [`references/prompts/tpl-interview-text-fallback.md`](references/prompts/tpl-interview-text-fallback.md)
+
 ## Reference 文件索引
 
 | 文件 | 何时阅读 | 关键内容 |
 |------|---------|---------|
-| `references/prompts.md` | 每步生成前 | 5 套 Prompt 模板（调研/大纲/策划/设计/备注）|
+| `references/prompts.md` | 每步生成前（合并版）| 5 套 Prompt 模板（调研/大纲/策划/设计/备注）|
+| `references/prompts/*.md` | 模块化版本（23 文件）| 按 step + module + tpl 拆分的 Prompt 模板 |
+| `references/playbooks/*.md` | 每步执行手册（11 文件）| outline / research / source / style / step4 各 phase 的执行 playbook |
 | `references/styles/index.md` | **Step 5a** | 26 种预置风格索引 + 决策矩阵 + JSON Schema |
 | `references/styles/{dark,light,vibrant,cultural,natural}.md` | Step 5a 选定风格后 | 该板块所有风格的完整 JSON + CSS 变量 + Mock 链接 |
 | `references/typography.md` | **Step 5c** | 排版铁律 14 条（字距/tabular-nums/OpenType/serif italic 混排/字体栈降级）|
 | `references/charts/index.md` | **Step 5c 涉及数据可视化时** | 18 种图表索引 + 决策矩阵 |
 | `references/charts/{basic,advanced,complex}.md` | 选定图表后 | 完整 HTML 模板（基础 8 种 / 进阶 6 种 / ECharts 级 4 种）|
-| `references/principles/failure-modes.md` | **Step 4-5 自检** | 8 种失败模式 + 修复顺序铁律 |
+| `references/charts/<chart_type>.md` | 单一图表精细规格 | sunbigfly 风格的单文件图表（13 个）|
+| `references/layouts/*.md` | Step 5c layout_hint 路由 | 10 个 layout 各成文件（asymmetric / hero-top / l-shape 等）|
+| `references/blocks/*.md` | Step 5c card_type 路由 | 9 个可复用卡片原型（card-styles / comparison / diagram / quote 等）|
+| `references/page-templates/*.md` | Step 5c page_type 路由 | 4 个页面模板（cover / end / section / toc）|
+| `references/principles/*.md` | **Step 4-5 自检与原则** | 8 设计原则 + failure-modes（cognitive-load / color-psychology / composition / data-visualization / narrative-arc / runtime-failure-modes / visual-hierarchy）|
+| `references/design-runtime/*.md` | Step 5c 设计运行时 | css-weapons / data-type-decoration-mapping / data-type-visual-mapping / design-specs / director-command-rules-examples |
 | `references/bento-grid.md` | Step 5c | 7 种布局精确坐标 + 5 种卡片类型 + 决策矩阵 |
 | `references/method.md` | 初次了解 | 核心理念与方法论 |
 | `references/pipeline-compat.md` | **Step 5c 设计稿生成时** | CSS 禁止清单 + 图片路径 + 字号混排 + SVG text + 环形图 + svg2pptx 注意事项 |
+| `references/cli-cheatsheet.md` | 脚本调用查阅 | 所有 scripts 的完整调用命令速查 |
 | `references/style-system.md` | （兼容引导文件） | 已升级为引导文件，redirect 到 `styles/index.md` |
+
+## 维护与校验
+
+**真源文件**：
+
+| 资源 | 真源位置 | 用途 |
+|------|---------|------|
+| Step 4 schema | `scripts/planning_validator.py` | P4 planning Gate |
+| Workflow 版本 | `scripts/workflow_versions.py` | 跨脚本版本号 |
+| Skill 一致性 | `scripts/check_skill.py` | 文档/代码合同漂移检查 |
+
+**自动检查入口**：修改 prompt / playbook / cheatsheet / Step 4 schema 示例后，运行：
+
+```bash
+python3 scripts/check_skill.py            # 文档与代码合同漂移检查
+python3 scripts/planning_validator.py     # 策划稿 schema 校验
+python3 scripts/contract_validator.py     # 各 phase 间 JSON 合同校验
+python3 scripts/visual_qa.py              # 视觉 QA 双层断言（planning + html）
+python3 scripts/smoke_test.py             # 我们简化版端到端冒烟测试
+python3 scripts/smoke_skill.py            # sunbigfly 完整版冒烟测试
+```

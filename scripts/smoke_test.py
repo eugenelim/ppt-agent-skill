@@ -63,18 +63,28 @@ FORBIDDEN_CSS = [
 # 工具函数
 # -------------------------------------------------------------------
 
+_STYLE_ID_PATTERN = re.compile(r'^[a-z][a-z0-9_]*$')
+
 def extract_style_jsons(md_path: Path) -> list:
-    """从 markdown 文件中提取所有 ```json ... ``` 代码块的 JSON 对象（含 style_id）。"""
+    """从 markdown 文件中提取所有 ```json ... ``` 代码块的 JSON 对象（含合法 style_id）。
+
+    跳过示例 schema（如 "自定义 ID 或预置 ID" / "your_style_id" / 占位符等），
+    只收 snake_case 合法 ID。
+    """
     text = md_path.read_text(encoding="utf-8")
     blocks = re.findall(r'```json\s*\n(.*?)\n```', text, re.DOTALL)
     styles = []
     for block in blocks:
         try:
             obj = json.loads(block)
-            if isinstance(obj, dict) and "style_id" in obj:
-                styles.append(obj)
         except json.JSONDecodeError:
-            pass
+            continue
+        if not isinstance(obj, dict):
+            continue
+        sid = obj.get("style_id", "")
+        if not isinstance(sid, str) or not _STYLE_ID_PATTERN.match(sid):
+            continue
+        styles.append(obj)
     return styles
 
 
@@ -262,6 +272,38 @@ def phase1_tests(style_filter: str = None) -> dict:
 
 
 # -------------------------------------------------------------------
+# Phase 0 文档/代码合同漂移检查（调用 sunbigfly 的 check_skill.py）
+# -------------------------------------------------------------------
+
+def phase0_check_skill() -> dict:
+    """Phase 0: 跑 check_skill.py 检查 SKILL.md/cheatsheet/scripts 三方一致性。"""
+    results = {"phase": 0, "check_skill": {}, "summary": {"pass": 0, "fail": 0, "warn": 0}}
+    cs = subprocess.run(
+        ["python3", str(ROOT / "scripts" / "check_skill.py")],
+        capture_output=True, text=True, timeout=60
+    )
+    out = cs.stdout
+    err_count = 0
+    warn_count = 0
+    m = re.search(r'errors:\s*(\d+)', out)
+    if m: err_count = int(m.group(1))
+    m = re.search(r'warnings:\s*(\d+)', out)
+    if m: warn_count = int(m.group(1))
+    results["check_skill"] = {
+        "rc": cs.returncode,
+        "errors": err_count,
+        "warnings": warn_count,
+        "output": out[-1000:],
+    }
+    if err_count == 0:
+        results["summary"]["pass"] += 1
+    else:
+        results["summary"]["fail"] += err_count
+    results["summary"]["warn"] += warn_count
+    return results
+
+
+# -------------------------------------------------------------------
 # Phase 5 端到端测试：跑完整 HTML→SVG→PPTX 管线
 # -------------------------------------------------------------------
 
@@ -422,6 +464,21 @@ def generate_report(results: dict, out_dir: Path):
                     lines.append(f"  - {w}")
         lines.append("")
 
+    # check_skill (Phase 0)
+    cs = results.get("check_skill", {})
+    if cs:
+        ok = cs.get("errors", 0) == 0
+        lines += [f"## ✅/❌ check_skill (文档/代码合同漂移)", ""]
+        lines.append(f"- 退出码: {cs.get('rc')}")
+        lines.append(f"- errors: {cs.get('errors', 0)}")
+        lines.append(f"- warnings: {cs.get('warnings', 0)}")
+        if cs.get("output"):
+            lines.append("")
+            lines.append("```")
+            lines.append(cs["output"])
+            lines.append("```")
+        lines.append("")
+
     # E2E pipeline
     e2e = results.get("e2e", {})
     if e2e:
@@ -456,8 +513,8 @@ def generate_report(results: dict, out_dir: Path):
 def main():
     parser = argparse.ArgumentParser(description="PPT Agent Smoke Test")
     parser.add_argument("--style", help="只测试指定 style_id")
-    parser.add_argument("--phase", type=int, default=1, choices=[1, 2, 3, 4, 5],
-                       help="只跑指定 Phase 测试")
+    parser.add_argument("--phase", type=int, default=1, choices=[0, 1, 2, 3, 4, 5],
+                       help="只跑指定 Phase 测试 (0=check_skill, 1=style+pipeline-compat, 5=e2e)")
     parser.add_argument("--quiet", action="store_true", help="只输出失败")
     args = parser.parse_args()
 
@@ -468,6 +525,8 @@ def main():
         results = phase1_tests(style_filter=args.style)
     elif args.phase == 5:
         results = phase5_e2e_tests(style_filter=args.style)
+    elif args.phase == 0:
+        results = phase0_check_skill()
     else:
         print(f"Phase {args.phase} tests not yet implemented", file=sys.stderr)
         sys.exit(1)
