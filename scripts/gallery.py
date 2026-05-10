@@ -374,7 +374,20 @@ def build_index_html(grouped: dict) -> str:
 
 def take_screenshots(styles: list) -> bool:
     """用 puppeteer 截图每个 mock 为 PNG。"""
-    work_dir = ROOT
+    # 找 puppeteer 安装位置：优先项目根，其次 ppt-output/e2e-test
+    candidates = [ROOT, ROOT / "ppt-output" / "e2e-test"]
+    work_dir = None
+    for cand in candidates:
+        if (cand / "node_modules" / "puppeteer").exists():
+            work_dir = cand
+            break
+    if work_dir is None:
+        # 如果都没装，在项目根装一个
+        work_dir = ROOT
+        print("Installing puppeteer in project root...")
+        subprocess.run(["npm", "install", "puppeteer"],
+                      capture_output=True, text=True, timeout=180, cwd=str(work_dir))
+
     script_path = work_dir / ".gallery_screenshot.cjs"
     files = [{"id": s["style_id"], "html": str(GALLERY_DIR / f"{s['style_id']}.html"), "png": str(GALLERY_DIR / f"{s['style_id']}.png")} for s in styles]
 
