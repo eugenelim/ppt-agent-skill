@@ -1,5 +1,7 @@
 # Stage 3: Page QA & Visual Review -- 第 {{PAGE_NUM}} 页（共 {{TOTAL_PAGES}} 页）
 
+> **Subagent**: `{{SUBAGENT_NAME}}` · **Stage**: review · **Page**: {{PAGE_NUM}}/{{TOTAL_PAGES}}
+
 > **【系统级强制指令 / CRITICAL OVERRIDE】**
 > 本 prompt 已包含了你在此阶段所需的**全部**任务目标与 Playbook 细则。
 > **严格禁止调用工具去读取外层的 `SKILL.md` 或主控全局规则文件！**
