@@ -14,3 +14,37 @@ tests/smoke-results/*/screenshots/
 
 # Puppeteer 运行时产物
 *.bundle.js
+
+# ── agent-ready-repo (core pack) ──────────────────────────────
+# Local install-time scratch — written by `agentbundle install`.
+.adapt-install-marker.toml
+
+# Work-loop session state — per-spec scratch, never committed.
+docs/specs/**/state.json
+
+# Supervisor-mode worktrees.
+.worktrees/
+
+# Implementer reports — session-scratch.
+docs/specs/**/notes/implementer-*.md
+
+# Personal Claude Code overrides.
+CLAUDE.local.md
+.claude/settings.local.json
+AGENTS.local.md
+
+# OS / editor noise.
+*.swp
+.idea/
+
+# Python build artefacts.
+__pycache__/
+*.egg-info/
+*.pyc
+build/
+
+# Build pipeline output.
+dist/
+
+# Conductor scratch + per-workspace probe scaffolding.
+.context/
