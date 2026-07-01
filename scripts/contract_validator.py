@@ -39,6 +39,10 @@ DENSITY_ORDER = {"low": 0, "mid_low": 1, "medium": 2, "high": 3, "dashboard": 4}
 VALID_RHYTHM_ACTIONS = {"铺垫", "推进", "爆发", "缓冲", "收束"}
 VALID_INFO_POSTURES = {"结论页", "解释页", "证据页", "仪表盘页", "呼吸页"}
 VALID_ANCHOR_TYPES = {"标题", "KPI", "图表", "表格", "图片", "引言"}
+VALID_ARGUMENT_STRATEGIES = {
+    "narrative_driven", "data_driven", "case_study", "comparison",
+    "framework", "step_by_step", "authority", "reference_runbook",
+}
 NON_DASHBOARD_PAGE_TYPES = {"cover", "section", "end"}
 REQUIRED_INTERVIEW_DIMENSIONS = [
     ("scenario", ["场景", "使用场景", "应用场景", "scenario"]),
@@ -226,6 +230,49 @@ def parse_outline_pages(text: str) -> list[dict[str, Any]]:
     return pages
 
 
+def normalize_argument_strategy(raw: Any) -> str | None:
+    """Take the leading identifier run of a `论证策略` value, lowercased.
+
+    Tolerates a trailing gloss like `narrative_driven(叙事)` (the playbook's
+    methodology line uses that shape) by keeping only the leading `[A-Za-z_]+`.
+
+    Lenient by design: `论证策略` is human-authored in the outline, so this accepts
+    casing/gloss variants. A present-but-unparseable value (e.g. a leading non-ASCII
+    run) returns `None`, which the caller treats as an invalid enum value (`None` is
+    not in `VALID_ARGUMENT_STRATEGIES`) — so it errors, it is not silently skipped
+    (only a genuinely absent field is skipped). This is deliberately looser than the
+    planning side's exact `narrative_archetype == "reference_runbook"` match, which is
+    validating a machine-emitted field, not human prose.
+    """
+    if not is_non_empty_string(raw):
+        return None
+    match = re.match(r"[A-Za-z_]+", str(raw).strip())
+    return match.group(0).lower() if match else None
+
+
+def parse_outline_parts(text: str) -> list[dict[str, Any]]:
+    """Parse `## Part N` header blocks and extract each Part's `论证策略`.
+
+    The strategy line lives in the Part header block (between `## Part N` and the
+    first `### 第 N 页`), never in a page block, so reading the whole Part span and
+    taking the first match is sufficient.
+    """
+    part_headers = list(re.finditer(r"^##\s+Part\s*(\d+)\s*[:：]?\s*(.*)$", text, re.M))
+    parts: list[dict[str, Any]] = []
+    for index, match in enumerate(part_headers):
+        block_start = match.end()
+        block_end = part_headers[index + 1].start() if index + 1 < len(part_headers) else len(text)
+        block = text[block_start:block_end]
+        parts.append(
+            {
+                "part_number": int(match.group(1)),
+                "part_title": match.group(2).strip(),
+                "argument_strategy": extract_named_field(block, ["论证策略", "argument_strategy"]),
+            }
+        )
+    return parts
+
+
 def extract_anchor_fields(text: str) -> dict[str, str]:
     anchors: dict[str, str] = {}
     for line in text.splitlines():
@@ -350,6 +397,21 @@ def validate_outline(path: Path) -> tuple[ValidationResult, dict[str, Any]]:
     if not pages:
         result.error("outline: failed to parse page blocks")
 
+    # Narrative archetype: a deck is reference-runbook iff any Part selects it.
+    # The `论证策略` enum is validated here (when present); `reference_runbook`
+    # relaxes the persuasive-only "禁止连续 3 页 high/dashboard" streak rule below.
+    parts = parse_outline_parts(text)
+    is_reference_archetype = False
+    for part in parts:
+        raw_strategy = part["argument_strategy"]
+        if raw_strategy is None:
+            continue
+        strategy = normalize_argument_strategy(raw_strategy)
+        if strategy not in VALID_ARGUMENT_STRATEGIES:
+            result.error(f"outline Part {part['part_number']}: invalid 论证策略 `{raw_strategy}`")
+        elif strategy == "reference_runbook":
+            is_reference_archetype = True
+
     dashboard_pages = 0
     high_pressure_streak = 0
     for index, page in enumerate(pages):
@@ -419,7 +481,9 @@ def validate_outline(path: Path) -> tuple[ValidationResult, dict[str, Any]]:
             high_pressure_streak += 1
         else:
             high_pressure_streak = 0
-        if high_pressure_streak >= 3:
+        # Reference-runbook decks are uniformly dense; rhythm comes from artifact
+        # shape, not a climax curve — so the streak rule is persuasive-only.
+        if high_pressure_streak >= 3 and not is_reference_archetype:
             result.error(f"{page_label}: 禁止连续 3 页 `high/dashboard`")
 
     summary["page_markers"] = len(page_markers)
@@ -427,6 +491,8 @@ def validate_outline(path: Path) -> tuple[ValidationResult, dict[str, Any]]:
     summary["density_curve"] = density_curve
     summary["parsed_pages"] = len(pages)
     summary["dashboard_pages"] = dashboard_pages
+    summary["narrative_archetype"] = "reference_runbook" if is_reference_archetype else "persuasive"
+    summary["argument_strategies"] = [p["argument_strategy"] for p in parts if p["argument_strategy"]]
     summary["errors"] = len(result.errors)
     summary["warnings"] = len(result.warnings)
     return result, summary

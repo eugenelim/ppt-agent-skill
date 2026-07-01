@@ -15,8 +15,11 @@
 - `密度下限 / 密度目标 / 密度上限`
 - `节奏动作 / 信息姿态 / 锚点类型`
 - deck 级 `密度倾向` 与整套 `密度曲线`
+- **本页所属 `## Part N` 头部的 `论证策略`**（在 Part 块里，不在页块里）→ 据此定 `narrative_archetype`
 
 > **硬边界**：本阶段不是重新发明这一页的密度，而是把 outline 定下的窗口冻结成单页可执行的 `density_contract`。
+
+> **叙事 archetype（`narrative_archetype`，必填）**：读本页所属 Part 头部的 `论证策略`；若为 `reference_runbook` 则 `narrative_archetype: "reference_runbook"`，否则 `"persuasive"`。**每页都要写**——这是让下游 `planning_validator` 对参考型 deck 放宽"连续 3 页 high/dashboard"密度规则的唯一信号；漏写按 `persuasive` 处理（说服型密度规则照常生效）。参考型 archetype 详见 [`principles/narrative-arc.md` §参考型叙事](../../principles/narrative-arc.md)。
 
 ---
 
@@ -110,6 +113,7 @@
     "slide_number": "<页码>",
     "page_type": "<cover/toc/section/content/end>",
     "narrative_role": "<叙事角色>",
+    "narrative_archetype": "<persuasive | reference_runbook — 由本页所属 Part 的 论证策略 推导>",
     "title": "<页标题>",
     "page_goal": "<一句话核心论点>",
     "audience_takeaway": "<观众带走什么>",

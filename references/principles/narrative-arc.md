@@ -70,10 +70,12 @@
 
 **何时判定为参考型**：`叙事结构` 落在"时间线 / 生命周期"，且内容是**可执行的操作制品**（模板 / 清单 / 排期 / 责任矩阵 / 升级路径 / 质量门）而非论点+证据。天然皮肤是 [`schematic_blueprint`](../styles/light.md)，成套组件见 [`blocks/worksheet.md`](../blocks/worksheet.md)。
 
+**如何声明（引擎可识别）**：在大纲里给相应 Part 写 `论证策略：reference_runbook`。任一 Part 选此值即把整套 deck 判为参考型 archetype——这是 `论证策略` 枚举的一个值（不新增 `page_type`）。下游 `contract_validator`（大纲阶段）与 `planning_validator`（策划阶段）都据此分支密度规则；未声明时按说服型处理，行为不变。
+
 **叙事脊柱 = 生命周期时间线**（不是论证高潮）：按"阶段先后"组织（准入 → 各交付阶段 → 收尾 → 复盘 + 横切参考），而非"问题→方案→效果"。
 
 **页面级节奏（覆盖高潮-呼吸规则）**：
-- 参考型 deck **整体均匀偏密**（都是要查的制品），不追求单一高潮页，也**不要求"密度高页后跟呼吸页"**——`narrative-arc` 的"禁止连续 3 页 high"在此**放宽**。
+- 参考型 deck **整体均匀偏密**（都是要查的制品），不追求单一高潮页，也**不要求"密度高页后跟呼吸页"**——"禁止连续 3 页 high"在此**放宽**（`contract_validator` 与 `planning_validator` 都据 archetype 分支此规则，说服型不变）。
 - 节奏来自**制品形态的交替**（表格 → 清单 → 短文 → 标注 callout），不是 high/low 密度起伏。
 - 每个阶段区段的内部模式：`section-marker`（§NN + kicker + 规线，轻量分隔，**不占整页**）→ `lead`（一句话交代"何时/为何用这段"）→ 操作制品（template / checklist / schedule）→ 失败模式 + 补救 → "why this matters" 聚光 callout。
 
@@ -85,7 +87,7 @@
 3. **章节用 `section-marker` 内联分隔**，而非整页 section 封面（跳读者不需要每次一整页呼吸）。
 4. **模板配"what good looks like"标注**；清单配准入门槛；失败模式配补救行。
 
-**与强制骨架的关系**：`cover / toc / end` 仍在（手册也有封面、目录、收束），但 Part 首页的整页 `section` 呼吸规则对参考型**放宽**为内联 `section-marker`；`end` 由"行动号召"改为"横切参考/复盘"。若下游 outline 需要严格 page_type，仍映射到现有枚举（见 [outline playbook](../playbooks/outline-phase1-playbook.md)）——参考型是**页面模式的选择**，不新增枚举。
+**与强制骨架的关系**：`cover / toc / end` 仍在（手册也有封面、目录、收束），但 Part 首页的整页 `section` 呼吸规则对参考型**放宽**为内联 `section-marker`；`end` 由"行动号召"改为"横切参考/复盘"。触发靠 `论证策略：reference_runbook`（`论证策略` 枚举的新值），下游 outline 仍映射到现有 `page_type` 枚举（见 [outline playbook](../playbooks/outline-phase1-playbook.md)）——参考型**不新增 `page_type`**（`section-marker` 作为独立 page_type 是另一项待办）。
 
 ## 自检
 

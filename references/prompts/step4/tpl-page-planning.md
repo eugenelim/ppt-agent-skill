@@ -55,7 +55,7 @@
 
 ## 执行链路（固定顺序，不得跳步）
 
-1. 读取 `{{OUTLINE_PATH}}` 中第 {{PAGE_NUM}} 页的定义（只关注你这一页），特别提取 `密度下限 / 密度目标 / 密度上限 / 节奏动作 / 信息姿态 / 锚点类型`
+1. 读取 `{{OUTLINE_PATH}}` 中第 {{PAGE_NUM}} 页的定义（只关注你这一页），特别提取 `密度下限 / 密度目标 / 密度上限 / 节奏动作 / 信息姿态 / 锚点类型`；**并读取本页所属 `## Part N` 头部的 `论证策略`**（它在 Part 块里、不在页块里）——若为 `reference_runbook` 则本页 `narrative_archetype: "reference_runbook"`，否则 `"persuasive"`（该字段是参考型 deck 放宽密度规则的信号，见 playbook）
 2. 深度读取 `{{REQUIREMENTS_PATH}}`，将其中的【受众画像】、【目标动作】和【版面心智】作为单页选型和内容设计的最高约束（例如：对底层技术受众放大图表卡片，对合作方主打对比及成果锚点）。
 3. 读取 `{{BRIEF_PATH}}` 获取可用素材
 4. 读取 `{{STYLE_PATH}}` 提取 `mood_keywords`、`variation_strategy`、`decoration_dna` 做情绪定调

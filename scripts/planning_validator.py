@@ -27,6 +27,7 @@ from workflow_versions import (
 
 
 VALID_PAGE_TYPES = {"cover", "toc", "section", "content", "end"}
+VALID_NARRATIVE_ARCHETYPES = {"persuasive", "reference_runbook"}
 VALID_NARRATIVE_ROLES = {
     "cover", "toc", "section", "opening", "orientation", "transition", "setup", "evidence", "comparison",
     "framework", "process", "case", "quote", "breath", "close", "cta",
@@ -496,6 +497,10 @@ def validate_page(page: dict[str, Any], refs_dir: Path | None) -> ValidationResu
     if narrative_role and narrative_role not in VALID_NARRATIVE_ROLES:
         result.warn(f"{label}: unknown narrative_role '{narrative_role}'")
 
+    narrative_archetype = page.get("narrative_archetype")
+    if narrative_archetype is not None and narrative_archetype not in VALID_NARRATIVE_ARCHETYPES:
+        result.error(f"{label}: invalid narrative_archetype '{narrative_archetype}'")
+
     visual_weight = page.get("visual_weight")
     if not isinstance(visual_weight, int) or not (1 <= visual_weight <= 9):
         result.error(f"{label}: visual_weight must be an integer in [1, 9]")
@@ -578,6 +583,13 @@ def validate_cross_page(pages: list[dict[str, Any]]) -> ValidationResult:
     last_content_layout: str | None = None
     high_pressure_streak = 0
 
+    # A reference-runbook deck is uniformly dense; the "no 3 consecutive
+    # high/dashboard" streak rule is persuasive-only. Absent the field (or any
+    # non-reference value) the deck is treated as persuasive — no behavior change.
+    is_reference_archetype = any(
+        page.get("narrative_archetype") == "reference_runbook" for page in pages
+    )
+
     for index, page in enumerate(pages):
         slide_number = page.get("slide_number")
         label = f"slide {slide_number}"
@@ -597,7 +609,7 @@ def validate_cross_page(pages: list[dict[str, Any]]) -> ValidationResult:
             high_pressure_streak += 1
         else:
             high_pressure_streak = 0
-        if high_pressure_streak >= 3:
+        if high_pressure_streak >= 3 and not is_reference_archetype:
             result.error(f"{label}: 3 consecutive slides with density_label in {{high, dashboard}}")
 
         if density_label == "dashboard":

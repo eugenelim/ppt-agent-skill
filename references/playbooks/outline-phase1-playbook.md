@@ -24,7 +24,7 @@
    - `少而精 -> relaxed`
    - `适中 -> balanced`
    - `容量极大 / 极高密度 -> ultra_dense`
-4. **为每 Part 选择论证策略** -- narrative_driven(叙事) / data_driven / case_study / comparison / framework / step_by_step / authority
+4. **为每 Part 选择论证策略** -- narrative_driven(叙事) / data_driven / case_study / comparison / framework / step_by_step / authority / reference_runbook（参考型：运行手册 / SOP / playbook，触发参考型 archetype——见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)）
 5. **分配页面并确定每页论点与密度窗口** -- **每页只有一句话 page_goal，绝不能含"和"字**（如果有"和"，说明这页装了两个目标，必须拆分成两页）；同时给出 `密度下限 / 密度目标 / 密度上限`
 6. **寻找故事与内容支撑** -- 内容必须结构化！PPT 的力量来自于金字塔顶端洞察与底层强有力数据的对冲。必须优先从素材中提取高度精炼的模块化数据点、对比组和关键特征词。如果遇到纯文叙事，也必须拆解出逻辑骨架。去素材摘要里寻找真正能撑起复杂组件矩阵的武器，拒绝平庸的高分贝长段落。
 
@@ -86,7 +86,7 @@
 
 ## Part 1: {part_title}
 Part 目标：{part_goal}
-论证策略：{narrative_driven / data_driven / case_study / comparison / framework / step_by_step / authority}
+论证策略：{narrative_driven / data_driven / case_study / comparison / framework / step_by_step / authority / reference_runbook}
 与上一 Part 的关系：{无（首Part）/ 递进 / 转折 / 因果 / 并列}
 
 ### 第 1 页：{page_title}
@@ -119,6 +119,7 @@ Part 目标：{part_goal}
 - `节奏动作` 必须从 `{铺垫, 推进, 爆发, 缓冲, 收束}` 中选择。
 - `信息姿态` 必须从 `{结论页, 解释页, 证据页, 仪表盘页, 呼吸页}` 中选择。
 - `锚点类型` 必须从 `{标题, KPI, 图表, 表格, 图片, 引言}` 中选择。
+- `论证策略`（Part 级）必须从 `{narrative_driven, data_driven, case_study, comparison, framework, step_by_step, authority, reference_runbook}` 中选择；下游 `contract_validator` 会校验此值。任一 Part 选 `reference_runbook` 即把整套 deck 判为**参考型 archetype**（见下方骨架规则）。
 
 ### 叙事角色 → page_type 映射规则
 
@@ -140,13 +141,17 @@ Part 目标：{part_goal}
 |------|---------|-----------|--------|----------|
 | 第 1 页 | `cover` | `cover` | **强制** | 标题冲击力 + 品牌仪式感 |
 | 第 2 页 | `toc` | `toc` | **强制（总页数 >= 6 时）** | 全局路线图，让观众 3 秒理解结构 |
-| 每个 Part 首页 | `section` | `section` | **强制** | 章节过渡呼吸页，告诉观众进入新篇章 |
-| 最后一页 | `close` 或 `cta` | `end` | **强制** | 核心结论收束 + 行动号召 |
+| 每个 Part 首页 | `section` | `section` | **强制（说服型）** | 章节过渡呼吸页，告诉观众进入新篇章 |
+| 最后一页 | `close` 或 `cta` | `end` | **强制** | 核心结论收束 + 行动号召（参考型改为横切参考/复盘） |
+
+> **按 archetype 分支（说服型 vs 参考型）**：本骨架的默认形态针对**说服型**演示。当任一 Part 选 `论证策略：reference_runbook`（参考型 archetype）时，两条规则放宽（其余规则不变）：
+> - **Part 首页的整页 `section`** 放宽为**内联 `section-marker`**（§NN + kicker + 规线，不占整页）——跳读者不需要每进一段就来一整页呼吸。参考型仍映射现有 `section` page_type（不新增枚举）。
+> - **"禁止连续 3 页 high/dashboard"** 放宽——参考型 deck 整体均匀偏密，节奏来自**制品形态交替**（表格 → 清单 → 短文 → callout），而非高潮-呼吸密度起伏。`contract_validator` 与 `planning_validator` 都据 archetype 分支此规则；说服型 deck 行为不变。详见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)。
 
 **违规检测**：
 - 缺少 cover 或 end = **结构缺陷，必须补回**
 - 总页 >= 6 却没有 toc = **结构缺陷，必须补回**
-- 任何 Part 的首页不是 section（除 Part 1 的首页是 cover/toc 外） = **结构缺陷，该 Part 必须有 section 页**
+- **说服型**：任何 Part 的首页不是 section（除 Part 1 的首页是 cover/toc 外） = **结构缺陷，该 Part 必须有 section 页**。**参考型**（`reference_runbook`）此规则放宽——Part 以内联 `section-marker` 分隔，不要求整页 `section`。
 - section 页只做呼吸过渡，**绝对禁止**在 section 页塞数据图表或多卡片布局
 
 ### 主题延续规则（灵活性保障）
