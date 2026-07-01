@@ -39,6 +39,7 @@
 *   `decoration_dna.forbidden`：**（强制：必须提供 2-5 个元素的数组）**
 *   `decoration_dna.recommended_combos`：**（强制：必须提供 2-4 个元素的数组）**
 *   `font_family`
+*   `card_fills`（可选布尔，**省略即 `false`**）：是否允许用副色铺卡片背景。**只有多-accent 风格**（多色是刻意身份，如 Stripe / 糖果风）才置 `true`；单-accent 风格一律省略或 `false`，让内容卡片默认走中性/白卡片底，副色仅作信号色（见 design-specs C 节「副色 = 信号色」）。
 
 #### css_variables 键命名与数量规范（强制红线）
 

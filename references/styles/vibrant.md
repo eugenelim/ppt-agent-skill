@@ -35,6 +35,7 @@
   "card": { "gradient_from": "rgba(255,255,255,0.18)", "gradient_to": "rgba(255,255,255,0.08)", "border": "rgba(255,255,255,0.4)", "border_radius": 100, "backdrop_blur": 20 },
   "text": { "primary": "#FFFFFF", "secondary": "rgba(255,255,255,0.85)", "title_size": 116, "body_size": 14, "card_title_size": 18 },
   "accent": { "primary": ["#ffd16b", "#ffffff"], "secondary": ["#ff5b9d", "#00d8d4"] },
+  "card_fills": true,
   "typography": {
     "display_font": "'Inter Tight', 'Inter', -apple-system, sans-serif",
     "body_font": "'Inter', -apple-system, sans-serif",
@@ -76,6 +77,7 @@ Mock: [`ppt-output/style-gallery/vibrant_rainbow.html`](../../ppt-output/style-g
   "card": { "gradient_from": "#ffffff", "gradient_to": "#fff8e7", "border": "rgba(255,127,193,0.2)", "border_radius": 28, "backdrop_blur": 0 },
   "text": { "primary": "#2a2a3a", "secondary": "#5a5a6a", "title_size": 36, "body_size": 14, "card_title_size": 18 },
   "accent": { "primary": ["#ff7eb9", "#ffd166"], "secondary": ["#06d6a0", "#87ceeb"] },
+  "card_fills": true,
   "typography": {
     "display_font": "'Quicksand', 'Nunito', -apple-system, sans-serif",
     "body_font": "'Quicksand', 'Nunito', -apple-system, sans-serif",
@@ -117,6 +119,7 @@ Mock: [`ppt-output/style-gallery/kindergarten_pop.html`](../../ppt-output/style-
   "card": { "gradient_from": "#ffffff", "gradient_to": "#f4f0e8", "border": "#1a1a1a", "border_radius": 0, "backdrop_blur": 0 },
   "text": { "primary": "#1a1a1a", "secondary": "#666", "title_size": 92, "body_size": 14, "card_title_size": 18 },
   "accent": { "primary": ["#d62828", "#003049"], "secondary": ["#ffd60a", "#1a1a1a"] },
+  "card_fills": true,
   "typography": {
     "display_font": "'Helvetica Neue', 'Inter Tight', 'Inter', sans-serif",
     "body_font": "'Inter', -apple-system, sans-serif",
@@ -158,6 +161,7 @@ Mock: [`ppt-output/style-gallery/bauhaus_block.html`](../../ppt-output/style-gal
   "card": { "gradient_from": "#ffffff", "gradient_to": "#fff5f0", "border": "rgba(248,187,208,0.3)", "border_radius": 24, "backdrop_blur": 0 },
   "text": { "primary": "#4a2c2a", "secondary": "#7a4c4a", "title_size": 78, "body_size": 14, "card_title_size": 18 },
   "accent": { "primary": ["#f8bbd0", "#c8e6c9"], "secondary": ["#fff59d", "#b3e5fc"] },
+  "card_fills": true,
   "typography": {
     "display_font": "'Playfair Display', 'Fraunces', Georgia, serif",
     "body_font": "'Inter', -apple-system, sans-serif",
