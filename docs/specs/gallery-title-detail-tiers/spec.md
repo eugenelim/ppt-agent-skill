@@ -88,6 +88,12 @@ Per style, normalization depends on what the existing `<id>.html` is:
   describes the cover left sitting next to a link that now resolves to the
   detail). No intra-repo `<id>.html` reference dangles. (deferred: gallery-tier-authoring)
 - [ ] `README.md` and `references/style-system.md` describe the two-tier model. (deferred: gallery-tier-finalize)
+- [x] **Two tiers are the forward standard for new/absorbed styles.**
+  `references/style-system.md` mandates that every style ship **both**
+  `<id>.cover.html` (cover) and `<id>.html` (detail) as `smoke_test` fixtures,
+  authored **together at absorption time** (not one-then-backfilled), and
+  `smoke_test` phase 1 validates both. This makes "the absorption workflow builds
+  both cover + detail fixtures" a structural convention, not a per-PR reminder.
 
 ## Boundaries
 
