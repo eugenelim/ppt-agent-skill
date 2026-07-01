@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>safari_savanna · 萨凡纳探险 · World-Class Mock</title>
+<title>safari_savanna · Wildlife Survey &amp; Migration Data · Detail Slide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;1,400;1,500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
   :root {
     --bg-light: #f3e6cc;
@@ -16,9 +16,10 @@
     --ink-primary: #2a1f0f;
     --ink-secondary: #5a4a30;
     --ink-tertiary: #7a6a4a;
-    --paper-line: rgba(90, 74, 48, 0.22);
-    --display-font: 'Playfair Display', 'Fraunces', Georgia, serif;
-    --body-font: 'Source Serif 4', Georgia, 'Iowan Old Style', serif;
+    --paper-line: rgba(90,74,48,0.22);
+    --paper-line-faint: rgba(90,74,48,0.12);
+    --display-font: 'Playfair Display', Georgia, serif;
+    --body-font: 'Source Serif 4', Georgia, serif;
     --mono-font: 'JetBrains Mono', 'Courier New', monospace;
   }
 
@@ -31,7 +32,8 @@
       linear-gradient(135deg, var(--bg-light) 0%, var(--bg-deep) 60%, var(--bg-edge) 100%);
     color: var(--ink-primary);
     font-family: var(--body-font);
-    font-feature-settings: 'kern', 'liga', 'calt', 'onum', 'ss01';
+    font-feature-settings: 'kern', 'liga', 'onum', 'calt', 'ss01';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -41,509 +43,461 @@
   .grain {
     position: absolute; inset: 0;
     background-image:
-      radial-gradient(circle at 20% 30%, rgba(139, 58, 31, 0.06) 0%, transparent 2%),
-      radial-gradient(circle at 70% 60%, rgba(196, 77, 42, 0.05) 0%, transparent 2.5%),
-      radial-gradient(circle at 45% 80%, rgba(90, 74, 48, 0.05) 0%, transparent 2%),
-      radial-gradient(circle at 85% 15%, rgba(90, 74, 48, 0.04) 0%, transparent 2%);
-    background-size: 14px 14px, 18px 18px, 22px 22px, 16px 16px;
+      radial-gradient(circle at 20% 30%, rgba(139,58,31,0.05) 0%, transparent 2%),
+      radial-gradient(circle at 70% 60%, rgba(196,77,42,0.04) 0%, transparent 2.5%),
+      radial-gradient(circle at 45% 80%, rgba(90,74,48,0.04) 0%, transparent 2%);
+    background-size: 14px 14px, 18px 18px, 22px 22px;
     pointer-events: none;
     opacity: 0.7;
   }
 
   .horizon {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    height: 220px;
-    background:
-      linear-gradient(180deg, transparent 0%, rgba(196, 77, 42, 0.08) 50%, rgba(139, 58, 31, 0.16) 100%);
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 160px;
+    background: linear-gradient(180deg, transparent 0%, rgba(196,77,42,0.06) 60%, rgba(139,58,31,0.12) 100%);
     pointer-events: none;
   }
 
   .frame {
     position: absolute;
-    top: 32px; left: 32px; right: 32px; bottom: 32px;
+    top: 22px; left: 22px; right: 22px; bottom: 22px;
     border: 1.5px solid var(--ink-secondary);
     pointer-events: none;
     z-index: 1;
   }
-  .frame-inner {
-    position: absolute;
-    top: 38px; left: 38px; right: 38px; bottom: 38px;
-    border: 0.5px solid rgba(90, 74, 48, 0.45);
-    pointer-events: none;
-    z-index: 1;
+  .cm-tl { position: absolute; top: 16px; left: 16px; width: 18px; height: 18px; border-top: 1px solid var(--accent-deep); border-left: 1px solid var(--accent-deep); z-index: 2; }
+  .cm-tr { position: absolute; top: 16px; right: 16px; width: 18px; height: 18px; border-top: 1px solid var(--accent-deep); border-right: 1px solid var(--accent-deep); z-index: 2; }
+  .cm-bl { position: absolute; bottom: 16px; left: 16px; width: 18px; height: 18px; border-bottom: 1px solid var(--accent-deep); border-left: 1px solid var(--accent-deep); z-index: 2; }
+  .cm-br { position: absolute; bottom: 16px; right: 16px; width: 18px; height: 18px; border-bottom: 1px solid var(--accent-deep); border-right: 1px solid var(--accent-deep); z-index: 2; }
+
+  .vertical-text {
+    position: absolute; left: 30px; top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: left center;
+    font-family: var(--mono-font);
+    font-size: 8px; letter-spacing: 0.38em;
+    color: var(--ink-tertiary); text-transform: uppercase;
+    z-index: 3; opacity: 0.55; white-space: nowrap;
   }
 
-  .corner-mark {
-    position: absolute;
-    width: 22px; height: 22px;
-    border: 0;
-    z-index: 2;
-  }
-  .cm-tl { top: 26px; left: 26px; border-top: 1px solid var(--accent-deep); border-left: 1px solid var(--accent-deep); }
-  .cm-tr { top: 26px; right: 26px; border-top: 1px solid var(--accent-deep); border-right: 1px solid var(--accent-deep); }
-  .cm-bl { bottom: 26px; left: 26px; border-bottom: 1px solid var(--accent-deep); border-left: 1px solid var(--accent-deep); }
-  .cm-br { bottom: 26px; right: 26px; border-bottom: 1px solid var(--accent-deep); border-right: 1px solid var(--accent-deep); }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 88px 96px;
+  /* Page layout */
+  .page {
+    position: absolute; inset: 0;
+    padding: 40px 72px 36px 72px;
     display: flex; flex-direction: column;
     z-index: 3;
   }
 
-  .top-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 20px;
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 12px;
     border-bottom: 0.5px solid var(--paper-line);
+    margin-bottom: 18px;
   }
-  .maison {
+  .masthead {
     font-family: var(--mono-font);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.42em;
-    color: var(--ink-secondary);
+    font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.42em; color: var(--ink-secondary);
     text-transform: uppercase;
   }
-  .issue {
+  .section-label {
+    display: flex; align-items: center; gap: 10px;
     font-family: var(--mono-font);
-    font-size: 10.5px;
-    font-weight: 500;
-    letter-spacing: 0.28em;
-    color: var(--ink-tertiary);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.24em; color: var(--accent-sun);
     text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
-    display: flex;
-    align-items: center;
-    gap: 14px;
   }
-  .issue .dot {
-    display: inline-block;
-    width: 4px; height: 4px;
-    border-radius: 50%;
-    background: var(--accent-sun);
+  .section-label .bar { width: 22px; height: 1px; background: var(--accent-sun); }
+  .hdr-meta {
+    font-family: var(--mono-font);
+    font-size: 10px; letter-spacing: 0.22em;
+    color: var(--ink-tertiary); text-transform: uppercase;
   }
 
-  .label-row {
-    margin-top: 64px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-  .label {
-    font-family: var(--mono-font);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.22em;
-    color: var(--accent-sun);
-    text-transform: uppercase;
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .label .bar {
-    display: inline-block;
-    width: 28px; height: 1px;
-    background: var(--accent-sun);
-  }
-  .label-meta {
-    font-family: var(--mono-font);
-    font-size: 10px;
-    letter-spacing: 0.2em;
-    color: var(--ink-tertiary);
-    text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
-  }
+  /* 3-column layout */
+  .main { display: grid; grid-template-columns: 1.1fr auto 1fr auto 0.9fr; flex: 1; min-height: 0; }
+  .divider-v { display: flex; align-items: stretch; justify-content: center; padding: 0 12px; }
+  .divider-v-line { display: block; width: 0.5px; background: var(--paper-line); flex: 1; }
 
-  .headline {
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .col-label {
+    font-family: var(--mono-font);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.32em; color: var(--accent-sun);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .col-label .lb { width: 14px; height: 1px; background: var(--accent-sun); }
+
+  /* Migration stats */
+  .migration-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mkpi {
+    background: rgba(255,250,235,0.55);
+    border: 0.5px solid var(--paper-line);
+    padding: 10px 12px 8px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .mkpi-val {
     font-family: var(--display-font);
-    font-weight: 700;
-    font-size: 96px;
-    line-height: 0.96;
-    letter-spacing: -0.035em;
+    font-size: 28px; font-weight: 500;
+    line-height: 1; letter-spacing: -0.02em;
     color: var(--ink-primary);
-    margin-top: 20px;
-    max-width: 760px;
+    display: flex; align-items: baseline; gap: 4px;
   }
-  .headline em {
-    font-style: italic;
-    font-weight: 400;
-    color: var(--accent-deep);
-    letter-spacing: -0.025em;
+  .mkpi-val .u {
+    font-style: italic; font-size: 12px;
+    color: var(--accent-amber); font-weight: 400;
   }
-
-  .deck {
+  .mkpi-lbl {
+    font-family: var(--mono-font);
+    font-size: 9px; letter-spacing: 0.22em;
+    color: var(--ink-tertiary); text-transform: uppercase;
+  }
+  .mkpi-note {
     font-family: var(--body-font);
-    font-style: italic;
-    font-size: 19px;
-    line-height: 1.55;
-    color: var(--ink-secondary);
-    margin-top: 26px;
-    max-width: 540px;
-    letter-spacing: 0.005em;
-  }
-  .deck .ornament {
-    color: var(--accent-sun);
-    font-style: normal;
-    margin: 0 8px;
-    font-family: var(--display-font);
+    font-style: italic; font-size: 10px;
+    color: var(--ink-tertiary); margin-top: 1px;
   }
 
-  .meta-rule {
-    margin-top: 56px;
-    width: 60px;
-    height: 1px;
-    background: var(--accent-sun);
-    opacity: 0.7;
-  }
+  .census-rule { width: 100%; height: 0.5px; background: var(--paper-line); margin: 4px 0; }
 
-  .meta-grid {
-    margin-top: 28px;
-    display: flex;
-    gap: 72px;
-    align-items: flex-start;
+  /* Field log table */
+  .field-table {
+    width: 100%; border-collapse: collapse;
   }
-  .meta {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .meta .key {
+  .field-table thead tr { border-bottom: 0.5px solid var(--paper-line); }
+  .field-table th {
     font-family: var(--mono-font);
-    font-size: 9.5px;
-    font-weight: 600;
-    letter-spacing: 0.32em;
-    color: var(--ink-tertiary);
-    text-transform: uppercase;
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.26em; color: var(--ink-tertiary);
+    text-transform: uppercase; padding: 0 0 7px 0;
+    text-align: left;
   }
-  .meta .val {
+  .field-table th:not(:first-child) { padding-left: 10px; }
+  .field-table th.right { text-align: right; }
+  .field-table tbody tr { border-bottom: 0.5px solid var(--paper-line-faint); }
+  .field-table tbody tr:last-child { border-bottom: none; }
+  .field-table td {
+    font-family: var(--body-font);
+    font-size: 11px; color: var(--ink-secondary);
+    padding: 6px 0; vertical-align: middle;
+  }
+  .field-table td:not(:first-child) { padding-left: 10px; }
+  .field-table td.species {
+    font-style: italic; color: var(--ink-primary);
+    font-size: 11.5px;
+  }
+  .field-table td.num {
     font-family: var(--mono-font);
-    font-size: 17px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
+    font-size: 10.5px; text-align: right;
     color: var(--ink-primary);
-    font-variant-numeric: tabular-nums;
   }
+  .trend-up { color: var(--accent-deep); font-weight: 700; font-family: var(--mono-font); font-size: 9.5px; }
+  .trend-stable { color: var(--ink-tertiary); font-family: var(--mono-font); font-size: 9.5px; }
 
-  .stamp {
-    position: absolute;
-    top: 108px;
-    right: 110px;
-    transform: rotate(-12deg);
-    padding: 10px 16px 8px 16px;
-    border: 2px solid var(--accent-sun);
-    color: var(--accent-sun);
+  /* Zone chart */
+  .zone-bars { display: flex; flex-direction: column; gap: 9px; }
+  .zone-row { display: flex; align-items: center; gap: 8px; }
+  .zone-lbl {
     font-family: var(--mono-font);
-    font-size: 11px;
-    letter-spacing: 0.2em;
-    font-weight: 700;
-    opacity: 0.78;
-    text-transform: uppercase;
-    text-align: center;
-    z-index: 4;
-    box-shadow: inset 0 0 0 1px rgba(196, 77, 42, 0.25);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.2em; color: var(--ink-secondary);
+    text-transform: uppercase; min-width: 46px;
   }
-  .stamp .row1 {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+  .zone-track {
+    flex: 1; height: 10px;
+    background: rgba(90,74,48,0.10);
+    position: relative; overflow: hidden;
   }
-  .stamp .row2 {
-    margin-top: 4px;
-    font-size: 8.5px;
-    letter-spacing: 0.34em;
-    font-weight: 500;
-    color: var(--accent-deep);
+  .zone-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-sun) 0%, var(--accent-amber) 100%);
     opacity: 0.85;
   }
-
-  .stamp-second {
-    position: absolute;
-    top: 200px;
-    right: 132px;
-    transform: rotate(6deg);
-    padding: 5px 10px;
-    border: 1px solid var(--ink-secondary);
-    color: var(--ink-secondary);
+  .zone-val {
     font-family: var(--mono-font);
-    font-size: 9px;
-    letter-spacing: 0.3em;
-    font-weight: 600;
-    opacity: 0.55;
-    z-index: 4;
-    text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
+    font-size: 9.5px; color: var(--ink-tertiary);
+    min-width: 40px; text-align: right;
   }
 
-  .map-wrap {
-    position: absolute;
-    right: 96px;
-    bottom: 132px;
-    width: 200px;
-    height: 240px;
-    z-index: 3;
+  /* Field log entries */
+  .field-log { display: flex; flex-direction: column; gap: 0; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid var(--paper-line); }
+  .log-entry {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 5px 0 5px 12px;
+    border-left: 0.5px solid var(--paper-line);
+    position: relative;
   }
-  .map-wrap svg {
-    width: 100%;
-    height: 100%;
-    display: block;
+  .log-dot {
+    position: absolute; left: -4px; top: 9px;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent-sun);
+    border: 1px solid var(--bg-light);
   }
-  .map-coord {
-    position: absolute;
+  .log-date {
     font-family: var(--mono-font);
-    font-size: 9px;
-    letter-spacing: 0.16em;
-    color: var(--ink-tertiary);
-    font-variant-numeric: tabular-nums;
-    text-transform: uppercase;
+    font-size: 8.5px; font-weight: 700;
+    color: var(--accent-deep); letter-spacing: 0.18em;
+    white-space: nowrap; padding-top: 1px; min-width: 58px;
   }
-  .map-coord-tl { top: 6px; left: 4px; }
-  .map-coord-tr { top: 6px; right: 4px; }
-  .map-coord-bl { bottom: 6px; left: 4px; }
-  .map-coord-br { bottom: 6px; right: 4px; }
-  .map-pin-label {
-    position: absolute;
-    top: 48%;
-    left: 56%;
-    font-family: var(--mono-font);
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-    color: var(--accent-sun);
-    text-transform: uppercase;
-  }
-  .map-caption {
-    position: absolute;
-    bottom: -22px;
-    left: 0; right: 0;
-    text-align: center;
+  .log-text {
     font-family: var(--body-font);
-    font-style: italic;
-    font-size: 11px;
-    letter-spacing: 0.06em;
-    color: var(--ink-tertiary);
+    font-size: 10.5px; color: var(--ink-secondary);
+    line-height: 1.4;
   }
+  .log-text strong { color: var(--ink-primary); font-weight: 600; }
 
-  .compass {
-    position: absolute;
-    top: 380px;
-    right: 132px;
-    width: 56px;
-    height: 56px;
-    z-index: 3;
-    opacity: 0.55;
-  }
-
+  /* Footer */
   .footer {
-    position: absolute;
-    bottom: 92px;
-    left: 96px;
-    right: 96px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    z-index: 3;
-    padding-top: 18px;
-    border-top: 0.5px solid var(--paper-line);
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 10px; border-top: 0.5px solid var(--paper-line);
+    margin-top: 14px;
   }
-  .field-editors {
+  .footer-left {
     font-family: var(--mono-font);
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: 0.34em;
-    color: var(--ink-secondary);
-    text-transform: uppercase;
+    font-size: 9.5px; letter-spacing: 0.28em;
+    color: var(--ink-tertiary); text-transform: uppercase;
   }
-  .field-editors .sep {
-    margin: 0 12px;
-    color: var(--accent-sun);
-    font-weight: 700;
+  .footer-right {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .folio-tag {
+    border: 0.5px solid var(--paper-line);
+    padding: 2px 8px;
+    font-family: var(--mono-font);
+    font-size: 9px; letter-spacing: 0.18em;
+    color: var(--ink-tertiary); text-transform: uppercase;
   }
   .page-mark {
     font-family: var(--mono-font);
-    font-size: 10.5px;
-    letter-spacing: 0.28em;
-    color: var(--ink-tertiary);
-    text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    font-size: 9.5px; letter-spacing: 0.26em;
+    color: var(--ink-tertiary); text-transform: uppercase;
   }
-
-  .vertical-text {
-    position: absolute;
-    left: 56px;
-    top: 50%;
-    transform: translateY(-50%) rotate(-90deg);
-    transform-origin: center;
-    font-family: var(--mono-font);
-    font-size: 9.5px;
-    letter-spacing: 0.46em;
-    color: var(--ink-tertiary);
-    text-transform: uppercase;
-    z-index: 3;
-    opacity: 0.7;
-    white-space: nowrap;
-  }
-
-  .sun-glyph {
-    position: absolute;
-    top: 320px;
-    left: 96px;
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 35%, rgba(255, 220, 160, 0.95), rgba(196, 77, 42, 0.55));
-    box-shadow:
-      0 0 0 8px rgba(196, 77, 42, 0.08),
-      0 0 0 16px rgba(196, 77, 42, 0.04);
-    opacity: 0.0;
-  }
-
 </style>
 </head>
 <body>
   <div class="grain"></div>
   <div class="horizon"></div>
   <div class="frame"></div>
-  <div class="frame-inner"></div>
-  <div class="corner-mark cm-tl"></div>
-  <div class="corner-mark cm-tr"></div>
-  <div class="corner-mark cm-bl"></div>
-  <div class="corner-mark cm-br"></div>
+  <div class="cm-tl"></div>
+  <div class="cm-tr"></div>
+  <div class="cm-bl"></div>
+  <div class="cm-br"></div>
+  <div class="vertical-text">ATLAS QUARTERLY · WILDLIFE SURVEY · VOL XII · MMXXVI</div>
 
-  <div class="vertical-text">ATLAS QUARTERLY · VOL XII · MMXXVI</div>
-
-  <div class="stage">
-    <div class="top-bar">
-      <div class="maison">ATLAS · QUARTERLY · MMXXVI</div>
-      <div class="issue">
-        <span>VOL XII</span>
-        <span class="dot"></span>
-        <span>ISSUE 042</span>
-        <span class="dot"></span>
-        <span>EAST AFRICA</span>
-      </div>
-    </div>
-
-    <div class="label-row">
-      <div class="label">
+  <div class="page">
+    <div class="header">
+      <div class="masthead">ATLAS · QUARTERLY · WILDLIFE SURVEY</div>
+      <div class="section-label">
         <span class="bar"></span>
-        Field Dispatch No. 042
+        FIELD DISPATCH NO. 042 — DATA SHEET
       </div>
-      <div class="label-meta">— FROM THE GREAT RIFT VALLEY</div>
+      <div class="hdr-meta">EAST AFRICA · SEP 2026 · SHEET 04 / 14</div>
     </div>
 
-    <h1 class="headline"><em>Serengeti</em><br>Sunrise.</h1>
+    <div class="main">
+      <!-- Column 1: Migration KPIs -->
+      <div class="col">
+        <div class="col-label"><span class="lb"></span>Migration Census — Mara River Corridor</div>
+        <div class="migration-kpis">
+          <div class="mkpi">
+            <div class="mkpi-val">1.4<span class="u">M</span></div>
+            <div class="mkpi-lbl">Wildebeest Count</div>
+            <div class="mkpi-note">Peak migration, Aug 2026</div>
+          </div>
+          <div class="mkpi">
+            <div class="mkpi-val">347<span class="u">km</span></div>
+            <div class="mkpi-lbl">Corridor Tracked</div>
+            <div class="mkpi-note">GPS collars &times; 42 animals</div>
+          </div>
+          <div class="mkpi">
+            <div class="mkpi-val">96<span class="u">%</span></div>
+            <div class="mkpi-lbl">Herd Integrity</div>
+            <div class="mkpi-note">Within modeled range</div>
+          </div>
+          <div class="mkpi">
+            <div class="mkpi-val">28<span class="u">days</span></div>
+            <div class="mkpi-lbl">Survey Duration</div>
+            <div class="mkpi-note">3 teams, continuous</div>
+          </div>
+        </div>
+        <div class="census-rule"></div>
+        <div style="background:rgba(255,250,235,0.55); border:0.5px solid var(--paper-line); padding:10px 12px;">
+          <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.24em; color:var(--ink-tertiary); text-transform:uppercase; margin-bottom:6px;">Predator Encounters — Season Tally</div>
+          <div style="display:flex; gap:18px; align-items:center;">
+            <div>
+              <div style="font-family:var(--display-font); font-size:24px; font-weight:500; color:var(--ink-primary);">74</div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.2em; color:var(--ink-tertiary); text-transform:uppercase;">Lion sightings</div>
+            </div>
+            <div>
+              <div style="font-family:var(--display-font); font-size:24px; font-weight:500; color:var(--ink-primary);">28</div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.2em; color:var(--ink-tertiary); text-transform:uppercase;">Leopard sightings</div>
+            </div>
+            <div>
+              <div style="font-family:var(--display-font); font-size:24px; font-weight:500; color:var(--ink-primary);">16</div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.2em; color:var(--ink-tertiary); text-transform:uppercase;">Cheetah sightings</div>
+            </div>
+          </div>
+        </div>
+        <div class="census-rule"></div>
+        <div style="background:rgba(255,250,235,0.55); border:0.5px solid var(--paper-line); padding:10px 12px;">
+          <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.24em; color:var(--ink-tertiary); text-transform:uppercase; margin-bottom:8px;">Habitat Condition Index — Survey Zones</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-secondary); min-width:52px; text-transform:uppercase; letter-spacing:0.14em;">Grassland</div>
+              <div style="flex:1; height:8px; background:rgba(90,74,48,0.10);">
+                <div style="width:88%; height:100%; background:var(--accent-sun); opacity:0.8;"></div>
+              </div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-tertiary); min-width:28px; text-align:right;">88%</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-secondary); min-width:52px; text-transform:uppercase; letter-spacing:0.14em;">Wetland</div>
+              <div style="flex:1; height:8px; background:rgba(90,74,48,0.10);">
+                <div style="width:74%; height:100%; background:var(--accent-amber); opacity:0.8;"></div>
+              </div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-tertiary); min-width:28px; text-align:right;">74%</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-secondary); min-width:52px; text-transform:uppercase; letter-spacing:0.14em;">Woodland</div>
+              <div style="flex:1; height:8px; background:rgba(90,74,48,0.10);">
+                <div style="width:62%; height:100%; background:var(--accent-deep); opacity:0.8;"></div>
+              </div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-tertiary); min-width:28px; text-align:right;">62%</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-secondary); min-width:52px; text-transform:uppercase; letter-spacing:0.14em;">Riverine</div>
+              <div style="flex:1; height:8px; background:rgba(90,74,48,0.10);">
+                <div style="width:91%; height:100%; background:var(--accent-sun); opacity:0.8;"></div>
+              </div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; color:var(--ink-tertiary); min-width:28px; text-align:right;">91%</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-    <p class="deck">Twelve days <span class="ornament">·</span> six rivers <span class="ornament">·</span> one pride of lions, traced from the Mara confluence to the kopjes of <em>Naabi Hill</em>.</p>
+      <div class="divider-v"><div class="divider-v-line"></div></div>
 
-    <div class="meta-rule"></div>
+      <!-- Column 2: Species table -->
+      <div class="col">
+        <div class="col-label"><span class="lb"></span>Species Tally — Survey Area IV</div>
+        <table class="field-table">
+          <thead>
+            <tr>
+              <th>Species</th>
+              <th>Zone</th>
+              <th class="right">Count</th>
+              <th>Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="species">Connochaetes taurinus</td>
+              <td>Mara</td>
+              <td class="num">1,420,000</td>
+              <td><span class="trend-up">&#8593; +8%</span></td>
+            </tr>
+            <tr>
+              <td class="species">Equus quagga</td>
+              <td>Serengeti</td>
+              <td class="num">294,000</td>
+              <td><span class="trend-up">&#8593; +4%</span></td>
+            </tr>
+            <tr>
+              <td class="species">Panthera leo</td>
+              <td>Kopje</td>
+              <td class="num">2,900</td>
+              <td><span class="trend-stable">&#8594; stable</span></td>
+            </tr>
+            <tr>
+              <td class="species">Acinonyx jubatus</td>
+              <td>Plains</td>
+              <td class="num">840</td>
+              <td><span class="trend-up">&#8593; +11%</span></td>
+            </tr>
+            <tr>
+              <td class="species">Loxodonta africana</td>
+              <td>Tarangire</td>
+              <td class="num">10,400</td>
+              <td><span class="trend-stable">&#8594; stable</span></td>
+            </tr>
+            <tr>
+              <td class="species">Hippopotamus amphibius</td>
+              <td>Mara River</td>
+              <td class="num">3,200</td>
+              <td><span class="trend-up">&#8593; +6%</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:10px; padding-top:8px; border-top:0.5px solid var(--paper-line-faint);">
+          <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.18em; color:var(--ink-tertiary); text-transform:uppercase;">
+            Total registered species: <span style="color:var(--accent-deep);">218</span>
+            &nbsp;&middot;&nbsp; Threatened: <span style="color:var(--accent-deep);">34</span>
+            &nbsp;&middot;&nbsp; New records: <span style="color:var(--accent-deep);">7</span>
+          </div>
+        </div>
+      </div>
 
-    <div class="meta-grid">
-      <div class="meta">
-        <div class="key">LATITUDE</div>
-        <div class="val">02° 19′ S</div>
-      </div>
-      <div class="meta">
-        <div class="key">LONGITUDE</div>
-        <div class="val">34° 49′ E</div>
-      </div>
-      <div class="meta">
-        <div class="key">ELEVATION</div>
-        <div class="val">1,520 m</div>
-      </div>
-      <div class="meta">
-        <div class="key">TIME ZONE</div>
-        <div class="val">GMT +3</div>
-      </div>
-      <div class="meta">
-        <div class="key">SEASON</div>
-        <div class="val">DRY · SEP</div>
+      <div class="divider-v"><div class="divider-v-line"></div></div>
+
+      <!-- Column 3: Zone activity + field log -->
+      <div class="col">
+        <div class="col-label"><span class="lb"></span>Zone Activity Index</div>
+        <div class="zone-bars">
+          <div class="zone-row">
+            <div class="zone-lbl">MARA</div>
+            <div class="zone-track"><div class="zone-fill" style="width:96%"></div></div>
+            <div class="zone-val">96%</div>
+          </div>
+          <div class="zone-row">
+            <div class="zone-lbl">SERENGT.</div>
+            <div class="zone-track"><div class="zone-fill" style="width:84%"></div></div>
+            <div class="zone-val">84%</div>
+          </div>
+          <div class="zone-row">
+            <div class="zone-lbl">KOPJE</div>
+            <div class="zone-track"><div class="zone-fill" style="width:71%"></div></div>
+            <div class="zone-val">71%</div>
+          </div>
+          <div class="zone-row">
+            <div class="zone-lbl">TARANGI.</div>
+            <div class="zone-track"><div class="zone-fill" style="width:58%"></div></div>
+            <div class="zone-val">58%</div>
+          </div>
+          <div class="zone-row">
+            <div class="zone-lbl">PLAINS</div>
+            <div class="zone-track"><div class="zone-fill" style="width:47%"></div></div>
+            <div class="zone-val">47%</div>
+          </div>
+        </div>
+
+        <div class="field-log">
+          <div class="log-entry">
+            <div class="log-dot"></div>
+            <div class="log-date">02° 19′ S</div>
+            <div class="log-text"><strong>River crossing event</strong> — 42,000 wildebeest observed at Mara ford; 3 crocodile ambushes documented</div>
+          </div>
+          <div class="log-entry">
+            <div class="log-dot"></div>
+            <div class="log-date">34° 49′ E</div>
+            <div class="log-text"><strong>New GPS collar data</strong> — Cheetah coalition "C-07" tracked 94 km in 18 hours; record sprint speed 112 km/h</div>
+          </div>
+          <div class="log-entry" style="border-left-color: var(--accent-amber);">
+            <div class="log-dot" style="background:var(--accent-amber);"></div>
+            <div class="log-date">1,520 m ASL</div>
+            <div class="log-text"><strong>Elephant family group</strong> — 38 individuals, matriarch "E-04" leading; calves 4 new, season record</div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="stamp">
-    <div class="row1">
-      <span>▲</span>
-      <span>EXPEDITION</span>
-      <span>◆</span>
-      <span>042</span>
-    </div>
-    <div class="row2">ENTERED · 09 · 2026</div>
-  </div>
-
-  <div class="stamp-second">EAA · 2026 / 09 · APPROVED</div>
-
-  <svg class="compass" viewBox="0 0 56 56">
-    <circle cx="28" cy="28" r="24" fill="none" stroke="#5a4a30" stroke-width="0.8"/>
-    <circle cx="28" cy="28" r="18" fill="none" stroke="#5a4a30" stroke-width="0.4" stroke-dasharray="2 2"/>
-    <polygon points="28,8 31,28 28,26 25,28" fill="#c44d2a"/>
-    <polygon points="28,48 31,28 28,30 25,28" fill="#5a4a30" opacity="0.5"/>
-    <circle cx="28" cy="28" r="2" fill="#2a1f0f"/>
-    <line x1="28" y1="4" x2="28" y2="9" stroke="#5a4a30" stroke-width="0.6"/>
-    <line x1="28" y1="47" x2="28" y2="52" stroke="#5a4a30" stroke-width="0.6"/>
-    <line x1="4" y1="28" x2="9" y2="28" stroke="#5a4a30" stroke-width="0.6"/>
-    <line x1="47" y1="28" x2="52" y2="28" stroke="#5a4a30" stroke-width="0.6"/>
-  </svg>
-
-  <div class="map-wrap">
-    <svg viewBox="0 0 200 240">
-      <rect x="0.5" y="0.5" width="199" height="239" fill="rgba(255,250,235,0.35)" stroke="#8b3a1f" stroke-width="0.6"/>
-      <line x1="0" y1="40" x2="200" y2="40" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
-      <line x1="0" y1="120" x2="200" y2="120" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
-      <line x1="0" y1="200" x2="200" y2="200" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
-      <line x1="60" y1="0" x2="60" y2="240" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
-      <line x1="140" y1="0" x2="140" y2="240" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
-
-      <path d="M95 30 Q60 50 50 95 Q42 130 55 165 Q70 195 100 200 Q135 198 150 170 Q165 135 158 95 Q150 55 120 38 Z"
-            fill="rgba(196, 77, 42, 0.06)" stroke="#5a4a30" stroke-width="1.2"/>
-      <path d="M95 30 Q60 50 50 95 Q42 130 55 165 Q70 195 100 200 Q135 198 150 170 Q165 135 158 95 Q150 55 120 38 Z"
-            fill="none" stroke="#8b3a1f" stroke-width="0.6" stroke-dasharray="3 2" opacity="0.6"/>
-
-      <path d="M75 75 Q90 95 105 100 Q125 105 140 130 Q150 150 145 175"
-            fill="none" stroke="#5a4a30" stroke-width="0.7" stroke-dasharray="4 3" opacity="0.7"/>
-      <path d="M60 110 Q80 125 100 120 Q115 118 130 105"
-            fill="none" stroke="#5a4a30" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.5"/>
-
-      <circle cx="100" cy="120" r="8" fill="none" stroke="#c44d2a" stroke-width="1"/>
-      <circle cx="100" cy="120" r="4" fill="#c44d2a"/>
-      <circle cx="100" cy="120" r="1.5" fill="#fff8e8"/>
-
-      <circle cx="75" cy="75" r="2.5" fill="#5a4a30"/>
-      <circle cx="140" cy="130" r="2.5" fill="#5a4a30"/>
-      <circle cx="145" cy="175" r="2.5" fill="#5a4a30"/>
-      <circle cx="60" cy="110" r="2" fill="#5a4a30" opacity="0.6"/>
-
-      <line x1="100" y1="120" x2="180" y2="120" stroke="#c44d2a" stroke-width="0.4" stroke-dasharray="1 2" opacity="0.6"/>
-      <line x1="100" y1="120" x2="100" y2="220" stroke="#c44d2a" stroke-width="0.4" stroke-dasharray="1 2" opacity="0.6"/>
-    </svg>
-    <div class="map-coord map-coord-tl">N</div>
-    <div class="map-coord map-coord-tr">02°S</div>
-    <div class="map-coord map-coord-bl">34°E</div>
-    <div class="map-coord map-coord-br">35°E</div>
-    <div class="map-pin-label">SERENGETI</div>
-    <div class="map-caption">— survey sheet IV / vii —</div>
-  </div>
-
-  <div class="footer">
-    <div class="field-editors">
-      FIELD EDITORS
-      <span class="sep">◆</span>
-      LARA &amp; TOMÁS
-      <span class="sep">◆</span>
-      SEPTEMBER 2026
-    </div>
-    <div class="page-mark">
-      <span>FOLIO</span>
-      <span>·</span>
-      <span>03 / 14</span>
+    <div class="footer">
+      <div class="footer-left">FIELD EDITORS: LARA &amp; TOM&Aacute;S &middot; ATLAS QUARTERLY &middot; SEPTEMBER 2026</div>
+      <div class="footer-right">
+        <span class="folio-tag">Wildlife Survey</span>
+        <span class="folio-tag">East Africa</span>
+        <span class="page-mark">FOLIO 04 / 14</span>
+      </div>
     </div>
   </div>
 </body>

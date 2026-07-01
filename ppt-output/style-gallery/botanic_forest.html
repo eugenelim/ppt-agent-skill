@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>botanic_forest · 户外森林 · World-Class Mock</title>
+<title>botanic_forest · Field Expedition Data Report · Detail Slide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,300;1,8..60,400;1,8..60,600&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 
   :root {
     --bg-from: #1a2e1f;
@@ -19,12 +19,14 @@
     --accent-warm: #ff8c42;
     --accent-gold: #e8b86d;
     --accent-moss: #7a9a6f;
+    --accent-green: #5a8c3a;
 
     --hairline: rgba(232,239,226,0.14);
     --card-border: rgba(232,239,226,0.12);
-    --card-bg: rgba(255,255,255,0.025);
+    --card-bg: rgba(255,255,255,0.03);
+    --card-accent-bg: rgba(255,140,66,0.06);
 
-    --display-font: 'Source Serif 4', 'Fraunces', Georgia, 'Iowan Old Style', serif;
+    --display-font: 'Source Serif 4', Georgia, 'Iowan Old Style', serif;
     --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono-font: 'JetBrains Mono', 'DM Mono', 'Courier New', monospace;
   }
@@ -33,12 +35,13 @@
   html, body { width: 1280px; height: 720px; overflow: hidden; }
   body {
     background:
-      radial-gradient(ellipse 70% 55% at 82% 18%, rgba(255,140,66,0.18) 0%, rgba(255,140,66,0) 60%),
-      radial-gradient(ellipse 80% 60% at 15% 85%, rgba(122,154,111,0.10) 0%, rgba(122,154,111,0) 65%),
+      radial-gradient(ellipse 70% 55% at 82% 18%, rgba(255,140,66,0.12) 0%, rgba(255,140,66,0) 60%),
+      radial-gradient(ellipse 80% 60% at 15% 85%, rgba(122,154,111,0.08) 0%, rgba(122,154,111,0) 65%),
       linear-gradient(165deg, var(--bg-from) 0%, var(--bg-mid) 45%, var(--bg-to) 80%, var(--bg-deepest) 100%);
     color: var(--text-primary);
     font-family: var(--body-font);
-    font-feature-settings: 'kern', 'liga', 'calt', 'ss01', 'cv11', 'ccmp';
+    font-feature-settings: 'kern', 'liga', 'onum', 'calt', 'ss01', 'cv11';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -48,335 +51,519 @@
   .grain {
     position: absolute; inset: 0;
     background-image:
-      radial-gradient(circle at 25% 30%, rgba(232,239,226,0.025) 1px, transparent 1.4px),
-      radial-gradient(circle at 75% 65%, rgba(232,239,226,0.018) 1px, transparent 1.4px);
+      radial-gradient(circle at 25% 30%, rgba(232,239,226,0.022) 1px, transparent 1.4px),
+      radial-gradient(circle at 75% 65%, rgba(232,239,226,0.016) 1px, transparent 1.4px);
     background-size: 7px 7px, 11px 11px;
     pointer-events: none;
     z-index: 1;
   }
 
-  .sun-disc {
-    position: absolute;
-    top: 92px; right: 240px;
-    width: 110px; height: 110px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 45% 45%, rgba(255,180,120,0.55) 0%, rgba(255,140,66,0.25) 45%, rgba(255,140,66,0) 75%);
-    pointer-events: none;
-    z-index: 1;
-  }
+  .corner-tl-h { position: absolute; top: 22px; left: 24px; width: 18px; height: 1px; background: rgba(232,239,226,0.28); z-index: 5; }
+  .corner-tl-v { position: absolute; top: 22px; left: 24px; width: 1px; height: 18px; background: rgba(232,239,226,0.28); z-index: 5; }
+  .corner-br-h { position: absolute; bottom: 22px; right: 24px; width: 18px; height: 1px; background: rgba(232,239,226,0.28); z-index: 5; }
+  .corner-br-v { position: absolute; bottom: 22px; right: 24px; width: 1px; height: 18px; background: rgba(232,239,226,0.28); z-index: 5; }
 
-  .corner-tl-h { position: absolute; top: 26px; left: 28px; width: 22px; height: 1px; background: rgba(232,239,226,0.32); z-index: 5; }
-  .corner-tl-v { position: absolute; top: 26px; left: 28px; width: 1px; height: 22px; background: rgba(232,239,226,0.32); z-index: 5; }
-  .corner-br-h { position: absolute; bottom: 26px; right: 28px; width: 22px; height: 1px; background: rgba(232,239,226,0.32); z-index: 5; }
-  .corner-br-v { position: absolute; bottom: 26px; right: 28px; width: 1px; height: 22px; background: rgba(232,239,226,0.32); z-index: 5; }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 56px 80px 0 80px;
+  /* Layout */
+  .page {
+    position: absolute; inset: 0;
+    padding: 32px 56px 28px 56px;
     display: flex; flex-direction: column;
-    z-index: 4;
+    z-index: 3;
   }
 
-  .top {
+  /* Header strip */
+  .header {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 78px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 20px;
   }
-  .logo {
-    font-family: var(--body-font);
-    font-size: 13px; font-weight: 700;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--text-primary);
-    display: flex; align-items: center; gap: 10px;
-  }
-  .logo-mark {
-    color: var(--accent-warm);
-    font-size: 14px;
-    line-height: 1;
-    transform: translateY(-1px);
-  }
-  .nav {
-    font-family: var(--mono-font);
-    font-size: 10.5px;
-    color: var(--text-secondary);
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    display: flex; gap: 8px;
-  }
-  .nav .dot { color: var(--accent-warm); opacity: 0.85; }
-
-  .label-row {
+  .header-left {
     display: flex; align-items: center; gap: 14px;
-    margin-bottom: 26px;
   }
-  .label-line {
-    width: 56px; height: 1px;
-    background: var(--accent-warm);
+  .accent-bar {
+    width: 3px; height: 28px;
+    background: linear-gradient(180deg, var(--accent-warm), var(--accent-gold));
+    border-radius: 2px;
   }
-  .label {
+  .report-label {
     font-family: var(--mono-font);
-    font-size: 11px;
-    color: var(--accent-warm);
+    font-size: 10px; font-weight: 500;
     letter-spacing: 0.28em;
+    color: var(--accent-warm);
     text-transform: uppercase;
-    font-weight: 500;
   }
-
-  .headline {
+  .report-title {
     font-family: var(--display-font);
-    font-size: 96px;
-    font-weight: 600;
-    letter-spacing: -0.035em;
-    line-height: 0.96;
+    font-size: 17px; font-weight: 600;
     color: var(--text-primary);
-    max-width: 920px;
+    letter-spacing: -0.01em;
+    margin-top: 3px;
   }
-  .headline em {
-    font-family: var(--display-font);
+  .report-title em {
     font-style: italic;
     font-weight: 400;
     color: var(--accent-gold);
-    letter-spacing: -0.025em;
   }
-
-  .deck {
-    font-family: var(--body-font);
-    font-size: 16px;
-    line-height: 1.55;
+  .header-right {
+    display: flex; align-items: center; gap: 22px;
+  }
+  .meta-chip {
+    font-family: var(--mono-font);
+    font-size: 10px; font-weight: 500;
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: flex; flex-direction: column; gap: 2px; align-items: flex-end;
+  }
+  .meta-chip .val {
     color: var(--text-secondary);
-    max-width: 540px;
-    margin-top: 28px;
-    letter-spacing: -0.005em;
-    font-weight: 400;
-  }
-  .deck em {
-    font-family: var(--display-font);
-    font-style: italic;
-    font-weight: 400;
-    color: var(--accent-gold);
-    letter-spacing: 0;
-    font-size: 17px;
+    font-size: 11px;
   }
 
-  .stats {
-    display: flex; gap: 18px;
-    margin-top: 64px;
-  }
-  .stat {
+  /* 3-column main layout */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr 1px 1fr;
+    gap: 0;
     flex: 1;
-    padding: 22px 24px 22px 24px;
+    min-height: 0;
+  }
+  .divider-v {
+    background: var(--hairline);
+    margin: 0 20px;
+  }
+
+  /* Column 1: Impact metrics */
+  .col { display: flex; flex-direction: column; gap: 14px; }
+
+  .col-label {
+    font-family: var(--mono-font);
+    font-size: 9.5px; font-weight: 700;
+    letter-spacing: 0.32em;
+    color: var(--accent-moss);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .col-label .lb { width: 18px; height: 1px; background: var(--accent-moss); }
+
+  /* KPI cards */
+  .kpi-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    flex: 1;
+  }
+  .kpi {
     background: var(--card-bg);
     border: 1px solid var(--card-border);
     border-radius: 4px;
-    position: relative;
-    overflow: hidden;
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 4px;
+    position: relative; overflow: hidden;
   }
-  .stat-accent {
-    position: absolute;
-    top: 0; left: 0;
-    width: 28px; height: 1px;
-    background: var(--accent-warm);
+  .kpi-accent-strip {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, var(--accent-warm), transparent);
   }
-  .stat .num {
+  .kpi-val {
     font-family: var(--display-font);
-    font-size: 46px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.035em;
+    font-size: 32px; font-weight: 600;
+    letter-spacing: -0.03em;
     line-height: 1;
     color: var(--text-primary);
-    display: flex; align-items: baseline; gap: 6px;
+    display: flex; align-items: baseline; gap: 4px;
   }
-  .stat .num .unit {
+  .kpi-val .unit {
     font-family: var(--display-font);
-    font-style: italic;
-    font-weight: 400;
-    font-size: 20px;
-    color: var(--accent-gold);
+    font-style: italic; font-weight: 400;
+    font-size: 13px; color: var(--accent-gold);
     letter-spacing: 0;
   }
-  .stat .l {
-    font-family: var(--mono-font);
-    font-size: 10px;
-    color: var(--text-secondary);
-    letter-spacing: 0.22em;
+  .kpi-lbl {
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 500;
+    color: var(--text-faint);
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    font-weight: 500;
-    margin-top: 12px;
   }
-  .stat .sub {
+  .kpi-trend {
+    font-family: var(--mono-font);
+    font-size: 9.5px;
+    color: var(--accent-moss);
+    margin-top: 2px;
+  }
+
+  /* Column 2: Expedition log table */
+  .expedition-table {
+    width: 100%;
+    border-collapse: collapse;
+    flex: 1;
+  }
+  .expedition-table thead tr {
+    border-bottom: 1px solid rgba(232,239,226,0.22);
+  }
+  .expedition-table th {
+    font-family: var(--mono-font);
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.26em;
+    color: var(--text-faint);
+    text-transform: uppercase;
+    padding: 0 0 8px 0;
+    text-align: left;
+  }
+  .expedition-table th:not(:first-child) { padding-left: 10px; }
+  .expedition-table th.right { text-align: right; }
+  .expedition-table tbody tr {
+    border-bottom: 1px solid rgba(232,239,226,0.07);
+  }
+  .expedition-table tbody tr:last-child { border-bottom: none; }
+  .expedition-table td {
+    font-family: var(--body-font);
+    font-size: 11.5px; font-weight: 400;
+    color: var(--text-secondary);
+    padding: 7px 0;
+    vertical-align: middle;
+  }
+  .expedition-table td:not(:first-child) { padding-left: 10px; }
+  .expedition-table td.right {
+    text-align: right;
+    font-family: var(--mono-font);
+    font-size: 11px;
+  }
+  .expedition-table td.name {
+    font-family: var(--display-font);
+    font-style: italic;
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: middle;
+  }
+  .status-active { background: var(--accent-moss); }
+  .status-complete { background: var(--accent-gold); }
+  .status-planned { background: rgba(232,239,226,0.28); }
+
+  /* Column 3: Species + timeline */
+  .species-bars { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .species-row { display: flex; flex-direction: column; gap: 3px; }
+  .species-meta {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .species-name {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+  .species-count {
+    font-family: var(--mono-font);
+    font-size: 10.5px;
+    color: var(--accent-gold);
+  }
+  .bar-track {
+    height: 4px;
+    background: rgba(232,239,226,0.10);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent-warm), var(--accent-gold));
+  }
+
+  /* Timeline */
+  .timeline { display: flex; flex-direction: column; gap: 0; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline); }
+  .tl-entry {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 6px 0;
+    border-left: 1px solid var(--hairline);
+    padding-left: 14px;
+    position: relative;
+  }
+  .tl-dot {
+    position: absolute;
+    left: -4px; top: 10px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--accent-warm);
+    border: 1px solid var(--bg-from);
+  }
+  .tl-date {
+    font-family: var(--mono-font);
+    font-size: 9px; font-weight: 500;
+    color: var(--accent-warm);
+    letter-spacing: 0.16em;
+    white-space: nowrap;
+    padding-top: 2px;
+    min-width: 60px;
+  }
+  .tl-text {
     font-family: var(--body-font);
     font-size: 11px;
-    color: var(--text-faint);
-    letter-spacing: 0.04em;
-    margin-top: 6px;
-  }
-
-  .mountains {
-    position: absolute;
-    bottom: 0; left: 0;
-    width: 100%;
-    height: 200px;
-    z-index: 2;
-    pointer-events: none;
-  }
-
-  .leaf {
-    position: absolute;
-    right: 88px; top: 70px;
-    width: 124px; height: 148px;
-    z-index: 3;
-    pointer-events: none;
-  }
-
-  .compass {
-    position: absolute;
-    bottom: 78px; right: 80px;
-    width: 96px; height: 96px;
-    z-index: 5;
-  }
-  .compass-cap {
-    position: absolute;
-    top: -16px; left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--mono-font);
-    font-size: 9px;
-    color: var(--accent-warm);
-    letter-spacing: 0.3em;
-  }
-  .compass-coords {
-    position: absolute;
-    top: 100%; left: 50%;
-    transform: translateX(-50%);
-    margin-top: 10px;
-    text-align: center;
-    font-family: var(--mono-font);
-    font-size: 9px;
     color: var(--text-secondary);
-    letter-spacing: 0.18em;
-    white-space: nowrap;
+    line-height: 1.4;
+  }
+  .tl-text strong {
+    color: var(--text-primary);
+    font-weight: 600;
   }
 
+  /* Footer */
   .footer {
-    position: absolute; bottom: 22px; left: 80px; right: 80px;
     display: flex; justify-content: space-between; align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+    margin-top: 16px;
+  }
+  .footer-left {
     font-family: var(--mono-font);
-    font-size: 10px;
+    font-size: 9.5px;
     color: var(--text-faint);
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    z-index: 6;
   }
-  .footer .right { display: flex; gap: 22px; align-items: center; }
-  .footer .pill {
+  .footer-right {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .tag {
     border: 1px solid var(--hairline);
-    padding: 3px 9px;
+    padding: 2px 8px;
     border-radius: 999px;
-    color: var(--text-secondary);
+    font-family: var(--mono-font);
+    font-size: 9px;
+    color: var(--text-faint);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .page-num {
+    font-family: var(--mono-font);
+    font-size: 9.5px;
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
   }
 </style>
 </head>
 <body>
   <div class="grain"></div>
-  <div class="sun-disc"></div>
-
   <div class="corner-tl-h"></div>
   <div class="corner-tl-v"></div>
   <div class="corner-br-h"></div>
   <div class="corner-br-v"></div>
 
-  <svg class="leaf" viewBox="0 0 124 148">
-    <path d="M62 14 Q14 70 62 138 Q110 70 62 14 Z" fill="none" stroke="#e8b86d" stroke-width="1" opacity="0.55"/>
-    <path d="M62 26 Q24 72 62 126 Q100 72 62 26 Z" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.35"/>
-    <line x1="62" y1="14" x2="62" y2="138" stroke="#e8b86d" stroke-width="1" opacity="0.6"/>
-    <path d="M62 44 Q42 50 32 64" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.45"/>
-    <path d="M62 44 Q82 50 92 64" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.45"/>
-    <path d="M62 64 Q40 72 28 88" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.4"/>
-    <path d="M62 64 Q84 72 96 88" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.4"/>
-    <path d="M62 86 Q44 92 34 106" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.35"/>
-    <path d="M62 86 Q80 92 90 106" fill="none" stroke="#e8b86d" stroke-width="0.6" opacity="0.35"/>
-    <circle cx="62" cy="14" r="2" fill="#e8b86d" opacity="0.7"/>
-    <line x1="62" y1="138" x2="62" y2="148" stroke="#e8b86d" stroke-width="1" opacity="0.5"/>
-  </svg>
-
-  <div class="stage">
-    <div class="top">
-      <div class="logo">
-        <span class="logo-mark">&#9650;</span>
-        <span>Alpine Collective</span>
+  <div class="page">
+    <div class="header">
+      <div class="header-left">
+        <div class="accent-bar"></div>
+        <div>
+          <div class="report-label">Alpine Collective &middot; Field Data Report</div>
+          <div class="report-title"><em>Sustainability &amp; Biodiversity</em> — Season 2026</div>
+        </div>
       </div>
-      <div class="nav">
-        <span>Journal</span>
-        <span class="dot">&middot;</span>
-        <span>Gear</span>
-        <span class="dot">&middot;</span>
-        <span>Stories</span>
+      <div class="header-right">
+        <div class="meta-chip">
+          <span>Region</span>
+          <span class="val">PATAGONIA · ZONE 7</span>
+        </div>
+        <div class="meta-chip">
+          <span>Survey Period</span>
+          <span class="val">MAR – SEP 2026</span>
+        </div>
+        <div class="meta-chip">
+          <span>Report</span>
+          <span class="val">EXP-042 / FINAL</span>
+        </div>
       </div>
     </div>
 
-    <div class="label-row">
-      <div class="label-line"></div>
-      <div class="label">Expedition &middot; 042</div>
+    <div class="main">
+      <!-- Column 1: KPI metrics -->
+      <div class="col">
+        <div class="col-label"><span class="lb"></span>Impact Indicators</div>
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-accent-strip"></div>
+            <div class="kpi-val">12,847<span class="unit">km</span></div>
+            <div class="kpi-lbl">Trails Surveyed</div>
+            <div class="kpi-trend">&#8593; +18.4% vs 2025</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-accent-strip"></div>
+            <div class="kpi-val">94<span class="unit">%</span></div>
+            <div class="kpi-lbl">Habitat Integrity</div>
+            <div class="kpi-trend">&#8594; Stable (&#177;1.2%)</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-accent-strip"></div>
+            <div class="kpi-val">347</div>
+            <div class="kpi-lbl">Species Logged</div>
+            <div class="kpi-trend">&#8593; 23 new sightings</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-accent-strip"></div>
+            <div class="kpi-val">62<span class="unit">t</span></div>
+            <div class="kpi-lbl">CO₂ Offset Est.</div>
+            <div class="kpi-trend">&#8593; Forest carbon sink</div>
+          </div>
+          <div class="kpi" style="grid-column: span 2;">
+            <div class="kpi-accent-strip"></div>
+            <div style="display:flex; gap:32px; align-items:center;">
+              <div>
+                <div class="kpi-val">28<span class="unit">expeditions</span></div>
+                <div class="kpi-lbl">Field Operations 2026</div>
+              </div>
+              <div>
+                <div class="kpi-val" style="font-size:22px;">6<span class="unit">continents</span></div>
+                <div class="kpi-lbl">Coverage reach</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- Column 2: Expedition log table -->
+      <div class="col" style="padding: 0 20px;">
+        <div class="col-label"><span class="lb"></span>Active Expedition Log</div>
+        <table class="expedition-table">
+          <thead>
+            <tr>
+              <th>Expedition</th>
+              <th>Zone</th>
+              <th class="right">km</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="name">Torres del Paine</td>
+              <td>Zone 7-A</td>
+              <td class="right">2,104</td>
+              <td><span class="status-dot status-active"></span>Active</td>
+            </tr>
+            <tr>
+              <td class="name">Nahuel Huapi</td>
+              <td>Zone 6-C</td>
+              <td class="right">1,872</td>
+              <td><span class="status-dot status-complete"></span>Complete</td>
+            </tr>
+            <tr>
+              <td class="name">Los Glaciares</td>
+              <td>Zone 8-B</td>
+              <td class="right">3,218</td>
+              <td><span class="status-dot status-complete"></span>Complete</td>
+            </tr>
+            <tr>
+              <td class="name">Tierra del Fuego</td>
+              <td>Zone 9-A</td>
+              <td class="right">1,640</td>
+              <td><span class="status-dot status-active"></span>Active</td>
+            </tr>
+            <tr>
+              <td class="name">Monte Fitz Roy</td>
+              <td>Zone 7-D</td>
+              <td class="right">2,356</td>
+              <td><span class="status-dot status-planned"></span>Planned</td>
+            </tr>
+            <tr>
+              <td class="name">Cerro Castillo</td>
+              <td>Zone 5-B</td>
+              <td class="right">1,657</td>
+              <td><span class="status-dot status-complete"></span>Complete</td>
+            </tr>
+          </tbody>
+        </table>
+        <div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--hairline);">
+          <div style="font-family:var(--mono-font); font-size:9px; color:var(--text-faint); letter-spacing:0.16em; text-transform:uppercase;">
+            Avg. km / expedition: <span style="color:var(--accent-gold);">2,141</span>
+            &nbsp;&middot;&nbsp; Total teams deployed: <span style="color:var(--accent-gold);">14</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- Column 3: Species chart + timeline -->
+      <div class="col" style="padding-left: 20px;">
+        <div class="col-label"><span class="lb"></span>Species Sightings — Top 6</div>
+        <div class="species-bars">
+          <div class="species-row">
+            <div class="species-meta">
+              <span class="species-name">Puma concolor</span>
+              <span class="species-count">42 obs.</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:82%"></div></div>
+          </div>
+          <div class="species-row">
+            <div class="species-meta">
+              <span class="species-name">Condor andinus</span>
+              <span class="species-count">38 obs.</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:74%"></div></div>
+          </div>
+          <div class="species-row">
+            <div class="species-meta">
+              <span class="species-name">Huemul deer</span>
+              <span class="species-count">29 obs.</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:56%"></div></div>
+          </div>
+          <div class="species-row">
+            <div class="species-meta">
+              <span class="species-name">Magellanic woodpecker</span>
+              <span class="species-count">24 obs.</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:47%"></div></div>
+          </div>
+          <div class="species-row">
+            <div class="species-meta">
+              <span class="species-name">Geoffroy's cat</span>
+              <span class="species-count">17 obs.</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:33%"></div></div>
+          </div>
+          <div class="species-row">
+            <div class="species-meta">
+              <span class="species-name">Darwin's rhea</span>
+              <span class="species-count">11 obs.</span>
+            </div>
+            <div class="bar-track"><div class="bar-fill" style="width:21%"></div></div>
+          </div>
+        </div>
+
+        <div class="timeline">
+          <div class="tl-entry">
+            <div class="tl-dot"></div>
+            <div class="tl-date">MAR 2026</div>
+            <div class="tl-text"><strong>Baseline survey launched</strong> — 14 field teams deployed across Zones 5–9</div>
+          </div>
+          <div class="tl-entry">
+            <div class="tl-dot"></div>
+            <div class="tl-date">JUN 2026</div>
+            <div class="tl-text"><strong>Mid-season checkpoint</strong> — 23 new species logged; huemul population +12%</div>
+          </div>
+          <div class="tl-entry">
+            <div class="tl-dot" style="background:var(--accent-gold);"></div>
+            <div class="tl-date">SEP 2026</div>
+            <div class="tl-text"><strong>Final data consolidation</strong> — Report EXP-042 compiled, 347 species confirmed</div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <h1 class="headline"><em>Wild Places.</em><br>Uncharted Stories.</h1>
-
-    <p class="deck">Documenting the last wilderness, one expedition at a time &mdash; <em>fourteen years</em> of field reports from the edge of the map.</p>
-
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-accent"></div>
-        <div class="num">12,847<span class="unit">km</span></div>
-        <div class="l">Trails Covered</div>
-        <div class="sub">since spring 2012 &mdash; on foot, ski, packraft</div>
+    <div class="footer">
+      <div class="footer-left">Expedition 042 &mdash; Patagonia Conservation Survey &middot; Vol. XIV</div>
+      <div class="footer-right">
+        <span class="tag">Field Journal</span>
+        <span class="tag">Sustainability</span>
+        <span class="page-num">06 / 12</span>
       </div>
-      <div class="stat">
-        <div class="stat-accent"></div>
-        <div class="num">47</div>
-        <div class="l">National Parks</div>
-        <div class="sub">across six continents &amp; nineteen countries</div>
-      </div>
-      <div class="stat">
-        <div class="stat-accent"></div>
-        <div class="num">28<span class="unit">&middot; 2026</span></div>
-        <div class="l">Expeditions Logged</div>
-        <div class="sub">field journal updated weekly from base camp</div>
-      </div>
-    </div>
-  </div>
-
-  <svg class="mountains" viewBox="0 0 1280 200" preserveAspectRatio="none">
-    <polygon points="0,200 180,70 280,110 410,40 540,95 660,55 780,105 900,60 1020,95 1140,70 1280,90 1280,200" fill="#0a1410" opacity="0.95"/>
-    <polygon points="0,200 130,110 260,135 380,95 500,125 640,100 760,130 880,105 1000,130 1120,110 1280,125 1280,200" fill="#142a1c" opacity="0.85"/>
-    <polygon points="0,200 110,150 240,165 360,140 500,160 640,145 780,165 900,150 1040,165 1160,150 1280,160 1280,200" fill="#1a3522" opacity="0.7"/>
-    <line x1="180" y1="70" x2="220" y2="92" stroke="#e8efe2" stroke-width="0.6" opacity="0.35"/>
-    <line x1="410" y1="40" x2="450" y2="68" stroke="#e8efe2" stroke-width="0.6" opacity="0.35"/>
-    <line x1="660" y1="55" x2="700" y2="80" stroke="#e8efe2" stroke-width="0.6" opacity="0.3"/>
-    <line x1="900" y1="60" x2="940" y2="85" stroke="#e8efe2" stroke-width="0.6" opacity="0.3"/>
-  </svg>
-
-  <div class="compass">
-    <div class="compass-cap">N</div>
-    <svg viewBox="0 0 96 96" style="width:100%; height:100%;">
-      <circle cx="48" cy="48" r="44" fill="none" stroke="rgba(232,239,226,0.18)" stroke-width="1"/>
-      <circle cx="48" cy="48" r="36" fill="none" stroke="rgba(232,239,226,0.10)" stroke-width="1"/>
-      <line x1="48" y1="6" x2="48" y2="14" stroke="#ff8c42" stroke-width="1.4"/>
-      <line x1="48" y1="82" x2="48" y2="90" stroke="rgba(232,239,226,0.4)" stroke-width="1"/>
-      <line x1="6" y1="48" x2="14" y2="48" stroke="rgba(232,239,226,0.4)" stroke-width="1"/>
-      <line x1="82" y1="48" x2="90" y2="48" stroke="rgba(232,239,226,0.4)" stroke-width="1"/>
-      <polygon points="48,18 54,48 48,44 42,48" fill="#ff8c42"/>
-      <polygon points="48,78 54,48 48,52 42,48" fill="rgba(232,239,226,0.55)"/>
-      <circle cx="48" cy="48" r="2.2" fill="#e8b86d"/>
-    </svg>
-    <div class="compass-coords">50&deg;57&prime;S &middot; 73&deg;24&prime;W</div>
-  </div>
-
-  <div class="footer">
-    <span>Expedition 042 &mdash; Patagonia &middot; Torres del Paine</span>
-    <div class="right">
-      <span class="pill">Field Journal</span>
-      <span>Vol. xiv &middot; 03 / 12</span>
     </div>
   </div>
 </body>

@@ -52,7 +52,9 @@
 }
 ```
 
-Mock: [`ppt-output/style-gallery/botanic_forest.html`](../../ppt-output/style-gallery/botanic_forest.html)
+Cover (title/identity): [`…botanic_forest.cover.html`](../../ppt-output/style-gallery/botanic_forest.cover.html) — serif-italic hero "Wild Places. Uncharted Stories." + mountain silhouette SVG + 3 expedition-stat cards.
+
+Detail (content/data): [`…botanic_forest.html`](../../ppt-output/style-gallery/botanic_forest.html) — sustainability & biodiversity field data report: 6 KPI tiles, active expedition log table (6 zones), species-sightings bar chart, season timeline.
 
 ---
 
@@ -93,7 +95,9 @@ Mock: [`ppt-output/style-gallery/botanic_forest.html`](../../ppt-output/style-ga
 }
 ```
 
-Mock: [`ppt-output/style-gallery/safari_savanna.html`](../../ppt-output/style-gallery/safari_savanna.html)
+Cover (title/identity): [`…safari_savanna.cover.html`](../../ppt-output/style-gallery/safari_savanna.cover.html) — expedition-journal cover "Serengeti Sunrise." + tilted passport stamp + hand-drawn map SVG + coordinate metadata.
+
+Detail (content/data): [`…safari_savanna.html`](../../ppt-output/style-gallery/safari_savanna.html) — wildlife survey data report: migration census KPIs, species tally table (6 species with trend arrows), zone activity index bars, field log entries, habitat condition index.
 
 ---
 
@@ -134,7 +138,9 @@ Mock: [`ppt-output/style-gallery/safari_savanna.html`](../../ppt-output/style-ga
 }
 ```
 
-Mock: [`ppt-output/style-gallery/retro_70s.html`](../../ppt-output/style-gallery/retro_70s.html)
+Cover (title/identity): [`…retro_70s.cover.html`](../../ppt-output/style-gallery/retro_70s.cover.html) — "STAY GROOVY." Bagel-Fat-One headline + 3 brown/orange/mustard stat cards + vinyl record + retro stripe bands.
+
+Detail (content/data): [`…retro_70s.html`](../../ppt-output/style-gallery/retro_70s.html) — vinyl catalogue & festival lineup: best-sellers table (5 records with badge tags), genre sales bars, top-selling stores, Groove Fest lineup table, monthly revenue bar chart.
 
 ---
 
@@ -175,4 +181,6 @@ Mock: [`ppt-output/style-gallery/retro_70s.html`](../../ppt-output/style-gallery
 }
 ```
 
-Mock: [`ppt-output/style-gallery/gov_authority.html`](../../ppt-output/style-gallery/gov_authority.html)
+Cover (title/identity): [`…gov_authority.cover.html`](../../ppt-output/style-gallery/gov_authority.cover.html) — 全面推进高质量发展 keynote title: red-blue dual top-bar, centered Noto Serif SC headline, five-star SVG, seal boxes, 4 meta-stat cells.
+
+Detail (content/data): [`…gov_authority.html`](../../ppt-output/style-gallery/gov_authority.html) — 政务工作报告指标面板: 4-KPI grid + 4 progress bars (col 1), department budget/execution table 6 rows (col 2), sector target vs. actual table + evaluation conclusion + seal area (col 3), quarterly trend bar chart strip.

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>safari_savanna · 萨凡纳探险 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400;1,700&family=Source+Serif+4:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg-light: #f3e6cc;
+    --bg-deep: #e8d4a8;
+    --bg-edge: #ddc28a;
+    --accent-sun: #c44d2a;
+    --accent-deep: #8b3a1f;
+    --accent-amber: #b8732b;
+    --ink-primary: #2a1f0f;
+    --ink-secondary: #5a4a30;
+    --ink-tertiary: #7a6a4a;
+    --paper-line: rgba(90, 74, 48, 0.22);
+    --display-font: 'Playfair Display', 'Fraunces', Georgia, serif;
+    --body-font: 'Source Serif 4', Georgia, 'Iowan Old Style', serif;
+    --mono-font: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 110% 80% at 30% 20%, #f6ead2 0%, transparent 55%),
+      radial-gradient(ellipse 90% 70% at 80% 90%, #d9bd83 0%, transparent 60%),
+      linear-gradient(135deg, var(--bg-light) 0%, var(--bg-deep) 60%, var(--bg-edge) 100%);
+    color: var(--ink-primary);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'calt', 'onum', 'ss01';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(139, 58, 31, 0.06) 0%, transparent 2%),
+      radial-gradient(circle at 70% 60%, rgba(196, 77, 42, 0.05) 0%, transparent 2.5%),
+      radial-gradient(circle at 45% 80%, rgba(90, 74, 48, 0.05) 0%, transparent 2%),
+      radial-gradient(circle at 85% 15%, rgba(90, 74, 48, 0.04) 0%, transparent 2%);
+    background-size: 14px 14px, 18px 18px, 22px 22px, 16px 16px;
+    pointer-events: none;
+    opacity: 0.7;
+  }
+
+  .horizon {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 220px;
+    background:
+      linear-gradient(180deg, transparent 0%, rgba(196, 77, 42, 0.08) 50%, rgba(139, 58, 31, 0.16) 100%);
+    pointer-events: none;
+  }
+
+  .frame {
+    position: absolute;
+    top: 32px; left: 32px; right: 32px; bottom: 32px;
+    border: 1.5px solid var(--ink-secondary);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .frame-inner {
+    position: absolute;
+    top: 38px; left: 38px; right: 38px; bottom: 38px;
+    border: 0.5px solid rgba(90, 74, 48, 0.45);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .corner-mark {
+    position: absolute;
+    width: 22px; height: 22px;
+    border: 0;
+    z-index: 2;
+  }
+  .cm-tl { top: 26px; left: 26px; border-top: 1px solid var(--accent-deep); border-left: 1px solid var(--accent-deep); }
+  .cm-tr { top: 26px; right: 26px; border-top: 1px solid var(--accent-deep); border-right: 1px solid var(--accent-deep); }
+  .cm-bl { bottom: 26px; left: 26px; border-bottom: 1px solid var(--accent-deep); border-left: 1px solid var(--accent-deep); }
+  .cm-br { bottom: 26px; right: 26px; border-bottom: 1px solid var(--accent-deep); border-right: 1px solid var(--accent-deep); }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 88px 96px;
+    display: flex; flex-direction: column;
+    z-index: 3;
+  }
+
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 20px;
+    border-bottom: 0.5px solid var(--paper-line);
+  }
+  .maison {
+    font-family: var(--mono-font);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.42em;
+    color: var(--ink-secondary);
+    text-transform: uppercase;
+  }
+  .issue {
+    font-family: var(--mono-font);
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.28em;
+    color: var(--ink-tertiary);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .issue .dot {
+    display: inline-block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent-sun);
+  }
+
+  .label-row {
+    margin-top: 64px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .label {
+    font-family: var(--mono-font);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    color: var(--accent-sun);
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .label .bar {
+    display: inline-block;
+    width: 28px; height: 1px;
+    background: var(--accent-sun);
+  }
+  .label-meta {
+    font-family: var(--mono-font);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--ink-tertiary);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-weight: 700;
+    font-size: 96px;
+    line-height: 0.96;
+    letter-spacing: -0.035em;
+    color: var(--ink-primary);
+    margin-top: 20px;
+    max-width: 760px;
+  }
+  .headline em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--accent-deep);
+    letter-spacing: -0.025em;
+  }
+
+  .deck {
+    font-family: var(--body-font);
+    font-style: italic;
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-secondary);
+    margin-top: 26px;
+    max-width: 540px;
+    letter-spacing: 0.005em;
+  }
+  .deck .ornament {
+    color: var(--accent-sun);
+    font-style: normal;
+    margin: 0 8px;
+    font-family: var(--display-font);
+  }
+
+  .meta-rule {
+    margin-top: 56px;
+    width: 60px;
+    height: 1px;
+    background: var(--accent-sun);
+    opacity: 0.7;
+  }
+
+  .meta-grid {
+    margin-top: 28px;
+    display: flex;
+    gap: 72px;
+    align-items: flex-start;
+  }
+  .meta {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .meta .key {
+    font-family: var(--mono-font);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.32em;
+    color: var(--ink-tertiary);
+    text-transform: uppercase;
+  }
+  .meta .val {
+    font-family: var(--mono-font);
+    font-size: 17px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: var(--ink-primary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stamp {
+    position: absolute;
+    top: 108px;
+    right: 110px;
+    transform: rotate(-12deg);
+    padding: 10px 16px 8px 16px;
+    border: 2px solid var(--accent-sun);
+    color: var(--accent-sun);
+    font-family: var(--mono-font);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    font-weight: 700;
+    opacity: 0.78;
+    text-transform: uppercase;
+    text-align: center;
+    z-index: 4;
+    box-shadow: inset 0 0 0 1px rgba(196, 77, 42, 0.25);
+  }
+  .stamp .row1 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .stamp .row2 {
+    margin-top: 4px;
+    font-size: 8.5px;
+    letter-spacing: 0.34em;
+    font-weight: 500;
+    color: var(--accent-deep);
+    opacity: 0.85;
+  }
+
+  .stamp-second {
+    position: absolute;
+    top: 200px;
+    right: 132px;
+    transform: rotate(6deg);
+    padding: 5px 10px;
+    border: 1px solid var(--ink-secondary);
+    color: var(--ink-secondary);
+    font-family: var(--mono-font);
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    font-weight: 600;
+    opacity: 0.55;
+    z-index: 4;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .map-wrap {
+    position: absolute;
+    right: 96px;
+    bottom: 132px;
+    width: 200px;
+    height: 240px;
+    z-index: 3;
+  }
+  .map-wrap svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .map-coord {
+    position: absolute;
+    font-family: var(--mono-font);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    color: var(--ink-tertiary);
+    font-variant-numeric: tabular-nums;
+    text-transform: uppercase;
+  }
+  .map-coord-tl { top: 6px; left: 4px; }
+  .map-coord-tr { top: 6px; right: 4px; }
+  .map-coord-bl { bottom: 6px; left: 4px; }
+  .map-coord-br { bottom: 6px; right: 4px; }
+  .map-pin-label {
+    position: absolute;
+    top: 48%;
+    left: 56%;
+    font-family: var(--mono-font);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--accent-sun);
+    text-transform: uppercase;
+  }
+  .map-caption {
+    position: absolute;
+    bottom: -22px;
+    left: 0; right: 0;
+    text-align: center;
+    font-family: var(--body-font);
+    font-style: italic;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--ink-tertiary);
+  }
+
+  .compass {
+    position: absolute;
+    top: 380px;
+    right: 132px;
+    width: 56px;
+    height: 56px;
+    z-index: 3;
+    opacity: 0.55;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 92px;
+    left: 96px;
+    right: 96px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 3;
+    padding-top: 18px;
+    border-top: 0.5px solid var(--paper-line);
+  }
+  .field-editors {
+    font-family: var(--mono-font);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.34em;
+    color: var(--ink-secondary);
+    text-transform: uppercase;
+  }
+  .field-editors .sep {
+    margin: 0 12px;
+    color: var(--accent-sun);
+    font-weight: 700;
+  }
+  .page-mark {
+    font-family: var(--mono-font);
+    font-size: 10.5px;
+    letter-spacing: 0.28em;
+    color: var(--ink-tertiary);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .vertical-text {
+    position: absolute;
+    left: 56px;
+    top: 50%;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: center;
+    font-family: var(--mono-font);
+    font-size: 9.5px;
+    letter-spacing: 0.46em;
+    color: var(--ink-tertiary);
+    text-transform: uppercase;
+    z-index: 3;
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+
+  .sun-glyph {
+    position: absolute;
+    top: 320px;
+    left: 96px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 220, 160, 0.95), rgba(196, 77, 42, 0.55));
+    box-shadow:
+      0 0 0 8px rgba(196, 77, 42, 0.08),
+      0 0 0 16px rgba(196, 77, 42, 0.04);
+    opacity: 0.0;
+  }
+
+</style>
+</head>
+<body>
+  <div class="grain"></div>
+  <div class="horizon"></div>
+  <div class="frame"></div>
+  <div class="frame-inner"></div>
+  <div class="corner-mark cm-tl"></div>
+  <div class="corner-mark cm-tr"></div>
+  <div class="corner-mark cm-bl"></div>
+  <div class="corner-mark cm-br"></div>
+
+  <div class="vertical-text">ATLAS QUARTERLY · VOL XII · MMXXVI</div>
+
+  <div class="stage">
+    <div class="top-bar">
+      <div class="maison">ATLAS · QUARTERLY · MMXXVI</div>
+      <div class="issue">
+        <span>VOL XII</span>
+        <span class="dot"></span>
+        <span>ISSUE 042</span>
+        <span class="dot"></span>
+        <span>EAST AFRICA</span>
+      </div>
+    </div>
+
+    <div class="label-row">
+      <div class="label">
+        <span class="bar"></span>
+        Field Dispatch No. 042
+      </div>
+      <div class="label-meta">— FROM THE GREAT RIFT VALLEY</div>
+    </div>
+
+    <h1 class="headline"><em>Serengeti</em><br>Sunrise.</h1>
+
+    <p class="deck">Twelve days <span class="ornament">·</span> six rivers <span class="ornament">·</span> one pride of lions, traced from the Mara confluence to the kopjes of <em>Naabi Hill</em>.</p>
+
+    <div class="meta-rule"></div>
+
+    <div class="meta-grid">
+      <div class="meta">
+        <div class="key">LATITUDE</div>
+        <div class="val">02° 19′ S</div>
+      </div>
+      <div class="meta">
+        <div class="key">LONGITUDE</div>
+        <div class="val">34° 49′ E</div>
+      </div>
+      <div class="meta">
+        <div class="key">ELEVATION</div>
+        <div class="val">1,520 m</div>
+      </div>
+      <div class="meta">
+        <div class="key">TIME ZONE</div>
+        <div class="val">GMT +3</div>
+      </div>
+      <div class="meta">
+        <div class="key">SEASON</div>
+        <div class="val">DRY · SEP</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stamp">
+    <div class="row1">
+      <span>▲</span>
+      <span>EXPEDITION</span>
+      <span>◆</span>
+      <span>042</span>
+    </div>
+    <div class="row2">ENTERED · 09 · 2026</div>
+  </div>
+
+  <div class="stamp-second">EAA · 2026 / 09 · APPROVED</div>
+
+  <svg class="compass" viewBox="0 0 56 56">
+    <circle cx="28" cy="28" r="24" fill="none" stroke="#5a4a30" stroke-width="0.8"/>
+    <circle cx="28" cy="28" r="18" fill="none" stroke="#5a4a30" stroke-width="0.4" stroke-dasharray="2 2"/>
+    <polygon points="28,8 31,28 28,26 25,28" fill="#c44d2a"/>
+    <polygon points="28,48 31,28 28,30 25,28" fill="#5a4a30" opacity="0.5"/>
+    <circle cx="28" cy="28" r="2" fill="#2a1f0f"/>
+    <line x1="28" y1="4" x2="28" y2="9" stroke="#5a4a30" stroke-width="0.6"/>
+    <line x1="28" y1="47" x2="28" y2="52" stroke="#5a4a30" stroke-width="0.6"/>
+    <line x1="4" y1="28" x2="9" y2="28" stroke="#5a4a30" stroke-width="0.6"/>
+    <line x1="47" y1="28" x2="52" y2="28" stroke="#5a4a30" stroke-width="0.6"/>
+  </svg>
+
+  <div class="map-wrap">
+    <svg viewBox="0 0 200 240">
+      <rect x="0.5" y="0.5" width="199" height="239" fill="rgba(255,250,235,0.35)" stroke="#8b3a1f" stroke-width="0.6"/>
+      <line x1="0" y1="40" x2="200" y2="40" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
+      <line x1="0" y1="120" x2="200" y2="120" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
+      <line x1="0" y1="200" x2="200" y2="200" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
+      <line x1="60" y1="0" x2="60" y2="240" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
+      <line x1="140" y1="0" x2="140" y2="240" stroke="#8b3a1f" stroke-width="0.3" stroke-dasharray="1 3" opacity="0.4"/>
+
+      <path d="M95 30 Q60 50 50 95 Q42 130 55 165 Q70 195 100 200 Q135 198 150 170 Q165 135 158 95 Q150 55 120 38 Z"
+            fill="rgba(196, 77, 42, 0.06)" stroke="#5a4a30" stroke-width="1.2"/>
+      <path d="M95 30 Q60 50 50 95 Q42 130 55 165 Q70 195 100 200 Q135 198 150 170 Q165 135 158 95 Q150 55 120 38 Z"
+            fill="none" stroke="#8b3a1f" stroke-width="0.6" stroke-dasharray="3 2" opacity="0.6"/>
+
+      <path d="M75 75 Q90 95 105 100 Q125 105 140 130 Q150 150 145 175"
+            fill="none" stroke="#5a4a30" stroke-width="0.7" stroke-dasharray="4 3" opacity="0.7"/>
+      <path d="M60 110 Q80 125 100 120 Q115 118 130 105"
+            fill="none" stroke="#5a4a30" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.5"/>
+
+      <circle cx="100" cy="120" r="8" fill="none" stroke="#c44d2a" stroke-width="1"/>
+      <circle cx="100" cy="120" r="4" fill="#c44d2a"/>
+      <circle cx="100" cy="120" r="1.5" fill="#fff8e8"/>
+
+      <circle cx="75" cy="75" r="2.5" fill="#5a4a30"/>
+      <circle cx="140" cy="130" r="2.5" fill="#5a4a30"/>
+      <circle cx="145" cy="175" r="2.5" fill="#5a4a30"/>
+      <circle cx="60" cy="110" r="2" fill="#5a4a30" opacity="0.6"/>
+
+      <line x1="100" y1="120" x2="180" y2="120" stroke="#c44d2a" stroke-width="0.4" stroke-dasharray="1 2" opacity="0.6"/>
+      <line x1="100" y1="120" x2="100" y2="220" stroke="#c44d2a" stroke-width="0.4" stroke-dasharray="1 2" opacity="0.6"/>
+    </svg>
+    <div class="map-coord map-coord-tl">N</div>
+    <div class="map-coord map-coord-tr">02°S</div>
+    <div class="map-coord map-coord-bl">34°E</div>
+    <div class="map-coord map-coord-br">35°E</div>
+    <div class="map-pin-label">SERENGETI</div>
+    <div class="map-caption">— survey sheet IV / vii —</div>
+  </div>
+
+  <div class="footer">
+    <div class="field-editors">
+      FIELD EDITORS
+      <span class="sep">◆</span>
+      LARA &amp; TOMÁS
+      <span class="sep">◆</span>
+      SEPTEMBER 2026
+    </div>
+    <div class="page-mark">
+      <span>FOLIO</span>
+      <span>·</span>
+      <span>03 / 14</span>
+    </div>
+  </div>
+</body>
+</html>
