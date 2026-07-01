@@ -64,23 +64,6 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   where puppeteer is available. (Visual QA of the 5 new recipes + 2 mocks and the post-diff
   adversarial review were completed in the authoring session — both clean.)
 
-## schematic-blueprint-runbook-restyle
-
-Proposals discovered while restyling `schematic_blueprint` + extracting the runbook
-primitives (not AC deferrals — these cross the planning **public interface**, so
-they need the full-mode spec path rather than a light-mode ride-along). The
-narrative-archetype *guidance* shipped in PR #7 (`principles/narrative-arc.md`
-§参考型叙事 + outline-playbook pointer). The **engine** now honors the archetype at the
-outline + planning layers (`論证策略：reference_runbook` enum value + archetype-branched
-density/skeleton rules in both validators — spec `reference-runbook-archetype`, Shipped).
-The inline section-divider + back-matter page_types shipped via spec
-`reference-runbook-page-types` (`section-marker` + `reference` across all seven enum
-consumer sites). Remaining engine work:
-
-- **`persistent_chrome` deck flag.** A deck-level flag that renders masthead + footer
-  on every content page (orientation for reference docs). Blocked on: new deck-level
-  field + page-html playbook support. Unblocked by a spec wiring the flag end-to-end.
-
 ## reference-runbook-page-types
 
 - **Discovered (not an AC deferral): `smoke_skill.py` pre-existing fixture drift.**

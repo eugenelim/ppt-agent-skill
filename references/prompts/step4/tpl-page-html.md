@@ -41,7 +41,8 @@
 
 ## 执行链路（固定顺序，不得跳步）
 
-1. 读取 `{{PLANNING_OUTPUT}}`，提取完整骨架（`page_type`、`layout_hint`、`density_label`、`density_contract`、`focus_zone`、`negative_space_target`、`cards[].card_id/role/card_type/card_style/headline/body/data_points/chart/image/resource_ref`、`director_command`、`decoration_hints`、`source_guidance`、`resources`、`must_avoid`）
+1. 读取 `{{PLANNING_OUTPUT}}`，提取完整骨架（`page_type`、`layout_hint`、`density_label`、`density_contract`、`focus_zone`、`negative_space_target`、`cards[].card_id/role/card_type/card_style/headline/body/data_points/chart/image/resource_ref`、`director_command`、`decoration_hints`、`source_guidance`、`resources`、`must_avoid`），以及 deck 级顶层字段 `persistent_chrome`（布尔，缺省 false）与 `deck_chrome`（`{title, subtitle}`）。
+   - **持久化页框（仅当 `persistent_chrome == true` 且 `page_type == content`）**：本页须按 Playbook「持久化页框例外」加装 masthead 顶栏 + runbook 页脚——读 `{{REFS_DIR}}/blocks/worksheet.md` C 组 `masthead` + `footer` 配方，结构逐字照搬、只改文案，文案逐槽映射填满（masthead 左=`deck_chrome.title`、中=`deck_chrome.subtitle`、右=本页页码；footer 列1=`deck_chrome.title`+`subtitle`、列2 `Section`=本页 section 标签、列3 `Page`=页码），**绝不渲染配方里的示例文案**（如 `SCHEMATIC · DELIVERY RUNBOOK` / `REV 2.4`；完整禁用清单 + footer 破折号回退规则以 `design-specs.md` §A 为准），绑定 deck 契约变量（`--text-primary` / `--accent-1` / `--card-bg-from` / `--font-mono` / `--font-primary`）。带定位与内容区收窄见 Playbook 与 `design-specs.md` §A。`false` / 缺省或非 content 页时忽略，走普通统一骨架。
 2. 读取 `{{STYLE_PATH}}`，提取 `css_variables`、`font_family`、`design_soul`、`variation_strategy`、`decoration_dna`
 3. **必须执行** —— 获取 planning 引用资源的**正文层实现细节**（不能跳过，里面有组件级 CSS 参数和骨架建议），并把结果备份到 runtime：
    ```bash

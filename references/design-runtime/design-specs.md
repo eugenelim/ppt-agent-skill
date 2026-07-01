@@ -98,6 +98,38 @@
 
 > **创意自由空间**：页脚内容可以用叙事化页脚（W12 技法）替换 `.footer-section` 的显示内容（如终端状态栏、印章徽记、进度条），但 **HTML 结构（`footer.slide-footer`）和定位方式（`position:absolute; bottom:12px`）必须全 deck 统一。** style.json 的 `decoration_dna.signature_move` 如指定页脚风格，优先执行。
 
+#### 持久化页框例外（持久化页框 / persistent_chrome —— 仅当 deck 开启此开关）
+
+**触发条件**：planning JSON 顶层 `persistent_chrome:true`（由大纲 deck 级字段 `持久化页框` 透传，见 outline playbook）**且** `page_type == content`。**缺省 / `false` 时本节完全不生效，上面的统一骨架合同一字不变**——不开启此开关的 deck 与今天逐字节一致。
+
+**做什么**：参考型 deck（运行手册 / SOP / playbook）在每张 content 页套一层"页框"，让读者中途翻入也知道"我在哪份文档、翻到第几节"。masthead 顶栏 + runbook 页脚直接取自 [`blocks/worksheet.md` C 组页面骨架](../blocks/worksheet.md)（`masthead` + `footer` 配方），**结构逐字照搬、只改文案**，全部绑定 deck 契约变量随风格换色。
+
+**三条绝对定位带**（都在既有 40px 左右边距内，与统一骨架同一种定位法；下列像素为契约近似值，具体高度随文案自适应）：
+
+| 带 | 定位 | 高度 | 内容 |
+|----|------|------|------|
+| **masthead 顶栏** | `position:absolute; top:20px; left:40px; right:40px;` | ~32px（y≈20–52） | `blocks/worksheet.md` C 组 masthead 配方：左 deck 品牌 / 中 deck 副题 / 右版本 |
+| **slide-header 标题区** | **下移**到 `position:absolute; top:64px;`（不再是 20px） | ~44px（y≈64–108；较普通骨架 50px 略收，为顶部 masthead 让位） | 仍是 `header.slide-header > span.overline + h1.page-title`，保留每页标题供导览 |
+| **content 内容区** | y 从 **≈120px** 起（不再 80px） | 可用高度 **≈500px**（非 580px） | `density_contract` 在开启页按 **≈500px** 计算，不得按 580px 硬塞 |
+| **runbook 页脚** | `position:absolute; bottom:12px; left:40px; right:40px;` | ~56px | `blocks/worksheet.md` C 组 footer 配方，**整块替换** `.slide-footer`（不并存两个页脚） |
+
+**文案来源（逐槽映射，别让每页代理各自猜）**：masthead / footer 的文字槽一律从 planning JSON 的 `deck_chrome`（`{title, subtitle}`，由 planning 阶段从 deck 标题 + 大纲核心论点写入）+ 本页字段（section 标签、页码 `{当前页}/{总页}`）填充，把 C 组配方的三段/三列填满、不留空列：
+
+| 配方槽位 | 填什么 |
+|---------|--------|
+| masthead 左（品牌） | `deck_chrome.title` |
+| masthead 中（副题） | `deck_chrome.subtitle` |
+| masthead 右（状态） | 本页页码 `{当前页} / {总页}` |
+| footer 列1（标题 + 释义） | `deck_chrome.title`，`deck_chrome.subtitle` 作破折号后的释义子句 |
+| footer 列2（小标题改 `Section`） | 本页 section 标签 |
+| footer 列3（小标题改 `Page`） | 本页页码 `{当前页} / {总页}` |
+
+**破折号确定性回退**（消除"悬空破折号"歧义，保证 N 个 per-page 代理输出一致）：footer 列1 渲染 `<strong>{title}</strong> — {subtitle}`，其中 `subtitle` 作破折号后的释义子句；**若 `subtitle` 不是成句的子句（如只是标题式短语），则丢弃破折号、只渲染 `<strong>{title}</strong>`**（title-only）。masthead 中段直接用 `subtitle` 原文，不加破折号。
+
+**绝不沿用配方里的示例文案**（`SCHEMATIC · DELIVERY RUNBOOK` / `Engineering Delivery Handbook` / `REV 2.4` / `Delivery Runbook` / `— the operating manual for a fixed-length delivery project.` / `Pre-flight · Cadence · Gates` / `2.4 · 2026`）；确无任何来源的槽位才留空省略。此清单与 `blocks/worksheet.md` C 组配方由 `scripts/lint_diagram_recipes.py` 双向校验保持同步。
+
+**铁律**：一张页要么走上面的普通统一骨架、要么走这套页框，**二者只居其一，绝不并存**。页框只用真实 `<div>`/`<span>`/`<footer>` 节点、只用契约变量——禁 `::before`/`::after` 装饰、禁硬编码色/字（沿用 C 组配方即天然满足）。
+
 ### 排版阶梯（拉开分层 -- 字号反差是设计力的核心指标）
 
 | 层级 | 用途 | 字号 | 字重 | 行高 | 颜色 | 设计建议 |
