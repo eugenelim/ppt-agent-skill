@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>mocha_editorial · Anthropic 级编辑器 · World-Class Mock</title>
+<title>mocha_editorial · Research Findings · Detail Slide</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400&family=Instrument+Serif:ital@0;1&family=Fraunces:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -14,13 +14,14 @@
     --ink-secondary: #4a3a30;
     --ink-label: #8b5a3c;
     --accent: #c1502e;
-    --rule: rgba(42, 24, 16, 0.12);
-
+    --rule: rgba(42,24,16,0.12);
+    --rule-strong: rgba(42,24,16,0.22);
+    --card-border: rgba(193,80,46,0.15);
     --display-font: 'Source Serif 4', 'Tiempos Text', 'Iowan Old Style', Georgia, serif;
     --italic-font: 'Instrument Serif', 'Fraunces', 'Source Serif 4', Georgia, serif;
     --body-font: 'Source Serif 4', 'Iowan Old Style', Georgia, serif;
-    --label-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --mono-font: 'JetBrains Mono', 'DM Mono', 'Courier New', monospace;
+    --label-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono-font: 'JetBrains Mono', 'DM Mono', monospace;
     --drop-font: 'Fraunces', 'Source Serif 4', Georgia, serif;
   }
 
@@ -31,231 +32,129 @@
     color: var(--ink-primary);
     font-family: var(--body-font);
     font-feature-settings: 'kern', 'liga', 'onum', 'ss01';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
   .paper-grain {
     position: absolute; inset: 0;
     background-image:
-      radial-gradient(circle at 18% 22%, rgba(193, 80, 46, 0.04) 0%, transparent 38%),
-      radial-gradient(circle at 88% 78%, rgba(139, 90, 60, 0.05) 0%, transparent 42%),
-      radial-gradient(circle at 50% 50%, rgba(42, 24, 16, 0.015) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 1;
+      radial-gradient(circle at 18% 22%, rgba(193,80,46,0.04) 0%, transparent 38%),
+      radial-gradient(circle at 88% 78%, rgba(139,90,60,0.05) 0%, transparent 42%);
+    pointer-events: none; z-index: 1;
   }
-
-  .frame-line-top {
-    position: absolute; top: 36px; left: 80px; right: 80px;
-    height: 1px; background: var(--rule);
-    z-index: 2;
-  }
-  .frame-line-bottom {
-    position: absolute; bottom: 36px; left: 80px; right: 80px;
-    height: 1px; background: var(--rule);
-    z-index: 2;
-  }
+  .frame-line-top { position: absolute; top: 36px; left: 80px; right: 80px; height: 1px; background: var(--rule); z-index: 2; }
+  .frame-line-bottom { position: absolute; bottom: 36px; left: 80px; right: 80px; height: 1px; background: var(--rule); z-index: 2; }
 
   .masthead {
-    position: absolute;
-    top: 50px; left: 80px; right: 80px;
+    position: absolute; top: 50px; left: 80px; right: 80px;
     display: flex; justify-content: space-between; align-items: center;
     z-index: 3;
     font-family: var(--label-font);
-    font-size: 10.5px;
-    color: var(--ink-secondary);
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    font-weight: 500;
+    font-size: 10.5px; color: var(--ink-secondary);
+    letter-spacing: 0.22em; text-transform: uppercase; font-weight: 500;
   }
-  .masthead .brand {
-    font-family: var(--display-font);
-    font-style: italic;
-    font-size: 15px;
-    letter-spacing: 0.01em;
-    text-transform: none;
-    color: var(--ink-primary);
-    font-weight: 400;
-  }
-  .masthead .brand-meta {
-    display: flex; gap: 28px; align-items: center;
-  }
+  .masthead .brand { font-family: var(--display-font); font-style: italic; font-size: 15px; letter-spacing: 0.01em; text-transform: none; color: var(--ink-primary); font-weight: 400; }
+  .masthead .brand-meta { display: flex; gap: 28px; align-items: center; }
 
   .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 130px 80px 80px;
+    position: relative; width: 100%; height: 100%;
+    padding: 130px 80px 72px;
     z-index: 2;
     display: grid;
     grid-template-columns: 1fr 1.5fr;
-    gap: 60px;
+    gap: 48px;
   }
 
-  .col-left {
-    display: flex; flex-direction: column;
-    padding-top: 0;
-  }
+  /* Left column */
+  .col-left { display: flex; flex-direction: column; }
+  .accent-rule { width: 24px; height: 1.5px; background: var(--accent); margin-bottom: 14px; }
+  .section-label { font-family: var(--label-font); font-size: 11px; color: var(--ink-label); font-weight: 600; letter-spacing: 0.25em; text-transform: uppercase; margin-bottom: 20px; }
 
-  .accent-rule {
-    width: 24px;
-    height: 1.5px;
-    background: var(--accent);
-    margin-bottom: 18px;
-  }
-
-  .label {
-    font-family: var(--label-font);
-    font-size: 11px;
-    color: var(--ink-label);
-    font-weight: 600;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    margin-bottom: 36px;
-  }
-
-  .headline {
+  h2 {
     font-family: var(--display-font);
-    font-size: 64px;
-    font-weight: 500;
-    color: var(--ink-deep);
-    line-height: 1.04;
-    letter-spacing: -0.025em;
+    font-size: 38px; font-weight: 500; color: var(--ink-deep);
+    line-height: 1.08; letter-spacing: -0.025em;
     font-feature-settings: 'kern', 'liga', 'onum', 'ss01';
+    margin-bottom: 22px;
   }
-  .headline em {
-    font-family: var(--italic-font);
-    font-style: italic;
-    font-weight: 400;
-    color: var(--accent);
-    letter-spacing: -0.015em;
-    padding-right: 2px;
-  }
+  h2 em { font-family: var(--italic-font); font-style: italic; font-weight: 400; color: var(--accent); letter-spacing: -0.015em; }
 
-  .byline {
-    margin-top: 44px;
-    display: flex; align-items: center; gap: 14px;
+  /* Key findings list */
+  .findings { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+  .finding {
+    display: grid; grid-template-columns: 32px 1fr;
+    gap: 10px; align-items: start;
+    padding: 10px 12px;
+    background: rgba(42,24,16,0.04);
+    border-left: 2px solid var(--accent);
+  }
+  .finding .num {
+    font-family: var(--drop-font); font-size: 22px; font-weight: 700;
+    color: var(--accent); line-height: 1.1; letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+  }
+  .finding .text { font-size: 13px; line-height: 1.58; color: var(--ink-secondary); }
+  .finding .text em { font-family: var(--italic-font); font-style: italic; color: var(--ink-primary); font-weight: 400; font-size: 14px; }
+
+  .byline { margin-top: 20px; font-family: var(--label-font); font-size: 10px; color: var(--ink-secondary); letter-spacing: 0.2em; text-transform: uppercase; font-weight: 500; display: flex; align-items: center; gap: 12px; }
+  .byline .dash { width: 16px; height: 1px; background: var(--ink-secondary); opacity: 0.5; }
+
+  /* Right column — data panels */
+  .col-right { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+
+  .data-panel {
+    background: rgba(42,24,16,0.035);
+    border: 1px solid var(--card-border);
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .data-panel .panel-head {
     font-family: var(--label-font);
-    font-size: 10.5px;
-    color: var(--ink-secondary);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 500;
-  }
-  .byline .dash { width: 18px; height: 1px; background: var(--ink-secondary); opacity: 0.5; }
-
-  .col-right {
-    padding-top: 130px;
-    display: flex; flex-direction: column;
-    position: relative;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-label); font-weight: 600; margin-bottom: 4px;
   }
 
-  .essay {
-    font-family: var(--body-font);
-    font-size: 16px;
-    line-height: 1.78;
-    color: var(--ink-primary);
-    text-align: justify;
-    hyphens: auto;
-    font-feature-settings: 'kern', 'liga', 'onum';
-    max-width: 600px;
-  }
-  .essay::first-letter {
-    float: left;
-    font-family: var(--drop-font);
-    font-size: 60px;
-    line-height: 0.85;
-    padding: 6px 10px 0 0;
-    font-weight: 600;
-    color: var(--ink-deep);
-    font-style: normal;
-  }
-  .essay em {
-    font-family: var(--italic-font);
-    font-style: italic;
-    color: var(--accent);
-    font-weight: 400;
-    font-size: 17px;
-    letter-spacing: -0.005em;
-  }
-  .essay .num {
-    font-variant-numeric: tabular-nums oldstyle-nums;
-    font-weight: 600;
-  }
-
-  .meta-row {
-    margin-top: 38px;
-    display: flex; align-items: center; gap: 16px;
-    font-family: var(--label-font);
-    font-size: 10.5px;
-    color: var(--ink-deep);
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-  .meta-row .sep {
-    width: 4px; height: 4px; border-radius: 50%;
-    background: var(--ink-label);
-    opacity: 0.6;
-  }
-  .meta-row .cta {
-    color: var(--accent);
-    display: inline-flex; align-items: center; gap: 8px;
-  }
-  .meta-row .cta .arrow {
+  /* Stat row */
+  .stat-row { display: flex; gap: 24px; align-items: flex-end; }
+  .stat-item { display: flex; flex-direction: column; gap: 4px; }
+  .stat-item .s-val {
     font-family: var(--display-font);
-    font-style: normal;
-    font-size: 13px;
-    letter-spacing: 0;
+    font-size: 36px; font-weight: 500; letter-spacing: -0.025em; line-height: 1;
+    color: var(--ink-deep); font-variant-numeric: tabular-nums;
   }
+  .stat-item .s-val .unit { font-size: 16px; color: var(--accent); font-weight: 400; font-family: var(--italic-font); font-style: italic; }
+  .stat-item .s-label { font-family: var(--label-font); font-size: 10px; color: var(--ink-secondary); letter-spacing: 0.18em; text-transform: uppercase; font-weight: 500; }
+
+  /* Mini bar chart */
+  .bar-chart { display: flex; flex-direction: column; gap: 6px; }
+  .bar-row { display: grid; grid-template-columns: 80px 1fr 38px; gap: 8px; align-items: center; }
+  .bar-row .b-label { font-family: var(--label-font); font-size: 10.5px; color: var(--ink-secondary); }
+  .bar-row .b-track { height: 6px; background: rgba(42,24,16,0.12); border-radius: 2px; overflow: hidden; }
+  .bar-row .b-fill { height: 100%; background: var(--accent); border-radius: 2px; opacity: 0.85; }
+  .bar-row .b-fill.sage { background: #7a9148; }
+  .bar-row .b-val { font-family: var(--mono-font); font-size: 10px; color: var(--ink-label); font-variant-numeric: tabular-nums; text-align: right; }
+
+  /* Comparison table */
+  .mini-table { width: 100%; border-collapse: collapse; }
+  .mini-table td { font-size: 11.5px; padding: 5px 0; border-bottom: 1px solid var(--rule); color: var(--ink-secondary); vertical-align: middle; }
+  .mini-table td:first-child { font-family: var(--body-font); font-size: 12px; color: var(--ink-primary); }
+  .mini-table td.val { font-family: var(--mono-font); font-size: 12px; color: var(--ink-deep); font-variant-numeric: tabular-nums; text-align: right; padding-left: 8px; }
+  .mini-table td.delta { color: var(--accent); font-family: var(--mono-font); font-size: 10.5px; text-align: right; }
 
   .pull-quote {
-    margin-top: 30px;
-    padding-left: 18px;
+    margin-top: 2px; padding: 10px 14px;
     border-left: 1.5px solid var(--accent);
-    font-family: var(--italic-font);
-    font-style: italic;
-    font-size: 15px;
-    line-height: 1.55;
-    color: var(--ink-secondary);
-    max-width: 460px;
-    letter-spacing: 0.005em;
+    font-family: var(--italic-font); font-style: italic;
+    font-size: 14px; line-height: 1.52; color: var(--ink-secondary);
+    max-width: 460px; letter-spacing: 0.005em;
   }
 
-  .folio {
-    position: absolute;
-    bottom: 60px; right: 80px;
-    font-family: var(--mono-font);
-    font-size: 11px;
-    color: var(--ink-label);
-    letter-spacing: 0.08em;
-    font-variant-numeric: tabular-nums;
-    z-index: 3;
-  }
-
-  .left-foot {
-    position: absolute;
-    bottom: 60px; left: 80px;
-    font-family: var(--label-font);
-    font-size: 10px;
-    color: var(--ink-secondary);
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    font-weight: 500;
-    opacity: 0.7;
-    z-index: 3;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .left-foot .glyph {
-    font-family: var(--display-font);
-    font-style: italic;
-    font-size: 13px;
-    letter-spacing: 0;
-    color: var(--ink-label);
-    text-transform: none;
-    opacity: 1;
-  }
+  .folio { position: absolute; bottom: 50px; right: 80px; font-family: var(--mono-font); font-size: 11px; color: var(--ink-label); letter-spacing: 0.08em; font-variant-numeric: tabular-nums; z-index: 3; }
+  .left-foot { position: absolute; bottom: 50px; left: 80px; font-family: var(--label-font); font-size: 10px; color: var(--ink-secondary); letter-spacing: 0.28em; text-transform: uppercase; font-weight: 500; opacity: 0.7; z-index: 3; display: flex; align-items: center; gap: 12px; }
+  .left-foot .glyph { font-family: var(--display-font); font-style: italic; font-size: 13px; letter-spacing: 0; color: var(--ink-label); text-transform: none; opacity: 1; }
 </style>
 </head>
 <body>
@@ -276,37 +175,97 @@
   </div>
 
   <div class="stage">
+
+    <!-- Left: argument structure -->
     <div class="col-left">
       <div class="accent-rule"></div>
-      <div class="label">Research Paper · 2026</div>
-      <h1 class="headline">Models that <em>think</em><br>before they<br>speak.</h1>
+      <div class="section-label">Key Findings · Extended Reasoning</div>
+      <h2>Where <em>deliberation</em> changes outcomes</h2>
+
+      <div class="findings">
+        <div class="finding">
+          <div class="num">01</div>
+          <div class="text">Models with 4+ reasoning passes show a <em>4.7× reduction</em> in factual hallucination rate on structured knowledge benchmarks (MMLU, HaloEval).</div>
+        </div>
+        <div class="finding">
+          <div class="num">02</div>
+          <div class="text">Latency overhead of extended chains is <em>under 340 ms p99</em> in production — well within user-tolerable wait for high-stakes decisions.</div>
+        </div>
+        <div class="finding">
+          <div class="num">03</div>
+          <div class="text">Alignment divergence drops 62% when chain-of-thought is visible and inspectable versus opaque single-pass generation.</div>
+        </div>
+      </div>
+
       <div class="byline">
         <span class="dash"></span>
-        <span>An Essay on Latent Deliberation</span>
+        <span>Mocha Research Team · May 2026</span>
       </div>
     </div>
 
+    <!-- Right: data panels -->
     <div class="col-right">
-      <p class="essay">
-        延展推理（<em>extended reasoning</em>）让语言模型在产出前进行多轮内部审议。本研究展示了 <span class="num">4.7×</span> 的推理深度提升如何转化为显著降低的幻觉率，以及在高风险部署场景下的<em>可对齐性</em>增强。
-      </p>
+
+      <div class="data-panel">
+        <div class="panel-head">Hallucination Rate by Reasoning Depth</div>
+        <div class="bar-chart">
+          <div class="bar-row">
+            <div class="b-label">0 passes (base)</div>
+            <div class="b-track"><div class="b-fill" style="width:92%"></div></div>
+            <div class="b-val">18.4%</div>
+          </div>
+          <div class="bar-row">
+            <div class="b-label">2 passes</div>
+            <div class="b-track"><div class="b-fill" style="width:54%"></div></div>
+            <div class="b-val">10.8%</div>
+          </div>
+          <div class="bar-row">
+            <div class="b-label">4 passes</div>
+            <div class="b-track"><div class="b-fill sage" style="width:22%"></div></div>
+            <div class="b-val">4.4%</div>
+          </div>
+          <div class="bar-row">
+            <div class="b-label">8+ passes</div>
+            <div class="b-track"><div class="b-fill sage" style="width:11%"></div></div>
+            <div class="b-val">2.1%</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="data-panel">
+        <div class="panel-head">Benchmark Summary — MMLU + HaloEval 2026</div>
+        <table class="mini-table">
+          <tr>
+            <td>Accuracy — MMLU Pro</td>
+            <td class="val">91.2%</td>
+            <td class="delta">▲ +12 pp</td>
+          </tr>
+          <tr>
+            <td>HaloEval factual pass rate</td>
+            <td class="val">88.7%</td>
+            <td class="delta">▲ +19 pp</td>
+          </tr>
+          <tr>
+            <td>Alignment divergence score</td>
+            <td class="val">0.08</td>
+            <td class="delta">▼ −62%</td>
+          </tr>
+          <tr>
+            <td>P99 latency overhead</td>
+            <td class="val">340 ms</td>
+            <td class="delta">within SLA</td>
+          </tr>
+        </table>
+      </div>
 
       <div class="pull-quote">
-        &ldquo; The space between question and answer is where alignment lives. &rdquo;
+        &ldquo; The space between question and answer is where alignment lives — and deliberation makes that space auditable. &rdquo;
       </div>
 
-      <div class="meta-row">
-        <span>By Research Team</span>
-        <span class="sep"></span>
-        <span class="cta">Continue Reading <span class="arrow">→</span></span>
-      </div>
     </div>
   </div>
 
-  <div class="left-foot">
-    <span class="glyph">M.R.</span>
-    <span>Editorial · Long Form</span>
-  </div>
-  <div class="folio">§ 04.2</div>
+  <div class="left-foot"><span class="glyph">M.R.</span><span>Research · Data</span></div>
+  <div class="folio">§ 04.3</div>
 </body>
 </html>

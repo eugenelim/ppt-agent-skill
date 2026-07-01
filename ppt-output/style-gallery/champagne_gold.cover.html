@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>champagne_gold · 香槟金奢华 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Bodoni+Moda:ital,wght@0,400;0,600;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg-from: #faf6ed;
+    --bg-mid:  #f6efd9;
+    --bg-to:   #f3ead0;
+    --paper:   #fbf7ec;
+    --gold:        #c9a35a;
+    --gold-deep:   #b88d3a;
+    --gold-darker: #8e6a25;
+    --gold-light:  #f5e8c8;
+    --gold-pale:   #efe1b8;
+    --ink:         #2a2218;
+    --ink-soft:    #5a4a32;
+    --ink-faint:   #8a7855;
+
+    --display-font: 'Playfair Display', 'Bodoni Moda', 'Didot', Georgia, serif;
+    --body-font:    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --script-font:  'Playfair Display', 'Bodoni Moda', Georgia, serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 70% 55% at 50% 38%, #fffaee 0%, transparent 60%),
+      linear-gradient(160deg, var(--bg-from) 0%, var(--bg-mid) 55%, var(--bg-to) 100%);
+    color: var(--ink);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'dlig', 'calt', 'onum';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(201,163,90,0.05) 0%, transparent 35%),
+      radial-gradient(circle at 80% 75%, rgba(184,141,58,0.06) 0%, transparent 40%);
+    pointer-events: none; z-index: 0;
+  }
+
+  .vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse 95% 75% at 50% 50%, transparent 55%, rgba(120,90,40,0.10) 100%);
+    pointer-events: none; z-index: 1;
+  }
+
+  .frame {
+    position: absolute;
+    top: 36px; left: 56px; right: 56px; bottom: 36px;
+    border: 1px solid rgba(201,163,90,0.32);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .frame-inner {
+    position: absolute;
+    top: 44px; left: 64px; right: 64px; bottom: 44px;
+    border: 1px solid rgba(201,163,90,0.18);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .corner { position: absolute; width: 22px; height: 22px; z-index: 3; pointer-events: none; }
+  .corner-tl { top: 28px; left: 48px; border-top: 1.5px solid var(--gold); border-left: 1.5px solid var(--gold); }
+  .corner-tr { top: 28px; right: 48px; border-top: 1.5px solid var(--gold); border-right: 1.5px solid var(--gold); }
+  .corner-bl { bottom: 28px; left: 48px; border-bottom: 1.5px solid var(--gold); border-left: 1.5px solid var(--gold); }
+  .corner-br { bottom: 28px; right: 48px; border-bottom: 1.5px solid var(--gold); border-right: 1.5px solid var(--gold); }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 80px 120px 70px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    z-index: 4;
+  }
+
+  .top-ornament {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin-bottom: 28px;
+  }
+  .top-ornament .line {
+    width: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold) 60%, var(--gold-deep));
+  }
+  .top-ornament .line.right {
+    background: linear-gradient(90deg, var(--gold-deep), var(--gold) 40%, transparent);
+  }
+  .top-ornament .diamond {
+    width: 6px; height: 6px;
+    background: var(--gold-deep);
+    transform: rotate(45deg);
+    box-shadow: 0 0 0 3px rgba(201,163,90,0.18);
+  }
+
+  .maison {
+    font-family: var(--body-font);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gold-deep);
+    letter-spacing: 0.65em;
+    text-indent: 0.65em;
+    text-transform: uppercase;
+    margin-bottom: 36px;
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 108px;
+    line-height: 0.95;
+    letter-spacing: -0.005em;
+    background: linear-gradient(135deg, #b88d3a 0%, #e6cf91 30%, #f5e8c8 50%, #d8b86a 70%, #b88d3a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.4);
+  }
+  .headline .amp {
+    display: block;
+    font-family: var(--display-font);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 64px;
+    line-height: 1.1;
+    margin: 4px 0 0;
+    letter-spacing: 0;
+    background: linear-gradient(135deg, var(--gold-deep), var(--gold-light) 50%, var(--gold-deep));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  .headline .name { display: block; }
+
+  .gold-divider {
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    margin-top: 34px;
+  }
+  .gold-divider .ln {
+    width: 110px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold));
+  }
+  .gold-divider .ln.right {
+    background: linear-gradient(90deg, var(--gold), transparent);
+  }
+  .gold-divider .dot {
+    width: 6px; height: 6px;
+    background: var(--gold-deep);
+    transform: rotate(45deg);
+  }
+  .gold-divider .swirl {
+    font-family: var(--script-font);
+    font-style: italic;
+    font-size: 22px;
+    color: var(--gold-deep);
+    line-height: 1;
+    letter-spacing: 0;
+    transform: translateY(-2px);
+  }
+
+  .date-line {
+    margin-top: 28px;
+    font-family: var(--body-font);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.55em;
+    text-indent: 0.55em;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums proportional-nums;
+  }
+
+  .seal {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    border: 1.5px solid var(--gold);
+    display: flex; align-items: center; justify-content: center;
+    margin: 32px auto 0;
+    position: relative;
+    background:
+      radial-gradient(circle at 35% 30%, rgba(255,250,235,0.9) 0%, rgba(245,232,200,0.5) 40%, transparent 70%),
+      radial-gradient(circle at 50% 50%, rgba(201,163,90,0.08), transparent 70%);
+    box-shadow:
+      0 0 0 4px rgba(201,163,90,0.06),
+      0 4px 18px rgba(184,141,58,0.18),
+      inset 0 1px 2px rgba(255,255,255,0.6);
+  }
+  .seal::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border-radius: 50%;
+    border: 0.5px solid rgba(184,141,58,0.32);
+  }
+  .seal .mono {
+    font-family: var(--script-font);
+    font-style: italic;
+    font-weight: 600;
+    font-size: 38px;
+    line-height: 1;
+    background: linear-gradient(135deg, #8e6a25 0%, #d8b86a 50%, #8e6a25 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    transform: translateY(-1px);
+  }
+
+  .venue-block { margin-top: 30px; }
+  .venue {
+    font-family: var(--body-font);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.42em;
+    text-indent: 0.42em;
+    color: var(--ink);
+    text-transform: uppercase;
+  }
+  .venue .sep {
+    color: var(--gold-deep);
+    margin: 0 4px;
+    font-weight: 400;
+  }
+  .venue-sub {
+    margin-top: 12px;
+    font-family: var(--script-font);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 16px;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+
+  .bottom-ornament {
+    position: absolute;
+    bottom: 86px; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    z-index: 4;
+  }
+  .bottom-ornament .ln {
+    width: 220px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-deep) 50%, transparent);
+  }
+  .bottom-ornament .glyph {
+    font-family: var(--script-font);
+    font-style: italic;
+    font-size: 18px;
+    color: var(--gold-deep);
+    letter-spacing: 0.1em;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 56px; left: 80px; right: 80px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--body-font);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--gold-darker);
+    opacity: 0.7;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    z-index: 5;
+  }
+  .footer .right { font-variant-numeric: tabular-nums; }
+
+  .left-flourish, .right-flourish {
+    position: absolute;
+    top: 50%; transform: translateY(-50%);
+    width: 1px; height: 280px;
+    background: linear-gradient(180deg, transparent, rgba(201,163,90,0.45) 30%, rgba(201,163,90,0.45) 70%, transparent);
+    z-index: 3;
+  }
+  .left-flourish { left: 96px; }
+  .right-flourish { right: 96px; }
+
+  .left-flourish::before, .right-flourish::before,
+  .left-flourish::after, .right-flourish::after {
+    content: '';
+    position: absolute;
+    left: 50%; transform: translateX(-50%) rotate(45deg);
+    width: 5px; height: 5px;
+    background: var(--gold-deep);
+  }
+  .left-flourish::before, .right-flourish::before { top: -3px; }
+  .left-flourish::after, .right-flourish::after { bottom: -3px; }
+</style>
+</head>
+<body>
+  <div class="grain"></div>
+  <div class="vignette"></div>
+  <div class="frame"></div>
+  <div class="frame-inner"></div>
+  <div class="corner corner-tl"></div>
+  <div class="corner corner-tr"></div>
+  <div class="corner corner-bl"></div>
+  <div class="corner corner-br"></div>
+
+  <div class="left-flourish"></div>
+  <div class="right-flourish"></div>
+
+  <div class="stage">
+    <div class="top-ornament">
+      <div class="line"></div>
+      <div class="diamond"></div>
+      <div class="line right"></div>
+    </div>
+
+    <div class="maison">S A V E &middot; T H E &middot; D A T E</div>
+
+    <h1 class="headline">
+      <span class="name">Marie</span>
+      <span class="amp">&amp;</span>
+      <span class="name">&Eacute;tienne</span>
+    </h1>
+
+    <div class="gold-divider">
+      <div class="ln"></div>
+      <div class="dot"></div>
+      <div class="swirl">&sect;</div>
+      <div class="dot"></div>
+      <div class="ln right"></div>
+    </div>
+
+    <div class="date-line">M M X X V I &middot; M A I &middot; X X I V</div>
+
+    <div class="seal">
+      <div class="mono">W</div>
+    </div>
+
+    <div class="venue-block">
+      <div class="venue">VINEYARD <span class="sep">&middot;</span> CH&Acirc;TEAU MARGAUX <span class="sep">&middot;</span> 6 PM</div>
+      <div class="venue-sub">A celebration of love, craft and timeless evenings</div>
+    </div>
+  </div>
+
+  <div class="bottom-ornament">
+    <div class="ln"></div>
+    <div class="glyph">&sect;</div>
+    <div class="ln"></div>
+  </div>
+
+  <div class="footer">
+    <span class="left">MAISON WESTBROOK &middot; INVITATION N&deg; XXIV</span>
+    <span class="right">2026 &middot; PRINTED IN BORDEAUX</span>
+  </div>
+</body>
+</html>

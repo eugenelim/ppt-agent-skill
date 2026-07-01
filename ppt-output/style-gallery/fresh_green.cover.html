@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>fresh_green · 草绿赭石 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400;1,8..60,500&family=Fraunces:ital,opsz,wght@0,9..144,400;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg-from: #f4ede0;
+    --bg-to: #e8dec5;
+    --paper: #efe6d2;
+    --card-bg: #f7f1e3;
+    --card-border: rgba(168, 91, 58, 0.18);
+    --hairline: rgba(45, 58, 31, 0.14);
+
+    --ink-primary: #2d3a1f;
+    --ink-secondary: #5a6840;
+    --ink-muted: rgba(45, 58, 31, 0.55);
+
+    --sage: #859e5a;
+    --sage-deep: #6b8344;
+    --ochre: #a85b3a;
+    --ochre-soft: rgba(168, 91, 58, 0.12);
+
+    --display-font: 'Source Serif 4', 'Fraunces', Georgia, 'Times New Roman', serif;
+    --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --label-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+
+  body {
+    background:
+      radial-gradient(ellipse 90% 70% at 18% 8%, #fbf6ea 0%, transparent 60%),
+      radial-gradient(ellipse 70% 60% at 90% 95%, #e3d7b8 0%, transparent 55%),
+      linear-gradient(155deg, var(--bg-from) 0%, var(--bg-to) 100%);
+    color: var(--ink-primary);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'onum', 'calt', 'ss01';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle at 25% 30%, rgba(168, 91, 58, 0.04) 1px, transparent 1.5px),
+      radial-gradient(circle at 75% 70%, rgba(133, 158, 90, 0.05) 1px, transparent 1.5px);
+    background-size: 60px 60px, 80px 80px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .frame-line {
+    position: absolute;
+    left: 60px; right: 60px;
+    height: 1px;
+    background: var(--hairline);
+    z-index: 2;
+  }
+  .frame-top { top: 60px; }
+  .frame-bottom { bottom: 56px; }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 28px 80px 28px 80px;
+    display: flex; flex-direction: column;
+    z-index: 3;
+  }
+
+  .top {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-top: 6px;
+    margin-bottom: 78px;
+  }
+  .logo {
+    font-family: var(--display-font);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    color: var(--ink-primary);
+    text-transform: uppercase;
+  }
+  .logo em {
+    font-style: italic;
+    font-weight: 400;
+    color: var(--sage-deep);
+  }
+  .nav {
+    font-family: var(--label-font);
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    display: flex; gap: 22px;
+  }
+  .nav span.active { color: var(--ochre); }
+
+  .label {
+    font-family: var(--label-font);
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--sage-deep);
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    display: inline-flex; align-items: center; gap: 14px;
+  }
+  .label .rule {
+    display: inline-block;
+    width: 56px; height: 1px;
+    background: var(--sage);
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-size: 76px;
+    font-weight: 400;
+    color: var(--ink-primary);
+    letter-spacing: -0.018em;
+    line-height: 1.02;
+    margin-top: 22px;
+    max-width: 760px;
+  }
+  .headline em {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--sage-deep);
+    letter-spacing: -0.02em;
+  }
+
+  .deck {
+    font-family: var(--body-font);
+    font-size: 14.5px;
+    line-height: 1.72;
+    color: var(--ink-secondary);
+    max-width: 480px;
+    margin-top: 26px;
+    letter-spacing: -0.005em;
+  }
+  .deck em {
+    font-family: var(--display-font);
+    font-style: italic;
+    color: var(--ochre);
+    font-size: 15.5px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-top: 46px;
+    max-width: 760px;
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 4px;
+    padding: 22px 20px 20px 20px;
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative;
+  }
+  .card .num {
+    font-family: var(--label-font);
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--ochre);
+    letter-spacing: 0.3em;
+    font-variant-numeric: tabular-nums;
+  }
+  .card .name {
+    font-family: var(--display-font);
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--ink-primary);
+    letter-spacing: -0.012em;
+    line-height: 1.15;
+    margin-top: 2px;
+  }
+  .card .name em {
+    font-style: italic;
+    color: var(--sage-deep);
+  }
+  .card .desc {
+    font-family: var(--body-font);
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--ink-muted);
+    letter-spacing: -0.003em;
+    margin-top: 4px;
+  }
+  .card .price-row {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+  }
+  .card .price {
+    font-family: var(--display-font);
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink-primary);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .card .vol {
+    font-family: var(--label-font);
+    font-size: 10px;
+    color: var(--ink-muted);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .product-vignette {
+    position: absolute;
+    right: 96px;
+    top: 152px;
+    width: 320px;
+    height: 320px;
+    z-index: 4;
+  }
+  .product-circle {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 35% 30%, #f6efde 0%, #e8dcc0 45%, #d8c79d 100%);
+    box-shadow:
+      inset 0 0 60px rgba(168, 91, 58, 0.15),
+      inset 8px 8px 40px rgba(255, 255, 255, 0.5),
+      0 4px 24px rgba(45, 58, 31, 0.08);
+  }
+  .product-ring {
+    position: absolute;
+    inset: -14px;
+    border: 1px solid var(--card-border);
+    border-radius: 50%;
+  }
+  .product-bottle {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 86px;
+    height: 168px;
+  }
+  .bottle-body {
+    position: absolute;
+    left: 0; right: 0; top: 26px; bottom: 0;
+    background: linear-gradient(160deg, #4a5a30 0%, #3a4823 60%, #2d3a1f 100%);
+    border-radius: 6px 6px 10px 10px;
+    box-shadow:
+      inset -8px 0 16px rgba(0, 0, 0, 0.25),
+      inset 8px 0 14px rgba(255, 255, 255, 0.06);
+  }
+  .bottle-neck {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    top: 8px;
+    width: 28px; height: 22px;
+    background: linear-gradient(180deg, #2d3a1f 0%, #3a4823 100%);
+    border-radius: 3px 3px 0 0;
+  }
+  .bottle-cap {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    top: 0;
+    width: 36px; height: 12px;
+    background: linear-gradient(180deg, #c8a87a 0%, #a8865a 100%);
+    border-radius: 2px;
+  }
+  .bottle-label {
+    position: absolute;
+    left: 12px; right: 12px;
+    top: 78px;
+    text-align: center;
+    color: rgba(244, 237, 224, 0.85);
+    font-family: var(--display-font);
+    font-style: italic;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    line-height: 1.2;
+  }
+  .bottle-label .lab-mark {
+    display: block;
+    font-family: var(--label-font);
+    font-style: normal;
+    font-size: 7px;
+    letter-spacing: 0.42em;
+    color: rgba(244, 237, 224, 0.5);
+    margin-top: 6px;
+  }
+
+  .leaf {
+    position: absolute;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .leaf-1 {
+    right: 56px;
+    top: 102px;
+    transform: rotate(-22deg);
+  }
+  .leaf-2 {
+    right: 332px;
+    top: 388px;
+    transform: rotate(38deg);
+    opacity: 0.9;
+  }
+  .leaf-3 {
+    right: 88px;
+    bottom: 110px;
+    transform: rotate(14deg);
+    opacity: 0.85;
+  }
+
+  .vignette-caption {
+    position: absolute;
+    right: 96px;
+    top: 488px;
+    width: 320px;
+    text-align: center;
+    z-index: 4;
+  }
+  .vignette-caption .ed {
+    font-family: var(--label-font);
+    font-size: 9.5px;
+    font-weight: 500;
+    color: var(--ochre);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+  }
+  .vignette-caption .nm {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-size: 17px;
+    color: var(--ink-primary);
+    margin-top: 6px;
+    letter-spacing: -0.005em;
+  }
+  .vignette-caption .meta {
+    font-family: var(--body-font);
+    font-size: 10.5px;
+    color: var(--ink-muted);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 28px;
+    left: 80px; right: 80px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--label-font);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--ink-muted);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    z-index: 6;
+  }
+  .footer .right em {
+    font-family: var(--display-font);
+    font-style: italic;
+    color: var(--sage-deep);
+    letter-spacing: 0.05em;
+    text-transform: none;
+    font-size: 11px;
+    margin: 0 4px;
+  }
+
+  .corner-mark {
+    position: absolute;
+    top: 78px; right: 80px;
+    font-family: var(--display-font);
+    font-style: italic;
+    font-size: 12px;
+    color: var(--ochre);
+    letter-spacing: 0.02em;
+    z-index: 4;
+  }
+</style>
+</head>
+<body>
+  <div class="grain"></div>
+  <div class="frame-line frame-top"></div>
+  <div class="frame-line frame-bottom"></div>
+
+  <div class="stage">
+    <div class="top">
+      <div class="logo">AUR<em>É</em>LIA &middot; APOTHECARY</div>
+      <div class="nav">
+        <span class="active">PRODUCTS</span>
+        <span>STORIES</span>
+        <span>JOURNAL</span>
+      </div>
+    </div>
+
+    <div class="label"><span class="rule"></span>NATURE &middot; ESSENTIALS</div>
+    <h1 class="headline"><em>Quiet rituals,</em><br>thoughtful care.</h1>
+    <p class="deck">本草配方，皮肤的安静修复。<em>十二种原料</em>，一种态度&mdash;&mdash;在每一次涂抹之间，把日常变成一段被珍重的仪式。冷压萃取，不添香精，让植物本身说话。</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="num">N&deg; 01</div>
+        <div class="name">Sage <em>&amp; Cedar</em></div>
+        <div class="desc">温润洁颜乳。鼠尾草与雪松，平衡油脂，清而不燥。</div>
+        <div class="price-row">
+          <span class="price">&yen; 320</span>
+          <span class="vol">200 ML</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="num">N&deg; 02</div>
+        <div class="name">Olive <em>Renewal</em></div>
+        <div class="desc">冷压橄榄精华油。修复屏障，回赠肌肤一份缓慢的光泽。</div>
+        <div class="price-row">
+          <span class="price">&yen; 480</span>
+          <span class="vol">50 ML</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="num">N&deg; 03</div>
+        <div class="name">Moss <em>Hand Balm</em></div>
+        <div class="desc">苔藓与乳木果护手霜。林间清晨，留在掌心的湿润。</div>
+        <div class="price-row">
+          <span class="price">&yen; 260</span>
+          <span class="vol">75 ML</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="corner-mark">est. MMXIV</div>
+
+  <div class="product-vignette">
+    <div class="product-ring"></div>
+    <div class="product-circle"></div>
+    <div class="product-bottle">
+      <div class="bottle-cap"></div>
+      <div class="bottle-neck"></div>
+      <div class="bottle-body">
+        <div class="bottle-label">Aur&eacute;lia<span class="lab-mark">N&deg; 02</span></div>
+      </div>
+    </div>
+  </div>
+
+  <svg class="leaf leaf-1" width="120" height="160" viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg">
+    <path d="M60 8 C 28 36, 18 92, 60 152 C 102 92, 92 36, 60 8 Z"
+          fill="#859e5a" opacity="0.92"/>
+    <path d="M60 8 C 28 36, 18 92, 60 152" fill="none" stroke="#5a6840" stroke-width="0.8" opacity="0.6"/>
+    <path d="M60 22 L 42 50 M60 40 L 38 70 M60 58 L 36 90 M60 76 L 38 110 M60 94 L 42 128
+             M60 22 L 78 50 M60 40 L 82 70 M60 58 L 84 90 M60 76 L 82 110 M60 94 L 78 128"
+          stroke="#5a6840" stroke-width="0.6" opacity="0.4" fill="none"/>
+  </svg>
+
+  <svg class="leaf leaf-2" width="68" height="92" viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg">
+    <path d="M60 8 C 28 36, 18 92, 60 152 C 102 92, 92 36, 60 8 Z"
+          fill="#6b8344" opacity="0.85"/>
+    <path d="M60 8 C 28 36, 18 92, 60 152" fill="none" stroke="#2d3a1f" stroke-width="0.8" opacity="0.5"/>
+  </svg>
+
+  <svg class="leaf leaf-3" width="84" height="112" viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg">
+    <path d="M60 8 C 28 36, 18 92, 60 152 C 102 92, 92 36, 60 8 Z"
+          fill="#a85b3a" opacity="0.78"/>
+    <path d="M60 8 C 28 36, 18 92, 60 152" fill="none" stroke="#6b3a25" stroke-width="0.8" opacity="0.55"/>
+    <path d="M60 30 L 42 56 M60 50 L 38 80 M60 70 L 38 102 M60 90 L 42 122
+             M60 30 L 78 56 M60 50 L 82 80 M60 70 L 82 102 M60 90 L 78 122"
+          stroke="#6b3a25" stroke-width="0.5" opacity="0.4" fill="none"/>
+  </svg>
+
+  <div class="vignette-caption">
+    <div class="ed">FEATURED EDITION</div>
+    <div class="nm">Olive Renewal Oil</div>
+    <div class="meta">N&deg; 02 &middot; 50 ML &middot; &yen; 480</div>
+  </div>
+
+  <div class="footer">
+    <span class="left">CHAPTER 02 &mdash; BOTANICAL ESSENTIALS &middot; MMXXVI</span>
+    <span class="right">03 / 12 <em>&mdash;</em> AUR&Eacute;LIA APOTHECARY</span>
+  </div>
+</body>
+</html>

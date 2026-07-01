@@ -60,7 +60,7 @@
 }
 ```
 
-Mock: [`ppt-output/style-gallery/blue_white.html`](../../ppt-output/style-gallery/blue_white.html)
+Cover: [`ppt-output/style-gallery/blue_white.cover.html`](../../ppt-output/style-gallery/blue_white.cover.html) · Detail: [`ppt-output/style-gallery/blue_white.html`](../../ppt-output/style-gallery/blue_white.html)
 
 ---
 
@@ -101,7 +101,7 @@ Mock: [`ppt-output/style-gallery/blue_white.html`](../../ppt-output/style-galler
 }
 ```
 
-Mock: [`ppt-output/style-gallery/fresh_green.html`](../../ppt-output/style-gallery/fresh_green.html)
+Cover: [`ppt-output/style-gallery/fresh_green.cover.html`](../../ppt-output/style-gallery/fresh_green.cover.html) · Detail: [`ppt-output/style-gallery/fresh_green.html`](../../ppt-output/style-gallery/fresh_green.html)
 
 ---
 
@@ -142,7 +142,7 @@ Mock: [`ppt-output/style-gallery/fresh_green.html`](../../ppt-output/style-galle
 }
 ```
 
-Mock: [`ppt-output/style-gallery/minimal_gray.html`](../../ppt-output/style-gallery/minimal_gray.html)
+Cover: [`ppt-output/style-gallery/minimal_gray.cover.html`](../../ppt-output/style-gallery/minimal_gray.cover.html) · Detail: [`ppt-output/style-gallery/minimal_gray.html`](../../ppt-output/style-gallery/minimal_gray.html)
 
 ---
 
@@ -183,7 +183,7 @@ Mock: [`ppt-output/style-gallery/minimal_gray.html`](../../ppt-output/style-gall
 }
 ```
 
-Mock: [`ppt-output/style-gallery/mocha_editorial.html`](../../ppt-output/style-gallery/mocha_editorial.html)
+Cover: [`ppt-output/style-gallery/mocha_editorial.cover.html`](../../ppt-output/style-gallery/mocha_editorial.cover.html) · Detail: [`ppt-output/style-gallery/mocha_editorial.html`](../../ppt-output/style-gallery/mocha_editorial.html)
 
 ---
 
@@ -224,7 +224,7 @@ Mock: [`ppt-output/style-gallery/mocha_editorial.html`](../../ppt-output/style-g
 }
 ```
 
-Mock: [`ppt-output/style-gallery/medical_pulse.html`](../../ppt-output/style-gallery/medical_pulse.html)
+Cover: [`ppt-output/style-gallery/medical_pulse.cover.html`](../../ppt-output/style-gallery/medical_pulse.cover.html) · Detail: [`ppt-output/style-gallery/medical_pulse.html`](../../ppt-output/style-gallery/medical_pulse.html)
 
 ---
 
@@ -265,7 +265,7 @@ Mock: [`ppt-output/style-gallery/medical_pulse.html`](../../ppt-output/style-gal
 }
 ```
 
-Mock: [`ppt-output/style-gallery/earth_concrete.html`](../../ppt-output/style-gallery/earth_concrete.html)
+Cover: [`ppt-output/style-gallery/earth_concrete.cover.html`](../../ppt-output/style-gallery/earth_concrete.cover.html) · Detail: [`ppt-output/style-gallery/earth_concrete.html`](../../ppt-output/style-gallery/earth_concrete.html)
 
 ---
 
@@ -306,7 +306,7 @@ Mock: [`ppt-output/style-gallery/earth_concrete.html`](../../ppt-output/style-ga
 }
 ```
 
-Mock: [`ppt-output/style-gallery/champagne_gold.html`](../../ppt-output/style-gallery/champagne_gold.html)
+Cover: [`ppt-output/style-gallery/champagne_gold.cover.html`](../../ppt-output/style-gallery/champagne_gold.cover.html) · Detail: [`ppt-output/style-gallery/champagne_gold.html`](../../ppt-output/style-gallery/champagne_gold.html)
 
 ---
 
@@ -347,7 +347,7 @@ Mock: [`ppt-output/style-gallery/champagne_gold.html`](../../ppt-output/style-ga
 }
 ```
 
-Mock: [`ppt-output/style-gallery/liquid_glass.html`](../../ppt-output/style-gallery/liquid_glass.html)
+Cover: [`ppt-output/style-gallery/liquid_glass.cover.html`](../../ppt-output/style-gallery/liquid_glass.cover.html) · Detail: [`ppt-output/style-gallery/liquid_glass.html`](../../ppt-output/style-gallery/liquid_glass.html)
 
 ---
 

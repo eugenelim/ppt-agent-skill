@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>blue_white · 苹果企业白 · World-Class Mock</title>
+<title>blue_white · QMS Product Tiers · Detail Slide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
 
   :root {
     --bg-base: #ffffff;
@@ -17,400 +17,283 @@
     --accent: #2563EB;
     --accent-deep: #1D4ED8;
     --accent-soft: rgba(37,99,235,0.08);
-    --display-font: -apple-system, 'SF Pro Display', 'Inter Tight', 'Inter', BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --body-font: -apple-system, 'SF Pro Text', 'Inter', BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --accent-soft2: rgba(37,99,235,0.05);
+    --display-font: -apple-system, 'SF Pro Display', 'Inter Tight', 'Inter', BlinkMacSystemFont, sans-serif;
+    --body-font: -apple-system, 'SF Pro Text', 'Inter', BlinkMacSystemFont, sans-serif;
     --serif-italic-font: 'Instrument Serif', 'Fraunces', Georgia, serif;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 1280px; height: 720px; overflow: hidden; }
   body {
-    background:
-      linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
+    background: linear-gradient(180deg, #ffffff 0%, #f6f8fb 100%);
     color: var(--text-primary);
     font-family: var(--body-font);
     font-feature-settings: 'kern', 'liga', 'calt', 'ss01', 'cv11', 'ccmp';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
-  .ambient-glow-a {
-    position: absolute;
-    top: -120px; right: -80px;
-    width: 520px; height: 520px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(37,99,235,0.10) 0%, rgba(37,99,235,0) 60%);
-    pointer-events: none;
-    z-index: 0;
+  .ambient-glow {
+    position: absolute; top: -80px; right: -60px;
+    width: 420px; height: 420px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0) 65%);
+    pointer-events: none; z-index: 0;
   }
-  .ambient-glow-b {
-    position: absolute;
-    bottom: -160px; left: -120px;
-    width: 600px; height: 600px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, rgba(37,99,235,0) 65%);
-    pointer-events: none;
-    z-index: 0;
-  }
-
   .grid-dot {
     position: absolute; inset: 0;
     background-image:
-      linear-gradient(rgba(10,29,58,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(10,29,58,0.025) 1px, transparent 1px);
+      linear-gradient(rgba(10,29,58,0.022) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(10,29,58,0.022) 1px, transparent 1px);
     background-size: 80px 80px;
-    pointer-events: none;
-    z-index: 0;
+    pointer-events: none; z-index: 0;
   }
-
   .inner-frame {
-    position: absolute;
-    top: 28px; left: 28px; right: 28px; bottom: 28px;
-    border: 1px solid var(--line-soft);
-    border-radius: 6px;
-    pointer-events: none;
-    z-index: 1;
+    position: absolute; top: 24px; left: 24px; right: 24px; bottom: 24px;
+    border: 1px solid var(--line-soft); border-radius: 6px;
+    pointer-events: none; z-index: 1;
   }
-
-  .corner-tl { position: absolute; top: 22px; left: 22px; width: 16px; height: 16px; border-top: 1px solid rgba(37,99,235,0.45); border-left: 1px solid rgba(37,99,235,0.45); z-index: 2;}
-  .corner-tr { position: absolute; top: 22px; right: 22px; width: 16px; height: 16px; border-top: 1px solid rgba(37,99,235,0.45); border-right: 1px solid rgba(37,99,235,0.45); z-index: 2;}
-  .corner-bl { position: absolute; bottom: 22px; left: 22px; width: 16px; height: 16px; border-bottom: 1px solid rgba(37,99,235,0.45); border-left: 1px solid rgba(37,99,235,0.45); z-index: 2;}
-  .corner-br { position: absolute; bottom: 22px; right: 22px; width: 16px; height: 16px; border-bottom: 1px solid rgba(37,99,235,0.45); border-right: 1px solid rgba(37,99,235,0.45); z-index: 2;}
-
-  .center-line {
-    position: absolute;
-    left: 80px; right: 80px;
-    top: 412px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(37,99,235,0.45) 50%, transparent 100%);
-    z-index: 1;
-  }
+  .corner-tl { position: absolute; top: 18px; left: 18px; width: 14px; height: 14px; border-top: 1px solid rgba(37,99,235,0.45); border-left: 1px solid rgba(37,99,235,0.45); z-index: 2; }
+  .corner-br { position: absolute; bottom: 18px; right: 18px; width: 14px; height: 14px; border-bottom: 1px solid rgba(37,99,235,0.45); border-right: 1px solid rgba(37,99,235,0.45); z-index: 2; }
 
   .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 60px 80px 56px 80px;
-    display: flex; flex-direction: column;
+    position: relative; width: 100%; height: 100%;
+    padding: 38px 72px 36px; display: flex; flex-direction: column;
     z-index: 3;
   }
 
-  .top {
+  .topbar {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 64px;
+    margin-bottom: 8px;
   }
-  .logo {
-    font-family: var(--display-font);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.018em;
-    color: var(--text-primary);
-    display: flex; align-items: center; gap: 10px;
-  }
-  .logo-mark {
-    width: 22px; height: 22px;
-    border-radius: 6px;
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
-    box-shadow: 0 4px 14px rgba(37,99,235,0.25), inset 0 1px 0 rgba(255,255,255,0.25);
-    position: relative;
-  }
-  .logo-mark::after {
-    content: '';
-    position: absolute;
-    top: 6px; left: 6px;
-    width: 10px; height: 10px;
-    border: 1.5px solid rgba(255,255,255,0.95);
-    border-radius: 2px;
-  }
-  .logo-name {
-    display: flex; align-items: baseline; gap: 6px;
-  }
-  .logo-name em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-weight: 400;
-    color: var(--accent);
-    font-size: 15px;
-    letter-spacing: -0.01em;
-  }
-  .nav {
+  .eyebrow {
     font-family: var(--body-font);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    letter-spacing: -0.005em;
-    display: flex; gap: 28px;
-    align-items: center;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
   }
-  .nav span { cursor: default; }
-  .nav .signin {
-    color: var(--text-primary);
-    padding: 6px 14px;
-    border: 1px solid var(--line-mid);
-    border-radius: 999px;
+  .pulse-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.16);
+  }
+  .page-ref {
+    font-family: var(--body-font);
+    font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.14em; text-transform: uppercase;
+  }
+
+  hr.rule {
+    height: 1px; border: 0;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    margin-bottom: 14px;
+  }
+
+  .head-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 18px;
+  }
+  h2 {
+    font-family: var(--display-font);
+    font-size: 24px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1;
+  }
+  h2 em {
+    font-family: var(--serif-italic-font);
+    font-style: italic; font-weight: 400;
+    color: var(--accent); font-size: 26px; letter-spacing: -0.012em;
+  }
+  .lead {
+    font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; max-width: 560px;
+  }
+
+  /* Main grid */
+  .main-grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+  }
+
+  /* Comparison table spanning full width */
+  .comparison-wrap {
+    grid-column: 1 / 4;
+  }
+  .comparison-table {
+    width: 100%; border-collapse: collapse;
     font-size: 12px;
-    font-weight: 600;
-    letter-spacing: -0.005em;
   }
-
-  .label {
+  .comparison-table thead th {
     font-family: var(--body-font);
-    font-size: 11px;
-    letter-spacing: 0.22em;
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--text-secondary); padding: 0 12px 8px 0; text-align: left;
+    border-bottom: 1px solid var(--line-mid);
+  }
+  .comparison-table thead th:first-child { color: var(--text-primary); }
+  .comparison-table thead th.col-accent {
     color: var(--accent);
-    font-weight: 600;
-    text-transform: uppercase;
-    display: inline-flex; align-items: center; gap: 10px;
+    border-bottom: 2px solid var(--accent);
   }
-  .label .pulse-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.18);
+  .comparison-table tbody td {
+    padding: 8px 12px 8px 0; border-bottom: 1px solid var(--line-soft);
+    font-size: 12px; color: var(--text-primary); vertical-align: middle;
+    line-height: 1.4;
   }
+  .comparison-table tbody td.feature-name {
+    font-weight: 500; color: var(--text-secondary); font-size: 11.5px;
+  }
+  .comparison-table tbody td.accent-col {
+    background: var(--accent-soft2); border-left: 2px solid rgba(37,99,235,0.12);
+    padding-left: 10px;
+  }
+  .check { color: var(--accent); font-size: 13px; font-weight: 700; }
+  .dash { color: var(--text-tertiary); font-size: 16px; }
+  .partial { color: #f59e0b; font-size: 13px; }
+  .badge-tier {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .badge-ent { background: var(--accent); color: #fff; }
+  .badge-pro { background: var(--accent-soft); color: var(--accent); border: 1px solid rgba(37,99,235,0.25); }
+  .badge-std { background: rgba(100,116,139,0.1); color: var(--text-secondary); border: 1px solid var(--line-mid); }
 
-  .headline {
+  /* Bottom metric cards */
+  .metric-card {
+    background: #ffffff;
+    border: 1px solid var(--line-soft);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 6px;
+    position: relative; overflow: hidden;
+  }
+  .metric-card .top-bar {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 10px 10px 0 0;
+  }
+  .metric-card .m-label {
+    font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-secondary); font-weight: 600;
+  }
+  .metric-card .m-value {
     font-family: var(--display-font);
-    font-size: 78px;
-    font-weight: 700;
-    letter-spacing: -0.042em;
-    line-height: 0.96;
-    margin-top: 22px;
+    font-size: 32px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
     color: var(--text-primary);
   }
-  .headline em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-weight: 400;
-    letter-spacing: -0.018em;
-    color: var(--accent);
+  .metric-card .m-value .unit {
+    font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-left: 2px;
   }
-
-  .deck {
-    font-family: var(--body-font);
-    font-size: 16px;
-    line-height: 1.6;
-    color: var(--text-secondary);
-    max-width: 600px;
-    margin-top: 24px;
-    letter-spacing: -0.005em;
-    font-weight: 400;
+  .metric-card .m-delta {
+    font-size: 10.5px; color: var(--accent); font-weight: 500;
   }
-  .deck em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    color: var(--accent);
-    font-weight: 400;
-    font-size: 17px;
-  }
-
-  .stats {
-    display: flex;
-    gap: 0;
-    margin-top: 56px;
-    border-top: 1px solid var(--line-soft);
-    padding-top: 32px;
-    max-width: 760px;
-  }
-  .stat {
-    display: flex; flex-direction: column; gap: 8px;
-    padding-right: 56px;
-    margin-right: 56px;
-    border-right: 1px solid var(--line-soft);
-  }
-  .stat:last-child { border-right: none; margin-right: 0; padding-right: 0; }
-  .stat-row {
-    display: flex; align-items: baseline; gap: 4px;
-  }
-  .stat .num {
-    font-family: var(--display-font);
-    font-size: 44px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums proportional-nums;
-    letter-spacing: -0.038em;
-    line-height: 1;
-    color: var(--text-primary);
-  }
-  .stat .unit {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-weight: 400;
-    color: var(--accent);
-    font-size: 22px;
-    letter-spacing: -0.01em;
-  }
-  .stat .l {
-    font-family: var(--body-font);
-    font-size: 11px;
-    color: var(--text-secondary);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    font-weight: 500;
-  }
-
-  .cta {
-    position: absolute;
-    bottom: 92px;
-    right: 80px;
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 13px 22px 13px 24px;
-    background: linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
-    color: #ffffff;
-    border-radius: 999px;
-    font-family: var(--display-font);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.005em;
-    box-shadow: 0 8px 24px rgba(37,99,235,0.28), inset 0 1px 0 rgba(255,255,255,0.18);
-    z-index: 4;
-  }
-  .cta .arrow {
-    font-family: var(--body-font);
-    font-size: 16px;
-    font-weight: 500;
-    line-height: 1;
-    transform: translateY(-1px);
-  }
-
-  .cert-stripe {
-    position: absolute;
-    bottom: 92px;
-    left: 80px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 4;
-  }
-  .cert-label {
-    font-family: var(--body-font);
-    font-size: 10px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 500;
-  }
-  .cert-row {
-    display: flex; align-items: center; gap: 14px;
-  }
-  .cert-pill {
-    font-family: var(--body-font);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    letter-spacing: 0.04em;
-    padding: 5px 11px;
-    border: 1px solid var(--line-mid);
-    border-radius: 4px;
-    background: rgba(255,255,255,0.6);
-  }
-  .cert-pill.accent {
-    color: var(--accent);
-    border-color: rgba(37,99,235,0.30);
-    background: var(--accent-soft);
+  .metric-card .m-sub {
+    font-size: 10.5px; color: var(--text-secondary); line-height: 1.4; margin-top: 2px;
   }
 
   .footer {
-    position: absolute;
-    bottom: 22px;
-    left: 80px; right: 80px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-family: var(--body-font);
-    font-size: 10px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    font-weight: 500;
+    position: absolute; bottom: 12px; left: 72px; right: 72px;
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.16em; text-transform: uppercase;
     z-index: 4;
-  }
-  .footer .right {
-    font-variant-numeric: tabular-nums;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .footer .sep {
-    width: 3px; height: 3px; border-radius: 50%;
-    background: var(--text-tertiary);
-    display: inline-block;
   }
 </style>
 </head>
 <body>
-  <div class="ambient-glow-a"></div>
-  <div class="ambient-glow-b"></div>
+  <div class="ambient-glow"></div>
   <div class="grid-dot"></div>
   <div class="inner-frame"></div>
   <div class="corner-tl"></div>
-  <div class="corner-tr"></div>
-  <div class="corner-bl"></div>
   <div class="corner-br"></div>
-  <div class="center-line"></div>
 
   <div class="stage">
-    <div class="top">
-      <div class="logo">
-        <div class="logo-mark"></div>
-        <div class="logo-name">
-          <span>Veritas</span><em>QMS</em>
-        </div>
-      </div>
-      <div class="nav">
-        <span>Product</span>
-        <span>Pricing</span>
-        <span>Customers</span>
-        <span class="signin">Sign in</span>
+    <div class="topbar">
+      <div class="eyebrow"><span class="pulse-dot"></span>03 · Product Tiers</div>
+      <div class="page-ref">Veritas QMS · Enterprise Edition</div>
+    </div>
+    <hr class="rule">
+
+    <div class="head-row">
+      <div>
+        <h2>Platform Capabilities <em>at a Glance</em></h2>
+        <p class="lead">Comparative feature matrix across Standard, Professional, and Enterprise tiers — QMS compliance, audit pipeline, and integration coverage.</p>
       </div>
     </div>
 
-    <div class="label"><span class="pulse-dot"></span>PART 01 · QUALITY MANAGEMENT</div>
-    <h1 class="headline">Enterprise-grade<br><em>quality assurance.</em></h1>
-    <p class="deck">为生命科学与医疗器械行业打造的下一代 QMS 系统 — 把分散在 <em>17</em> 个工具中的质量流程，统一到一个可追溯、可审计、符合 FDA 21 CFR Part 11 的工作台。</p>
+    <div class="main-grid">
+      <div class="comparison-wrap">
+        <table class="comparison-table">
+          <thead>
+            <tr>
+              <th style="width:30%">Feature</th>
+              <th style="width:20%">Standard <span class="badge-std">STD</span></th>
+              <th style="width:20%">Professional <span class="badge-pro">PRO</span></th>
+              <th style="width:20%" class="col-accent">Enterprise <span class="badge-ent">ENT</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="feature-name">FDA 21 CFR Part 11 Compliance</td>
+              <td><span class="partial">◐</span> Partial</td>
+              <td><span class="check">✓</span> Full</td>
+              <td class="accent-col"><span class="check">✓</span> Full + Audit</td>
+            </tr>
+            <tr>
+              <td class="feature-name">ISO 13485 Workflow Templates</td>
+              <td><span class="dash">—</span></td>
+              <td><span class="check">✓</span> 12 templates</td>
+              <td class="accent-col"><span class="check">✓</span> 47 templates</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Electronic Signature (eSign)</td>
+              <td><span class="dash">—</span></td>
+              <td><span class="partial">◐</span> Single-factor</td>
+              <td class="accent-col"><span class="check">✓</span> Multi-factor + PKI</td>
+            </tr>
+            <tr>
+              <td class="feature-name">Deviation &amp; CAPA Tracking</td>
+              <td>Manual log</td>
+              <td><span class="check">✓</span> Structured</td>
+              <td class="accent-col"><span class="check">✓</span> AI-assisted triage</td>
+            </tr>
+            <tr>
+              <td class="feature-name">API Integrations (ERP / LIMS)</td>
+              <td><span class="dash">—</span></td>
+              <td>3 connectors</td>
+              <td class="accent-col">Unlimited + custom SDK</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-row">
-          <span class="num">98.4</span><span class="unit">%</span>
-        </div>
-        <div class="l">DETECTION ACCURACY</div>
+      <!-- Metric cards -->
+      <div class="metric-card">
+        <div class="top-bar" style="background: linear-gradient(90deg, var(--accent), var(--accent-deep));"></div>
+        <div class="m-label">Audit Trail Entries / Day</div>
+        <div class="m-value">2.4<span class="unit">M</span></div>
+        <div class="m-delta">▲ +340% vs. manual</div>
+        <div class="m-sub">Immutable timestamped log · hash-chained</div>
       </div>
-      <div class="stat">
-        <div class="stat-row">
-          <span class="num">12</span><span class="unit">s</span>
-        </div>
-        <div class="l">AVG SCAN TIME</div>
+
+      <div class="metric-card">
+        <div class="top-bar" style="background: linear-gradient(90deg, #059669, #047857);"></div>
+        <div class="m-label">Avg. CAPA Cycle Time</div>
+        <div class="m-value">4.2<span class="unit">d</span></div>
+        <div class="m-delta">▼ −62% vs. spreadsheet baseline</div>
+        <div class="m-sub">AI triage + automated routing</div>
       </div>
-      <div class="stat">
-        <div class="stat-row">
-          <span class="num">47</span><span class="unit">国</span>
-        </div>
-        <div class="l">REGULATORY COVERAGE</div>
+
+      <div class="metric-card">
+        <div class="top-bar" style="background: linear-gradient(90deg, rgba(37,99,235,0.6), rgba(37,99,235,0.2));"></div>
+        <div class="m-label">Regulatory Markets Covered</div>
+        <div class="m-value">47<span class="unit">+</span></div>
+        <div class="m-delta">FDA · EMA · PMDA · NMPA</div>
+        <div class="m-sub">Pre-mapped submission templates</div>
       </div>
     </div>
-  </div>
-
-  <div class="cert-stripe">
-    <div class="cert-label">Certified · Trusted</div>
-    <div class="cert-row">
-      <div class="cert-pill accent">FDA 21 CFR Part 11</div>
-      <div class="cert-pill">ISO 13485</div>
-      <div class="cert-pill">SOC 2 Type II</div>
-      <div class="cert-pill">HIPAA</div>
-    </div>
-  </div>
-
-  <div class="cta">
-    <span>查看产品</span>
-    <span class="arrow">→</span>
   </div>
 
   <div class="footer">
-    <span>PART 01 — QUALITY MANAGEMENT SYSTEM</span>
-    <span class="right">
-      <span>02 / 14</span>
-      <span class="sep"></span>
-      <span>VERITAS QMS</span>
-    </span>
+    <span>PART 03 — PRODUCT TIERS · VERITAS QMS</span>
+    <span>05 / 14</span>
   </div>
 </body>
 </html>
