@@ -42,6 +42,27 @@ CATEGORY_ORDER = [
     "natural_retro",
 ]
 
+# 板块导语（一句"用在哪"）+ 标杆品牌，用于分组标题的语境增强
+CATEGORY_BLURB = {
+    "dark_professional": "深色发布会 / 产品主张 — AI · SaaS · 硬件 · 奢侈品 · 电竞",
+    "light_premium": "浅色高信任场景 — 企业 · 医疗 · 学术 · 出版 · 婚庆",
+    "vibrant": "高能量表达 — 营销 · 儿童教育 · 创意品牌 · 甜品零售",
+    "cultural_oriental": "东方语汇 — 中国风 · 政务文化 · 茶道 · 国潮文创",
+    "natural_retro": "自然与年代感 — 户外 · 旅行 · 复古唱片 · 严肃汇报",
+}
+CATEGORY_BRANDS = {
+    "dark_professional": ["Linear", "Apple Hardware", "Tom Ford", "Cyberpunk 2077", "Y2K", "Magnum"],
+    "light_premium": ["Apple", "Anthropic", "NYT Magazine", "iOS 26", "Mayo Clinic", "Suisse Int'l"],
+    "vibrant": ["Stripe", "儿童绘本", "Bauhaus", "Ladurée"],
+    "cultural_oriental": ["北京冬奥", "日本侘寂", "新中式国潮"],
+    "natural_retro": ["Patagonia", "Nat Geo", "Wes Anderson", "人民日报"],
+}
+
+# 增强表必须覆盖每个板块，否则会静默渲染空导语/空品牌行——在此 fail-loud
+assert set(CATEGORY_BLURB) == set(CATEGORY_ORDER) == set(CATEGORY_BRANDS), (
+    "CATEGORY_BLURB / CATEGORY_BRANDS keys must match CATEGORY_ORDER"
+)
+
 
 def gallery_face(sid: str) -> str:
     """风格在画廊里的『门面』文件名。
@@ -130,16 +151,27 @@ def build_index_html(grouped: dict) -> str:
                 for c in swatches
             )
             kw_html = " · ".join(keywords[:3])
-            face = gallery_face(sid)
+            # Tier resolution by filesystem presence (the gallery_face() contract):
+            # cover = <id>.cover.html, detail = <id>.html. A style with only one
+            # tier gets no toggle (graceful degradation); default face is cover.
+            cover_url = f"{sid}.cover.html" if (GALLERY_DIR / f"{sid}.cover.html").exists() else ""
+            detail_url = f"{sid}.html" if (GALLERY_DIR / f"{sid}.html").exists() else ""
+            has_both = bool(cover_url and detail_url)
+            default_src = cover_url or detail_url  # cover-first, matches gallery_face()
+            toggle_html = (f"""
+            <div class="tier-toggle" role="group" aria-label="预览层级">
+              <button type="button" data-tier="cover" class="active">封面 Cover</button>
+              <button type="button" data-tier="detail">详情 Detail</button>
+            </div>""" if has_both else "")
             cards.append(f"""
-        <a class="card" href="{face}" target="_blank" rel="noopener">
+        <div class="card{' has-both' if has_both else ''}" data-cover="{cover_url}" data-detail="{detail_url}">
           <div class="frame">
-            <iframe src="{face}" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="{default_src}" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
               <span class="name">{name}</span>
-              <span class="open">↗</span>
+              <a class="open" href="{default_src}" target="_blank" rel="noopener" aria-label="打开原尺寸">↗</a>
             </div>
             <div class="row2">
               <span class="id">{sid}</span>
@@ -147,17 +179,25 @@ def build_index_html(grouped: dict) -> str:
               <span class="insp">{inspiration}</span>
             </div>
             <div class="kw">{kw_html}</div>
-            <div class="swatches">{sw_html}</div>
+            <div class="swatches">{sw_html}</div>{toggle_html}
           </div>
-        </a>
+        </div>
 """.strip())
 
+        blurb = CATEGORY_BLURB.get(cat, "")
+        brands_html = "".join(
+            f'<span class="brand">{bn}</span>' for bn in CATEGORY_BRANDS.get(cat, [])
+        )
         sections.append(f"""
     <section class="section">
       <div class="section-head">
         <div class="section-cn">{cn}</div>
         <div class="section-en">{en}</div>
-        <div class="section-count">{len(styles)} 风格</div>
+        <div class="section-count">{len(styles)} 风格 · 封面+详情</div>
+      </div>
+      <div class="section-sub">
+        <span class="section-blurb">{blurb}</span>
+        <span class="section-brands">{brands_html}</span>
       </div>
       <div class="grid">
         {chr(10).join(cards)}
@@ -271,6 +311,21 @@ def build_index_html(grouped: dict) -> str:
     letter-spacing: 0.05em;
     font-family: 'JetBrains Mono', monospace;
   }}
+  .section-sub {{
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px;
+    margin: -18px 0 26px;
+  }}
+  .section-blurb {{
+    font-size: 13px; color: rgba(255,255,255,0.6); letter-spacing: -0.005em;
+  }}
+  .section-brands {{
+    display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto;
+  }}
+  .section-brands .brand {{
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    letter-spacing: 0.02em; color: rgba(255,255,255,0.45);
+    padding: 3px 8px; border: 1px solid rgba(255,255,255,0.1); border-radius: 5px;
+  }}
 
   .grid {{
     display: grid;
@@ -322,7 +377,11 @@ def build_index_html(grouped: dict) -> str:
   .row1 .open {{
     font-size: 14px;
     color: rgba(255,255,255,0.4);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s;
   }}
+  .row1 .open:hover {{ color: #22D3EE; }}
   .row2 {{
     display: flex; gap: 6px; align-items: center;
     font-size: 11px;
@@ -348,6 +407,45 @@ def build_index_html(grouped: dict) -> str:
     border: 1px solid rgba(255,255,255,0.1);
   }}
 
+  /* per-card cover/detail toggle */
+  .tier-toggle {{
+    display: inline-flex; margin-top: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 7px; overflow: hidden;
+  }}
+  .tier-toggle button {{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; letter-spacing: 0.04em;
+    padding: 5px 11px; border: 0; cursor: pointer;
+    background: transparent; color: rgba(255,255,255,0.55);
+    transition: background 0.15s, color 0.15s;
+  }}
+  .tier-toggle button + button {{ border-left: 1px solid rgba(255,255,255,0.12); }}
+  .tier-toggle button:hover {{ color: #fff; }}
+  .tier-toggle button.active {{ background: #22D3EE; color: #06121a; font-weight: 700; }}
+
+  /* global cover/detail switch (header) */
+  .tierswitch {{
+    display: inline-flex; align-items: center; gap: 10px; margin-top: 28px;
+  }}
+  .tierswitch .tsl {{
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: rgba(255,255,255,0.4); font-family: 'JetBrains Mono', monospace;
+  }}
+  .tierswitch .grp {{
+    display: inline-flex; border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px; overflow: hidden;
+  }}
+  .tierswitch button {{
+    font-family: 'Inter Tight', sans-serif; font-size: 12px; font-weight: 600;
+    padding: 7px 16px; border: 0; cursor: pointer;
+    background: transparent; color: rgba(255,255,255,0.6);
+    transition: background 0.15s, color 0.15s;
+  }}
+  .tierswitch button + button {{ border-left: 1px solid rgba(255,255,255,0.14); }}
+  .tierswitch button:hover {{ color: #fff; }}
+  .tierswitch button.active {{ background: #22D3EE; color: #06121a; }}
+
   .footer {{
     padding: 40px 60px 60px;
     text-align: center;
@@ -368,11 +466,18 @@ def build_index_html(grouped: dict) -> str:
   <header class="header">
     <div class="label">PPT AGENT SKILL · WORLD-CLASS</div>
     <h1>风格预览<em>画廊。</em></h1>
-    <p class="deck">28 个世界级演示文稿风格，按 5 板块分组。每张卡片是真实 1280×720 设计稿的缩略预览，点击打开看原尺寸。</p>
+    <p class="deck">{total} 个世界级演示文稿风格，按 5 板块分组。每张卡片是真实 1280×720 设计稿的缩略预览；有封面 / 详情两版的风格可切换查看，点击 ↗ 打开原尺寸。</p>
     <div class="stats">
       <div class="stat"><div class="num">{total}</div><div class="l">STYLES</div></div>
       <div class="stat"><div class="num">5</div><div class="l">CATEGORIES</div></div>
       <div class="stat"><div class="num">18</div><div class="l">CHART TYPES</div></div>
+    </div>
+    <div class="tierswitch" role="group" aria-label="全局层级切换">
+      <span class="tsl">Show</span>
+      <span class="grp">
+        <button type="button" data-tier="cover" class="active">封面 Covers</button>
+        <button type="button" data-tier="detail">详情 Details</button>
+      </span>
     </div>
   </header>
 
@@ -381,6 +486,30 @@ def build_index_html(grouped: dict) -> str:
   <footer class="footer">
     <a href="https://github.com" target="_blank">PPT AGENT SKILL · MMXXVI</a>
   </footer>
+  <script>
+  (function(){{
+    function setTier(card, tier){{
+      var url = tier === 'detail' ? card.dataset.detail : card.dataset.cover;
+      if(!url){{ return; }}
+      var f = card.querySelector('iframe');
+      if(f && f.getAttribute('src') !== url){{ f.src = url; }}
+      var open = card.querySelector('.open');
+      if(open){{ open.setAttribute('href', url); }}
+      card.querySelectorAll('.tier-toggle button').forEach(function(b){{
+        b.classList.toggle('active', b.dataset.tier === tier);
+      }});
+    }}
+    document.querySelectorAll('.card.has-both .tier-toggle button').forEach(function(btn){{
+      btn.addEventListener('click', function(){{ setTier(btn.closest('.card'), btn.dataset.tier); }});
+    }});
+    document.querySelectorAll('.tierswitch button').forEach(function(btn){{
+      btn.addEventListener('click', function(){{
+        document.querySelectorAll('.tierswitch button').forEach(function(b){{ b.classList.toggle('active', b === btn); }});
+        document.querySelectorAll('.card.has-both').forEach(function(c){{ setTier(c, btn.dataset.tier); }});
+      }});
+    }});
+  }})();
+  </script>
 </body>
 </html>
 """

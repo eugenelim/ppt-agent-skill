@@ -55,20 +55,21 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## reference-runbook-page-types
 
-- **Discovered (not an AC deferral): `smoke_skill.py` pre-existing fixture drift.**
-  <a name="smoke-skill-pre-existing-fixture-drift"></a>`scripts/smoke_skill.py`
-  exits non-zero on `main` (independent of the reference-runbook page_type work —
-  verified by running it against the pre-change tree): its fixtures + the
-  `tpl-style-phase1` invocation reference files that no longer exist —
-  `references/charts/kpi.md` / `references/charts/metric-row.md` (charts were
-  consolidated into `basic.md` / `advanced.md` / `complex.md`) and
-  `references/styles/runtime-style-rules.md` (also referenced at
-  `references/cli-cheatsheet.md:275`; no `runtime-*` file exists under
-  `references/styles/`). The `reference-runbook-page-types` change adds **zero**
-  net-new `smoke_skill` failures and its own new-type router assertions pass.
-  Out of scope for that spec (unrelated chart/style file structure). Unblocked by
-  a follow-up that regenerates the smoke fixtures + `cli-cheatsheet` against the
-  current `charts/` and `styles/` file set (or restores the missing files).
+### smoke-skill-pre-existing-fixture-drift
+
+**Discovered (not an AC deferral): `smoke_skill.py` pre-existing fixture drift.**
+`scripts/smoke_skill.py` exits non-zero on `main` (independent of the
+reference-runbook page_type work — verified by running it against the pre-change
+tree): its fixtures + the `tpl-style-phase1` invocation reference files that no
+longer exist — `references/charts/kpi.md` / `references/charts/metric-row.md`
+(charts were consolidated into `basic.md` / `advanced.md` / `complex.md`) and
+`references/styles/runtime-style-rules.md` (also referenced at
+`references/cli-cheatsheet.md:275`; no `runtime-*` file exists under
+`references/styles/`). The `reference-runbook-page-types` change adds **zero**
+net-new `smoke_skill` failures and its own new-type router assertions pass. Out
+of scope for that spec (unrelated chart/style file structure). Unblocked by a
+follow-up that regenerates the smoke fixtures + `cli-cheatsheet` against the
+current `charts/` and `styles/` file set (or restores the missing files).
 
 - **Discovered (not an AC deferral): `page_type` value-set duplicated across seven
   sites with no shared constant.** The planning `page_type` enum is copy-pasted
@@ -81,6 +82,29 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   `contract_validator` / `visual_qa` / `smoke_skill`, collapsing three of the seven
   code sites to one. Out of scope for `reference-runbook-page-types` (which added
   both values to every site in lockstep as the spec's *Always do* demanded).
+
+## gallery-title-detail-tiers
+
+The T0–T3 infra shipped in the first PR (classification, gallery Cover|Detail
+toggle, enriched category headers, smoke both-tier). Two AC groups deferred to
+follow-up batch PRs (headings below double as the `(deferred: …)` anchors):
+
+### gallery-tier-authoring
+
+**AC "both tiers for all 29" + distinctness + references-links.** Author the
+**26 net-new slides** (**23 details + 3 covers**, per the spec's
+`classification.md`), relocate the **23 cover-primary** `<id>.html` →
+`<id>.cover.html` (`git mv`, byte-unchanged), and update each relocated style's
+`references/styles/*.md` links to name both tiers. Unblocked by the T4
+category-batch PRs (dark 7, light 8, vibrant 4, cultural 3, natural 4 — minus the
+3 already complete).
+
+### gallery-tier-finalize
+
+**AC "hero covers all 29" + README/style-system two-tier docs.** Once T4 lands
+every cover, regenerate the hero composites (`gallery.py --screenshots` +
+`build_hero.py`) and update `README.md` + `references/style-system.md` to describe
+the two-tier model + toggle. Unblocked by T5, after the authoring PRs.
 
 <!-- Add one section per spec with open work, e.g.:
 

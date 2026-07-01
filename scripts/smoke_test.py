@@ -255,7 +255,8 @@ def phase1_tests(style_filter: str = None) -> dict:
 
     # 收集所有风格 JSON
     md_files = sorted(STYLES_DIR.glob("*.md"))
-    md_files = [f for f in md_files if f.name != "index.md"]
+    # 排除 schema 示例文件，与 gallery.py 的口径一致（index.md + readme.md）
+    md_files = [f for f in md_files if f.name.lower() not in ("index.md", "readme.md")]
     all_styles = []
     for md in md_files:
         all_styles.extend(extract_style_jsons(md))
@@ -278,24 +279,34 @@ def phase1_tests(style_filter: str = None) -> dict:
         else:
             results["summary"]["pass"] += 1
 
-        # 校验对应 mock HTML
-        html_path = GALLERY_DIR / f"{sid}.html"
-        compat_errors = check_html_pipeline_compat(html_path)
-        results["html_compat"][sid] = compat_errors
-        if compat_errors:
-            results["summary"]["fail"] += len(compat_errors)
-        elif html_path.exists():
-            results["summary"]["pass"] += 1
+        # 校验 mock HTML —— 两个层级都是夹具：
+        #   详情 <id>.html（必在）+ 封面 <id>.cover.html（存在才校验，
+        #   T4 未完成前部分风格暂缺封面——报告但不判 fail）
+        # 详情层 <id>.html 是契约必在项：缺失 → check_html_pipeline_compat 返回
+        # "file not found" → 计 fail（真错）。封面层 <id>.cover.html 是可选项，
+        # 仅在存在时才追加校验（T4 完成前部分风格暂缺封面，报告但不判 fail）。
+        tiers = [(sid, GALLERY_DIR / f"{sid}.html")]
+        cover_path = GALLERY_DIR / f"{sid}.cover.html"
+        if cover_path.exists():
+            tiers.append((f"{sid} (cover)", cover_path))
 
-        # 排版警告（不计 fail）
-        typo_warnings = check_html_typography(html_path)
-        results["html_typography"][sid] = typo_warnings
-        results["summary"]["warn"] += len(typo_warnings)
+        for key, html_path in tiers:
+            compat_errors = check_html_pipeline_compat(html_path)
+            results["html_compat"][key] = compat_errors
+            if compat_errors:
+                results["summary"]["fail"] += len(compat_errors)
+            elif html_path.exists():
+                results["summary"]["pass"] += 1
 
-        # 伪元素装饰警告（不计 fail）
-        pseudo_warnings = check_html_pseudo_decorations(html_path)
-        results["html_pseudo"][sid] = pseudo_warnings
-        results["summary"]["warn"] += len(pseudo_warnings)
+            # 排版警告（不计 fail）
+            typo_warnings = check_html_typography(html_path)
+            results["html_typography"][key] = typo_warnings
+            results["summary"]["warn"] += len(typo_warnings)
+
+            # 伪元素装饰警告（不计 fail）
+            pseudo_warnings = check_html_pseudo_decorations(html_path)
+            results["html_pseudo"][key] = pseudo_warnings
+            results["summary"]["warn"] += len(pseudo_warnings)
 
     # diagram-consistency-system：图解配方结构/管线 lint + QA 自检
     results["diagram_qa"] = {}
@@ -490,15 +501,20 @@ def generate_report(results: dict, out_dir: Path):
     hc = results.get("html_compat", {})
     if hc:
         lines += ["## Mock HTML pipeline-compat 检查", ""]
-        for sid, errs in hc.items():
+        for key, errs in hc.items():
             if errs:
-                lines.append(f"### ❌ {sid}")
+                lines.append(f"### ❌ {key}")
                 for e in errs:
                     lines.append(f"  - {e}")
             else:
-                html_path = GALLERY_DIR / f"{sid}.html"
+                # key is the composite tier key: "<id>" (detail) or "<id> (cover)".
+                # Resolve to the real file rather than rebuilding "<id>.html" blindly.
+                if key.endswith(" (cover)"):
+                    html_path = GALLERY_DIR / f"{key[:-len(' (cover)')]}.cover.html"
+                else:
+                    html_path = GALLERY_DIR / f"{key}.html"
                 status = "✅" if html_path.exists() else "⚠️ (no mock yet)"
-                lines.append(f"### {status} {sid}")
+                lines.append(f"### {status} {key}")
         lines.append("")
 
     # Typography warnings
