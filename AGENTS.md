@@ -151,6 +151,51 @@ Run `<lint command>` and follow what it tells you. If something is genuinely
 ambiguous to a linter (naming, file organization, error handling philosophy),
 it's covered in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
+## Skill & reference authoring format
+
+Any change to a skill or to skill-facing reference content
+(`references/**`, playbooks, recipe files) is authored to be
+**[agentskills.io](https://agentskills.io/specification)-compliant, terse,
+token-efficient, trigger-friendly, and progressively disclosed** — so it
+activates reliably and doesn't bloat the agent's context. Two formats, by
+artifact kind:
+
+**(a) `SKILL.md` files — frontmatter + progressive disclosure.**
+- Frontmatter keys come **only** from the agentskills.io-pinned set:
+  `name`, `description`, `license`, `compatibility`, `metadata`,
+  `allowed-tools`. Project-specific keys live **under `metadata:`**, never
+  at top level.
+- `description` is one tight sentence naming the **trigger** ("Use when
+  …"), written so the right task activates it — not a feature list.
+- **Progressive disclosure:** the `SKILL.md` body stays thin; depth lives
+  in `references/*.md` loaded on demand. Don't inline a reference's full
+  body into the skill.
+- Where a frontmatter lint exists (`tools/lint-agent-artifacts.py`), it
+  enforces the key set. *That lint is not installed in this repo today*;
+  treat the rule as the contract regardless.
+
+**(b) Reference recipe files (no frontmatter) — fixed section order.**
+Component/diagram/chart recipes carry no frontmatter; consistency comes
+from a **fixed bold-label section order**, matching `references/charts/basic.md`:
+
+```
+### <type> (<id>)
+**何时用**：…        ← one line: when to use
+**数据格式**：…       ← JSON data shape
+**模板**：… (or **HTML 模板**) ← ≥1 paste-ready, CSS-variable-themed HTML/CSS block
+**自检**：…          ← self-check list
+**管线安全**：…       ← pipeline-safety checklist (diagrams pin this separately;
+                        charts may fold it into 自检)
+```
+- **Terse & token-efficient:** lead with the paste-ready block; prose is
+  captions, not essays. Colors/fonts bind to CSS variables (no hardcoded
+  hex bar trend `#22c55e`/`#ef4444`).
+- **Progressive disclosure:** keep an always-loaded thin selector
+  (`blocks/diagram.md`) that points to on-demand family files via
+  `block_refs`; never inline every recipe into the always-loaded file.
+- Reference-file conformance is enforced by `scripts/lint_diagram_recipes.py`
+  (the recipe lint), not a frontmatter lint.
+
 ## Agent workflows
 
 Use the generated skill list below when a task matches a named workflow.
