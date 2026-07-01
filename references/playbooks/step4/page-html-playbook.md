@@ -22,6 +22,7 @@
 | `director_command` / `decoration_hints` | 决定镜头感、装饰层次和实现边界 |
 | `source_guidance` / `must_avoid` | 决定证据呈现方式与禁止动作 |
 | `image.mode` | 严格按下面第 3 条执行 |
+| `persistent_chrome` / `deck_chrome` | 顶层布尔开关 + 文案对象。为 `true` 且本页 `page_type == content` 时，按 Phase 5「持久化页框例外」加装 masthead 顶栏 + runbook 页脚（文案取自 `deck_chrome`）；缺省 / `false` 时忽略，走普通统一骨架 |
 
 ---
 
@@ -123,6 +124,15 @@ body {
 | `cover` / `end` | **自由** | **可选** |
 
 **视觉创意不受影响**：overline 内容、page-title 字号、装饰线、页脚风格（W12 终端/印章/进度条）都可按风格变化。统一的只是 **HTML 结构和定位方式**。
+
+#### 持久化页框例外（persistent_chrome —— 仅参考型 deck 开启时）
+
+当 planning JSON 顶层 `persistent_chrome == true` **且** 本页 `page_type == content` 时，为本页套一层"页框"（`cover`/`section`/`toc`/`end` 不受影响；`false` / 缺省时本节不生效，按上表走普通骨架）：
+
+- **masthead 顶栏 + runbook 页脚**：结构逐字取自 [`blocks/worksheet.md` C 组页面骨架](../../blocks/worksheet.md)（`masthead` + `footer` 配方），只改文案、不改结构，全部绑定 deck 契约变量（`--text-primary` / `--accent-1` / `--card-bg-from` / `--font-mono` / `--font-primary`）随风格换色。
+- **三条绝对定位带 + 内容区收窄**：masthead `position:absolute; top:20px`（~32px）；`slide-header` **下移到** `top:64px`（保留每页标题）；content 从 y≈120px 起、可用高度 **≈500px**（`density_contract` 按 ≈500px 计，不按 580px）；runbook 页脚 `position:absolute; bottom:12px`（~56px）**整块替换** `.slide-footer`。完整像素带见 `design-runtime/design-specs.md` §A「持久化页框例外」。
+- **文案逐槽映射填满，别留空列**：masthead 左 = `deck_chrome.title`、中 = `deck_chrome.subtitle`、右 = 本页页码 `{当前页}/{总页}`；footer 列1 = `deck_chrome.title` + `deck_chrome.subtitle`（作释义句）、列2（小标题改 `Section`）= 本页 section 标签、列3（小标题改 `Page`）= 本页页码。**绝不渲染 C 组配方里的示例文案**（如 `SCHEMATIC · DELIVERY RUNBOOK` / `REV 2.4`；完整禁用清单以 `design-runtime/design-specs.md` §A「持久化页框例外」为准），确无来源的槽位才留空省略。footer 列1 破折号回退规则同 §A。
+- **铁律**：一张页要么普通骨架、要么这套页框，二者只居其一，绝不并存；页框只用真实 `<div>`/`<span>`/`<footer>`——禁 `::before`/`::after` 装饰、禁硬编码色/字（沿用 C 组配方即天然满足管线红线）。
 
 ---
 

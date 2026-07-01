@@ -80,6 +80,7 @@
 叙事结构：{问题->方案->效果 / 是什么->为什么->怎么做 / 全景->聚焦->行动 / 对比论证 / 时间线 / 其他}
 密度倾向：{relaxed / balanced / ultra_dense}
 密度曲线：{一句话概括整套 deck 的密度节奏，例如：low -> mid_low -> high -> medium -> close}
+持久化页框：{on / off}    # 缺省 off；on = 每张 content 页加装 masthead 顶栏 + runbook 页脚做定向导览（见下方约束）
 总页数：{N}
 
 ---
@@ -115,6 +116,7 @@ Part 目标：{part_goal}
 - `叙事角色` 必须从 `{cover, toc, section, section-marker, evidence, comparison, process, reference, close, cta}` 中静态选择。（`section-marker` 与 `reference` 是参考型 archetype 专用，见下方映射与骨架规则。）
 - `页面类型映射` 必须从 `{cover, toc, section, section-marker, content, reference, end}` 中静态选择，与下游 Step 4 的 `page_type` 一一对应。
 - `密度倾向` 必须从 `{relaxed, balanced, ultra_dense}` 中静态选择。
+- `持久化页框 (persistent_chrome)` 必须从 `{on, off}` 中选择；**缺省（不写该字段）= off**。仅**参考型（reference）archetype** 的 deck（运行手册 / SOP / playbook —— 见上方 §先判 archetype 与 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)）建议开启：它为每张 `content` 页加装统一的 masthead 顶栏 + runbook 页脚做"我在哪份文档、翻到哪"的定向导览。说明型 deck 一律 off。该字段是 deck 级开关，独立于风格（任何风格都可开启），与 `style.json` 的 `decorations.masthead` 无关。
 - `密度下限 / 密度目标 / 密度上限` 必须从 `{low, mid_low, medium, high, dashboard}` 中静态选择，且必须满足 `下限 <= 目标 <= 上限`。
 - `节奏动作` 必须从 `{铺垫, 推进, 爆发, 缓冲, 收束}` 中选择。
 - `信息姿态` 必须从 `{结论页, 解释页, 证据页, 仪表盘页, 呼吸页}` 中选择。

@@ -30,6 +30,7 @@ docs/specs/<feature>/
 | --- | --- | --- | --- |
 | [`reference-runbook-archetype`](reference-runbook-archetype/spec.md) | Shipped | none | Outline engine honors the `reference_runbook` narrative archetype: `论证策略` enum + archetype-branched density/skeleton rules in both validators, persuasive decks unchanged |
 | [`reference-runbook-page-types`](reference-runbook-page-types/spec.md) | Shipped | none | `section-marker` (inline divider) + `reference` (back-matter) page_types across all seven enum consumer sites; completes the reference-runbook archetype (backlog items 1 + 4) |
+| [`persistent-chrome-flag`](persistent-chrome-flag/spec.md) | Shipped | none | Deck-global `persistent_chrome` flag (default off) — masthead + runbook footer on every content page for reference decks, reusing worksheet.md group-C chrome recipes |
 
 ## Adding a new spec
 
