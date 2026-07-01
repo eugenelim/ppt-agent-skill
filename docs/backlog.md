@@ -73,18 +73,42 @@ narrative-archetype *guidance* shipped in PR #7 (`principles/narrative-arc.md`
 §参考型叙事 + outline-playbook pointer). The **engine** now honors the archetype at the
 outline + planning layers (`論证策略：reference_runbook` enum value + archetype-branched
 density/skeleton rules in both validators — spec `reference-runbook-archetype`, Shipped).
-Remaining engine work:
+The inline section-divider + back-matter page_types shipped via spec
+`reference-runbook-page-types` (`section-marker` + `reference` across all seven enum
+consumer sites). Remaining engine work:
 
-- **Inline section-divider `page_type`.** Add a `section-marker` page_type (lightweight
-  §NN + kicker + rule) distinct from today's full-page `section`, so reference decks
-  can divide inline. Blocked on: `page_type` enum + `references/page-templates/` +
-  validators are contract-bound. Unblocked by a spec updating all three together.
 - **`persistent_chrome` deck flag.** A deck-level flag that renders masthead + footer
   on every content page (orientation for reference docs). Blocked on: new deck-level
   field + page-html playbook support. Unblocked by a spec wiring the flag end-to-end.
-- **Back-matter reference page types.** First-class RACI / glossary / gates / escalation
-  reference sections (vs a CTA finale). Blocked on: same page_type enum contract as
-  the first item. Unblocked by the same spec.
+
+## reference-runbook-page-types
+
+- **Discovered (not an AC deferral): `smoke_skill.py` pre-existing fixture drift.**
+  <a name="smoke-skill-pre-existing-fixture-drift"></a>`scripts/smoke_skill.py`
+  exits non-zero on `main` (independent of the reference-runbook page_type work —
+  verified by running it against the pre-change tree): its fixtures + the
+  `tpl-style-phase1` invocation reference files that no longer exist —
+  `references/charts/kpi.md` / `references/charts/metric-row.md` (charts were
+  consolidated into `basic.md` / `advanced.md` / `complex.md`) and
+  `references/styles/runtime-style-rules.md` (also referenced at
+  `references/cli-cheatsheet.md:275`; no `runtime-*` file exists under
+  `references/styles/`). The `reference-runbook-page-types` change adds **zero**
+  net-new `smoke_skill` failures and its own new-type router assertions pass.
+  Out of scope for that spec (unrelated chart/style file structure). Unblocked by
+  a follow-up that regenerates the smoke fixtures + `cli-cheatsheet` against the
+  current `charts/` and `styles/` file set (or restores the missing files).
+
+- **Discovered (not an AC deferral): `page_type` value-set duplicated across seven
+  sites with no shared constant.** The planning `page_type` enum is copy-pasted
+  across three Python modules (`planning_validator.VALID_PAGE_TYPES`,
+  `contract_validator.NON_DASHBOARD_PAGE_TYPES` + the `validate_html` chrome set,
+  `visual_qa` + `smoke_skill` header/footer sets) plus two playbooks and
+  `references/prompts.md` — see [[ppt-page-type-enum-consumers]]. Every enum edit
+  re-runs the same seven-site drift risk. Unblocked by exporting `VALID_PAGE_TYPES`
+  (and the chrome-required subset) from `planning_validator` and importing it into
+  `contract_validator` / `visual_qa` / `smoke_skill`, collapsing three of the seven
+  code sites to one. Out of scope for `reference-runbook-page-types` (which added
+  both values to every site in lockstep as the spec's *Always do* demanded).
 
 <!-- Add one section per spec with open work, e.g.:
 

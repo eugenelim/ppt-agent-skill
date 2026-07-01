@@ -47,6 +47,8 @@ PAGE_TEMPLATE_EXPECTATIONS = {
     "cover": "# 封面页 -- 演讲的第一声呼吸",
     "toc": "# 目录页 -- 演讲的地图俯瞰",
     "section": "# 章节封面页 -- 演讲中的呼吸",
+    "section-marker": "# 章节标记页 -- 内联分隔（不占整页）",
+    "reference": "# 横切参考页 -- 运行手册 back-matter",
     "end": "# 结束页 -- 演讲的最后一个视觉印记",
 }
 BIAS_BOUNDS = {
@@ -521,9 +523,9 @@ def build_html_fixture(
     header_markup = ""
     footer_markup = ""
     page_type = str(page.get("page_type") or "").strip().lower()
-    if page_type in {"content", "toc", "section"} and not omit_header:
+    if page_type in {"content", "toc", "section", "section-marker", "reference"} and not omit_header:
         header_markup = '<header class="slide-header"><span class="overline">Smoke</span><h1 class="page-title">测试页</h1></header>'
-    if page_type in {"content", "toc", "section"} and not omit_footer:
+    if page_type in {"content", "toc", "section", "section-marker", "reference"} and not omit_footer:
         footer_markup = '<footer class="slide-footer"><span>01</span><span>smoke</span></footer>'
     img_markup = '<img class="hero-shot" src="../images/smoke-image.svg" alt="smoke" />' if include_img else ""
     bg_style = "background-image:url(../images/smoke-image.svg);" if include_bg_url else ""

@@ -359,7 +359,7 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 | 字段 | 取值 | 路由到 | 例 |
 |------|------|-------|---|
 | `layout_hint` | asymmetric / hero-top / l-shape / mixed-grid / primary-secondary / single-focus / symmetric / t-shape / three-column / waterfall | `references/layouts/<name>.md` | 主次结合 → `references/layouts/primary-secondary.md` |
-| `page_type` | cover / toc / section / end | `references/page-templates/<name>.md` | 封面 → `references/page-templates/cover.md` |
+| `page_type` | cover / toc / section / section-marker / reference / end | `references/page-templates/<name>.md` | 封面 → `references/page-templates/cover.md` |
 | `card_type` | text / data / list / quote / timeline / comparison / diagram / image-hero / matrix-chart / people | `references/blocks/<name>.md` | 数据卡 → `references/blocks/card-styles.md` |
 | `chart_type` | progress-bar / ring / sparkline / radar / funnel / kpi / metric-row / waffle / rating / timeline / treemap / comparison-bar / stacked-bar | `references/charts/<name>.md` | 雷达 → `references/charts/radar.md` |
 
@@ -388,7 +388,7 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 | `references/charts/<chart_type>.md` | 单一图表精细规格 | sunbigfly 风格的单文件图表（13 个）|
 | `references/layouts/*.md` | Step 5c layout_hint 路由 | 10 个 layout 各成文件（asymmetric / hero-top / l-shape 等）|
 | `references/blocks/*.md` | Step 5c card_type 路由 | 9 个可复用卡片原型（card-styles / comparison / diagram / quote 等）|
-| `references/page-templates/*.md` | Step 5c page_type 路由 | 4 个页面模板（cover / end / section / toc）|
+| `references/page-templates/*.md` | Step 5c page_type 路由 | 6 个页面模板（cover / end / reference / section / section-marker / toc）|
 | `references/principles/*.md` | **Step 4-5 自检与原则** | 8 设计原则 + failure-modes + **taste-gate（反 AI 感自审 / 出片前品味闸门）**（cognitive-load / color-psychology / composition / data-visualization / narrative-arc / runtime-failure-modes / visual-hierarchy / taste-gate）|
 | `references/design-runtime/*.md` | Step 5c 设计运行时 | css-weapons / data-type-decoration-mapping / data-type-visual-mapping / design-specs / director-command-rules-examples |
 | `references/bento-grid.md` | Step 5c | 7 种布局精确坐标 + 5 种卡片类型 + 决策矩阵 |

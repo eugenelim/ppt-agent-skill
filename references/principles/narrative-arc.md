@@ -87,7 +87,7 @@
 3. **章节用 `section-marker` 内联分隔**，而非整页 section 封面（跳读者不需要每次一整页呼吸）。
 4. **模板配"what good looks like"标注**；清单配准入门槛；失败模式配补救行。
 
-**与强制骨架的关系**：`cover / toc / end` 仍在（手册也有封面、目录、收束），但 Part 首页的整页 `section` 呼吸规则对参考型**放宽**为内联 `section-marker`；`end` 由"行动号召"改为"横切参考/复盘"。触发靠 `论证策略：reference_runbook`（`论证策略` 枚举的新值），下游 outline 仍映射到现有 `page_type` 枚举（见 [outline playbook](../playbooks/outline-phase1-playbook.md)）——参考型**不新增 `page_type`**（`section-marker` 作为独立 page_type 是另一项待办）。
+**与强制骨架的关系**：`cover / toc` 仍在（手册也有封面、目录）。archetype 由 `论证策略：reference_runbook` 触发（`论证策略` 枚举值，下游 `contract_validator` / `planning_validator` 据此分支密度规则）；在此 archetype 下，Part 首页的整页 `section` 呼吸规则**放宽**为内联 `section-marker`，收尾由"行动号召"（`close`/`cta` → `end`）改为 `reference` 横切参考 back-matter。参考型有**专属 page_type**——`section-marker`（内联分隔，消费 `page-templates/section-marker.md`）与 `reference`（横切参考 back-matter，消费 `page-templates/reference.md` + `blocks/worksheet.md` 配方）；二者是自映射的叙事角色+page_type（同 `cover`/`toc`/`section`），枚举与映射见 [outline playbook](../playbooks/outline-phase1-playbook.md)。说服型 deck 不用这两个，其强制骨架不变。
 
 ## 自检
 

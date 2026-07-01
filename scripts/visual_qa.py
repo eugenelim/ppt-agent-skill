@@ -454,7 +454,7 @@ def check_html_contracts(html_path: Path, planning_path: Path | None) -> list[di
     density_contract = (page or {}).get("density_contract") if isinstance((page or {}).get("density_contract"), dict) else {}
     results: list[dict] = []
 
-    if page_type in {"content", "toc", "section"}:
+    if page_type in {"content", "toc", "section", "section-marker", "reference"}:
         header_ok = bool(re.search(r'<header[^>]*class=([\'"])[^\'"]*\bslide-header\b[^\'"]*\1', text, re.IGNORECASE))
         footer_ok = bool(re.search(r'<footer[^>]*class=([\'"])[^\'"]*\bslide-footer\b[^\'"]*\1', text, re.IGNORECASE))
         results.append({"id": "HTML-01", "status": "PASS" if header_ok else "FAIL", "msg": "header.slide-header 存在" if header_ok else "缺少统一标题区 header.slide-header"})

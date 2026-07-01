@@ -10,7 +10,7 @@
 
 从 `outline.txt` 中找到第 N 页的定义，明确：
 - `page_goal`：这一页的核心论点（一句话，不含"和"字）
-- `narrative_role`：叙事角色（cover/toc/section/evidence/comparison/process/close/cta）
+- `narrative_role`：叙事角色（cover/toc/section/section-marker/evidence/comparison/process/reference/close/cta）
 - `proof_type`：论证方式（数据驱动/案例/对比/框架/步骤）
 - `密度下限 / 密度目标 / 密度上限`
 - `节奏动作 / 信息姿态 / 锚点类型`
@@ -39,7 +39,25 @@
 ### 命名合同（必须区分 schema 枚举 与 资源文件 stem）
 
 - `layout_hint` / `page_type`：写 validator 认可的值。`layout_hint` 推荐使用真实文件 stem，如 `hero-top`、`mixed-grid`、`l-shape`。
-- 非 `content` 页优先通过 `page_type` 消费 `page-templates/`（如 `cover` / `toc` / `section` / `end`）。通常不需要再写 `layout_hint`；只有在要显式钉住模板正文时，才额外填写 `resources.page_template`。
+- 非 `content` 页优先通过 `page_type` 消费 `page-templates/`（如 `cover` / `toc` / `section` / `section-marker` / `reference` / `end`）。通常不需要再写 `layout_hint`；只有在要显式钉住模板正文时，才额外填写 `resources.page_template`。
+
+### 参考型 page_type：`section-marker` 与 `reference`（何时用）
+
+`section-marker` 与 `reference` 是**参考型 archetype**（运行手册 / 交付手册 / SOP / playbook——"用来查、不是一次性读完"的 deck）专用的 page_type。判据见 [`principles/narrative-arc.md` §参考型叙事](../../principles/narrative-arc.md)。说服型 deck 不用它们。
+
+- **内联 `section-marker` vs 整页 `section`**：
+  - 整页 `section`——说服型 deck 的 Part 首页，整页呼吸封面，`visual_weight <= 3`、几乎全留白、不放正文。观众线性观看需要情绪缓冲。
+  - 内联 `section-marker`——参考型 deck 的阶段边界，`§NN` + kicker 压 2px 规线的轻量分隔条**领起正文**（顶部分隔条 + 下方 lead + 首个制品），不占整页。跳读者不需要每阶段一整页呼吸。消费 `page-templates/section-marker.md`。
+- **`reference` 横切参考 back-matter**：参考型 deck 的收尾（替代 `close`/`cta` → `end` 的行动号召），一页放一个可查制品。消费 `page-templates/reference.md`，制品复用 `blocks/worksheet.md` 既有配方，按 `resources.block_refs:["worksheet"]` 注入——**不写新组件**：
+
+  | back-matter 角色 | worksheet 配方 | card_type | block_refs |
+  |------------------|----------------|-----------|------------|
+  | 责任矩阵（RACI） | `responsibility-matrix` | `list` | `["worksheet"]` |
+  | 质量门 / 失败模式 | `status-block` | `list` | `["worksheet"]` |
+  | 升级路径 / 例会节奏 | `escalation-matrix` | `list` | `["worksheet"]` |
+  | 术语表（glossary） | 原生 `card_type:list` 定义列表（**不新增配方**） | `list` | 可选 `["worksheet"]` |
+
+- 两者均为非 `content` 页：不要求 `layout_hint`、禁 `dashboard` 密度；但仍受通用规则约束（>= 1 张卡、恰好 1 张 anchor、`director_command`、`decoration_hints`）。均携带持久页眉/页脚（`slide-header` / `slide-footer`）。
 - `card_type`：写 validator 认可的枚举，如 `data_highlight`、`image_hero`、`matrix_chart`。
 - `chart.chart_type`：写 validator 认可的枚举，**使用下划线命名**，如 `metric_row`、`comparison_bar`、`stacked_bar`、`progress_bar`。
 - `resources.*_refs` 与 `card.resource_ref.*`：推荐写 `references/` 中的真实文件 stem，如 `metric-row`、`comparison-bar`、`visual-hierarchy`；`resource_loader.py` 会自动做下划线/连字符归一化。
@@ -111,7 +129,7 @@
 {
   "page": {
     "slide_number": "<页码>",
-    "page_type": "<cover/toc/section/content/end>",
+    "page_type": "<cover/toc/section/section-marker/content/reference/end>",
     "narrative_role": "<叙事角色>",
     "narrative_archetype": "<persuasive | reference_runbook — 由本页所属 Part 的 论证策略 推导>",
     "title": "<页标题>",
@@ -208,8 +226,8 @@
 ### 必填字段与枚举底线
 
 - 顶层页字段至少要有：`slide_number`、`page_type`、`title`、`page_goal`、`cards`、`visual_weight`、`density_label`、`density_reason`、`density_contract`、`director_command`、`decoration_hints`、`resources`、`workflow_metadata`。
-- `page_type`：`cover` / `toc` / `section` / `content` / `end`
-- `narrative_role`：与 outline 的叙事角色对齐，使用 `cover` / `toc` / `section` / `evidence` / `comparison` / `process` / `close` / `cta`
+- `page_type`：`cover` / `toc` / `section` / `section-marker` / `content` / `reference` / `end`
+- `narrative_role`：与 outline 的叙事角色对齐，使用 `cover` / `toc` / `section` / `section-marker` / `evidence` / `comparison` / `process` / `reference` / `close` / `cta`
 - `density_label`：`low` / `mid_low` / `medium` / `high` / `dashboard`
 - `density_contract.image_policy`：`flexible` / `support_only` / `decorate_only`
 - `density_contract.decoration_budget`：`generous` / `medium` / `low` / `minimal`
