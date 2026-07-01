@@ -45,19 +45,14 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## claude-design-absorption
 
-- **Follow-up (not an AC deferral): visual QA of the 5 new diagram recipes + 2 style mocks.**
-  `spectrum-marker` / `iceberg` / `force-field` / `before-after` / `causal-loop` are
-  hand-placed SVG geometry; `lint_diagram_recipes.py` verifies markers/colors/pipeline-safety
-  but **cannot** catch mis-aligned coordinates or off-canvas labels. Same for the two new
-  gallery mocks (`editorial_paper.html`, `schematic_blueprint.html`). Unblocked by rendering
-  each at 1280×720 (html2png / a browser) and eyeballing, ideally via a fresh-eyes subagent.
-- **Follow-up: regenerate PNGs for the two new styles.** The 26 existing styles ship committed
-  `<style_id>.png` thumbnails; the two new styles have HTML mocks only (tiles render from the
-  HTML iframe, so the gallery is correct). Unblocked by `python3 scripts/gallery.py --screenshots`
-  where puppeteer is available.
-- **Note:** the work-loop post-diff `adversarial-reviewer` REVIEW pass was not run in-session
-  (shipped on green mechanical gates + the addressed pre-EXECUTE review). A diff review before
-  merge is recommended.
+- **Follow-up: regenerate PNG thumbnails for the two new styles + refresh the hero composites.**
+  The existing styles ship committed `<style_id>.png` thumbnails and category `hero-*.png`
+  composites; the two new styles have HTML mocks only (gallery tiles render from the HTML
+  iframe, so the gallery index is correct), and `hero-all.png` / `hero-light-premium.png` still
+  render the old tile set (and their README alt-text still reads the old per-category counts).
+  Unblocked by `python3 scripts/gallery.py --screenshots` + `python3 scripts/build_hero.py`
+  where puppeteer is available. (Visual QA of the 5 new recipes + 2 mocks and the post-diff
+  adversarial review were completed in the authoring session — both clean.)
 
 <!-- Add one section per spec with open work, e.g.:
 

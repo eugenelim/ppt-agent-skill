@@ -1,6 +1,6 @@
 # Spec: claude-design-absorption
 
-- **Status:** Implementing <!-- Draft | Approved | Implementing | Shipped | Archived -->
+- **Status:** Shipped <!-- Draft | Approved | Implementing | Shipped | Archived -->
 - **Owner:** eugenelim
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** `docs/specs/diagram-consistency-system/spec.md` (diagram theming contract + recipe lint)
@@ -52,10 +52,9 @@ defaults to the current filled rendering.
   `before-after`, `causal-loop` — each with all five markers (何时用 / 数据格式 /
   模板 / 自检 / 管线安全), plus `consultant-2x2` and `quadrant-trajectory` as
   documented variants of `matrix-quadrant`. All 7 new `diagram_type` strings —
-  including the two variants — are registered in the `diagram.md` selector row (so
-  routing resolves), SKILL.md routing, and the taxonomy note. The two variants are
-  subsections (not `### (id)` headings), so the 5-marker lint applies only to the 5
-  recipes.
+  including the two variants — are registered in the `diagram.md` selector row (the
+  single routing authority) and the taxonomy note. The two variants are subsections
+  (not `### (id)` headings), so the 5-marker lint applies only to the 5 recipes.
 - [x] **AC5 — de-slop the title rule.** `references/design-runtime/design-specs.md`
   demotes the decorative accent *rule/underline under titles* from a default
   (naming it an AI-slop signal) while explicitly **keeping the mono eyebrow

@@ -14,7 +14,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/styles-28-22D3EE?style=for-the-badge&labelColor=050b1f" alt="26 Styles" />
+    <img src="https://img.shields.io/badge/styles-28-22D3EE?style=for-the-badge&labelColor=050b1f" alt="28 Styles" />
     <img src="https://img.shields.io/badge/charts-18-6366f1?style=for-the-badge&labelColor=050b1f" alt="18 Charts" />
     <img src="https://img.shields.io/badge/categories-5-FF9500?style=for-the-badge&labelColor=050b1f" alt="5 Categories" />
     <img src="https://img.shields.io/badge/pipeline-6_steps-22c55e?style=for-the-badge&labelColor=050b1f" alt="6-step Pipeline" />
@@ -47,8 +47,8 @@
 ---
 
 <div align="center">
-  <img src="assets/hero-all.png" alt="26 Style Preview Gallery" width="100%" />
-  <p><sub>26 world-class styles across 5 categories · Real 1280×720 reference mocks</sub></p>
+  <img src="assets/hero-all.png" alt="28 Style Preview Gallery" width="100%" />
+  <p><sub>28 world-class styles across 5 categories · Real 1280×720 reference mocks</sub></p>
 </div>
 
 ---
@@ -310,7 +310,7 @@ Typography practices borrowed from real brand websites (**not by mimicking scree
 
 Full world-class redesign spec: [`docs/superpowers/specs/2026-05-10-world-class-redesign-design.md`](docs/superpowers/specs/2026-05-10-world-class-redesign-design.md)
 
-Contains: goals & motivation / 26 style list / JSON schema upgrade / font stack strategy / typography rules / chart system design / preview gallery / file org / backward compat / 5-phase implementation / success criteria / decision log.
+Contains: goals & motivation / 28 style list / JSON schema upgrade / font stack strategy / typography rules / chart system design / preview gallery / file org / backward compat / 5-phase implementation / success criteria / decision log.
 
 ## ⭐ Star History
 

@@ -394,7 +394,7 @@ Mock: [`ppt-output/style-gallery/editorial_paper.html`](../../ppt-output/style-g
 
 ## 10. schematic_blueprint — 工程蓝图线稿（线稿图解主题）
 
-> 本风格开启 `decorations.diagram_mode: "lineart"` —— 图解块按 [`blocks/diagram.md`](../blocks/diagram.md) 的**线稿模式**渲染（透明节点填充 + 发丝描边 + mono 标注 + 仅焦点用强调色）。其余 25 个既有风格不带此开关，图解仍按默认填充模式渲染，视觉零变化。
+> 本风格开启 `decorations.diagram_mode: "lineart"` —— 图解块按 [`blocks/diagram.md`](../blocks/diagram.md) 的**线稿模式**渲染（透明节点填充 + 发丝描边 + mono 标注 + 仅焦点用强调色）。其余 27 个既有风格不带此开关，图解仍按默认填充模式渲染，视觉零变化。
 
 ```json
 {

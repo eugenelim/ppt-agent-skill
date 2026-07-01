@@ -14,7 +14,7 @@
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/styles-28-22D3EE?style=for-the-badge&labelColor=050b1f" alt="26 Styles" />
+    <img src="https://img.shields.io/badge/styles-28-22D3EE?style=for-the-badge&labelColor=050b1f" alt="28 Styles" />
     <img src="https://img.shields.io/badge/charts-18-6366f1?style=for-the-badge&labelColor=050b1f" alt="18 Charts" />
     <img src="https://img.shields.io/badge/categories-5-FF9500?style=for-the-badge&labelColor=050b1f" alt="5 Categories" />
     <img src="https://img.shields.io/badge/pipeline-6_steps-22c55e?style=for-the-badge&labelColor=050b1f" alt="6-step Pipeline" />

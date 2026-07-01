@@ -236,10 +236,11 @@
   <polygon points="76,234 62,240 76,246" fill="var(--edge)"/>
   <polygon points="540,234 554,240 540,246" fill="var(--edge)"/>
 </svg>
-<!-- 焦点单元格（右上，唯一着色） -->
-<div style="position:absolute; left:320px; top:40px; width:210px; padding:14px 16px; box-sizing:border-box;
-  background:var(--node-accent); opacity:0.06; border:1px solid var(--node-accent); border-radius:var(--node-radius);"></div>
-<div style="position:absolute; left:320px; top:40px; width:210px; padding:14px 16px; box-sizing:border-box;">
+<!-- 焦点单元格（右上，唯一着色）：底色单独一层用 opacity（不含 border），描边放在满不透明的内容层 -->
+<div style="position:absolute; left:320px; top:40px; width:210px; height:130px; box-sizing:border-box;
+  background:var(--node-accent); opacity:0.06; border-radius:var(--node-radius);"></div>
+<div style="position:absolute; left:320px; top:40px; width:210px; height:130px; padding:14px 16px; box-sizing:border-box;
+  border:1px solid var(--node-accent); border-radius:var(--node-radius);">
   <div style="font-weight:700; font-size:16px; color:var(--node-accent);">领跑者</div>
   <div style="font-size:11px; color:var(--node-fg-dim); line-height:1.6;">高增长 · 高份额：优先加注</div>
 </div>
@@ -258,7 +259,7 @@
 <!-- 轨迹：现状(空心) → 目标(实心 accent)，叠加在基础散点层之上 -->
 <svg viewBox="0 0 560 480" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
   <line x1="200" y1="300" x2="410" y2="130" stroke="var(--edge-strong)" stroke-width="2" stroke-dasharray="5 4"/>
-  <polygon points="404,124 418,124 410,138" fill="var(--edge-strong)"/>
+  <polygon points="420,120 408,144 400,133" fill="var(--edge-strong)"/>
   <circle cx="200" cy="300" r="9" fill="transparent" stroke="var(--node-fg-dim)" stroke-width="1.5"/>
   <circle cx="410" cy="130" r="9" fill="var(--node-accent)"/>
 </svg>
@@ -968,9 +969,9 @@
     <circle cx="414" cy="96" r="9" fill="var(--node-accent)"/>
   </svg>
 
-  <!-- 端锚标签 -->
-  <span style="position:absolute; left:60px; top:116px; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--node-fg);">集中式</span>
-  <span style="position:absolute; left:580px; top:116px; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--node-fg);">完全去中心</span>
+  <!-- 端锚标签（nowrap 防止右端标签换行） -->
+  <span style="position:absolute; left:60px; top:116px; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--node-fg); white-space:nowrap;">集中式</span>
+  <span style="position:absolute; left:580px; top:116px; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--node-fg); white-space:nowrap;">完全去中心</span>
   <!-- 刻度标签 -->
   <span style="position:absolute; left:190px; top:116px; transform:translateX(-50%); font-size:10px; color:var(--node-fg-dim);">强管控</span>
   <span style="position:absolute; left:320px; top:116px; transform:translateX(-50%); font-size:10px; color:var(--node-fg-dim);">混合</span>
@@ -1145,10 +1146,11 @@
     <div style="font-size:11px; color:var(--node-fg-dim); line-height:1.8;">流程自动化<br>统一数据中台</div>
   </div>
 
-  <!-- 目标卡（accent 描边 + 极淡底） -->
+  <!-- 目标卡：底色单独一层用 opacity（不含 border），描边放在满不透明的内容层，避免 opacity 把描边一起淡掉 -->
   <div style="position:absolute; left:470px; top:60px; width:190px; height:240px; box-sizing:border-box;
-    background:var(--node-accent); opacity:0.06; border:1px solid var(--node-accent); border-radius:var(--node-radius);"></div>
-  <div style="position:absolute; left:470px; top:60px; width:190px; height:240px; box-sizing:border-box; padding:18px 16px;">
+    background:var(--node-accent); opacity:0.06; border-radius:var(--node-radius);"></div>
+  <div style="position:absolute; left:470px; top:60px; width:190px; height:240px; box-sizing:border-box; padding:18px 16px;
+    border:1px solid var(--node-accent); border-radius:var(--node-radius);">
     <div style="font-size:14px; font-weight:700; color:var(--node-accent); margin-bottom:12px;">目标 (To-Be)</div>
     <div style="font-size:12px; color:var(--node-fg-dim); line-height:2.0;">审批 2 小时<br>单一可信源<br>实时看板</div>
   </div>

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""build_hero.py -- 把 26 张风格截图拼成 5 板块 hero 拼图
+"""build_hero.py -- 把 28 张风格截图拼成 5 板块 hero 拼图
 
 输出：
-  assets/hero-all.png         总览：26 风格 5 板块网格（适合 README 顶部）
+  assets/hero-all.png         总览：28 风格 5 板块网格（适合 README 顶部）
   assets/hero-<category>.png  每个板块单独一张
 """
 
@@ -175,7 +175,7 @@ def build_all_categories_grid() -> Image.Image:
 
     draw.ellipse([(padding, padding + 10), (padding + 12, padding + 22)], fill=(34, 211, 238))
     draw.text((padding + 24, padding + 8), "PPT AGENT SKILL · WORLD-CLASS", fill=(34, 211, 238), font=accent_font)
-    draw.text((padding, padding + 50), "26 风格预览画廊", fill=(255, 255, 255), font=title_font)
+    draw.text((padding, padding + 50), "28 风格预览画廊", fill=(255, 255, 255), font=title_font)
     draw.text((padding, padding + 130), "5 板块 · 18 图表 · 世界级排版 · Linear / Anthropic / Stripe / Apple / NYT 标杆", fill=(180, 200, 220), font=sub_font)
 
     all_styles = []

@@ -27,19 +27,19 @@
 | 13 | `earth_concrete` | 浅色高级 | Suisse Int'l | 建筑 / 工业 / 咖啡 | [light.md](light.md) |
 | 14 | `champagne_gold` | 浅色高级 | 香槟金 | 婚庆 / 宴会 / 庆典 | [light.md](light.md) |
 | 15 | `liquid_glass` | 浅色高级 | iOS 26 / visionOS | XR / AR / 苹果生态 | [light.md](light.md) |
-| 27 | `editorial_paper` | 浅色高级 | 温润研究手记 | 研究/出版/白皮书/思考型汇报 | [light.md](light.md) |
-| 28 | `schematic_blueprint` | 浅色高级 | 工程蓝图线稿 | 架构/系统/建模/图解密集（线稿图解）| [light.md](light.md) |
-| 16 | `vibrant_rainbow` | 活力鲜明 | Stripe Sessions | 营销 / 创作者 | [vibrant.md](vibrant.md) |
-| 17 | `kindergarten_pop` | 活力鲜明 | Quicksand 童趣 | 儿童教育 / 启蒙 | [vibrant.md](vibrant.md) |
-| 18 | `bauhaus_block` | 活力鲜明 | Bauhaus / Swiss | 教育 / 创意品牌 | [vibrant.md](vibrant.md) |
-| 19 | `candy_pastel` | 活力鲜明 | 马卡龙糖果 | 甜品 / 烘焙 / 零食 | [vibrant.md](vibrant.md) |
-| 20 | `royal_red` | 东方文化 | 北京冬奥开幕式 | 中国风 / 政务 / 文化 | [cultural.md](cultural.md) |
-| 21 | `sakura_wabi` | 东方文化 | 日本侘寂 | 日系 / 茶道 / 酒店 | [cultural.md](cultural.md) |
-| 22 | `ink_jade` | 东方文化 | 墨色+浅米+朱红 | 国潮 / 茶饮 / 古风 | [cultural.md](cultural.md) |
-| 23 | `botanic_forest` | 自然/复古 | 深绿森林秘境 | 户外 / 可持续 / 林产 | [natural.md](natural.md) |
-| 24 | `safari_savanna` | 自然/复古 | 萨凡纳暖橙 | 旅行 / 探险 / 纪录片 | [natural.md](natural.md) |
-| 25 | `retro_70s` | 自然/复古 | 70 年代复古 | 独立咖啡 / 唱片 / 复古 | [natural.md](natural.md) |
-| 26 | `gov_authority` | 自然/复古 | 国徽 / 国宴 | 党政 / 重大会议 / 严肃 | [natural.md](natural.md) |
+| 16 | `editorial_paper` | 浅色高级 | 温润研究手记 | 研究/出版/白皮书/思考型汇报 | [light.md](light.md) |
+| 17 | `schematic_blueprint` | 浅色高级 | 工程蓝图线稿 | 架构/系统/建模/图解密集（线稿图解）| [light.md](light.md) |
+| 18 | `vibrant_rainbow` | 活力鲜明 | Stripe Sessions | 营销 / 创作者 | [vibrant.md](vibrant.md) |
+| 19 | `kindergarten_pop` | 活力鲜明 | Quicksand 童趣 | 儿童教育 / 启蒙 | [vibrant.md](vibrant.md) |
+| 20 | `bauhaus_block` | 活力鲜明 | Bauhaus / Swiss | 教育 / 创意品牌 | [vibrant.md](vibrant.md) |
+| 21 | `candy_pastel` | 活力鲜明 | 马卡龙糖果 | 甜品 / 烘焙 / 零食 | [vibrant.md](vibrant.md) |
+| 22 | `royal_red` | 东方文化 | 北京冬奥开幕式 | 中国风 / 政务 / 文化 | [cultural.md](cultural.md) |
+| 23 | `sakura_wabi` | 东方文化 | 日本侘寂 | 日系 / 茶道 / 酒店 | [cultural.md](cultural.md) |
+| 24 | `ink_jade` | 东方文化 | 墨色+浅米+朱红 | 国潮 / 茶饮 / 古风 | [cultural.md](cultural.md) |
+| 25 | `botanic_forest` | 自然/复古 | 深绿森林秘境 | 户外 / 可持续 / 林产 | [natural.md](natural.md) |
+| 26 | `safari_savanna` | 自然/复古 | 萨凡纳暖橙 | 旅行 / 探险 / 纪录片 | [natural.md](natural.md) |
+| 27 | `retro_70s` | 自然/复古 | 70 年代复古 | 独立咖啡 / 唱片 / 复古 | [natural.md](natural.md) |
+| 28 | `gov_authority` | 自然/复古 | 国徽 / 国宴 | 党政 / 重大会议 / 严肃 | [natural.md](natural.md) |
 
 ---
 
