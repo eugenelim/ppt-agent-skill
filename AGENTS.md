@@ -36,6 +36,14 @@ Scope each change precisely to the request.
 - **Prefer the boring, obvious solution.** Cleverness is expensive; see
   the declined-pattern register in the `work-loop` skill.
 - **Touch only what you're asked to touch.** See the rest of this section.
+- **Never leak PII or confidential identifiers into committed artifacts.**
+  When absorbing or adapting an external source (a deck, a document, a
+  screenshot), reproduce only its *reusable form* — layout, palette, type,
+  primitives. Strip everything identifying: real client / customer / employer
+  names, project or deck code-names, personal names, emails, internal URLs,
+  ticket IDs, and any proprietary engagement detail. Examples and mocks use
+  clearly-fabricated neutral placeholders (`Acme`, `Program`, `example.com`).
+  This applies to this file too — do not name a real client anywhere in the repo.
 
 - **Limit the diff to what the request requires — extra changes hide
   the real one from review.** If the request needs it — or would ship

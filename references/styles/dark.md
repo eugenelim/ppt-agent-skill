@@ -1,4 +1,4 @@
-# 暗色专业板块（7 风格）
+# 暗色专业板块（8 风格）
 
 > 板块定位：深色背景 + 高对比 + 精密科技/奢华情绪。适用于产品发布会、SaaS 平台、技术文档、奢侈品、电竞、Web3 等场景。
 >
@@ -17,6 +17,7 @@
 | 5 | `cyberpunk_neon` | Cyberpunk 2077 | 紫青霓虹 + 扫描线，2077 未来街景 |
 | 6 | `chrome_y2k` | Y2K / Vaporwave | 千禧年银色铬感 + 网格透视 |
 | 7 | `noir_film` | 黑白电影 | 高反差黑白 + 胶片颗粒，纪录片质感 |
+| 8 | `graphite_gold` | 高端顾问简报（黄昏会议室） | 石墨炭底 + 香槟金焦点 + 尘调五信号，克制的战略简报 |
 
 ---
 
@@ -403,3 +404,66 @@ Mock: [`ppt-output/style-gallery/chrome_y2k.html`](../../ppt-output/style-galler
 ```
 
 Mock: [`ppt-output/style-gallery/noir_film.html`](../../ppt-output/style-gallery/noir_film.html)
+
+---
+
+## 8. graphite_gold — 石墨金（高端顾问简报 · 黄昏会议室）
+
+> 视觉基准：高端咨询/顾问的**内部战略简报** deck——石墨炭灰底（带一丝紫青冷调）+ 香槟/古金焦点 + 一整套**尘调（去饱和）五信号**（茶青 / 钢蓝 / 陶红 / 薰衣草紫）。没有任何霓虹或高饱和主色，全场"安静的奢华"。
+>
+> 与既有暗色风格的区别：`dark_tech`/`cyberpunk_neon` 用冷青/霓虹高饱和；`luxury_purple`/`nocturne_violet` 是单一紫的品牌奢华；`noir_film` 是纯黑白单色；`champagne_gold` 是**浅色**婚庆风。本风格是唯一的"暗底 + 暖金 + 尘调多信号"顾问简报皮肤。成套论证卡/条件列表/相位流原语见 [`blocks/advisory-brief.md`](../blocks/advisory-brief.md)。
+
+```json
+{
+  "style_id": "graphite_gold",
+  "style_name": "石墨金 (Graphite Gold)",
+  "category": "dark_professional",
+  "inspiration": "高端咨询顾问内部战略简报 · 石墨炭底 + 香槟古金 + 尘调五信号",
+  "mood_keywords": ["石墨炭底", "香槟金焦点", "尘调五信号", "顾问克制", "黄昏会议室"],
+  "design_soul": "黄昏时分的董事会议室：石墨灰的墙面吸掉了所有喧哗，一束香槟金的光落在唯一要看的那句结论上，四种褪了色的信号色像旧铜、旧青、旧陶、旧紫一样各自安静地标注着一列论证——克制、笃定，每张卡片都以一句『所以』收束。",
+  "variation_strategy": "封面居中大标题（关键词香槟金 + em 强调）+ 金渐变规线；论证页用『顶栏彩条 + per-card 信号点 + psec 分段小标 + 底部 so-what netline』的推理卡网格；条件页用 key/minor 排序的横条列表（转角标签 + 金/红左条渐变）；相位页用彩条顶边的列 + 箭头相位流；数据页用尘调面积斜坡图 + 相位卡；插图/估算页顶部必挂红色『先读这个』诚实横幅。",
+  "decoration_dna": {
+    "signature_move": "卡片顶部 3px 信号彩条（per-card --cdot 驱动彩条 + 项目符号点）+ 底部 so-what『Therefore / Result』收束行（金色大写 kicker + heading 字体结论）+ 金渐变规线 + 尘调五信号在暗底上作单点信号",
+    "forbidden": ["高饱和/霓虹主色", "冷青科技风扫描光", "多主色平分画面（信号色只作 ≤~200px² 点缀）", "浅色/白纸背景", "厚重投影", "圆角 > 16px"],
+    "recommended_combos": ["顶栏彩条卡 + psec 分段小标 + so-what netline", "key/minor 条件列表 + 转角标签 + 金/红左条", "尘调面积斜坡图 + 相位卡 + 红色诚实横幅"]
+  },
+  "background": { "primary": "#111118", "gradient_to": "#16161f", "texture": { "type": "grid_dot", "size": 80, "opacity": 0.015 } },
+  "card": { "gradient_from": "#1c1d28", "gradient_to": "#21222f", "border": "#2C2D3A", "border_radius": 14, "backdrop_blur": 0 },
+  "text": { "primary": "#ECECF2", "secondary": "#9A9BA8", "title_size": 52, "body_size": 14, "card_title_size": 18 },
+  "accent": { "primary": ["#D4A96E", "#B98E4E"], "secondary": ["#6DBEA3", "#7BB4CC"] },
+  "typography": {
+    "display_font": "'Sora', 'Inter Tight', -apple-system, sans-serif",
+    "body_font": "'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+    "serif_italic_font": "'Sora', Georgia, serif",
+    "mono_font": "'JetBrains Mono', 'DM Mono', 'SF Mono', monospace",
+    "display_letter_spacing": "-0.02em",
+    "headline_letter_spacing": "-0.01em",
+    "body_letter_spacing": "0em",
+    "label_letter_spacing": "0.22em",
+    "feature_settings": "'kern', 'liga', 'calt', 'tnum'",
+    "tabular_nums": true
+  },
+  "decorations": { "label_anchor": "horizontal_line", "title_serif_italic": false, "corner_lines": false, "vertical_divider": false, "drop_cap": false, "masthead": false, "accent_topline": true, "netline_sowhat": true },
+  "font_imports": ["https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap"]
+}
+```
+
+**尘调五信号色**（去饱和信号色，暗底上作 per-card 单点信号 —— 非 accent，保持"香槟金唯一焦点"纪律）：`--gold:#D4A96E`（焦点 / 主信号）· `--gold-deep:#B98E4E`（深金）· `--teal:#6DBEA3` · `--blue:#7BB4CC` · `--red:#D46B6B`（也用作『先读这个』诚实横幅）· `--violet:#9B8BD4` · `--ink:#ECECF2` · `--muted:#9A9BA8` · `--line:#2C2D3A` · `--card:#1c1d28` · `--card-2:#21222f`。五信号色各自恒定语义（一列 = 一色），像图表趋势色一样是本风格允许的信号 hex；每张卡通过 `--cdot` 选一色驱动顶栏彩条 + 项目符号点，副色只作 ≤~200px² 点缀。
+
+### 样式细则（styling spec）—— 让生成页"像一份顾问战略简报"
+
+> 风格 JSON 只给粗粒度的色/字/字距；下面这套细则才是让整页读起来克制、笃定、"安静奢华"的关键。HTML 生成阶段照此施工。
+
+1. **顶栏彩条卡（signature move）**：内容卡 `border-radius:14px` + `1px var(--line)` 边，卡顶贴一条 `3px` 的信号彩条（`.topline`，`margin:-padding` 顶满卡宽，圆角 `3px 3px 0 0`）。彩条颜色 = 该卡 `--cdot` 的信号色。一页多卡时，每卡选一枚不同信号色（金 / 青 / 蓝 / 紫 / 陶红），彩条 + 卡内项目符号点 + psec 小标同色，形成"一卡一色"的编码。
+2. **so-what netline（signature move）**：每张论证卡底部用 `margin-top:auto` 顶到卡底、`border-top:1px var(--line)` 起一条收束行——先一行金色大写 kicker（`Therefore` / `Result` / `Net`，`font-size:10px letter-spacing:.05em`），下面一句 heading 字体的结论（`~12.5px`，暖白 `#EFE3CC`）。这是本风格的"论证诚实"纪律：每张卡都要回答"所以呢"。
+3. **psec 分段推理小标**：卡内正文按语义分 2–3 段，每段一枚大写小标（`.sl2`，`10px letter-spacing:.14em`）领起一簇要点。小标用语义色区分角色——如 `AI 做的事`=金、`移除等待`=蓝、`结论`=……；要点用无序 `ul.sb`（小圆点 `--cdot`）。
+4. **单一香槟金焦点纪律**：金色（`--gold`）只落在——眉标、金渐变规线、标题 `<em>` 强调词、netline kicker、条件列表 key 左条、callout 边、pblabel、页脚。尘调副信号（青/蓝/陶/紫）只在 per-card 编码与图表里出现，不与金争焦点；一页金色出现点 ≤ ~6 处。
+5. **金渐变规线**：页眉下压一条 `height:2px; background:linear-gradient(90deg, var(--gold), transparent); border:0` 的规线——从金到透明，是"顾问文件页眉"的签名分隔。（唯一保留的渐变；其余 rgba 洗色面板在提取原语里改为实色 + 左条，见 `blocks/advisory-brief.md`。）
+6. **页眉/页脚 chrome**：页眉 `.topbar` 左侧 eyebrow（金色大写 `.22em` 字距）+ H2 标题，右侧 `.brand`（灰 + `<b>` 反白品牌名）；页脚 `.pagefoot` 绝对定位贴底，两段 mono 感的大写点码（`11px letter-spacing:.18em`，暗灰 `#54556a`）——左品牌·右页码 `NN / NN`。
+7. **色彩角色**：`--gold`（焦点 / 主信号 / kicker）· `--gold-deep`（深金）· `--teal`/`--blue`/`--violet`（per-card 副信号，冷侧）· `--red`（陶红：make-or-break 条件左条 + 诚实横幅）· `--ink`（主文字）· `--muted`（次要 / 页脚）· `--line`（发丝边 / 分隔）· `--card`/`--card-2`（卡底 / 副底 / 斑马）。
+8. **数字全站 tabular**：`font-variant-numeric:tabular-nums` + `font-feature-settings:'kern','liga','calt','tnum'`——页码 / 百分比 / 天数逐列对齐。
+9. **间距节奏**：整页 `padding:38px clamp(34px,4.6vw,78px) 56px`；卡片 `padding:17px 18px`；网格 `gap:16px`；正文 `line-height:1.46` + `max-width:~90ch`；导语 `p.lead`/`p.flowintro` 略大一档（16px）。
+10. **条件列表排序纪律**：`.cond` 横条列表按重要性排序——`key`（金左条 + 金渐变底 + 转角标签"Make-or-break"）在前，`minor`（虚线边、微降 opacity）在后；make-or-break 的第二条用 `red`（陶红左条）。转角 `.ctag` 是 heading 字体的大写小胶囊。
+11. **诚实横幅（persuasion-integrity）**：任何用"来自可比案例、非本客户"的估算数字的页面，顶部必挂 `.illbanner`（陶红边 + 红色大写 `先读这个` kicker），一句话讲清"这是形状不是承诺"。见 [`principles/narrative-arc.md`](../principles/narrative-arc.md) 的 so-what / 诚实横幅约定。
+
+Mock: [`ppt-output/style-gallery/graphite_gold.html`](../../ppt-output/style-gallery/graphite_gold.html) · 组件原语: [`blocks/advisory-brief.md`](../blocks/advisory-brief.md)

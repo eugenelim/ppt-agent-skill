@@ -8,13 +8,13 @@
   <p>
     <a href="README.md">中文文档</a> ·
     <a href="#-quick-start">Quick Start</a> ·
-    <a href="#-style-gallery-28-styles">Gallery</a> ·
+    <a href="#-style-gallery-29-styles">Gallery</a> ·
     <a href="#-workflow">Workflow</a> ·
     <a href="#-architecture">Architecture</a>
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/styles-28-22D3EE?style=for-the-badge&labelColor=050b1f" alt="28 Styles" />
+    <img src="https://img.shields.io/badge/styles-29-22D3EE?style=for-the-badge&labelColor=050b1f" alt="29 Styles" />
     <img src="https://img.shields.io/badge/charts-18-6366f1?style=for-the-badge&labelColor=050b1f" alt="18 Charts" />
     <img src="https://img.shields.io/badge/categories-5-FF9500?style=for-the-badge&labelColor=050b1f" alt="5 Categories" />
     <img src="https://img.shields.io/badge/pipeline-6_steps-22c55e?style=for-the-badge&labelColor=050b1f" alt="6-step Pipeline" />
@@ -47,8 +47,8 @@
 ---
 
 <div align="center">
-  <img src="assets/hero-all.png" alt="28 Style Preview Gallery" width="100%" />
-  <p><sub>28 world-class styles across 5 categories · Real 1280×720 reference mocks</sub></p>
+  <img src="assets/hero-all.png" alt="29 Style Preview Gallery" width="100%" />
+  <p><sub>29 world-class styles across 5 categories · Real 1280×720 reference mocks</sub></p>
 </div>
 
 ---
@@ -66,14 +66,14 @@ Each style mirrors the actual production typography of world-class brands (**not
 | Feature | Description |
 |---------|-------------|
 | **6-Step Pipeline** | Interview → Research → Outline → Planning → HTML Design → Post-process (SVG + PPTX) |
-| **28 World-Class Styles** | 5 categories: Dark Professional 7 / Light Premium 10 / Vibrant 4 / Cultural Oriental 3 / Natural Retro 4 |
+| **29 World-Class Styles** | 5 categories: Dark Professional 8 / Light Premium 10 / Vibrant 4 / Cultural Oriental 3 / Natural Retro 4 |
 | **18 Data Visualizations** | 8 basic + 6 advanced (radar/timeline/funnel/gauge) + 4 ECharts-grade (world map/network/Sankey/heatmap calendar) |
 | **Bento Grid Layouts** | 7 flexible card layouts driven by content, not templates |
 | **World-Class Typography** | 7-level scale · letter-spacing rules · tabular-nums · OpenType features · serif italic mixing · 3-tier font fallback |
 | **Smart Illustrations** | AI-generated images with 5 visual fusion techniques (fade/tinted overlay/ambient bg/etc.) |
 | **Failure Modes Catalog** | 8 failure modes (underfill / decorative_substitution / etc.) + repair-order rules |
 | **Cross-page Narrative** | Density alternation · chapter color progression · cover-ending visual echo |
-| **Style Preview Gallery** | `gallery.py` one-shot generates a 28-style card-wall index |
+| **Style Preview Gallery** | `gallery.py` one-shot generates a 29-style card-wall index |
 | **Smoke Testing** | `smoke_test.py` validates JSON / pipeline-compat / typography / e2e pipeline |
 | **PPTX Compatible** | HTML → SVG → PPTX pipeline; right-click "Convert to Shape" in PPT 365 for full editing |
 
@@ -111,14 +111,14 @@ pip install python-pptx lxml Pillow
 # Node.js >= 18; puppeteer auto-installs on first html2svg.py run
 ```
 
-## 🎨 Style Gallery (28 styles)
+## 🎨 Style Gallery (29 styles)
 
 Five categories cover all typical commercial scenarios. Every mock is a real 1280×720 design:
 
-### Dark Professional (7 styles · `references/styles/dark.md`)
+### Dark Professional (8 styles · `references/styles/dark.md`)
 
 <div align="center">
-  <img src="assets/hero-dark-professional.png" alt="7 Dark Professional Styles" width="100%" />
+  <img src="assets/hero-dark-professional.png" alt="8 Dark Professional Styles" width="100%" />
 </div>
 
 > Linear / Apple Hardware / Tom Ford / Cyberpunk 2077 / Y2K / Magnum etc.
@@ -198,7 +198,7 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 | **Advanced** | 6 | Radar · Timeline · Funnel · Gauge · Grouped bar · Simple map | [`charts/advanced.md`](references/charts/advanced.md) |
 | **ECharts-grade** | 4 | World choropleth · Network graph · Sankey · Heatmap calendar | [`charts/complex.md`](references/charts/complex.md) |
 
-All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipeline). All charts auto-adapt to the 28 styles via CSS variables.
+All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipeline). All charts auto-adapt to the 29 styles via CSS variables.
 
 ## 🔧 Workflow
 
@@ -207,7 +207,7 @@ All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipe
 │  Step 1    │  │  Step 2    │  │  Step 3    │  │  Step 4    │  │  Step 5    │  │  Step 6    │
 │  Interview │→ │  Research  │→ │  Outline   │→ │  Planning  │→ │  Style+    │→ │  Post-     │
 │            │  │            │  │            │  │            │  │  Design    │  │  process   │
-│  7-Q deep  │  │  3-15 srch │  │  Pyramid + │  │  Bento     │  │  28 styles │  │  HTML→SVG  │
+│  7-Q deep  │  │  3-15 srch │  │  Pyramid + │  │  Bento     │  │  29 styles │  │  HTML→SVG  │
 │  interview │  │  adaptive  │  │  self-test │  │  cards     │  │  + images  │  │  →PPTX     │
 └────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘
    STOP wait                                       Wait confirm    Batch by part      Auto exec
@@ -232,7 +232,7 @@ Detailed flow in [`SKILL.md`](SKILL.md).
 
 | Module | Count | Location |
 |--------|-------|----------|
-| 📐 Style Library | 28 styles | `references/styles/` (5 categories) |
+| 📐 Style Library | 29 styles | `references/styles/` (5 categories) |
 | 📊 Chart Library | 18 charts | `references/charts/` (3 tiers) |
 | 🔤 Typography | 14 rules | `references/typography.md` |
 | ⚠ Failure Modes | 8 modes | `references/principles/failure-modes.md` |
@@ -247,7 +247,7 @@ ppt-agent-skill/
 ├── assets/                       # Visual assets
 │   ├── logo.svg                  # Logo
 │   ├── banner.svg                # README banner
-│   ├── hero-all.png              # 28-style overview composite
+│   ├── hero-all.png              # 29-style overview composite
 │   └── hero-<category>.png       # Per-category composites
 ├── references/                   # Skill reference docs
 │   ├── prompts.md                # 5 prompt templates
@@ -256,7 +256,7 @@ ppt-agent-skill/
 │   ├── pipeline-compat.md        # HTML→SVG→PPTX compatibility rules
 │   ├── method.md                 # Core methodology
 │   ├── style-system.md           # Redirect file (legacy compat)
-│   ├── styles/                   # 28 styles by 5 categories
+│   ├── styles/                   # 29 styles by 5 categories
 │   │   ├── index.md, dark.md, light.md, vibrant.md, cultural.md, natural.md
 │   ├── charts/                   # 18 chart types
 │   │   ├── index.md, basic.md, advanced.md, complex.md
@@ -266,11 +266,11 @@ ppt-agent-skill/
 │   ├── html_packager.py          # Multi-page HTML → paginated preview
 │   ├── html2svg.py               # HTML → SVG (dom-to-svg, editable text)
 │   ├── svg2pptx.py               # SVG → PPTX (OOXML native)
-│   ├── gallery.py                # Generate 28-style preview gallery + screenshots
+│   ├── gallery.py                # Generate 29-style preview gallery + screenshots
 │   ├── build_hero.py             # Generate README hero composites
 │   └── smoke_test.py             # E2E test + pipeline-compat scan
 ├── ppt-output/                   # runtime: one <deck-name>/ folder per deck (gitignored)
-│   └── style-gallery/            # 28 mocks + 28 PNGs + index.html (tooling sibling, not a deck)
+│   └── style-gallery/            # 29 mocks + 29 PNGs + index.html (tooling sibling, not a deck)
 ├── docs/superpowers/specs/       # Design docs
 └── tests/smoke-results/          # Test reports
 ```
@@ -278,7 +278,7 @@ ppt-agent-skill/
 ## 🧪 Quality Assurance
 
 ```bash
-# JSON validation + pipeline-compat scan + typography self-check (28 styles)
+# JSON validation + pipeline-compat scan + typography self-check (29 styles)
 python3 scripts/smoke_test.py --phase 1
 # → 52 pass / 0 fail / 0 warn
 
@@ -310,7 +310,7 @@ Typography practices borrowed from real brand websites (**not by mimicking scree
 
 Full world-class redesign spec: [`docs/superpowers/specs/2026-05-10-world-class-redesign-design.md`](docs/superpowers/specs/2026-05-10-world-class-redesign-design.md)
 
-Contains: goals & motivation / 28 style list / JSON schema upgrade / font stack strategy / typography rules / chart system design / preview gallery / file org / backward compat / 5-phase implementation / success criteria / decision log.
+Contains: goals & motivation / 29 style list / JSON schema upgrade / font stack strategy / typography rules / chart system design / preview gallery / file org / backward compat / 5-phase implementation / success criteria / decision log.
 
 ## ⭐ Star History
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """lint_diagram_recipes.py — structural + pipeline-safety lint for block recipes.
 
-Covers the diagram recipe family files, timeline.md, and worksheet.md. Checks
+Covers the diagram recipe family files, timeline.md, worksheet.md, and
+advisory-brief.md. Checks
 the recipe contract pinned in docs/specs/diagram-consistency-system/spec.md:
 
   1. Each recipe (a `### <name> (<id>)` heading) carries the five bold-label
@@ -200,6 +201,7 @@ def main() -> int:
     targets = sorted(blocks_dir.glob("diagram*.md")) + [
         blocks_dir / "timeline.md",
         blocks_dir / "worksheet.md",
+        blocks_dir / "advisory-brief.md",
     ]
     targets = [t for t in targets if t.exists()]
 

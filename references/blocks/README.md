@@ -26,6 +26,7 @@
 | 情感冲击/场景营造 | **image_hero** | 一张好图胜过千言万语 |
 | 2x2 战略定位分析 | **matrix_chart** | 象限图是商业决策最直觉的工具 |
 | 责任矩阵/填空工作表/逐日排期表 | **worksheet**（按需加载） | 桌面文档式表格——可在会上逐格签字讨论 |
+| 论证卡/条件列表/相位流/估算斜坡/诚实横幅 | **advisory-brief**（按需加载） | 顾问战略简报——每张卡以一句 so-what 收束 |
 
 ## 灵动组合原则
 
@@ -56,3 +57,13 @@
 - **C. 页面骨架（本风格签名）**：masthead 顶栏 · cover-header 封面头（Fraunces 斜体紫 em + meta 网格）· section-marker 章节标记 · spotlight-callout 聚光标注 · footer 页脚。
 
 全部绑定 deck 契约变量（黑表头 = `var(--text-primary)`、发丝 = `var(--card-border)`、焦点 = `var(--accent-1)`），换风格随 `:root` 改色；与 `schematic_blueprint`（`diagram_mode:"lineart"`）最契合，其**样式细则**（边框层级 / 黑底反白反转 / 斜体紫 em / mono 字距阶梯 / 间距节奏）见 [`styles/light.md` §10](../styles/light.md)。**管线安全**：真实 `<table>`/`<div>`、禁 SVG `<text>`、禁 `mask-image`/`conic-gradient`/`background-image:url()`；仅 `status-block` 的 warn/ok 是语义信号 hex 碳out。
+
+## advisory-brief 原语（按需加载）
+
+`advisory-brief` 同为**按需注入配方**（非 validator 枚举）：在 `data` / `list` / `timeline` / `text` 卡上写 `resources.block_refs:["advisory-brief"]` 加载 [`blocks/advisory-brief.md`](advisory-brief.md) 的整套"顾问战略简报"原语，分三组：
+
+- **A. 论证卡族**：顶栏彩条论证卡（per-card 信号彩条 + psec 分段小标 + 底部 so-what netline）· so-what 收束行（`Therefore/Result` 金 kicker + heading 结论，可单独复用）。
+- **B. 排序列表 & 相位带**：优先级条件列表（key/minor/red + 转角标签 + 焦点左条）· 相位流（彩条顶边列 + 箭头相接）· 优先级药丸带（标签 + 彩条药丸）。
+- **C. 强调 & 页面骨架**：焦点洗色面板 callout（实色 + 焦点左条）· 诚实横幅 illustrative-banner（估算数字页顶必挂，消费 warn 信号色）· 估算斜坡图 projection-ramp（SVG path + HTML 叠加标注，禁 `<text>`）· 页眉页脚骨架 page-chrome（topbar + 金渐变 rule + pagefoot）。
+
+全部绑定 deck 契约变量（焦点 = `var(--accent-1)`、per-card = inline `--cdot`、发丝 = `var(--card-border)`），换风格随 `:root` 改色；与 `graphite_gold` 最契合，其**样式细则**（顶栏彩条 / so-what 纪律 / 单一香槟金焦点 / 金渐变规线 / 诚实横幅）见 [`styles/dark.md` §8](../styles/dark.md)。**管线安全**：真实 `<div>`、SVG 仅 `<path>`/`<line>`/`<circle>`（标注用 HTML 叠加、禁 SVG `<text>`）、禁 `mask-image`/`conic-gradient`/`background-image:url()`；仅 `illustrative-banner` 的 warn 是语义信号 hex 碳out。
