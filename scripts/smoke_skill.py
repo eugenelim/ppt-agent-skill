@@ -813,7 +813,7 @@ def build_fixture_tree(tmp_dir: Path) -> dict[str, Path]:
         "# 采访纪要\n\n用户要做一份 4 页的 Linux.do 社区介绍，目标是让新用户快速理解定位并愿意加入。\n\nscenario: 社区介绍\n"
         "audience: 新用户与潜在参与者\ntarget_action: 建立认知并愿意加入\nexpected_pages: 4\npage_density: 适中\n"
         "style: 极简商务\nbrand: 保持社区感与克制气质\nmust_include: 社区定位、氛围、价值、加入理由\n"
-        "must_avoid: 不要写成广告页\nlanguage: 中文\nimagery: decorate\nmaterial_strategy: research\n"
+        "must_avoid: 不要写成广告页\nlanguage: 中文\nimagery: decorate\nmaterial_strategy: research\ngrounding_mode: researched\n"
         "subagent_model_strategy: 继承主代理\nsubagent_thinking_effort: 中等\nmanual_audit_mode: fine_grained\n"
         "manual_audit_scope: page_html, page_review\nmanual_audit_assets: runtime_and_selected_assets\n",
     )
@@ -822,7 +822,7 @@ def build_fixture_tree(tmp_dir: Path) -> dict[str, Path]:
         "# 需求归一化\n\nscenario: 社区介绍\naudience: 新用户与潜在参与者\ntarget_action: 建立认知并愿意加入\n"
         "expected_pages: 4\npage_density: 适中\nstyle: 极简商务\nbrand: 保持社区感与克制气质\n"
         "must_include: 社区定位、氛围、价值、加入理由\nmust_avoid: 不要写成广告页\nlanguage: 中文\n"
-        "imagery: decorate\nmaterial_strategy: research\nsubagent_model_strategy: 继承主代理\n"
+        "imagery: decorate\nmaterial_strategy: research\ngrounding_mode: researched\nsubagent_model_strategy: 继承主代理\n"
         "subagent_thinking_effort: 中等\nmanual_audit_mode: fine_grained\nmanual_audit_scope: page_html, page_review\n"
         "manual_audit_assets: runtime_and_selected_assets\ndensity_bias: balanced\nbranch: research\n",
     )

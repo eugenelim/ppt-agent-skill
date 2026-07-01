@@ -21,6 +21,7 @@
 - 期望页数：【A. 5-10页(微型/短汇报)】 【B. 10-20页(标准)】 【C. 20-30页及以上(宽幅深度盘点)】 【D. 让AI凭内容自动决断】
 - 密度：【A. 极简呼吸感(整套偏松，不代表每页都空)】 【B. 均衡图文(整套有起伏，主次分明)】 【C. 极高密度干货(整套窗口上移，但页与页仍要错落)】
 - 资料：【A. Research(全网检索扩写并做发散)】 【B. 严格闭卷(绝不发散，仅限用户现有文字)】
+- 内容来源(接地契约)：【A. 代表我的工作(用我给的资料，取不到就停下问我，绝不用AI脑补)】 【B. 基于调研(联网查证，每条带来源)】 【C. 示意稿(AI常识出草稿，我知晓非核实事实，成品标注"示意·未经核实")】
 - 核心主张与红线：【自由补充，例如：主张必须是我们最快，禁止提xx竞品名字】
 
 **C. 视觉与资产策略**
@@ -51,6 +52,7 @@ brand_constraints -> brand
 language_mode -> language
 imagery_strategy -> imagery
 material_strategy -> material_strategy
+grounding_mode -> grounding_mode   # represent_user_work / researched / illustrative
 subagent_model_strategy -> subagent_model_strategy
 subagent_thinking_effort -> subagent_thinking_effort
 manual_audit_mode -> manual_audit_mode
@@ -62,6 +64,7 @@ manual_audit_assets -> manual_audit_assets
 
 ```text
 material_strategy: research
+grounding_mode: researched
 page_density: 适中
 visual_style: 自动匹配
 language_mode: 中文

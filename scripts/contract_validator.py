@@ -43,6 +43,23 @@ VALID_ARGUMENT_STRATEGIES = {
     "narrative_driven", "data_driven", "case_study", "comparison",
     "framework", "step_by_step", "authority", "reference_runbook",
 }
+# Source-of-truth contract (see SKILL.md「来源接地契约」/ method.md §7).
+# The deck's content must be one of: grounded in the user's own materials (G1),
+# grounded in this run's research (G2), or explicitly-consented illustrative
+# output built from the model's general knowledge (G3). The pipeline may never
+# silently fall from G1/G2 to fabricating from topic memory — hence this is a
+# recorded, validated decision, not an implicit default.
+VALID_GROUNDING_MODES = {
+    "represent_user_work",  # G1 — content traces to user-provided materials
+    "researched",           # G2 — content traces to this run's gathered sources
+    "illustrative",         # G3 — model-knowledge draft; user-consented + labeled
+}
+GROUNDING_MODE_ALIASES = {
+    "g1": "represent_user_work", "user_work": "represent_user_work",
+    "user_materials": "represent_user_work", "local_only": "represent_user_work",
+    "g2": "researched", "research": "researched",
+    "g3": "illustrative", "model_knowledge": "illustrative",
+}
 NON_DASHBOARD_PAGE_TYPES = {"cover", "section", "section-marker", "reference", "end"}
 REQUIRED_INTERVIEW_DIMENSIONS = [
     ("scenario", ["场景", "使用场景", "应用场景", "scenario"]),
@@ -57,6 +74,7 @@ REQUIRED_INTERVIEW_DIMENSIONS = [
     ("language", ["语言", "中文", "英文", "中英", "language:"]),
     ("imagery", ["配图", "图片", "图像", "插图", "imagery", "image_mode"]),
     ("material_strategy", ["资料使用策略", "资料策略", "素材使用", "引用策略", "material_strategy", "materials_strategy"]),
+    ("grounding_mode", ["接地模式", "来源模式", "来源接地", "内容来源", "grounding_mode", "grounding mode"]),
     ("subagent_model_strategy", ["subagent_model_strategy", "后续子系统使用什么模型", "模型", "subagent model"]),
     ("subagent_thinking_effort", ["subagent_thinking_effort", "思考深度", "推理等级", "reasoning effort"]),
     ("manual_audit_mode", ["manual_audit_mode", "人工审计", "中间审计", "断点"]),
@@ -76,6 +94,7 @@ REQUIRED_INTERVIEW_ANCHORS = [
     "language",
     "imagery",
     "material_strategy",
+    "grounding_mode",
     "subagent_model_strategy",
     "subagent_thinking_effort",
     "manual_audit_mode",
@@ -301,6 +320,26 @@ def validate_required_anchor_fields(
     return matched
 
 
+def validate_grounding_mode(anchors: dict[str, str], result: ValidationResult, label: str) -> None:
+    """The source-of-truth contract must be an explicit, valid choice.
+
+    Presence is already enforced via REQUIRED_INTERVIEW_ANCHORS; here we reject a
+    grounding_mode whose value is not a recognized G1/G2/G3 token so the decision
+    can't be recorded as noise. Aliases (g1/g2/g3, research, local_only, ...) are
+    normalized before the check.
+    """
+    raw = anchors.get("grounding_mode")
+    if not is_non_empty_string(raw):
+        return  # missing-anchor error is raised by validate_required_anchor_fields
+    token = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    token = GROUNDING_MODE_ALIASES.get(token, token)
+    if token not in VALID_GROUNDING_MODES:
+        result.error(
+            f"{label}: grounding_mode `{raw}` is not one of "
+            f"{sorted(VALID_GROUNDING_MODES)} (see SKILL.md「来源接地契约」)"
+        )
+
+
 def validate_topics_coverage(text: str, result: ValidationResult, label: str) -> list[str]:
     # 每个维度同时支持中文标题（tpl-interview.md 规范格式）和英文键名（LLM 自由格式兼容）
     matched: list[str] = []
@@ -317,6 +356,7 @@ def validate_interview(path: Path) -> tuple[ValidationResult, dict[str, Any]]:
     matched = validate_topics_coverage(text, result, "interview-qa")
     anchors = extract_anchor_fields(text)
     matched_anchors = validate_required_anchor_fields(anchors, REQUIRED_INTERVIEW_ANCHORS, result, "interview-qa")
+    validate_grounding_mode(anchors, result, "interview-qa")
     density_bias = derive_density_bias_from_page_density(anchors.get("density_bias") or anchors.get("page_density"))
     summary["matched_dimensions"] = matched
     summary["matched_anchor_fields"] = matched_anchors
@@ -332,6 +372,7 @@ def validate_requirements_interview(path: Path) -> tuple[ValidationResult, dict[
     matched = validate_topics_coverage(text, result, "requirements-interview")
     anchors = extract_anchor_fields(text)
     matched_anchors = validate_required_anchor_fields(anchors, REQUIRED_INTERVIEW_ANCHORS, result, "requirements-interview")
+    validate_grounding_mode(anchors, result, "requirements-interview")
     density_bias = derive_density_bias_from_page_density(anchors.get("density_bias") or anchors.get("page_density"))
 
     if not contains_any(text, ["branch", "分支", "research", "直接制作", "现有资料"]):

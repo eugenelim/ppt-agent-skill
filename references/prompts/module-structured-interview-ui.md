@@ -28,6 +28,6 @@ questions: [
 
 ## 字段与问题约束
 
-- 至少覆盖 `presentation_scenario`、`core_audience`、`target_action`、`expected_pages`、`page_density`、`visual_style`、`language_mode`、`imagery_strategy`、`material_strategy`、`manual_audit_mode`
-- `presentation_scenario`、`core_audience`、`visual_style`、`language_mode`、`imagery_strategy`、`material_strategy`、`manual_audit_mode` 必须优先做成单选题
+- 至少覆盖 `presentation_scenario`、`core_audience`、`target_action`、`expected_pages`、`page_density`、`visual_style`、`language_mode`、`imagery_strategy`、`material_strategy`、`grounding_mode`、`manual_audit_mode`
+- `presentation_scenario`、`core_audience`、`visual_style`、`language_mode`、`imagery_strategy`、`material_strategy`、`grounding_mode`、`manual_audit_mode` 必须优先做成单选题（`grounding_mode` 三选一：`represent_user_work` / `researched` / `illustrative`，即"来源接地契约"，决定这份 deck 代表谁的事实）
 - `manual_audit_scope`、`manual_audit_assets`、`must_include`、`must_avoid`、`brand_constraints`、`success_criteria`、`subagent_model_strategy` 可通过第二轮结构化题或“其他”补充收集
