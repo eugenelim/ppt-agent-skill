@@ -167,6 +167,55 @@ def test_dtheme():
               V.check_diagram_theme_binding(themed, None) is None)
 
 
+def test_light_bg_false_positives():
+    """BLANK-01 / CUT-01 must not fire on light-background (blue_white) decks:
+    a near-white slide with content is fine; only truly empty slides FAIL blank,
+    and only content bleeding to the edge WARNs cutoff."""
+    print("visual_qa (light-bg false positives):")
+    white = Image.new("RGB", (1280, 720), (248, 248, 248))
+    content = Image.new("RGB", (1280, 720), (248, 248, 248))
+    for x in range(100, 600):
+        for y in range(100, 400):
+            content.putpixel((x, y), (30, 40, 90))
+    check("BLANK-01 passes light bg with content", V.check_blank_ratio(content)["status"] == "PASS")
+    check("BLANK-01 fails truly-empty light slide", V.check_blank_ratio(white)["status"] == "FAIL")
+    check("BLANK-01 mid-tone flat fill (no style) still FAILs", V.check_blank_ratio(Image.new("RGB", (1280, 720), (120, 120, 120)))["status"] == "FAIL")
+    check("CUT-01 no false positive on all-white slide", V.check_overflow_cutoff(white)["status"] == "PASS")
+    bleed = Image.new("RGB", (1280, 720), (248, 248, 248))
+    for x in range(1280):
+        for y in range(716, 720):
+            bleed.putpixel((x, y), (200, 20, 20))
+    check("CUT-01 warns on content bleeding to bottom edge", V.check_overflow_cutoff(bleed)["status"] == "WARN")
+    check("CUT-01 no false positive on dark slide", V.check_overflow_cutoff(Image.new("RGB", (1280, 720), (16, 20, 30)))["status"] == "PASS")
+
+
+def test_structural_hex_whitelist():
+    """HEX-01 ignores structural #fff/#ffffff (theme-invariant white) but still
+    flags genuinely off-theme hex."""
+    print("visual_qa (HEX-01 structural white):")
+    check("#fff whitelisted", V.check_hardcoded_colors("<div style='background:#fff'>")["status"] == "PASS")
+    check("#ffffff whitelisted", V.check_hardcoded_colors("<div style='color:#ffffff'>")["status"] == "PASS")
+    check("non-white hex still flagged", V.check_hardcoded_colors("<div style='color:#abcdef'>")["status"] == "WARN")
+    check("#fff excluded from count, real offender kept",
+          "1 处" in V.check_hardcoded_colors("<div style='background:#fff;color:#abcdef'>")["msg"])
+
+
+def test_style_and_naming():
+    """load_style_bg parses the declared background; _slide_number accepts both
+    slide-N and slide_NN naming."""
+    print("visual_qa (style bg + slide naming):")
+    with tempfile.TemporaryDirectory() as d:
+        sp = Path(d) / "style.json"
+        sp.write_text('{"css_variables":{"bg_primary":"#f8f8f8"}}', encoding="utf-8")
+        check("load_style_bg parses hex", V.load_style_bg(sp) == (248, 248, 248))
+        sp.write_text('{"css_variables":{"bg_primary":"rgb(10, 14, 26)"}}', encoding="utf-8")
+        check("load_style_bg parses rgb()", V.load_style_bg(sp) == (10, 14, 26))
+        check("load_style_bg None on missing", V.load_style_bg(Path(d) / "nope.json") is None)
+    check("_slide_number slide-3", V._slide_number("slide-3") == 3)
+    check("_slide_number slide_03 (zero-pad)", V._slide_number("slide_03") == 3)
+    check("_slide_number no match", V._slide_number("foo") is None)
+
+
 def main() -> int:
     test_lint()
     test_visual_qa_html()
@@ -174,6 +223,9 @@ def main() -> int:
     test_deck()
     test_exit_contract()
     test_dtheme()
+    test_light_bg_false_positives()
+    test_structural_hex_whitelist()
+    test_style_and_naming()
     print()
     if FAILS:
         print(f"test_diagram_qa: {len(FAILS)} FAILED")

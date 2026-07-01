@@ -550,9 +550,10 @@ test -s OUTPUT_DIR/png/slide-N.png
 **第 2 步：自动化视觉断言（第一道过滤器）**
 
 ```bash
-python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUTPUT_DIR/planning/planningN.json --html OUTPUT_DIR/slides/slide-N.html
+python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUTPUT_DIR/planning/planningN.json --html OUTPUT_DIR/slides/slide-N.html --style OUTPUT_DIR/style.json
 # exit=1 -> 致命缺陷，直接重跑
 # exit=2 -> 品质警告，第 3 步看图时重点关注 WARN 项
+# --style 让 BLANK-01 / CUT-01 知道声明背景色；浅底 deck（如 blue_white）务必带上，否则近白底会误报
 ```
 
 **第 3 步（核心质量关卡）：主 agent 亲自看截图**
@@ -588,7 +589,7 @@ test -s OUTPUT_DIR/planning/planningN.json && \
 test -s OUTPUT_DIR/slides/slide-N.html && \
 test -s OUTPUT_DIR/png/slide-N.png && \
 python3 SKILL_DIR/scripts/planning_validator.py OUTPUT_DIR/planning --refs SKILL_DIR/references --page N && \
-python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUTPUT_DIR/planning/planningN.json --html OUTPUT_DIR/slides/slide-N.html
+python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUTPUT_DIR/planning/planningN.json --html OUTPUT_DIR/slides/slide-N.html --style OUTPUT_DIR/style.json
 # 任一 exit!=0 -> 加入失败页列表
 ```
 
@@ -709,15 +710,18 @@ python3 SKILL_DIR/scripts/contract_validator.py <contract-type> <target-file> [-
 单页：
 
 ```bash
-python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUTPUT_DIR/planning/planningN.json --html OUTPUT_DIR/slides/slide-N.html
+python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUTPUT_DIR/planning/planningN.json --html OUTPUT_DIR/slides/slide-N.html --style OUTPUT_DIR/style.json
 ```
 
 批量：
 
 ```bash
-python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png --planning-dir OUTPUT_DIR/planning --html-dir OUTPUT_DIR/slides
+python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png --planning-dir OUTPUT_DIR/planning --html-dir OUTPUT_DIR/slides --style OUTPUT_DIR/style.json
 ```
 
 退出码：`0` = 全通过、`1` = FAIL（致命缺陷，必须重跑）、`2` = WARN（品质警告，看图复查）
+
+- `--style`：读 style.json 的 `css_variables.bg_primary`，让 BLANK-01 / CUT-01 排除设计意图内的背景色。**浅底 deck（近白底）不带此参数会误报大面积空白/触边裁切**，务必带上。
+- PNG 命名：同时接受 `slide-N.png` 与 `slide_NN.png`（零填充）两种命名，无需再手动 symlink。
 
 依赖：`pip install Pillow`

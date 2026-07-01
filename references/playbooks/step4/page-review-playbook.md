@@ -136,7 +136,7 @@ cp PNG_OUTPUT REVIEW_DIR/roundX/slide-N.png
 
 **与既有项的对账（重要，避免重复打分）**：`HEX-01` 就是 **P1-5**（硬编码色）的自动化版本；`RAD-01` 就是 **P2-1**（圆角不一致）的自动化版本。发现时**只记一条**（沿用 P1-5 / P2-1 编号），不要既记 P1-5 又记 `HEX-01`。其余 `PAL-01`/`TYPE-01`/`ALIGN-01`/`DTHEME-01`/`DECK-*` 是本轮新增维度。
 
-**跨页归属感**只能在批量阶段查：所有页出图后，跑一次 `visual_qa.py PNG_DIR --html-dir SLIDES_DIR --planning-dir PLANNING_DIR`，看 deck 聚合裁定，对漂移页回到该页修主题/背景/字号。
+**跨页归属感**只能在批量阶段查：所有页出图后，跑一次 `visual_qa.py PNG_DIR --html-dir SLIDES_DIR --planning-dir PLANNING_DIR --style STYLE_JSON`，看 deck 聚合裁定，对漂移页回到该页修主题/背景/字号。浅底 deck 必须带 `--style`，否则 BLANK-01 / CUT-01 会对近白底误报。
 
 ---
 
@@ -329,8 +329,10 @@ P0（致命）→ P1（必修）→ P2（抛光）
 在最后一轮截图通过人工扫描后，**必须运行自动化视觉断言脚本**作为客观验证：
 
 ```bash
-python3 SKILL_DIR/scripts/visual_qa.py PNG_OUTPUT --planning PLANNING_OUTPUT --html SLIDE_OUTPUT
+python3 SKILL_DIR/scripts/visual_qa.py PNG_OUTPUT --planning PLANNING_OUTPUT --html SLIDE_OUTPUT --style STYLE_JSON
 ```
+
+> `--style` 指向本 deck 的 style.json，让 BLANK-01 / CUT-01 读到声明背景色。浅底 deck 不带会误报大面积空白/触边裁切。
 
 断言结果解读：
 

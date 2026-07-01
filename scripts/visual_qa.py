@@ -13,8 +13,11 @@
     # 检查单页
     python3 scripts/visual_qa.py OUTPUT_DIR/png/slide-1.png --planning OUTPUT_DIR/planning/planning1.json --html OUTPUT_DIR/slides/slide-1.html
 
-    # 批量检查所有页
+    # 批量检查所有页（同时接受 slide-N.png 与 slide_NN.png 命名）
     python3 scripts/visual_qa.py OUTPUT_DIR/png --planning-dir OUTPUT_DIR/planning --html-dir OUTPUT_DIR/slides
+
+    # 浅底 deck 务必带 --style，让 BLANK-01 / CUT-01 知道声明背景色（避免近白底假阳）
+    python3 scripts/visual_qa.py OUTPUT_DIR/png --planning-dir OUTPUT_DIR/planning --html-dir OUTPUT_DIR/slides --style OUTPUT_DIR/style.json
 
     # 同时把文本报告写入 runtime
     python3 scripts/visual_qa.py OUTPUT_DIR/png/slide-1.png --planning OUTPUT_DIR/planning/planning1.json --html OUTPUT_DIR/slides/slide-1.html --output OUTPUT_DIR/runtime/page-review-qa-1.txt
@@ -45,6 +48,66 @@ DECORATION_BUDGET_LIMITS = {
     "minimal": 1,
 }
 
+# BLANK-01 / CUT-01：背景感知常量
+# 主色与「声明背景色」的 RGB 曼哈顿距离小于此值 → 视为同一背景（不算空白/裁切）
+BLANK_BG_MATCH_DIST = 60
+# 像素相对主背景色的曼哈顿距离大于此值 → 视为「内容」（前景像素）
+BLANK_CONTENT_DIST = 90
+# 边缘像素相对背景色偏离大于此值 → 视为「触边内容」（疑似裁切）
+CUT_EDGE_DIST = 60
+
+
+def _slide_number(stem: str) -> int | None:
+    """从 slide-N / slide_NN 文件名提取页码（去零填充）。无法匹配返回 None。"""
+    m = re.search(r"slide[-_](\d+)", stem)
+    return int(m.group(1)) if m else None
+
+
+def _rgb_dist(a: tuple, b: tuple) -> int:
+    """RGB 曼哈顿距离（sum of abs channel diff），对深/浅背景对称。"""
+    return abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2])
+
+
+def _parse_color(value) -> tuple | None:
+    """把 #hex / #rgb / rgb()/rgba() 字符串解析为 (r,g,b)；无法解析返回 None。"""
+    if not isinstance(value, str):
+        return None
+    v = value.strip()
+    m = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", v)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+    m = re.match(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)", v, re.IGNORECASE)
+    if m:
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    return None
+
+
+def load_style_bg(style_path: Path | None) -> tuple | None:
+    """从 style.json 读取声明的主背景色（css_variables.bg_primary）。
+
+    供 BLANK-01 / CUT-01 排除「设计意图内的背景」——浅底 deck（如 blue_white）
+    的近白底不再被误判为大面积空白或触边裁切。
+    """
+    if not style_path or not Path(style_path).exists():
+        return None
+    try:
+        data = json.loads(Path(style_path).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    cssv = data.get("css_variables")
+    if not isinstance(cssv, dict):
+        return None
+    for key in ("bg_primary", "bg_secondary"):
+        rgb = _parse_color(cssv.get(key))
+        if rgb:
+            return rgb
+    return None
+
 
 # ─────────────────────── 检测函数 ───────────────────────
 
@@ -59,11 +122,17 @@ def check_dimensions(img: Image.Image) -> dict:
     return {"id": "DIM-01", "status": "FAIL", "msg": f"分辨率 {w}x{h} 不符合 16:9 规格"}
 
 
-def check_blank_ratio(img: Image.Image, threshold: float = 0.40) -> dict:
+def check_blank_ratio(img: Image.Image, threshold: float = 0.40,
+                      bg_rgb: tuple | None = None) -> dict:
     """检测大面积空白/纯色区域是否超过阈值。
 
-    策略：将图片缩放到小尺寸后统计主色占比。
-    如果占比 > threshold 且主色极暗（背景色），再检查非背景区域是否太少。
+    策略：将图片缩放到小尺寸后统计主色占比。占比高本身不是问题——
+    深色主题的深底、浅色主题（如 blue_white）的近白底天然占比高。
+    判定改为「相对主背景色的内容像素是否太少」，对深/浅背景对称：
+      - 深底：偏离主色的更亮像素 = 内容
+      - 浅底：偏离主色的更暗/着色像素 = 内容
+    若传入 style.json 的声明背景色 bg_rgb，则主色贴近它时直接按背景处理，
+    不再对浅底误报为「大面积空白」（修复 BLANK-01 在浅底 deck 的假阳）。
     """
     # 缩放以加速
     small = img.resize((128, 72), Image.LANCZOS)
@@ -81,24 +150,30 @@ def check_blank_ratio(img: Image.Image, threshold: float = 0.40) -> dict:
     dominant_color = max(color_count, key=color_count.get)
     dominant_ratio = color_count[dominant_color] / total
 
-    if dominant_ratio > threshold:
-        # 检查这个 dominant 是不是背景色（暗色系）
-        brightness = sum(dominant_color) / 3
-        if brightness < 60:
-            # 深色背景占比高可能正常（深色主题），但需要检查内容色占比
-            content_pixels = sum(1 for p in pixels if sum(p) / 3 > 80)
-            content_ratio = content_pixels / total
-            if content_ratio < 0.15:
-                return {"id": "BLANK-01", "status": "FAIL",
-                        "msg": f"内容区域仅占 {content_ratio:.0%}，背景占 {dominant_ratio:.0%}（P0-3 大面积空白）"}
-            return {"id": "BLANK-01", "status": "PASS",
-                    "msg": f"深色背景 {dominant_ratio:.0%}，内容区 {content_ratio:.0%}"}
-        else:
-            return {"id": "BLANK-01", "status": "FAIL",
-                    "msg": f"主色 RGB{dominant_color} 占比 {dominant_ratio:.0%}，疑似大面积空白（P0-3）"}
+    if dominant_ratio <= threshold:
+        return {"id": "BLANK-01", "status": "PASS",
+                "msg": f"画面色彩分布正常，主色占比 {dominant_ratio:.0%}"}
 
-    return {"id": "BLANK-01", "status": "PASS",
-            "msg": f"画面色彩分布正常，主色占比 {dominant_ratio:.0%}"}
+    brightness = sum(dominant_color) / 3
+    # 主色是否为「背景」：声明背景色贴近，或本身是深/浅极值
+    is_declared_bg = bg_rgb is not None and _rgb_dist(dominant_color, bg_rgb) <= BLANK_BG_MATCH_DIST
+    is_extreme_bg = brightness < 60 or brightness > 200
+
+    if is_declared_bg or is_extreme_bg:
+        # 背景占比高属正常，改判「内容是否太少」——偏离主色的像素即内容
+        content_pixels = sum(1 for p in pixels if _rgb_dist(p[:3], dominant_color) > BLANK_CONTENT_DIST)
+        content_ratio = content_pixels / total
+        tone = "浅色背景" if brightness > 128 else "深色背景"
+        src = "（style 声明背景）" if is_declared_bg else ""
+        if content_ratio < 0.15:
+            return {"id": "BLANK-01", "status": "FAIL",
+                    "msg": f"内容区域仅占 {content_ratio:.0%}，{tone}{src}占 {dominant_ratio:.0%}（P0-3 大面积空白）"}
+        return {"id": "BLANK-01", "status": "PASS",
+                "msg": f"{tone}{src} {dominant_ratio:.0%}，内容区 {content_ratio:.0%}"}
+
+    # 中间调主色大面积铺满、又不是声明背景 → 才是真可疑
+    return {"id": "BLANK-01", "status": "FAIL",
+            "msg": f"主色 RGB{dominant_color} 占比 {dominant_ratio:.0%}，疑似大面积空白（P0-3）"}
 
 
 def check_vertical_text(img: Image.Image) -> dict:
@@ -155,22 +230,26 @@ def check_vertical_text(img: Image.Image) -> dict:
     return {"id": "VTXT-01", "status": "PASS", "msg": "未检测到竖排异常"}
 
 
-def check_overflow_cutoff(img: Image.Image) -> dict:
+def check_overflow_cutoff(img: Image.Image, bg_rgb: tuple | None = None) -> dict:
     """检测底部/右侧是否有内容被裁切痕迹。
 
-    策略：检查底部和右侧边缘几行像素是否仍有非背景内容（提示被裁切）。
+    策略：检查底部/右侧边缘是否仍有**偏离背景色**的内容（提示被裁切）。
+    过去用「绝对亮度 > 80」判定，会在浅底 deck 把白色留白误判为内容而永远
+    触发（修复 CUT-01 浅底假阳）。改为相对背景色的色彩变化：白底白边、
+    深底深边都归零，只有真正触边的内容（任意颜色）才计入。
+    背景色来源：优先 style.json 声明的 bg_rgb，否则取四角像素众数作为背景。
     """
     w, h = img.size
     pixels = img.load()
+
+    bg = bg_rgb if bg_rgb is not None else _infer_bg_from_corners(img)
 
     # 检查底部最后 4 行
     bottom_content_pixels = 0
     bottom_total = w * 4
     for y in range(h - 4, h):
         for x in range(w):
-            p = pixels[x, y]
-            brightness = sum(p[:3]) / 3
-            if brightness > 80:
+            if _rgb_dist(pixels[x, y][:3], bg) > CUT_EDGE_DIST:
                 bottom_content_pixels += 1
 
     bottom_ratio = bottom_content_pixels / bottom_total if bottom_total > 0 else 0
@@ -180,23 +259,36 @@ def check_overflow_cutoff(img: Image.Image) -> dict:
     right_total = h * 4
     for x in range(w - 4, w):
         for y in range(h):
-            p = pixels[x, y]
-            brightness = sum(p[:3]) / 3
-            if brightness > 80:
+            if _rgb_dist(pixels[x, y][:3], bg) > CUT_EDGE_DIST:
                 right_content_pixels += 1
 
     right_ratio = right_content_pixels / right_total if right_total > 0 else 0
 
     issues = []
     if bottom_ratio > 0.2:
-        issues.append(f"底部边缘有 {bottom_ratio:.0%} 亮像素，疑似内容被裁切")
+        issues.append(f"底部边缘 {bottom_ratio:.0%} 像素偏离背景色，疑似内容被裁切")
     if right_ratio > 0.15:
-        issues.append(f"右侧边缘有 {right_ratio:.0%} 亮像素，疑似内容被裁切")
+        issues.append(f"右侧边缘 {right_ratio:.0%} 像素偏离背景色，疑似内容被裁切")
 
     if issues:
         return {"id": "CUT-01", "status": "WARN", "msg": " | ".join(issues)}
 
     return {"id": "CUT-01", "status": "PASS", "msg": "边缘无异常裁切痕迹"}
+
+
+def _infer_bg_from_corners(img: Image.Image) -> tuple:
+    """取四角 8x8 区域的像素众数作为背景参考色（无 style 声明时的兜底）。"""
+    w, h = img.size
+    s = 8
+    regions = [(0, 0), (w - s, 0), (0, h - s), (w - s, h - s)]
+    counts: dict[tuple, int] = {}
+    px = img.load()
+    for ox, oy in regions:
+        for x in range(ox, min(ox + s, w)):
+            for y in range(oy, min(oy + s, h)):
+                q = tuple(c // 8 * 8 for c in px[x, y][:3])
+                counts[q] = counts.get(q, 0) + 1
+    return max(counts, key=counts.get) if counts else (0, 0, 0)
 
 
 def check_contrast_zones(img: Image.Image) -> dict:
@@ -450,6 +542,11 @@ def check_html_contracts(html_path: Path, planning_path: Path | None) -> list[di
 # 阈值是命名常量、fixture 校准，留待后续微调。
 
 TREND_COLORS = {"#22c55e", "#ef4444"}
+# 结构性常量：#fff / #ffffff 在任何调色板下都是同一个「白」——白色文字、白卡底、
+# 白图标填充都用它，与主题无关，不需要绑定 CSS 变量。默认从硬编码色检测中豁免。
+STRUCTURAL_HEX = {"#fff", "#ffffff"}
+# 硬编码色检测统一豁免集合（趋势色 + 结构性白）
+IGNORED_HEX = TREND_COLORS | STRUCTURAL_HEX
 # 8-digit before 6 before 3 so #rrggbbaa isn't truncated to a 6-digit match
 _HEX_RE = re.compile(r"#[0-9a-fA-F]{8}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b")
 _RGB_RE = re.compile(r"\brgba?\(", re.IGNORECASE)
@@ -491,14 +588,14 @@ def _strip_root(html_text: str) -> str:
 def check_hardcoded_colors(html_text: str) -> dict:
     """HEX-01：HTML 正文（:root 之外）的硬编码颜色 = 脱离主题。"""
     body = _strip_root(html_text)
-    hits = [h for h in _HEX_RE.findall(body) if h.lower() not in TREND_COLORS]
+    hits = [h for h in _HEX_RE.findall(body) if h.lower() not in IGNORED_HEX]
     rgb_hits = len(re.findall(r"\brgba?\(", body, re.IGNORECASE))
     total = len(hits) + rgb_hits
     if total > 0:
         sample = ", ".join(sorted(set(hits))[:4]) or "rgb()"
         return {"id": "HEX-01", "status": "WARN",
                 "msg": f"检测到 {total} 处硬编码颜色（{sample}…），建议改用 CSS 变量绑定主题"}
-    return {"id": "HEX-01", "status": "PASS", "msg": "正文未见硬编码颜色（趋势色除外）"}
+    return {"id": "HEX-01", "status": "PASS", "msg": "正文未见硬编码颜色（趋势色/结构性白除外）"}
 
 
 def check_type_scale(html_text: str) -> dict:
@@ -568,7 +665,7 @@ def check_diagram_theme_binding(html_text: str, planning_path: Path | None) -> d
         if not region:
             continue
         scanned += 1
-        hard = [h for h in _HEX_RE.findall(region) if h.lower() not in TREND_COLORS]
+        hard = [h for h in _HEX_RE.findall(region) if h.lower() not in IGNORED_HEX]
         if hard or _RGB_RE.search(region):
             offenders.append(cid)
     if not scanned:
@@ -694,8 +791,13 @@ def run_checks(
     png_path: Path,
     planning_path: Path | None = None,
     html_path: Path | None = None,
+    style_bg: tuple | None = None,
 ) -> list[dict]:
-    """对单张 PNG 运行全部检测。"""
+    """对单张 PNG 运行全部检测。
+
+    style_bg：style.json 声明的背景色 (r,g,b)，供 BLANK-01 / CUT-01 排除
+    设计意图内的浅底/深底背景，避免在浅色 deck 上误报。
+    """
     results = []
 
     # 文件级检查
@@ -710,9 +812,9 @@ def run_checks(
 
     # 像素级检查
     results.append(check_dimensions(img))
-    results.append(check_blank_ratio(img))
+    results.append(check_blank_ratio(img, bg_rgb=style_bg))
     results.append(check_vertical_text(img))
-    results.append(check_overflow_cutoff(img))
+    results.append(check_overflow_cutoff(img, bg_rgb=style_bg))
     results.append(check_contrast_zones(img))
 
     # planning 对照检查
@@ -795,6 +897,7 @@ def main():
     html_path = None
     html_dir = None
     output_path = None
+    style_path = None
     args = sys.argv[2:]
     i = 0
     while i < len(args):
@@ -810,23 +913,32 @@ def main():
         elif args[i] == "--html-dir" and i + 1 < len(args):
             html_dir = Path(args[i + 1]).resolve()
             i += 2
+        elif args[i] == "--style" and i + 1 < len(args):
+            style_path = Path(args[i + 1]).resolve()
+            i += 2
         elif args[i] == "--output" and i + 1 < len(args):
             output_path = Path(args[i + 1]).resolve()
             i += 2
         else:
             i += 1
 
-    # 收集要检查的 PNG
+    # style.json 声明背景色（供 BLANK-01 / CUT-01 排除浅底/深底假阳）
+    style_bg = load_style_bg(style_path)
+
+    # 收集要检查的 PNG（同时接受 slide-N.png 与 slide_NN.png 两种命名，
+    # 兼容 html2png.py 沿用输入 HTML 文件名产出的 slide_NN.png）
     if target.is_file():
         pngs = [target]
     elif target.is_dir():
-        pngs = sorted(target.glob("slide-*.png"))
+        found = {p.resolve() for p in target.glob("slide-*.png")}
+        found |= {p.resolve() for p in target.glob("slide_*.png")}
+        pngs = sorted(found, key=lambda p: (_slide_number(p.stem) or 0, p.name))
     else:
         print(f"ERROR: {target} 不存在", file=sys.stderr)
         sys.exit(1)
 
     if not pngs:
-        print(f"ERROR: 未找到 slide-*.png 文件于 {target}", file=sys.stderr)
+        print(f"ERROR: 未找到 slide-*.png / slide_*.png 文件于 {target}", file=sys.stderr)
         sys.exit(1)
 
     total_fails = 0
@@ -835,20 +947,23 @@ def main():
     deck_signals: list[dict] = []
 
     for png in pngs:
-        # 自动推断 planning 路径
+        # 自动推断 planning / html 路径（页码接受 slide-N 与 slide_NN 两种分隔符）
         pp = planning_path
         hh = html_path
-        if pp is None and planning_dir:
-            # slide-3.png -> planning3.json
-            m = re.search(r"slide-(\d+)", png.stem)
-            if m:
-                pp = planning_dir / f"planning{m.group(1)}.json"
-        if hh is None and html_dir:
-            m = re.search(r"slide-(\d+)", png.stem)
-            if m:
-                hh = html_dir / f"slide-{m.group(1)}.html"
+        n = _slide_number(png.stem)
+        if pp is None and planning_dir and n is not None:
+            # slide-3.png / slide_03.png -> planning3.json（去零填充）
+            pp = planning_dir / f"planning{n}.json"
+        if hh is None and html_dir and n is not None:
+            # 依次尝试 slide-N.html、slide_N.html、原始零填充 slide_NN.html
+            for cand in (f"slide-{n}.html", f"slide_{n}.html", f"{png.stem}.html"):
+                if (html_dir / cand).exists():
+                    hh = html_dir / cand
+                    break
+            if hh is None:
+                hh = html_dir / f"slide-{n}.html"
 
-        results = run_checks(png, pp, hh)
+        results = run_checks(png, pp, hh, style_bg=style_bg)
         lines, f, w = build_report_lines(png.name, results)
         report_lines.extend(lines)
         print("\n".join(lines))
