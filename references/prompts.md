@@ -251,7 +251,7 @@
 ```json
 {
   "page_number": 1,
-  "page_type": "cover | toc | section | content | end",
+  "page_type": "cover | toc | section | section-marker | content | reference | end",
   "title": "页面标题",
   "goal": "这页最想让观众记住什么",
   "layout_hint": "布局建议（如：主次结合 / 英雄式 + 下方三栏 / 混合网格）",

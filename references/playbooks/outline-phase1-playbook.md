@@ -14,7 +14,7 @@
 2. **叙事弧线** -- 情感轨迹有起伏（开场抓人、中间详实、结尾升华）
 3. **密度节奏** -- 整套 deck 先有整体感觉，再给每页留出错落差异
 
-> **先判 archetype（说服型 vs 参考型）**：三大支柱针对**说服型**演示。若 `叙事结构` 落在"时间线/生命周期"且内容是可执行操作制品（模板/清单/排期/责任矩阵/质量门）——如运行手册、交付手册、SOP、playbook——则属**参考型 archetype**：叙事脊柱是生命周期而非论证高潮，密度均匀偏密、靠制品形态交替而非高潮-呼吸，Part 首页用内联 `section-marker` 而非整页 section，`end` 改为横切参考/复盘。详见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)。参考型**不新增枚举**，仍映射现有 `page_type`。
+> **先判 archetype（说服型 vs 参考型）**：三大支柱针对**说服型**演示。若 `叙事结构` 落在"时间线/生命周期"且内容是可执行操作制品（模板/清单/排期/责任矩阵/质量门）——如运行手册、交付手册、SOP、playbook——则属**参考型 archetype**：叙事脊柱是生命周期而非论证高潮，密度均匀偏密、靠制品形态交替而非高潮-呼吸，Part 首页用内联 `section-marker` 而非整页 section，收尾用 `reference` 横切参考 back-matter 而非 `close`/`cta`。详见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)。参考型有专属 page_type：`section-marker`（内联分隔）与 `reference`（横切参考），见下方映射表与骨架规则。
 
 ### 5 步思考过程
 
@@ -91,8 +91,8 @@ Part 目标：{part_goal}
 
 ### 第 1 页：{page_title}
 - 页目标：{page_goal，一句话，不含"和"字}
-- 叙事角色：{cover / toc / section / evidence / comparison / process / close / cta}
-- 页面类型映射：{cover / toc / section / content / end}
+- 叙事角色：{cover / toc / section / section-marker / evidence / comparison / process / reference / close / cta}
+- 页面类型映射：{cover / toc / section / section-marker / content / reference / end}
 - 密度下限：{low / mid_low / medium / high / dashboard}
 - 密度目标：{low / mid_low / medium / high / dashboard}
 - 密度上限：{low / mid_low / medium / high / dashboard}
@@ -112,8 +112,8 @@ Part 目标：{part_goal}
 ```
 
 **字段枚举约束**：
-- `叙事角色` 必须从 `{cover, toc, section, evidence, comparison, process, close, cta}` 中静态选择。
-- `页面类型映射` 必须从 `{cover, toc, section, content, end}` 中静态选择，与下游 Step 4 的 `page_type` 一一对应。
+- `叙事角色` 必须从 `{cover, toc, section, section-marker, evidence, comparison, process, reference, close, cta}` 中静态选择。（`section-marker` 与 `reference` 是参考型 archetype 专用，见下方映射与骨架规则。）
+- `页面类型映射` 必须从 `{cover, toc, section, section-marker, content, reference, end}` 中静态选择，与下游 Step 4 的 `page_type` 一一对应。
 - `密度倾向` 必须从 `{relaxed, balanced, ultra_dense}` 中静态选择。
 - `密度下限 / 密度目标 / 密度上限` 必须从 `{low, mid_low, medium, high, dashboard}` 中静态选择，且必须满足 `下限 <= 目标 <= 上限`。
 - `节奏动作` 必须从 `{铺垫, 推进, 爆发, 缓冲, 收束}` 中选择。
@@ -127,9 +127,13 @@ Part 目标：{part_goal}
 |---------|-----------|------|
 | `cover` | `cover` | 封面页 |
 | `toc` | `toc` | 目录页 |
-| `section` | `section` | 章节过渡页 |
+| `section` | `section` | 章节过渡页（整页呼吸封面，说服型）|
+| `section-marker` | `section-marker` | 内联章节分隔（§NN + kicker + 规线，不占整页；参考型 archetype）|
 | `evidence` / `comparison` / `process` | `content` | 正文内容页 |
+| `reference` | `reference` | 横切参考 back-matter（RACI / 质量门 / 升级路径 / 术语表；参考型 archetype）|
 | `close` / `cta` | `end` | 结束页（close=总结回顾型，cta=行动号召型）|
+
+> `section-marker` 与 `reference` 是**自映射**行（角色名 == page_type），与 `cover` / `toc` / `section` 同理。二者仅在**参考型 archetype**（运行手册 / 交付手册 / SOP / playbook）使用：`section-marker` 在阶段边界做内联分隔替代整页 `section`；`reference` 收尾放横切参考制品替代 `close` / `cta`。说服型 deck 不用这两个。何时判定为参考型见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)。
 
 ---
 
@@ -145,7 +149,8 @@ Part 目标：{part_goal}
 | 最后一页 | `close` 或 `cta` | `end` | **强制** | 核心结论收束 + 行动号召（参考型改为横切参考/复盘） |
 
 > **按 archetype 分支（说服型 vs 参考型）**：本骨架的默认形态针对**说服型**演示。当任一 Part 选 `论证策略：reference_runbook`（参考型 archetype）时，两条规则放宽（其余规则不变）：
-> - **Part 首页的整页 `section`** 放宽为**内联 `section-marker`**（§NN + kicker + 规线，不占整页）——跳读者不需要每进一段就来一整页呼吸。参考型仍映射现有 `section` page_type（不新增枚举）。
+> - **Part 首页的整页 `section`** 放宽为**内联 `section-marker`**（§NN + kicker + 规线，不占整页）——跳读者不需要每进一段就来一整页呼吸。`section-marker` 是独立 page_type（消费 `page-templates/section-marker.md`）。
+> - **最后一页**放宽为 `reference` 横切参考 back-matter（RACI / 质量门 / 升级路径 / 术语表，消费 `page-templates/reference.md`），替代 `close`/`cta` → `end` 的行动号召。
 > - **"禁止连续 3 页 high/dashboard"** 放宽——参考型 deck 整体均匀偏密，节奏来自**制品形态交替**（表格 → 清单 → 短文 → callout），而非高潮-呼吸密度起伏。`contract_validator` 与 `planning_validator` 都据 archetype 分支此规则；说服型 deck 行为不变。详见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)。
 
 **违规检测**：

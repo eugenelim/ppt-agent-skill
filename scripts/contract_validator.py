@@ -43,7 +43,7 @@ VALID_ARGUMENT_STRATEGIES = {
     "narrative_driven", "data_driven", "case_study", "comparison",
     "framework", "step_by_step", "authority", "reference_runbook",
 }
-NON_DASHBOARD_PAGE_TYPES = {"cover", "section", "end"}
+NON_DASHBOARD_PAGE_TYPES = {"cover", "section", "section-marker", "reference", "end"}
 REQUIRED_INTERVIEW_DIMENSIONS = [
     ("scenario", ["场景", "使用场景", "应用场景", "scenario"]),
     ("audience", ["受众", "听众", "对象", "audience"]),
@@ -946,8 +946,10 @@ def validate_html(path: Path, page_type: str) -> tuple[ValidationResult, dict[st
         result.error("html: file is empty")
         return result, {"errors": 1, "warnings": 0}
 
-    # Only enforce header/footer for 'content', 'toc', 'section' page types.
-    if page_type in ("content", "toc", "section"):
+    # Enforce persistent chrome for content/toc/section plus the reference-runbook
+    # page types (section-marker inline divider, reference back-matter) — both carry
+    # the archetype's masthead/footer for in-field orientation.
+    if page_type in ("content", "toc", "section", "section-marker", "reference"):
         has_header = bool(re.search(r'<header[^>]*class=([\'"])[^\'"]*\bslide-header\b[^\'"]*\1[^>]*>', text, re.IGNORECASE))
         if not has_header:
             result.error(f"html: page type '{page_type}' must contain a <header class=\"slide-header\"> DOM element")

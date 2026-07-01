@@ -26,11 +26,11 @@ from workflow_versions import (
 )
 
 
-VALID_PAGE_TYPES = {"cover", "toc", "section", "content", "end"}
+VALID_PAGE_TYPES = {"cover", "toc", "section", "section-marker", "content", "reference", "end"}
 VALID_NARRATIVE_ARCHETYPES = {"persuasive", "reference_runbook"}
 VALID_NARRATIVE_ROLES = {
-    "cover", "toc", "section", "opening", "orientation", "transition", "setup", "evidence", "comparison",
-    "framework", "process", "case", "quote", "breath", "close", "cta",
+    "cover", "toc", "section", "section-marker", "opening", "orientation", "transition", "setup", "evidence",
+    "comparison", "framework", "process", "case", "quote", "breath", "reference", "close", "cta",
 }
 VALID_CARD_ROLES = {"anchor", "support", "context"}
 VALID_CARD_TYPES = {
@@ -463,7 +463,7 @@ def validate_density_contract(page: dict[str, Any], label: str, result: Validati
                 result.warn(f"{label}: density_contract.{key}={actual!r} != recommended {expected!r} for density_label={density_label}")
 
     page_type = page.get("page_type")
-    if page_type in {"cover", "section", "end"} and density_label == "dashboard":
+    if page_type in {"cover", "section", "section-marker", "reference", "end"} and density_label == "dashboard":
         result.error(f"{label}: page_type '{page_type}' cannot use density_label 'dashboard'")
     if density_label == "dashboard" and page_type != "content":
         result.error(f"{label}: dashboard density_label is only allowed on content pages")

@@ -13,7 +13,7 @@ references/
   charts/             -- 图表组件（13 种 + runtime-chart-rules）
   styles/             -- 风格主题（8 种 + runtime-style-rules + runtime-style-palette-index）
   principles/         -- 设计原则（7 种 + runtime-failure-modes）
-  page-templates/     -- 页面结构模板（cover/toc/section/end）
+  page-templates/     -- 页面结构模板（cover/toc/section/section-marker/reference/end）
   design-runtime/     -- 数据类型映射 + 设计规格 + CSS 武器库
 ```
 
@@ -89,7 +89,7 @@ P2A/P2B/P3/P3.5/P4 均采用渐进式上下文注入：每个节点有 orchestra
 
 说明：
 
-- `cover` / `toc` / `section` / `end` 这类非 `content` 页，主消费链是 `page_type -> page-templates/`
+- `cover` / `toc` / `section` / `section-marker` / `reference` / `end` 这类非 `content` 页，主消费链是 `page_type -> page-templates/`（`section-marker` / `reference` 是参考型 archetype 专用）
 - `resources.page_template` 是显式覆盖口，只有需要强制钉住某个模板正文时才额外填写
 
 ## Design Runtime
