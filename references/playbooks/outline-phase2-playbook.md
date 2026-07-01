@@ -33,8 +33,8 @@
 
 ### 密度专项铁律
 
-- 禁止连续 3 页 `high / dashboard`
-- `dashboard` 前后必须至少有 1 页非 `dashboard` 过渡
+- 禁止连续 3 页 `high / dashboard`（**仅说服型 archetype**）。若任一 Part 选 `论证策略：reference_runbook`（参考型 archetype），此条**放宽**——参考型 deck 整体均匀偏密，节奏靠制品形态交替（表格/清单/短文/callout）而非高潮-呼吸；`contract_validator` 与 `planning_validator` 都据 archetype 分支此规则。见 [`principles/narrative-arc.md` §参考型叙事](../principles/narrative-arc.md)。
+- `dashboard` 前后必须至少有 1 页非 `dashboard` 过渡（两种 archetype 都不放宽）
 - `relaxed` 模式禁止出现 `dashboard`
 - `balanced` 模式允许 `dashboard`，但只能少量出现
 

@@ -42,6 +42,16 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   fed a gallery mock's `:root`. Out of scope for this spec (diagrams + QA + §E
   contradiction). Unblocked by a follow-up that regenerates the gallery mocks
   against the canonical variable set, or documents the mocks as non-canonical.
+- **Discovered (not an AC deferral): planning `chart_refs` never resolve, so planning
+  smoke fixtures fail at baseline.** `planning_validator.resource_exists` looks up a
+  `chart_refs` value as a per-name file (`references/charts/<chart_type>.md`), but chart
+  recipes live in *grouped* files (`references/charts/{basic,advanced,complex}.md`), so
+  any planning packet carrying `chart_refs` / `resource_ref.chart` fails resolution —
+  which is why `smoke_skill.py`'s `planning-validator-{low,mid-low,high,dashboard}` cases
+  are red at baseline (independent of the outline/style failures). The
+  `reference-runbook-archetype` planning fixtures work around this with a `chart_free()`
+  helper. Unblocked by teaching `resource_exists` to resolve a `chart_type` against the
+  grouped recipe files (e.g. an index), then dropping `chart_free`.
 
 ## claude-design-absorption
 
@@ -59,19 +69,16 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 Proposals discovered while restyling `schematic_blueprint` + extracting the runbook
 primitives (not AC deferrals — these cross the planning **public interface**, so
 they need the full-mode spec path rather than a light-mode ride-along). The
-narrative-archetype *guidance* shipped in this PR (`principles/narrative-arc.md`
-§参考型叙事 + outline-playbook pointer); making the **engine** honor it needs:
+narrative-archetype *guidance* shipped in PR #7 (`principles/narrative-arc.md`
+§参考型叙事 + outline-playbook pointer). The **engine** now honors the archetype at the
+outline + planning layers (`論证策略：reference_runbook` enum value + archetype-branched
+density/skeleton rules in both validators — spec `reference-runbook-archetype`, Shipped).
+Remaining engine work:
 
 - **Inline section-divider `page_type`.** Add a `section-marker` page_type (lightweight
   §NN + kicker + rule) distinct from today's full-page `section`, so reference decks
   can divide inline. Blocked on: `page_type` enum + `references/page-templates/` +
   validators are contract-bound. Unblocked by a spec updating all three together.
-- **`reference_runbook` argumentation strategy + archetype-aware skeleton.** Add a
-  `reference_runbook` value to the outline `论证策略` enum and branch the mandatory
-  skeleton (the "every Part opens with a full-page section" + "no 3 consecutive high
-  density" rules) on archetype, so the density/rhythm override documented in
-  `narrative-arc.md` is actually enforced. Blocked on: outline-playbook枚举 is parsed
-  downstream. Unblocked by a spec touching the playbook + its parser/validators.
 - **`persistent_chrome` deck flag.** A deck-level flag that renders masthead + footer
   on every content page (orientation for reference docs). Blocked on: new deck-level
   field + page-html playbook support. Unblocked by a spec wiring the flag end-to-end.

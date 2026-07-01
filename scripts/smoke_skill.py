@@ -23,6 +23,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from contract_validator import VALID_ARGUMENT_STRATEGIES  # noqa: E402
 from planning_validator import DENSITY_DEFAULTS  # noqa: E402
 from workflow_versions import (  # noqa: E402
     PLANNING_CONTINUITY_VERSION,
@@ -204,6 +205,8 @@ def build_content_page_fixture(
     slide_number: int = 3,
     deck_bias: str = "balanced",
     density_label: str = "medium",
+    layout_hint: str | None = None,
+    narrative_archetype: str | None = None,
 ) -> dict[str, object]:
     """Build a content page planning fixture for density smoke tests."""
     defaults = copy.deepcopy(DENSITY_DEFAULTS[density_label])
@@ -243,7 +246,7 @@ def build_content_page_fixture(
             make_card(slide_number, "context", 3, "提醒", ["仍需防止误读"], "quote", "outline", 3),
         ],
     }
-    layout_hint = "mixed-grid" if density_label == "dashboard" else ("hero-top" if density_label in {"low", "medium"} else "asymmetric" if density_label == "mid_low" else "t-shape")
+    layout_hint = layout_hint or ("mixed-grid" if density_label == "dashboard" else ("hero-top" if density_label in {"low", "medium"} else "asymmetric" if density_label == "mid_low" else "t-shape"))
     chart_refs = sorted(
         {
             str(card.get("chart", {}).get("chart_type", "")).replace("_", "-")
@@ -251,7 +254,7 @@ def build_content_page_fixture(
             if isinstance(card.get("chart"), dict) and card["chart"].get("chart_type")
         }
     )
-    return {
+    payload: dict[str, object] = {
         "page": {
             "slide_number": slide_number,
             "page_type": "content",
@@ -314,9 +317,41 @@ def build_content_page_fixture(
             },
         }
     }
+    if narrative_archetype is not None:
+        page = payload["page"]
+        assert isinstance(page, dict)
+        page["narrative_archetype"] = narrative_archetype
+    return payload
 
 
-def build_outline_fixture(density_bias: str) -> str:
+def chart_free(page_payload: dict[str, object]) -> dict[str, object]:
+    """Drop card `chart` blocks, `resource_ref.chart`, and `chart_refs`.
+
+    Chart recipes live in grouped files (`references/charts/{basic,advanced,complex}.md`),
+    not per-`chart_type` files, so `chart_refs` never resolve under the current
+    resource lookup — an issue orthogonal to this test. Stripping charts isolates the
+    archetype/streak behavior under test so a passing fixture proves the branch, not
+    resource plumbing.
+
+    TODO: drop chart_free once chart_refs resolve against the grouped chart recipe
+    files (references/charts/{basic,advanced,complex}.md); until then it is applied
+    symmetrically to paired arms, so it cannot mask a persuasive/reference divergence.
+    """
+    page = page_payload["page"]
+    assert isinstance(page, dict)
+    for card in page.get("cards", []):
+        if isinstance(card, dict):
+            card.pop("chart", None)
+            resource_ref = card.get("resource_ref")
+            if isinstance(resource_ref, dict):
+                resource_ref.pop("chart", None)
+    resources = page.get("resources")
+    if isinstance(resources, dict):
+        resources["chart_refs"] = []
+    return page_payload
+
+
+def build_outline_fixture(density_bias: str, argument_strategy: str = "data_driven") -> str:
     if density_bias == "relaxed":
         curve = "low -> medium -> high -> mid_low"
         pages = [
@@ -354,7 +389,7 @@ def build_outline_fixture(density_bias: str) -> str:
         "",
         "## Part 1: Demo",
         "Part 目标：验证密度曲线",
-        "论证策略：data_driven",
+        f"论证策略：{argument_strategy}",
         "与上一 Part 的关系：无（首Part）",
         "",
     ]
@@ -373,6 +408,60 @@ def build_outline_fixture(density_bias: str) -> str:
                 f"- 锚点类型：{anchor}",
                 "- 论证方式：数据驱动",
                 "- 内容支撑：用示例内容验证合同",
+                "- 素材来源：found_in_brief: true",
+                "",
+            ]
+        )
+    lines.extend(["---", "SELF_REVIEW_PASS", "自审轮数：1", "自审时间：2026-04-09 12:00", ""])
+    return "\n".join(lines)
+
+
+def build_streak_outline_fixture(argument_strategy: str) -> str:
+    """A uniformly-dense outline: 3 consecutive `high` content pages.
+
+    Under a persuasive `论证策略` this trips the "禁止连续 3 页 high/dashboard" rule;
+    under `论证策略：reference_runbook` the streak rule is relaxed and it validates clean.
+    Every other outline invariant (density windows, page types, rhythm/posture/anchor
+    enums) holds regardless of archetype.
+    """
+    lines = [
+        "# 大纲",
+        "核心论点：运行手册按生命周期阶段组织，逐页可查",
+        "叙事结构：时间线",
+        "密度倾向：ultra_dense",
+        "密度曲线：low -> high -> high -> high -> mid_low",
+        "总页数：5",
+        "",
+        "---",
+        "",
+        "## Part 1: Runbook",
+        "Part 目标：交付各阶段的可执行制品",
+        f"论证策略：{argument_strategy}",
+        "与上一 Part 的关系：无（首Part）",
+        "",
+    ]
+    pages = [
+        ("1", "封面", "cover", "low", "low", "mid_low", "铺垫", "呼吸页", "标题"),
+        ("2", "阶段一", "content", "medium", "high", "high", "推进", "证据页", "表格"),
+        ("3", "阶段二", "content", "medium", "high", "high", "推进", "证据页", "表格"),
+        ("4", "阶段三", "content", "medium", "high", "high", "爆发", "证据页", "表格"),
+        ("5", "收尾", "end", "mid_low", "mid_low", "medium", "收束", "结论页", "标题"),
+    ]
+    for page_no, title, page_type, lower, target, upper, rhythm, posture, anchor in pages:
+        lines.extend(
+            [
+                f"### 第 {page_no} 页：{title}",
+                f"- 页目标：交付 {title} 的操作制品",
+                "- 叙事角色：evidence",
+                f"- 页面类型映射：{page_type}",
+                f"- 密度下限：{lower}",
+                f"- 密度目标：{target}",
+                f"- 密度上限：{upper}",
+                f"- 节奏动作：{rhythm}",
+                f"- 信息姿态：{posture}",
+                f"- 锚点类型：{anchor}",
+                "- 论证方式：可执行制品",
+                "- 内容支撑：表格 / 清单 / 排期等桌面制品",
                 "- 素材来源：found_in_brief: true",
                 "",
             ]
@@ -847,6 +936,48 @@ def run_smoke() -> SmokeResult:
             if outline_variant.returncode == 0:
                 assert_contains(f"contract-validator-outline-{bias}", outline_variant.stdout, ["OK"], result)
 
+        # --- reference-runbook archetype: outline validator (spec reference-runbook-archetype T1) ---
+        # reference archetype relaxes the "3 consecutive high" streak rule
+        ref_streak_path = tmp_dir / "outline-reference-streak.txt"
+        write_text(ref_streak_path, build_streak_outline_fixture("reference_runbook"))
+        ref_streak = run_cmd(
+            "contract-validator-outline-reference-streak",
+            [py, str(SCRIPTS_DIR / "contract_validator.py"), "outline", str(ref_streak_path)],
+            result,
+        )
+        if ref_streak.returncode == 0:
+            assert_contains("contract-validator-outline-reference-streak", ref_streak.stdout, ["OK"], result)
+        # persuasive control: identical page shape must still fail the streak rule
+        persuasive_streak_path = tmp_dir / "outline-persuasive-streak.txt"
+        write_text(persuasive_streak_path, build_streak_outline_fixture("data_driven"))
+        run_cmd_expect_failure(
+            "contract-validator-outline-persuasive-streak",
+            [py, str(SCRIPTS_DIR / "contract_validator.py"), "outline", str(persuasive_streak_path)],
+            result,
+            expected_tokens=["禁止连续 3 页"],
+        )
+        # unknown 论证策略 is rejected
+        bad_strategy_path = tmp_dir / "outline-bad-strategy.txt"
+        write_text(bad_strategy_path, build_outline_fixture("balanced", "not_a_strategy"))
+        run_cmd_expect_failure(
+            "contract-validator-outline-bad-strategy",
+            [py, str(SCRIPTS_DIR / "contract_validator.py"), "outline", str(bad_strategy_path)],
+            result,
+            expected_tokens=["invalid 论证策略"],
+        )
+        # every valid 论证策略 (7 existing + reference_runbook) validates clean;
+        # iterate the source set so a new strategy is covered automatically
+        for strategy in sorted(VALID_ARGUMENT_STRATEGIES):
+            strat_path = tmp_dir / f"outline-strategy-{strategy}.txt"
+            write_text(strat_path, build_outline_fixture("balanced", strategy))
+            strat_check = run_cmd(
+                f"contract-validator-outline-strategy-{strategy}",
+                [py, str(SCRIPTS_DIR / "contract_validator.py"), "outline", str(strat_path)],
+                result,
+            )
+            if strat_check.returncode == 0:
+                assert_contains(f"contract-validator-outline-strategy-{strategy}", strat_check.stdout, ["OK"], result)
+
         validator = run_cmd(
             "planning-validator",
             [
@@ -927,6 +1058,66 @@ def run_smoke() -> SmokeResult:
         )
         if dashboard_validate.returncode == 0:
             assert_contains("planning-validator-dashboard", dashboard_validate.stdout, ["OK"], result)
+
+        # --- reference-runbook archetype: planning validator (spec reference-runbook-archetype T2) ---
+        ref_layouts = {1: "t-shape", 2: "asymmetric", 3: "l-shape"}
+        # 3 consecutive high pages tagged reference_runbook validate clean
+        ref_plan_dir = tmp_dir / "planning-reference-streak"
+        for slide_no, layout in ref_layouts.items():
+            write_text(
+                ref_plan_dir / f"planning{slide_no}.json",
+                json.dumps(
+                    chart_free(build_content_page_fixture(
+                        slide_number=slide_no, deck_bias="ultra_dense", density_label="high",
+                        layout_hint=layout, narrative_archetype="reference_runbook",
+                    )),
+                    ensure_ascii=False, indent=2,
+                ),
+            )
+        ref_plan = run_cmd(
+            "planning-validator-reference-streak",
+            [py, str(SCRIPTS_DIR / "planning_validator.py"), str(ref_plan_dir), "--refs", str(REFERENCES_DIR)],
+            result,
+        )
+        if ref_plan.returncode == 0:
+            assert_contains("planning-validator-reference-streak", ref_plan.stdout, ["OK"], result)
+        # persuasive control: identical pages, untagged, must still fail the streak rule
+        persuasive_plan_dir = tmp_dir / "planning-persuasive-streak"
+        for slide_no, layout in ref_layouts.items():
+            write_text(
+                persuasive_plan_dir / f"planning{slide_no}.json",
+                json.dumps(
+                    chart_free(build_content_page_fixture(
+                        slide_number=slide_no, deck_bias="ultra_dense", density_label="high",
+                        layout_hint=layout,
+                    )),
+                    ensure_ascii=False, indent=2,
+                ),
+            )
+        run_cmd_expect_failure(
+            "planning-validator-persuasive-streak",
+            [py, str(SCRIPTS_DIR / "planning_validator.py"), str(persuasive_plan_dir), "--refs", str(REFERENCES_DIR)],
+            result,
+            expected_tokens=["3 consecutive slides"],
+        )
+        # unknown narrative_archetype is rejected for the right reason
+        bad_arch_dir = tmp_dir / "planning-bad-archetype"
+        write_text(
+            bad_arch_dir / "planning1.json",
+            json.dumps(
+                chart_free(build_content_page_fixture(
+                    slide_number=1, deck_bias="balanced", density_label="medium",
+                    narrative_archetype="bogus",
+                )),
+                ensure_ascii=False, indent=2,
+            ),
+        )
+        run_cmd_expect_failure(
+            "planning-validator-bad-archetype",
+            [py, str(SCRIPTS_DIR / "planning_validator.py"), str(bad_arch_dir), "--refs", str(REFERENCES_DIR)],
+            result,
+            expected_tokens=["narrative_archetype"],
+        )
 
         visual_qa = run_cmd_allow_codes(
             "visual-qa-pass",
