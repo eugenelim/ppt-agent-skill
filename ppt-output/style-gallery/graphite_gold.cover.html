@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>graphite_gold — 封面 / cover</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#111118; --bg2:#16161f; --card:#1c1d28;
+    --ink:#ECECF2; --muted:#9A9BA8; --line:#2C2D3A;
+    --gold:#D4A96E; --gold-deep:#B98E4E; --teal:#6DBEA3; --blue:#7BB4CC; --red:#D46B6B; --violet:#9B8BD4;
+    --foot:#54556a;
+    --sans:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --head:'Sora','Inter Tight',-apple-system,sans-serif;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;position:relative;
+    background:radial-gradient(120% 90% at 78% 8%,var(--bg2) 0%,var(--bg) 58%);
+    color:var(--ink);font-family:var(--sans);
+    font-feature-settings:'kern','liga','calt','tnum';font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;}
+  .grid{position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,0.015) 1px,transparent 1px);
+    background-size:80px 80px;}
+  /* the champagne beam landing on the headline */
+  .beam{position:absolute;top:-120px;right:120px;width:520px;height:520px;border-radius:50%;
+    background:radial-gradient(circle,rgba(212,169,110,0.16) 0%,rgba(212,169,110,0) 70%);pointer-events:none;}
+  .page{position:absolute;inset:0;padding:58px 64px 56px;display:flex;flex-direction:column;}
+
+  .topbar{display:flex;align-items:flex-start;justify-content:space-between;}
+  .eyebrow{font-family:var(--head);font-size:12px;letter-spacing:0.24em;text-transform:uppercase;
+    color:var(--gold);font-weight:600;}
+  .brand{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:0.04em;color:var(--muted);}
+  .brand b{color:var(--ink);}
+
+  .hero{margin-top:auto;margin-bottom:auto;}
+  h1{font-family:var(--head);font-size:78px;font-weight:800;line-height:1.04;letter-spacing:-0.035em;
+    max-width:19ch;}
+  h1 em{font-style:italic;font-weight:700;color:var(--gold);}
+  .rule{height:2px;width:236px;background:linear-gradient(90deg,var(--gold),transparent);margin:26px 0 22px;border:0;}
+  .lede{font-size:17px;color:#C6C7D2;line-height:1.5;max-width:62ch;}
+  .lede b{color:var(--ink);}
+
+  .signals{display:flex;gap:26px;margin-top:36px;}
+  .sig{display:flex;align-items:center;gap:8px;font-family:var(--head);font-size:10px;
+    letter-spacing:0.14em;text-transform:uppercase;font-weight:700;color:var(--muted);}
+  .sig .d{width:8px;height:8px;border-radius:50%;}
+
+  .pagefoot{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:space-between;
+    padding:0 64px;font-family:var(--head);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--foot);}
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="beam"></div>
+  <div class="page">
+
+    <div class="topbar">
+      <div class="eyebrow">Acme Program · Advisory Brief</div>
+      <div class="brand"><b>Acme</b> Program</div>
+    </div>
+
+    <div class="hero">
+      <h1>The case for pulling <em>both</em> levers.</h1>
+      <hr class="rule">
+      <p class="lede">Why tool-only programs plateau — and the <b>operating-model change</b> that moves the second lever. Five signals, one conclusion per card.</p>
+    </div>
+
+    <div class="signals">
+      <span class="sig"><span class="d" style="background:var(--gold)"></span>Conclusion</span>
+      <span class="sig"><span class="d" style="background:var(--blue)"></span>Platform</span>
+      <span class="sig"><span class="d" style="background:var(--teal)"></span>Pipeline</span>
+      <span class="sig"><span class="d" style="background:var(--red)"></span>Make-or-break</span>
+      <span class="sig"><span class="d" style="background:var(--violet)"></span>Condition</span>
+    </div>
+
+    <div class="pagefoot"><span>graphite_gold · charcoal + champagne gold · advisory brief</span><span>01 / 07</span></div>
+
+  </div>
+</body>
+</html>

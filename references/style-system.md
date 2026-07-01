@@ -36,4 +36,7 @@
    - `decoration_dna.recommended_combos` 推荐组合
    - `typography.*` 完整字体栈 + 字距规则 + OpenType 特性
 3. **每个风格附 1280×720 标杆 mock**：`ppt-output/style-gallery/<style_id>.html`
+   （spec 验收物 + smoke_test 夹具，展示风格的内容/详情页）。可选再附一张
+   `<style_id>.cover.html` 作为封面/标题页——存在时，画廊卡片与 hero 缩略图
+   优先取它（见 `gallery.py` 的 `gallery_face()`），保证整墙缩略图统一为封面视角。
 4. **质量参照**：Linear / Anthropic / Stripe / Apple / NYT / Tom Ford / Pitch / Mercury 等品牌的实际排版做法

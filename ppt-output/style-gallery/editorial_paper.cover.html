@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>editorial_paper — 封面 / cover</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-primary:#faf9f5; --bg-2:#f0eee6;
+    --text-primary:#141413; --text-secondary:#5e5d59;
+    --accent-1:#d97757; --accent-2:#6a9bcc;
+    --rule:#dcd8cc;
+    --serif:'Fraunces','Tiempos Headline',Georgia,serif;
+    --sans:'Inter',-apple-system,'Segoe UI',sans-serif;
+    --mono:'Geist Mono','IBM Plex Mono','SF Mono',monospace;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;background:var(--bg-primary);
+    color:var(--text-primary);font-family:var(--sans);position:relative;
+    font-feature-settings:'kern','liga','ss01';font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;}
+  .grain{position:absolute;inset:0;pointer-events:none;opacity:0.03;
+    background-image:radial-gradient(#141413 0.5px,transparent 0.5px);background-size:3px 3px;}
+  .page{position:absolute;inset:0;padding:56px 84px 52px;display:flex;flex-direction:column;}
+
+  .masthead{display:flex;align-items:baseline;justify-content:space-between;
+    padding-bottom:16px;border-bottom:1px solid var(--rule);}
+  .masthead .kicker{font-family:var(--mono);font-size:12px;letter-spacing:0.18em;
+    text-transform:uppercase;color:var(--accent-1);}
+  .masthead .meta{font-family:var(--mono);font-size:12px;letter-spacing:0.12em;color:var(--text-secondary);}
+
+  .hero{margin-top:auto;margin-bottom:auto;}
+  h1{font-family:var(--serif);font-weight:600;font-size:70px;line-height:1.04;letter-spacing:-0.012em;
+    max-width:12ch;}
+  h1 em{font-style:italic;color:var(--accent-1);}
+  .lede{margin-top:26px;font-size:17px;line-height:1.62;color:var(--text-secondary);max-width:48ch;
+    font-family:var(--serif);font-weight:400;}
+  .lede .dropcap{float:left;font-family:var(--serif);font-size:52px;line-height:0.72;
+    font-weight:600;color:var(--accent-1);margin:5px 12px 0 0;}
+
+  .footline{position:absolute;left:84px;right:84px;bottom:52px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding-top:16px;border-top:1px solid var(--rule);
+    font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-secondary);}
+  .footline .swatches{display:flex;gap:6px;}
+  .footline .sw{width:14px;height:14px;border-radius:3px;border:1px solid var(--rule);}
+</style>
+</head>
+<body>
+  <div class="grain"></div>
+  <div class="page">
+
+    <div class="masthead">
+      <span class="kicker">Field Notes · Vol. 04</span>
+      <span class="meta">2026 · Editorial Paper</span>
+    </div>
+
+    <div class="hero">
+      <h1>Notes toward a <em>quieter</em> practice.</h1>
+      <p class="lede"><span class="dropcap">W</span>arm paper, one deliberate accent, and type that carries the argument — a research notebook kept by hand, where colour appears once and earns its place.</p>
+    </div>
+
+    <div class="footline">
+      <span>温润研究手记 · Editorial Paper</span>
+      <span class="swatches">
+        <span class="sw" style="background:#faf9f5"></span>
+        <span class="sw" style="background:#d97757"></span>
+        <span class="sw" style="background:#6a9bcc"></span>
+        <span class="sw" style="background:#141413"></span>
+      </span>
+    </div>
+
+  </div>
+</body>
+</html>
