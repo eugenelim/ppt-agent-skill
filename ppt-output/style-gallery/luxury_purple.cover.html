@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>luxury_purple · Maison Aeternum · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Bodoni+Moda:ital,wght@0,400;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg-noir: #060606;
+    --bg-graphite: #0d0d0d;
+    --line-soft: #1a1a1a;
+    --gold: #c9a960;
+    --gold-bright: #d8bd7a;
+    --gold-deep: #8a6f3a;
+    --cream: #f5e8c8;
+    --cream-soft: #e8dcb8;
+    --pure: #ffffff;
+    --display-font: 'Playfair Display', 'Bodoni Moda', 'Didot', Georgia, serif;
+    --serif-italic: 'Playfair Display', 'Bodoni Moda', 'Didot', Georgia, serif;
+    --label-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: radial-gradient(ellipse 80% 60% at 50% 50%, #0c0a07 0%, var(--bg-noir) 70%, #030303 100%);
+    color: var(--cream);
+    font-family: var(--label-font);
+    font-feature-settings: 'kern', 'liga', 'dlig', 'onum';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .vignette {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 50% 50%, rgba(201,169,96,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 100% 100% at 50% 100%, rgba(0,0,0,0.6) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(201,169,96,0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201,169,96,0.012) 1px, transparent 1px);
+    background-size: 120px 120px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .frame-tl { position: absolute; top: 32px; left: 32px; width: 18px; height: 18px; border-top: 1px solid var(--gold-deep); border-left: 1px solid var(--gold-deep); opacity: 0.55; z-index: 3; }
+  .frame-tr { position: absolute; top: 32px; right: 32px; width: 18px; height: 18px; border-top: 1px solid var(--gold-deep); border-right: 1px solid var(--gold-deep); opacity: 0.55; z-index: 3; }
+  .frame-bl { position: absolute; bottom: 32px; left: 32px; width: 18px; height: 18px; border-bottom: 1px solid var(--gold-deep); border-left: 1px solid var(--gold-deep); opacity: 0.55; z-index: 3; }
+  .frame-br { position: absolute; bottom: 32px; right: 32px; width: 18px; height: 18px; border-bottom: 1px solid var(--gold-deep); border-right: 1px solid var(--gold-deep); opacity: 0.55; z-index: 3; }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: space-between;
+    padding: 64px 80px 56px 80px;
+    z-index: 2;
+  }
+
+  .top-cluster {
+    display: flex; flex-direction: column; align-items: center; gap: 22px;
+    width: 100%;
+  }
+
+  .gold-line-top {
+    width: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold) 50%, transparent);
+  }
+
+  .maison {
+    font-family: var(--label-font);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--cream-soft);
+    letter-spacing: 0.65em;
+    text-indent: 0.65em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+
+  .est {
+    font-family: var(--label-font);
+    font-size: 9px;
+    font-weight: 300;
+    color: var(--gold);
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.75;
+  }
+
+  .center-cluster {
+    display: flex; flex-direction: column; align-items: center;
+    flex: 1;
+    justify-content: center;
+    gap: 38px;
+    width: 100%;
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 168px;
+    line-height: 0.92;
+    letter-spacing: -0.005em;
+    color: var(--cream);
+    text-align: center;
+    font-feature-settings: 'kern', 'liga', 'dlig', 'swsh';
+    text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+  }
+
+  .headline .ligature {
+    background: linear-gradient(180deg, #f5e8c8 0%, #d8bd7a 55%, #b58f4a 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .ornament-row {
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    width: 100%;
+    max-width: 520px;
+  }
+  .ornament-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold) 30%, var(--gold) 70%, transparent);
+  }
+  .ornament-diamond {
+    width: 8px; height: 8px;
+    background: var(--gold);
+    transform: rotate(45deg);
+    box-shadow: 0 0 10px rgba(201,169,96,0.5);
+  }
+  .ornament-diamond.small {
+    width: 4px; height: 4px;
+    background: var(--gold-deep);
+    box-shadow: none;
+  }
+
+  .subtitle {
+    font-family: var(--label-font);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--gold-bright);
+    letter-spacing: 0.55em;
+    text-indent: 0.55em;
+    text-transform: uppercase;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tagline {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--cream-soft);
+    letter-spacing: 0.02em;
+    text-align: center;
+    max-width: 460px;
+    opacity: 0.7;
+    margin-top: -14px;
+  }
+
+  .bottom-cluster {
+    display: flex; flex-direction: column; align-items: center; gap: 22px;
+    width: 100%;
+  }
+
+  .gold-line-bottom {
+    width: 60px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold) 50%, transparent);
+  }
+
+  .signature-row {
+    display: flex; align-items: center; justify-content: center; gap: 36px;
+    width: 100%;
+  }
+  .signature-row .crest {
+    font-family: var(--display-font);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 22px;
+    color: var(--gold);
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+  .signature-row .crest-sub {
+    font-family: var(--label-font);
+    font-size: 9px;
+    color: var(--cream-soft);
+    letter-spacing: 0.4em;
+    text-indent: 0.4em;
+    text-transform: uppercase;
+    margin-top: 6px;
+    opacity: 0.65;
+  }
+
+  .corner-meta {
+    position: absolute;
+    bottom: 64px;
+    z-index: 4;
+    font-family: var(--label-font);
+    font-size: 10px;
+    color: var(--cream-soft);
+    letter-spacing: 0.4em;
+    text-indent: 0.4em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+  }
+  .corner-meta.left { left: 80px; }
+  .corner-meta.right { right: 80px; }
+
+  .corner-meta .accent {
+    color: var(--gold);
+    margin-right: 8px;
+    font-family: var(--display-font);
+    font-style: italic;
+    letter-spacing: 0;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+  <div class="vignette"></div>
+  <div class="grain"></div>
+
+  <div class="frame-tl"></div>
+  <div class="frame-tr"></div>
+  <div class="frame-bl"></div>
+  <div class="frame-br"></div>
+
+  <div class="stage">
+
+    <div class="top-cluster">
+      <div class="gold-line-top"></div>
+      <div class="maison">M A I S O N &nbsp;·&nbsp; A E T E R N U M</div>
+      <div class="est">EST · MMXXVI &nbsp;·&nbsp; PARIS</div>
+    </div>
+
+    <div class="center-cluster">
+      <h1 class="headline"><span class="ligature">Æ</span>ternum</h1>
+
+      <div class="ornament-row">
+        <div class="ornament-line"></div>
+        <div class="ornament-diamond small"></div>
+        <div class="ornament-diamond"></div>
+        <div class="ornament-diamond small"></div>
+        <div class="ornament-line"></div>
+      </div>
+
+      <div class="subtitle">P A R F U M &nbsp;·&nbsp; A T E L I E R &nbsp;·&nbsp; M M X X V I</div>
+
+      <div class="tagline">Une fragrance composée à la main —<br>l’éternité, distillée en un seul flacon.</div>
+    </div>
+
+    <div class="bottom-cluster">
+      <div class="signature-row">
+        <div style="text-align:center;">
+          <div class="crest">N°&nbsp;I</div>
+          <div class="crest-sub">EDITION PRIVÉE</div>
+        </div>
+      </div>
+      <div class="gold-line-bottom"></div>
+    </div>
+
+  </div>
+
+  <div class="corner-meta left">
+    <span class="accent">∾</span>PARIS &nbsp;·&nbsp; MILAN &nbsp;·&nbsp; TOKYO
+  </div>
+  <div class="corner-meta right">
+    N°&nbsp;042 <span class="accent" style="margin-left:10px; margin-right:0;">/</span> CCC
+  </div>
+
+</body>
+</html>

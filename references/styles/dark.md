@@ -140,7 +140,9 @@
 
 ### Mock HTML 标杆
 
-完整 1280×720 mock 见 [`ppt-output/style-gallery/dark_tech.html`](../../ppt-output/style-gallery/dark_tech.html)。
+Cover (title/identity hero): [`ppt-output/style-gallery/dark_tech.cover.html`](../../ppt-output/style-gallery/dark_tech.cover.html) — "Intelligence, at the edge." hero + 3 stats + gauge.
+
+Detail (content/data): [`ppt-output/style-gallery/dark_tech.html`](../../ppt-output/style-gallery/dark_tech.html) — edge node health matrix: 4 KPI metric cards + 6-row component layer status table with status badges.
 
 ---
 
@@ -189,7 +191,9 @@
 }
 ```
 
-Mock: [`ppt-output/style-gallery/xiaomi_orange.html`](../../ppt-output/style-gallery/xiaomi_orange.html)
+Cover: [`ppt-output/style-gallery/xiaomi_orange.cover.html`](../../ppt-output/style-gallery/xiaomi_orange.cover.html) — "让性能不再设限" launch hero + 3 orange-glow stat cards.
+
+Detail: [`ppt-output/style-gallery/xiaomi_orange.html`](../../ppt-output/style-gallery/xiaomi_orange.html) — performance benchmark matrix: 3-generation product comparison table (compute, battery, camera specs) with orange accent highlights.
 
 ---
 
@@ -230,7 +234,9 @@ Mock: [`ppt-output/style-gallery/xiaomi_orange.html`](../../ppt-output/style-gal
 }
 ```
 
-Mock: [`ppt-output/style-gallery/luxury_purple.html`](../../ppt-output/style-gallery/luxury_purple.html)
+Cover: [`ppt-output/style-gallery/luxury_purple.cover.html`](../../ppt-output/style-gallery/luxury_purple.cover.html) — "Æternum" pure serif italic title in gold on black.
+
+Detail: [`ppt-output/style-gallery/luxury_purple.html`](../../ppt-output/style-gallery/luxury_purple.html) — collection performance analysis: two-column editorial layout with KPI stats grid + 5-collection sell-through table and gold bar indicators.
 
 ---
 
@@ -280,7 +286,9 @@ Mock: [`ppt-output/style-gallery/luxury_purple.html`](../../ppt-output/style-gal
 }
 ```
 
-Mock: [`ppt-output/style-gallery/nocturne_violet.html`](../../ppt-output/style-gallery/nocturne_violet.html)
+Cover: [`ppt-output/style-gallery/nocturne_violet.cover.html`](../../ppt-output/style-gallery/nocturne_violet.cover.html) — "Designed for the dreamers" hero + glassmorphism stat badges.
+
+Detail: [`ppt-output/style-gallery/nocturne_violet.html`](../../ppt-output/style-gallery/nocturne_violet.html) — product usage & reliability report: 4 glass KPI cards with tier breakdown bars + feature rollout matrix, purple aurora background.
 
 ---
 
@@ -321,7 +329,9 @@ Mock: [`ppt-output/style-gallery/nocturne_violet.html`](../../ppt-output/style-g
 }
 ```
 
-Mock: [`ppt-output/style-gallery/cyberpunk_neon.html`](../../ppt-output/style-gallery/cyberpunk_neon.html)
+Cover: [`ppt-output/style-gallery/cyberpunk_neon.cover.html`](../../ppt-output/style-gallery/cyberpunk_neon.cover.html) — "JACK IN" glitch hero + HUD scan panels + scanlines.
+
+Detail: [`ppt-output/style-gallery/cyberpunk_neon.html`](../../ppt-output/style-gallery/cyberpunk_neon.html) — threat matrix HUD: dual CVE/anomaly tables with CVSS scores and colour-coded severity, + sector event breakdown panel.
 
 ---
 
@@ -362,7 +372,9 @@ Mock: [`ppt-output/style-gallery/cyberpunk_neon.html`](../../ppt-output/style-ga
 }
 ```
 
-Mock: [`ppt-output/style-gallery/chrome_y2k.html`](../../ppt-output/style-gallery/chrome_y2k.html)
+Cover: [`ppt-output/style-gallery/chrome_y2k.cover.html`](../../ppt-output/style-gallery/chrome_y2k.cover.html) — "DIGITAL FUTURE" chrome-text hero + silver orbs + perspective grid.
+
+Detail: [`ppt-output/style-gallery/chrome_y2k.html`](../../ppt-output/style-gallery/chrome_y2k.html) — AX-2026 system spec sheet: 4-column technical datasheet (processor, memory/storage, display/GPU, connectivity/AI) with Orbitron headers and silver-on-dark palette.
 
 ---
 
@@ -403,7 +415,9 @@ Mock: [`ppt-output/style-gallery/chrome_y2k.html`](../../ppt-output/style-galler
 }
 ```
 
-Mock: [`ppt-output/style-gallery/noir_film.html`](../../ppt-output/style-gallery/noir_film.html)
+Cover: [`ppt-output/style-gallery/noir_film.cover.html`](../../ppt-output/style-gallery/noir_film.cover.html) — "The City Awakens" photo-essay cover + film metadata chips.
+
+Detail: [`ppt-output/style-gallery/noir_film.html`](../../ppt-output/style-gallery/noir_film.html) — urban light evidence report: two-column monochrome editorial essay + fieldwork data stats + contact sheet film-frame grid, strict monochrome palette.
 
 ---
 
