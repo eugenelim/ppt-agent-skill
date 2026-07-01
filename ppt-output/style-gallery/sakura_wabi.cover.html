@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>sakura_wabi · 日本侘寂 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600&family=Inter:wght@300;400;500&display=swap');
+
+  :root {
+    --bg-washi: #f5f0e8;
+    --bg-washi-deep: #ede6da;
+    --ink-primary: #2c2826;
+    --ink-soft: #4a423d;
+    --ink-light: #7a6f66;
+    --ink-faint: #c9b896;
+    --sakura-light: #ffb7c5;
+    --sakura-deep: #d97a87;
+    --hairline: rgba(44, 40, 38, 0.18);
+
+    --display-font: 'Source Han Serif SC', 'Noto Serif JP', 'Hiragino Mincho ProN', 'Songti SC', serif;
+    --body-font: 'Source Han Serif SC', 'Noto Serif JP', 'Hiragino Mincho ProN', 'Songti SC', serif;
+    --label-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: var(--bg-washi);
+    color: var(--ink-primary);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'palt';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .washi-grain {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 900px 600px at 18% 22%, rgba(217, 122, 135, 0.025) 0%, transparent 60%),
+      radial-gradient(ellipse 700px 500px at 82% 78%, rgba(44, 40, 38, 0.025) 0%, transparent 55%),
+      radial-gradient(circle at 30% 60%, rgba(201, 184, 150, 0.06) 0px, transparent 1px),
+      radial-gradient(circle at 70% 40%, rgba(201, 184, 150, 0.05) 0px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 7px 7px, 11px 11px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .top-hairline {
+    position: absolute;
+    top: 22px; left: 80px; right: 80px;
+    height: 1px;
+    background: var(--hairline);
+    z-index: 2;
+  }
+
+  .top-meta {
+    position: absolute;
+    top: 38px; left: 80px;
+    font-family: var(--label-font);
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    font-weight: 400;
+    z-index: 2;
+  }
+
+  .top-meta-right {
+    position: absolute;
+    top: 38px; right: 80px;
+    font-family: var(--label-font);
+    font-size: 10px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    font-weight: 400;
+    z-index: 2;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .vertical-title {
+    position: absolute;
+    top: 110px;
+    right: 150px;
+    writing-mode: vertical-rl;
+    -webkit-writing-mode: vertical-rl;
+    font-family: var(--display-font);
+    font-size: 64px;
+    font-weight: 400;
+    letter-spacing: 0.32em;
+    line-height: 1.1;
+    color: var(--ink-primary);
+    z-index: 3;
+  }
+
+  .vertical-sub {
+    position: absolute;
+    top: 138px;
+    right: 108px;
+    writing-mode: vertical-rl;
+    -webkit-writing-mode: vertical-rl;
+    font-family: var(--display-font);
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.55em;
+    color: var(--ink-light);
+    z-index: 3;
+  }
+
+  .vertical-author {
+    position: absolute;
+    top: 138px;
+    right: 245px;
+    writing-mode: vertical-rl;
+    -webkit-writing-mode: vertical-rl;
+    font-family: var(--display-font);
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 0.45em;
+    color: var(--ink-light);
+    z-index: 3;
+  }
+
+  .sakura-dot {
+    position: absolute;
+    bottom: 230px;
+    right: 320px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #ffc4d0 0%, #ffb7c5 38%, #d97a87 100%);
+    opacity: 0.92;
+    box-shadow: 0 1px 6px rgba(217, 122, 135, 0.18);
+    z-index: 3;
+  }
+
+  .sakura-shadow {
+    position: absolute;
+    bottom: 222px;
+    right: 312px;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 50% 50%, rgba(217, 122, 135, 0.12) 0%, transparent 65%);
+    z-index: 2;
+  }
+
+  .bottom-block {
+    position: absolute;
+    bottom: 88px;
+    left: 80px;
+    z-index: 3;
+    max-width: 360px;
+  }
+
+  .deck {
+    font-family: var(--body-font);
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 2.1;
+    color: var(--ink-soft);
+    letter-spacing: 0.08em;
+    margin-bottom: 38px;
+  }
+
+  .deck .accent {
+    color: var(--sakura-deep);
+  }
+
+  .label-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+
+  .label-mark {
+    width: 22px;
+    height: 1px;
+    background: var(--ink-primary);
+  }
+
+  .label-en {
+    font-family: var(--label-font);
+    font-size: 10px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--ink-primary);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .label-cn {
+    font-family: var(--body-font);
+    font-size: 11px;
+    letter-spacing: 0.35em;
+    color: var(--ink-light);
+    font-weight: 400;
+  }
+
+  .seal {
+    position: absolute;
+    bottom: 88px;
+    right: 80px;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--sakura-deep);
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    opacity: 0.85;
+  }
+
+  .seal-char {
+    font-family: var(--display-font);
+    font-size: 16px;
+    color: var(--sakura-deep);
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+
+  .bottom-hairline {
+    position: absolute;
+    bottom: 50px; left: 80px; right: 80px;
+    height: 1px;
+    background: var(--hairline);
+    z-index: 2;
+  }
+
+  .footer-left {
+    position: absolute;
+    bottom: 26px;
+    left: 80px;
+    font-family: var(--label-font);
+    font-size: 9px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    font-weight: 400;
+    z-index: 3;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .footer-right {
+    position: absolute;
+    bottom: 26px;
+    right: 80px;
+    font-family: var(--label-font);
+    font-size: 9px;
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    font-weight: 400;
+    z-index: 3;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .corner-mark {
+    position: absolute;
+    top: 22px;
+    left: 80px;
+    width: 6px;
+    height: 6px;
+    z-index: 3;
+  }
+</style>
+</head>
+<body>
+  <div class="washi-grain"></div>
+
+  <div class="top-hairline"></div>
+  <div class="top-meta">茶 · 道 · 二〇二六</div>
+  <div class="top-meta-right">VOL. 03 / KYOTO</div>
+
+  <div class="vertical-author">谷崎潤一郎  阴翳礼讃</div>
+  <div class="vertical-title">侘 寂</div>
+  <div class="vertical-sub">WABI · SABI</div>
+
+  <div class="sakura-shadow"></div>
+  <div class="sakura-dot"></div>
+
+  <div class="bottom-block">
+    <div class="label-row">
+      <div class="label-mark"></div>
+      <div class="label-en">WABI · SABI · 二〇二六</div>
+    </div>
+    <div class="label-cn">不完整之美 · 京都記</div>
+    <p class="deck" style="margin-top:28px;">
+      不完整之美。<br>
+      残缺与时间，<br>
+      沉淀的<span class="accent">本真</span>。
+    </p>
+  </div>
+
+  <div class="seal">
+    <span class="seal-char">寂</span>
+  </div>
+
+  <div class="bottom-hairline"></div>
+  <div class="footer-left">CHAPTER 01 — 一期一会</div>
+  <div class="footer-right">01 / 12  ·  KYOTO STUDIO</div>
+</body>
+</html>

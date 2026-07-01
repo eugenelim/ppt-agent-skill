@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>ink_jade · 新中式国潮 · World-Class Mock</title>
+<title>ink_jade · 节气茶品 · Detail Slide</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -32,279 +32,318 @@
     color: var(--ink);
     font-family: var(--body-font);
     font-feature-settings: "kern", "liga", "ss01", "calt", "ccmp";
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
+  /* Ink bleed atmosphere */
   .ink-bleed-1 {
-    position: absolute;
-    top: 38%; left: 30%;
+    position: absolute; top: 38%; left: 30%;
     width: 520px; height: 380px;
     background: radial-gradient(ellipse 50% 50% at 50% 50%,
-      rgba(90, 79, 68, 0.10) 0%,
-      rgba(90, 79, 68, 0.05) 35%,
-      transparent 75%);
-    pointer-events: none;
-    z-index: 1;
+      rgba(90, 79, 68, 0.08) 0%, rgba(90, 79, 68, 0.04) 35%, transparent 75%);
+    pointer-events: none; z-index: 1;
   }
+
   .ink-bleed-2 {
-    position: absolute;
-    top: 12%; right: 8%;
+    position: absolute; top: 12%; right: 8%;
     width: 360px; height: 260px;
     background: radial-gradient(ellipse 50% 50% at 50% 50%,
-      rgba(26, 26, 26, 0.06) 0%,
-      transparent 70%);
-    pointer-events: none;
-    z-index: 1;
+      rgba(26, 26, 26, 0.05) 0%, transparent 70%);
+    pointer-events: none; z-index: 1;
   }
 
   .grain {
     position: absolute; inset: 0;
-    background-image:
-      radial-gradient(circle, rgba(26, 26, 26, 0.025) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(26, 26, 26, 0.022) 1px, transparent 1px);
     background-size: 5px 5px;
-    pointer-events: none;
-    z-index: 1;
+    pointer-events: none; z-index: 1;
   }
 
-  .fiber-h {
-    position: absolute;
-    left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(90, 79, 68, 0.18), transparent);
-    pointer-events: none;
-    z-index: 1;
-  }
-  .fiber-1 { top: 24%; }
-  .fiber-2 { top: 67%; }
-
+  /* Frame lines */
   .frame-line-top {
-    position: absolute;
-    top: 36px; left: 80px; right: 80px;
-    height: 1px;
-    background: linear-gradient(90deg, var(--ink) 0%, var(--ink) 60px, transparent 60px, transparent calc(100% - 60px), var(--ink) calc(100% - 60px), var(--ink) 100%);
-    opacity: 0.8;
-    z-index: 3;
-  }
-  .frame-line-bot {
-    position: absolute;
-    bottom: 36px; left: 80px; right: 80px;
-    height: 1px;
-    background: linear-gradient(90deg, var(--ink) 0%, var(--ink) 60px, transparent 60px, transparent calc(100% - 60px), var(--ink) calc(100% - 60px), var(--ink) 100%);
-    opacity: 0.8;
-    z-index: 3;
+    position: absolute; top: 36px; left: 80px; right: 80px; height: 1px;
+    background: linear-gradient(90deg, var(--ink) 0%, var(--ink) 50px, transparent 50px, transparent calc(100% - 50px), var(--ink) calc(100% - 50px), var(--ink) 100%);
+    opacity: 0.75; z-index: 3;
   }
 
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
+  .frame-line-bot {
+    position: absolute; bottom: 36px; left: 80px; right: 80px; height: 1px;
+    background: linear-gradient(90deg, var(--ink) 0%, var(--ink) 50px, transparent 50px, transparent calc(100% - 50px), var(--ink) calc(100% - 50px), var(--ink) 100%);
+    opacity: 0.75; z-index: 3;
+  }
+
+  /* Corner marks */
+  .cm-h  { position: absolute; top: 36px;    left:  56px; width: 14px; height: 1px; background: var(--ink); opacity: 0.65; z-index: 4; }
+  .cm-v  { position: absolute; top:  28px;   left:  64px; width: 1px; height: 14px; background: var(--ink); opacity: 0.65; z-index: 4; }
+  .cm-h2 { position: absolute; bottom: 36px; right: 56px; width: 14px; height: 1px; background: var(--ink); opacity: 0.65; z-index: 4; }
+  .cm-v2 { position: absolute; bottom: 28px; right: 64px; width: 1px; height: 14px; background: var(--ink); opacity: 0.65; z-index: 4; }
+
+  /* Page layout */
+  .page {
+    position: absolute;
+    top: 56px; bottom: 56px;
+    left: 80px; right: 80px;
+    display: flex; flex-direction: column;
     z-index: 2;
   }
 
-  .vertical-title {
-    position: absolute;
-    top: 88px; left: 110px;
-    writing-mode: vertical-rl;
-    font-family: var(--display-font);
-    font-size: 84px;
-    font-weight: 500;
-    letter-spacing: 0.32em;
-    line-height: 1.05;
-    color: var(--ink);
-    text-indent: 0.32em;
-    z-index: 4;
-  }
-  .vertical-title .ch {
-    display: block;
-  }
-  .vertical-title .ch-accent {
-    color: var(--vermilion);
+  /* Topbar */
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
   }
 
-  .vertical-sub {
-    position: absolute;
-    top: 100px; left: 232px;
-    writing-mode: vertical-rl;
+  .eyebrow {
     font-family: var(--display-font);
-    font-size: 18px;
-    font-weight: 400;
-    letter-spacing: 0.45em;
-    text-indent: 0.45em;
-    color: var(--ink-light);
-    z-index: 4;
-  }
-
-  .vertical-divider {
-    position: absolute;
-    top: 110px; left: 280px;
-    width: 1px; height: 280px;
-    background: linear-gradient(to bottom, var(--ink) 0%, var(--ink-light) 60%, transparent 100%);
-    opacity: 0.55;
-    z-index: 3;
-  }
-
-  .seal {
-    position: absolute;
-    top: 70px; right: 96px;
-    width: 64px; height: 64px;
-    background: var(--vermilion);
-    color: #fff8e7;
-    font-family: var(--display-font);
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 64px;
-    text-align: center;
-    border-radius: 4px;
-    box-shadow:
-      inset 0 0 0 2px rgba(255, 248, 231, 0.18),
-      0 6px 14px rgba(192, 57, 43, 0.22);
-    letter-spacing: 0;
-    z-index: 5;
-  }
-  .seal-mini {
-    position: absolute;
-    top: 148px; right: 116px;
-    width: 24px; height: 24px;
-    background: var(--vermilion-d);
-    color: #fff8e7;
-    font-family: var(--display-font);
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 24px;
-    text-align: center;
-    border-radius: 2px;
-    z-index: 5;
-  }
-
-  .label-en {
-    position: absolute;
-    top: 196px; right: 96px;
-    font-family: var(--label-font);
     font-size: 11px;
-    font-weight: 500;
     letter-spacing: 0.4em;
     text-indent: 0.4em;
     color: var(--gold-light);
-    text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
-    z-index: 4;
-    text-align: right;
-  }
-
-  .label-anchor {
-    position: absolute;
-    top: 220px; right: 96px;
-    width: 44px; height: 1px;
-    background: var(--gold-light);
-    opacity: 0.7;
-    z-index: 4;
-  }
-
-  .body-poem {
-    position: absolute;
-    bottom: 130px; left: 110px;
-    font-family: var(--display-font);
-    font-size: 22px;
-    font-weight: 400;
-    line-height: 2.1;
-    letter-spacing: 0.18em;
-    color: var(--ink-soft);
-    z-index: 4;
-  }
-  .body-poem .em {
-    color: var(--vermilion);
     font-weight: 500;
   }
 
-  .body-attr {
-    position: absolute;
-    bottom: 100px; left: 112px;
+  .page-id {
     font-family: var(--label-font);
     font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.35em;
-    text-indent: 0.35em;
+    letter-spacing: 0.28em;
     color: var(--ink-faint);
     text-transform: uppercase;
     font-variant-numeric: tabular-nums;
-    z-index: 4;
+    font-weight: 500;
+  }
+
+  /* Section heading */
+  .head-row {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 10px;
+  }
+
+  .section-title {
+    font-family: var(--display-font);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-indent: 0.22em;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  .section-sub {
+    font-family: var(--label-font);
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--ink-light);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Vermilion rule */
+  .rule-v {
+    height: 1px;
+    background: linear-gradient(90deg, var(--vermilion), rgba(192, 57, 43, 0.22), transparent);
+    margin-bottom: 16px;
+    border: 0;
+  }
+
+  /* 6-card product grid (2 rows × 3 cols) */
+  .product-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .product-card {
+    border: 1px solid rgba(26, 26, 26, 0.12);
+    padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 5px;
+    background: rgba(255, 255, 255, 0.35);
+    position: relative; overflow: hidden;
+  }
+
+  .product-card .top-accent {
+    position: absolute; top: 0; left: 0; width: 32px; height: 2px;
+    background: var(--vermilion);
+  }
+
+  .product-card .jieqi-label {
+    font-family: var(--display-font);
+    font-size: 9px;
+    letter-spacing: 0.38em;
+    text-indent: 0.38em;
+    color: var(--vermilion);
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  .product-card .product-name {
+    font-family: var(--display-font);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+
+  .product-card .product-en {
+    font-family: var(--label-font);
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    font-weight: 400;
+  }
+
+  .product-card .desc {
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: var(--ink-light);
+    letter-spacing: 0.06em;
+    line-height: 1.55;
+    margin-top: 2px;
+  }
+
+  .product-card .price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(26, 26, 26, 0.08);
+  }
+
+  .product-card .price {
+    font-family: var(--label-font);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: 0.05em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .product-card .price .currency {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--ink-light);
+    margin-right: 2px;
+  }
+
+  .product-card .weight {
+    font-family: var(--label-font);
+    font-size: 9px;
+    color: var(--ink-faint);
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Bottom summary strip */
+  .summary-strip {
+    display: flex;
+    gap: 0;
+    border-top: 1px solid rgba(26, 26, 26, 0.12);
+    padding-top: 10px;
+    flex: 1; min-height: 0;
+  }
+
+  .summary-item {
+    flex: 1;
+    padding: 0 18px 0 0;
+    display: flex; flex-direction: column; gap: 3px;
+    border-right: 1px solid rgba(26, 26, 26, 0.08);
+  }
+
+  .summary-item:last-child {
+    border-right: none;
+    padding-right: 0;
+    padding-left: 18px;
+  }
+
+  .summary-item + .summary-item {
+    padding-left: 18px;
+  }
+
+  .s-key {
+    font-family: var(--label-font);
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--gold-light);
+    font-weight: 500;
+  }
+
+  .s-val {
+    font-family: var(--display-font);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ink);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .s-note {
+    font-family: var(--label-font);
+    font-size: 9px;
+    color: var(--ink-faint);
+    letter-spacing: 0.12em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Seal + brush accent */
+  .seal {
+    position: absolute;
+    top: 56px; right: 80px;
+    width: 52px; height: 52px;
+    background: var(--vermilion);
+    color: #fff8e7;
+    font-family: var(--display-font);
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 52px;
+    text-align: center;
+    border-radius: 3px;
+    box-shadow: inset 0 0 0 2px rgba(255, 248, 231, 0.18), 0 4px 10px rgba(192, 57, 43, 0.22);
+    z-index: 5;
   }
 
   .brush-stroke {
     position: absolute;
-    bottom: 130px; right: 100px;
-    width: 168px; height: 6px;
+    bottom: 94px; right: 86px;
+    width: 140px; height: 5px;
     background: linear-gradient(90deg,
-      transparent 0%,
-      rgba(192, 57, 43, 0.25) 6%,
-      var(--vermilion) 22%,
-      var(--vermilion-d) 55%,
-      var(--vermilion) 78%,
-      transparent 100%);
-    transform: rotate(-15deg);
+      transparent 0%, rgba(192, 57, 43, 0.22) 8%,
+      var(--vermilion) 25%, var(--vermilion-d) 58%,
+      var(--vermilion) 80%, transparent 100%);
+    transform: rotate(-14deg);
     border-radius: 3px;
     z-index: 3;
-    box-shadow:
-      0 1px 0 rgba(192, 57, 43, 0.18),
-      0 -1px 0 rgba(192, 57, 43, 0.12);
+    box-shadow: 0 1px 0 rgba(192, 57, 43, 0.16);
   }
+
   .brush-tail {
     position: absolute;
-    bottom: 124px; right: 78px;
-    width: 36px; height: 4px;
-    background: linear-gradient(90deg, var(--vermilion) 0%, rgba(192, 57, 43, 0.4) 50%, transparent 100%);
-    transform: rotate(-18deg);
+    bottom: 88px; right: 66px;
+    width: 30px; height: 3px;
+    background: linear-gradient(90deg, var(--vermilion) 0%, rgba(192, 57, 43, 0.35) 60%, transparent 100%);
+    transform: rotate(-16deg);
     border-radius: 2px;
-    opacity: 0.85;
-    z-index: 3;
-  }
-  .brush-splash {
-    position: absolute;
-    bottom: 118px; right: 56px;
-    width: 14px; height: 8px;
-    background: radial-gradient(ellipse 50% 50% at 50% 50%, var(--vermilion) 0%, rgba(192, 57, 43, 0.4) 60%, transparent 100%);
-    transform: rotate(-12deg);
-    border-radius: 50%;
-    opacity: 0.75;
-    z-index: 3;
-  }
-  .brush-dot {
-    position: absolute;
-    bottom: 156px; right: 244px;
-    width: 6px; height: 6px;
-    background: var(--vermilion);
-    border-radius: 50%;
-    opacity: 0.55;
+    opacity: 0.82;
     z-index: 3;
   }
 
-  .vert-meta {
-    position: absolute;
-    bottom: 132px; right: 64px;
-    writing-mode: vertical-rl;
-    font-family: var(--label-font);
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: 0.4em;
-    color: var(--ink-light);
-    text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
-    z-index: 4;
-    opacity: 0.7;
-  }
-
+  /* Footer */
   .footer {
     position: absolute;
-    bottom: 56px;
-    left: 110px; right: 110px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    bottom: 48px;
+    left: 94px; right: 94px;
+    display: flex; justify-content: space-between; align-items: center;
     font-family: var(--label-font);
     font-size: 10px;
-    font-weight: 500;
     letter-spacing: 0.28em;
     text-indent: 0.28em;
     color: var(--ink-faint);
@@ -312,6 +351,7 @@
     font-variant-numeric: tabular-nums;
     z-index: 4;
   }
+
   .footer .meta-cn {
     font-family: var(--display-font);
     letter-spacing: 0.4em;
@@ -319,23 +359,12 @@
     color: var(--ink-light);
     text-transform: none;
   }
-  .footer .pg {
-    font-family: var(--label-font);
-    letter-spacing: 0.18em;
-  }
-
-  .cm-h { position: absolute; top: 36px; left: 56px; width: 14px; height: 1px; background: var(--ink); opacity: 0.7; z-index: 4; }
-  .cm-v { position: absolute; top: 28px; left: 64px; width: 1px; height: 14px; background: var(--ink); opacity: 0.7; z-index: 4; }
-  .cm-h2 { position: absolute; bottom: 36px; right: 56px; width: 14px; height: 1px; background: var(--ink); opacity: 0.7; z-index: 4; }
-  .cm-v2 { position: absolute; bottom: 28px; right: 64px; width: 1px; height: 14px; background: var(--ink); opacity: 0.7; z-index: 4; }
 </style>
 </head>
 <body>
   <div class="ink-bleed-1"></div>
   <div class="ink-bleed-2"></div>
   <div class="grain"></div>
-  <div class="fiber-h fiber-1"></div>
-  <div class="fiber-h fiber-2"></div>
 
   <div class="frame-line-top"></div>
   <div class="frame-line-bot"></div>
@@ -345,41 +374,136 @@
   <div class="cm-h2"></div>
   <div class="cm-v2"></div>
 
-  <div class="stage">
-    <div class="vertical-title">
-      <span class="ch">茶</span>
-      <span class="ch">之</span>
-      <span class="ch ch-accent">道</span>
+  <div class="seal">茶</div>
+  <div class="brush-stroke"></div>
+  <div class="brush-tail"></div>
+
+  <div class="page">
+
+    <div class="topbar">
+      <div class="eyebrow">节气茶品  ·  春夏秋冬系列</div>
+      <div class="page-id">INK JADE · 新中式国潮 · 2026</div>
     </div>
 
-    <div class="vertical-divider"></div>
-
-    <div class="vertical-sub">器　承　古　意　心　归　今</div>
-
-    <div class="seal">茶</div>
-    <div class="seal-mini">壹</div>
-    <div class="label-en">CHA　·　DAO　·　MMXXVI</div>
-    <div class="label-anchor"></div>
-
-    <div class="body-poem">
-      一　盏　清　茗，<br>
-      半　窗　<span class="em">山　色，</span><br>
-      器　与　心　同　温。
+    <div class="head-row">
+      <div class="section-title">二十四节气  ·  茶品品类册</div>
+      <div class="section-sub">Seasonal Collection · Q2 Launch</div>
     </div>
-    <div class="body-attr">— FROM　THE　EASTERN　TEAHOUSE　PROJECT</div>
 
-    <div class="brush-dot"></div>
-    <div class="brush-stroke"></div>
-    <div class="brush-tail"></div>
-    <div class="brush-splash"></div>
+    <hr class="rule-v">
 
-    <div class="vert-meta">EST　MMXXVI　·　VOL　I</div>
+    <!-- 6-product grid -->
+    <div class="product-grid">
+
+      <div class="product-card">
+        <div class="top-accent"></div>
+        <div class="jieqi-label">立春 · 惊蛰</div>
+        <div class="product-name">清明前龙井</div>
+        <div class="product-en">Pre-Qingming Longjing</div>
+        <div class="desc">西湖产区明前一芽一叶，汤色嫩绿，豆香馥郁，回甘持久。</div>
+        <div class="price-row">
+          <div class="price"><span class="currency">¥</span>388</div>
+          <div class="weight">50 g / 礼盒</div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="top-accent" style="background: #8b7d6b;"></div>
+        <div class="jieqi-label">谷雨 · 立夏</div>
+        <div class="product-name">古树白毫银针</div>
+        <div class="product-en">Silver Needle · Ancient Tree</div>
+        <div class="desc">政和高山单芽，披满白毫，滋味甘醇，陈放愈显花香。</div>
+        <div class="price-row">
+          <div class="price"><span class="currency">¥</span>568</div>
+          <div class="weight">30 g / 礼罐</div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="top-accent" style="background: var(--vermilion);"></div>
+        <div class="jieqi-label">小暑 · 大暑</div>
+        <div class="product-name">云南滇红工夫</div>
+        <div class="product-en">Yunnan Dianhong · Gongfu</div>
+        <div class="desc">凤庆大叶种，蜜糖香气浓郁，汤色红艳明亮，性温养胃。</div>
+        <div class="price-row">
+          <div class="price"><span class="currency">¥</span>268</div>
+          <div class="weight">100 g / 散装</div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="top-accent" style="background: #4a6741;"></div>
+        <div class="jieqi-label">白露 · 秋分</div>
+        <div class="product-name">武夷大红袍</div>
+        <div class="product-en">Da Hong Pao · Wuyi Rock</div>
+        <div class="desc">三坑两涧核心产区，岩骨花香，汤色橙黄，滋味醇厚甘活。</div>
+        <div class="price-row">
+          <div class="price"><span class="currency">¥</span>688</div>
+          <div class="weight">25 g / 小罐</div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="top-accent" style="background: #7a6050;"></div>
+        <div class="jieqi-label">寒露 · 霜降</div>
+        <div class="product-name">普洱生茶饼</div>
+        <div class="product-en">Raw Pu-erh Cake · 2018</div>
+        <div class="desc">易武正山乔木原料，2018年压饼，初具陈香，转化空间佳。</div>
+        <div class="price-row">
+          <div class="price"><span class="currency">¥</span>428</div>
+          <div class="weight">357 g / 饼</div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="top-accent" style="background: var(--gold-light);"></div>
+        <div class="jieqi-label">冬至 · 小寒</div>
+        <div class="product-name">安化黑茶千两</div>
+        <div class="product-en">Anhua Dark Tea · Qianliang</div>
+        <div class="desc">湖南安化茯茶，金花繁茂，菌香独特，暖身养气，冬藏首选。</div>
+        <div class="price-row">
+          <div class="price"><span class="currency">¥</span>328</div>
+          <div class="weight">200 g / 切片</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Summary strip -->
+    <div class="summary-strip">
+
+      <div class="summary-item">
+        <div class="s-key">在售品类</div>
+        <div class="s-val">24 款</div>
+        <div class="s-note">覆盖六大茶类</div>
+      </div>
+
+      <div class="summary-item">
+        <div class="s-key">产区溯源</div>
+        <div class="s-val">12 省</div>
+        <div class="s-note">产地直采保证</div>
+      </div>
+
+      <div class="summary-item">
+        <div class="s-key">本季新品</div>
+        <div class="s-val">6 款</div>
+        <div class="s-note">节气限定发售</div>
+      </div>
+
+      <div class="summary-item">
+        <div class="s-key">礼盒套装</div>
+        <div class="s-val">8 套</div>
+        <div class="s-note">含定制国潮包装</div>
+      </div>
+
+    </div>
+
   </div>
 
   <div class="footer">
-    <span>CHAPTER I  —  PROLOGUE</span>
-    <span class="meta-cn">东方茶寮 · 新中式国潮</span>
-    <span class="pg">01 / 24</span>
+    <span>CHAPTER II — SEASONAL COLLECTION</span>
+    <span class="meta-cn">东方茶寮 · 节气茶品</span>
+    <span>02 / 24</span>
   </div>
 </body>
 </html>

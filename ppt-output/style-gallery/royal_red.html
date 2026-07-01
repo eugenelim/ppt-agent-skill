@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>royal_red · 朱宫金阙 · World-Class Mock</title>
+<title>royal_red · 典藏文物展陈 · Detail Slide</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -29,6 +29,7 @@
     color: var(--cream);
     font-family: var(--body-font);
     font-feature-settings: "kern", "liga", "ss01", "calt", "ccmp";
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -37,144 +38,277 @@
 
   .vignette {
     position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 60% 45% at 50% 50%, transparent 0%, transparent 55%, rgba(0,0,0,0.45) 100%);
+    background: radial-gradient(ellipse 70% 55% at 50% 50%, transparent 0%, transparent 50%, rgba(0,0,0,0.48) 100%);
     pointer-events: none;
     z-index: 1;
   }
 
   .grain {
     position: absolute; inset: 0;
-    background-image:
-      radial-gradient(circle, rgba(255, 248, 231, 0.025) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(255, 248, 231, 0.025) 1px, transparent 1px);
     background-size: 6px 6px;
     opacity: 0.7;
     pointer-events: none;
     z-index: 1;
   }
 
-  .corner-tl { position: absolute; top: 24px; left: 24px; width: 50px; height: 50px; border-top: 1px solid var(--gold); border-left: 1px solid var(--gold); z-index: 4; }
-  .corner-tr { position: absolute; top: 24px; right: 24px; width: 50px; height: 50px; border-top: 1px solid var(--gold); border-right: 1px solid var(--gold); z-index: 4; }
-  .corner-bl { position: absolute; bottom: 24px; left: 24px; width: 50px; height: 50px; border-bottom: 1px solid var(--gold); border-left: 1px solid var(--gold); z-index: 4; }
-  .corner-br { position: absolute; bottom: 24px; right: 24px; width: 50px; height: 50px; border-bottom: 1px solid var(--gold); border-right: 1px solid var(--gold); z-index: 4; }
+  /* Corner decorations */
+  .corner-tl { position: absolute; top: 20px; left: 20px; width: 40px; height: 40px; border-top: 1px solid var(--gold); border-left: 1px solid var(--gold); z-index: 4; }
+  .corner-tr { position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-top: 1px solid var(--gold); border-right: 1px solid var(--gold); z-index: 4; }
+  .corner-bl { position: absolute; bottom: 20px; left: 20px; width: 40px; height: 40px; border-bottom: 1px solid var(--gold); border-left: 1px solid var(--gold); z-index: 4; }
+  .corner-br { position: absolute; bottom: 20px; right: 20px; width: 40px; height: 40px; border-bottom: 1px solid var(--gold); border-right: 1px solid var(--gold); z-index: 4; }
 
-  .frame-top { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); width: 220px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-soft), transparent); z-index: 3; }
-  .frame-bottom { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); width: 220px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-soft), transparent); z-index: 3; }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
+  /* Page layout */
+  .page {
+    position: absolute; inset: 0;
+    padding: 36px 60px 44px;
     display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    padding: 90px 80px;
     z-index: 2;
-    text-align: center;
   }
 
-  .overline {
-    font-family: var(--display-font);
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: 0.8em;
-    color: var(--gold);
-    text-indent: 0.8em;
-    margin-bottom: 44px;
-    display: inline-flex;
-    align-items: center;
-    gap: 18px;
+  /* Top bar */
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 8px;
   }
-  .overline .dot {
+
+  .eyebrow {
+    font-family: var(--display-font);
+    font-size: 11px;
+    letter-spacing: 0.8em;
+    text-indent: 0.8em;
+    color: var(--gold);
+    font-weight: 500;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .eyebrow-dot {
     width: 5px; height: 5px;
     background: var(--gold);
-    border-radius: 50%;
-    box-shadow: 0 0 8px rgba(201, 169, 96, 0.6);
-    transform: rotate(45deg);
     border-radius: 0;
+    transform: rotate(45deg);
+    box-shadow: 0 0 6px rgba(201, 169, 96, 0.55);
   }
 
-  .headline {
-    font-family: var(--display-font);
-    font-size: 96px;
-    font-weight: 500;
-    line-height: 1.18;
-    letter-spacing: 0.18em;
-    color: var(--cream);
-    text-indent: 0.18em;
-    margin: 0;
-  }
-  .headline .accent {
-    color: var(--gold);
-    font-weight: 600;
-  }
-
-  .gold-line {
-    width: 1px;
-    height: 60px;
-    background: linear-gradient(to bottom, transparent, var(--gold), transparent);
-    margin: 36px auto 0;
-  }
-
-  .seal-row {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 22px;
-    margin-top: 28px;
-  }
-  .seal-side {
-    width: 64px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--gold-faint), var(--gold-soft));
-  }
-  .seal-side.right {
-    background: linear-gradient(90deg, var(--gold-soft), var(--gold-faint), transparent);
-  }
-  .seal {
-    display: inline-block;
-    padding: 14px 16px;
-    background: var(--seal);
-    color: var(--cream);
-    font-family: var(--display-font);
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    text-indent: 0.1em;
-    border-radius: 2px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.15);
-    border: 2px solid rgba(255, 215, 0, 0.32);
-    line-height: 1;
-  }
-
-  .subtitle {
+  .page-id {
     font-family: var(--body-font);
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.5em;
-    text-indent: 0.5em;
+    font-size: 10px;
+    letter-spacing: 0.25em;
     color: var(--cream-faint);
-    margin-top: 32px;
+    text-transform: uppercase;
     font-variant-numeric: tabular-nums;
   }
 
+  /* Gold rule */
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold-soft), transparent);
+    margin: 6px 0 14px;
+    border: 0;
+  }
+
+  /* Heading row */
+  .head-row {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-family: var(--display-font);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-indent: 0.18em;
+    color: var(--cream);
+    line-height: 1.2;
+  }
+
+  .section-subtitle {
+    font-family: var(--body-font);
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    color: var(--cream-soft);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Main grid: 3 KPI cards + exhibition table */
+  .main-grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 12px;
+  }
+
+  /* KPI stat card */
+  .stat-card {
+    background: linear-gradient(135deg, rgba(201, 169, 96, 0.08), transparent);
+    border: 1px solid var(--gold-faint);
+    padding: 14px 18px;
+    display: flex; flex-direction: column; gap: 4px;
+    position: relative; overflow: hidden;
+  }
+
+  .stat-card .top-bar {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+  }
+
+  .stat-card .s-label {
+    font-family: var(--display-font);
+    font-size: 10px;
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    color: var(--gold);
+    font-weight: 500;
+    text-transform: none;
+  }
+
+  .stat-card .s-value {
+    font-family: var(--display-font);
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--cream);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-card .s-value .unit {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--cream-soft);
+    letter-spacing: 0.15em;
+    margin-left: 4px;
+  }
+
+  .stat-card .s-note {
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: var(--cream-faint);
+    letter-spacing: 0.15em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Exhibition timeline table - spans all 3 columns */
+  .table-panel {
+    grid-column: 1 / 4;
+    background: linear-gradient(135deg, rgba(201, 169, 96, 0.05), transparent);
+    border: 1px solid var(--gold-faint);
+    padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .table-heading {
+    font-family: var(--display-font);
+    font-size: 11px;
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    color: var(--gold);
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .exhibit-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .exhibit-table thead tr {
+    border-bottom: 1px solid var(--gold-faint);
+  }
+
+  .exhibit-table th {
+    font-family: var(--body-font);
+    font-size: 9px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--gold);
+    font-weight: 600;
+    padding: 0 12px 8px 0;
+    text-align: left;
+  }
+
+  .exhibit-table tbody tr {
+    border-bottom: 1px solid rgba(255, 248, 231, 0.06);
+  }
+
+  .exhibit-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .exhibit-table td {
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: var(--cream-soft);
+    padding: 7px 12px 7px 0;
+    vertical-align: middle;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .exhibit-table td.dynasty {
+    font-family: var(--display-font);
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    color: var(--cream);
+    font-weight: 500;
+  }
+
+  .exhibit-table td.era {
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 0.1em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-family: var(--body-font);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .badge-perm { background: rgba(201, 169, 96, 0.18); color: var(--gold); border: 1px solid rgba(201, 169, 96, 0.35); }
+  .badge-loan { background: rgba(255, 248, 231, 0.08); color: var(--cream-soft); border: 1px solid rgba(255, 248, 231, 0.18); }
+  .badge-rare { background: rgba(192, 57, 43, 0.20); color: #ff9c8a; border: 1px solid rgba(192, 57, 43, 0.35); }
+
+  /* Gold vertical divider between KPI and supplementary */
+  .gold-vline {
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, var(--gold-soft), transparent);
+    align-self: stretch;
+    display: none;
+  }
+
+  /* Footer */
   .footer {
     position: absolute;
-    bottom: 64px;
+    bottom: 52px;
     left: 0; right: 0;
     display: flex;
     justify-content: space-between;
-    padding: 0 96px;
+    padding: 0 80px;
     font-family: var(--body-font);
     font-size: 10px;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.28em;
     color: var(--cream-faint);
     text-transform: uppercase;
     z-index: 3;
     font-variant-numeric: tabular-nums;
   }
-  .footer .meta {
+
+  .footer .meta-cn {
     font-family: var(--display-font);
     letter-spacing: 0.4em;
     color: var(--gold-soft);
+    text-transform: none;
   }
 </style>
 </head>
@@ -187,36 +321,111 @@
   <div class="corner-bl"></div>
   <div class="corner-br"></div>
 
-  <div class="frame-top"></div>
-  <div class="frame-bottom"></div>
-
-  <div class="stage">
-    <div class="overline">
-      <span>壹</span>
-      <span class="dot"></span>
-      <span>开　篇</span>
+  <div class="page">
+    <div class="topbar">
+      <div class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        <span>典藏文物  ·  展陈数据</span>
+      </div>
+      <div class="page-id">故宫文创 · Cultural Heritage · 2026</div>
     </div>
 
-    <h1 class="headline">
-      千　年　文　脉<br>
-      当　代　<span class="accent">新　生</span>
-    </h1>
+    <hr class="rule">
 
-    <div class="gold-line"></div>
-
-    <div class="seal-row">
-      <span class="seal-side"></span>
-      <span class="seal">壹</span>
-      <span class="seal-side right"></span>
+    <div class="head-row">
+      <div class="section-title">宫廷典藏  ·  文物保护季报</div>
+      <div class="section-subtitle">Q2 2026 · Collection Management Report</div>
     </div>
 
-    <div class="subtitle">VERMILION　·　COURT　·　MMXXVI</div>
+    <div class="main-grid">
+
+      <!-- KPI stat card 1 -->
+      <div class="stat-card">
+        <div class="top-bar"></div>
+        <div class="s-label">馆藏文物总量</div>
+        <div class="s-value">186<span class="unit">万件</span></div>
+        <div class="s-note">含一级文物 8,728 件</div>
+      </div>
+
+      <!-- KPI stat card 2 -->
+      <div class="stat-card">
+        <div class="top-bar" style="background: linear-gradient(90deg, rgba(201,169,96,0.5), transparent);"></div>
+        <div class="s-label">数字化归档率</div>
+        <div class="s-value">94<span class="unit">%</span></div>
+        <div class="s-note">较上季度提升 6 pp</div>
+      </div>
+
+      <!-- KPI stat card 3 -->
+      <div class="stat-card">
+        <div class="top-bar" style="background: linear-gradient(90deg, rgba(192,57,43,0.5), transparent);"></div>
+        <div class="s-label">参观人次（本季）</div>
+        <div class="s-value">312<span class="unit">万</span></div>
+        <div class="s-note">国际访客占比 28%</div>
+      </div>
+
+      <!-- Exhibition timeline table -->
+      <div class="table-panel">
+        <div class="table-heading">当期特别展陈  ·  Curated Exhibitions</div>
+        <table class="exhibit-table">
+          <thead>
+            <tr>
+              <th style="width: 24%">展陈名称</th>
+              <th style="width: 12%">朝代</th>
+              <th style="width: 13%">年代区间</th>
+              <th style="width: 10%">件数</th>
+              <th style="width: 12%">展期</th>
+              <th style="width: 11%">状态</th>
+              <th>主题</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>宫廷礼仪文物展</td>
+              <td class="dynasty">明清</td>
+              <td class="era">1368–1912</td>
+              <td>248</td>
+              <td>4月–7月</td>
+              <td><span class="badge badge-perm">常设</span></td>
+              <td style="color: var(--cream-faint);">天子之礼 · 宫廷仪仗</td>
+            </tr>
+            <tr>
+              <td>丝路金银器特展</td>
+              <td class="dynasty">唐</td>
+              <td class="era">618–907</td>
+              <td>86</td>
+              <td>5月–8月</td>
+              <td><span class="badge badge-loan">借展</span></td>
+              <td style="color: var(--cream-faint);">丝绸之路 · 异域风情</td>
+            </tr>
+            <tr>
+              <td>御瓷百年巡礼</td>
+              <td class="dynasty">宋元明</td>
+              <td class="era">960–1644</td>
+              <td>134</td>
+              <td>6月–9月</td>
+              <td><span class="badge badge-rare">珍品</span></td>
+              <td style="color: var(--cream-faint);">汝钧官哥定 · 五大名窑</td>
+            </tr>
+            <tr>
+              <td>古代天文仪器展</td>
+              <td class="dynasty">明清</td>
+              <td class="era">1644–1912</td>
+              <td>42</td>
+              <td>常年</td>
+              <td><span class="badge badge-perm">常设</span></td>
+              <td style="color: var(--cream-faint);">观天察地 · 钦天监</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
   </div>
 
   <div class="footer">
-    <span>CHAPTER I  —  PROLOGUE</span>
-    <span class="meta">紫禁文创 · 大典开篇</span>
-    <span>01 / 24</span>
+    <span>CHAPTER III — COLLECTION &amp; HERITAGE</span>
+    <span class="meta-cn">紫禁文创 · 典藏季报</span>
+    <span>03 / 24</span>
   </div>
 </body>
 </html>

@@ -51,7 +51,9 @@
 }
 ```
 
-Mock: [`ppt-output/style-gallery/royal_red.html`](../../ppt-output/style-gallery/royal_red.html)
+Cover (title/identity): [`ppt-output/style-gallery/royal_red.cover.html`](../../ppt-output/style-gallery/royal_red.cover.html) — "千年文脉 · 当代新生" 开篇大典封面.
+
+Detail (content/data): [`ppt-output/style-gallery/royal_red.html`](../../ppt-output/style-gallery/royal_red.html) — 宫廷典藏 · 文物保护季报：3 张 KPI 卡 + 当期特别展陈表（朝代 / 年代 / 件数 / 展期 / 状态徽章）.
 
 ---
 
@@ -92,7 +94,9 @@ Mock: [`ppt-output/style-gallery/royal_red.html`](../../ppt-output/style-gallery
 }
 ```
 
-Mock: [`ppt-output/style-gallery/sakura_wabi.html`](../../ppt-output/style-gallery/sakura_wabi.html)
+Cover (title/identity): [`ppt-output/style-gallery/sakura_wabi.cover.html`](../../ppt-output/style-gallery/sakura_wabi.cover.html) — 侘寂留白标题封面.
+
+Detail (content/data): [`ppt-output/style-gallery/sakura_wabi.html`](../../ppt-output/style-gallery/sakura_wabi.html) — 四季茶道 · 茶会行事历：春夏秋冬分节的茶会时序编排.
 
 ---
 
@@ -133,4 +137,6 @@ Mock: [`ppt-output/style-gallery/sakura_wabi.html`](../../ppt-output/style-galle
 }
 ```
 
-Mock: [`ppt-output/style-gallery/ink_jade.html`](../../ppt-output/style-gallery/ink_jade.html)
+Cover (title/identity): [`ppt-output/style-gallery/ink_jade.cover.html`](../../ppt-output/style-gallery/ink_jade.cover.html) — "道之茶" 新中式标题封面.
+
+Detail (content/data): [`ppt-output/style-gallery/ink_jade.html`](../../ppt-output/style-gallery/ink_jade.html) — 二十四节气 · 茶品品类册：按节气编排的产品品类目录.
