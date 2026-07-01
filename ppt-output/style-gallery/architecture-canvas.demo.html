@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>architecture-canvas — primitive demo (schematic_blueprint)</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* schematic_blueprint tokens → the diagram family's contract vars */
+    --paper:#ffffff; --paper-warm:#fafafa; --rule:#d8d8d8; --ink:#000000;
+    --card-bg-from:#ffffff; --card-bg-to:#fafafa; --card-border:#d8d8d8; --card-radius:0px;
+    --text-primary:#000000; --text-secondary:#555555; --accent-1:#a100ff;
+    --font-primary:'Inter Tight','Inter',-apple-system,sans-serif;
+    --font-mono:'JetBrains Mono','IBM Plex Mono','SF Mono',monospace;
+    --serif:'Fraunces','Source Serif 4',Georgia,serif;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;position:relative;background:var(--paper);
+    color:var(--ink);font-family:var(--font-primary);
+    font-feature-settings:'kern','liga','calt','tnum';font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased;}
+  .grid{position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(rgba(0,0,0,0.02) 1px,transparent 1px);background-size:40px 40px;}
+  .page{position:absolute;inset:0;padding:38px 64px 44px;display:flex;flex-direction:column;}
+  .masthead{border-top:3px solid var(--ink);border-bottom:1px solid var(--ink);padding:10px 0;
+    display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);
+    font-size:10px;text-transform:uppercase;letter-spacing:0.14em;}
+  .masthead .left{color:var(--ink);font-weight:700;display:flex;align-items:center;gap:9px;}
+  .masthead .left .mark{width:12px;height:12px;background:var(--accent-1);display:inline-block;}
+  .masthead .right{color:var(--accent-1);font-weight:700;}
+  header{margin:22px 0 16px;}
+  .eyebrow{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.18em;
+    color:var(--accent-1);font-weight:700;display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+  .eyebrow .dash{width:24px;height:2px;background:var(--accent-1);display:inline-block;}
+  h1{font-family:var(--serif);font-weight:300;font-variation-settings:"opsz" 144;font-size:40px;
+    line-height:1.0;letter-spacing:-0.03em;color:var(--ink);}
+  h1 em{font-style:italic;font-weight:400;color:var(--accent-1);}
+  footer{margin-top:auto;padding-top:14px;border-top:1px solid var(--rule);display:flex;
+    justify-content:space-between;font-family:var(--font-mono);font-size:10px;letter-spacing:0.12em;
+    color:var(--text-secondary);text-transform:uppercase;}
+  footer .fig{color:var(--accent-1);font-weight:700;}
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="page">
+    <div class="masthead">
+      <span class="left"><span class="mark"></span>SCHEMATIC · BLOCK LIBRARY</span>
+      <span class="right">architecture-canvas</span>
+    </div>
+    <header>
+      <div class="eyebrow"><span class="dash"></span>diagram-architecture — icon-node canvas</div>
+      <h1>One <em>data platform</em>, drawn in zones.</h1>
+    </header>
+
+    <div class="diagram arch-canvas" style="
+      --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+      --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+      --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+      --edge:var(--card-border); --node-accent:var(--accent-1);
+      font-family:var(--font-primary); display:flex; flex-direction:column; gap:6px; width:100%;">
+
+      <div class="zone" style="display:flex; align-items:stretch; gap:14px; padding-left:12px;">
+        <span style="width:84px; flex-shrink:0; display:flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--node-fg-dim);">Sources</span>
+        <div style="display:flex; gap:12px; flex:1;">
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.7 19a5.3 5.3 0 0 1 10.6 0"/><path d="M16 6.3a3 3 0 0 1 0 5.4M17.6 19a5.3 5.3 0 0 0-2.9-4.75"/></svg></span>
+            <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Channels</span><span style="font-size:11px; color:var(--node-fg-dim);">web · mobile · partners</span></span>
+          </div>
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15 6.6 17.4a3 3 0 0 1-4.24-4.24L4.8 10.7"/><path d="M15 9l2.4-2.4a3 3 0 0 0-4.24-4.24L10.7 4.8"/><path d="M9.4 14.6 14.6 9.4"/></svg></span>
+            <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Connectors</span><span style="font-size:11px; color:var(--node-fg-dim);">SaaS · systems</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:center; gap:8px; height:20px; padding-left:96px;">
+        <span style="font-family:var(--font-mono,monospace); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--node-fg-dim);">ingest</span>
+        <svg viewBox="0 0 24 20" preserveAspectRatio="none" style="width:24px; height:20px; overflow:visible;"><line x1="12" y1="0" x2="12" y2="12" stroke="var(--edge)" stroke-width="1.5"/><polygon points="7,10 12,20 17,10" fill="var(--edge)"/></svg>
+      </div>
+
+      <div class="zone spine" style="display:flex; align-items:stretch; gap:14px; padding-left:9px; border-left:3px solid var(--node-accent);">
+        <span style="width:84px; flex-shrink:0; display:flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--node-accent);">Platform</span>
+        <div style="display:flex; gap:12px; flex:1;">
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg); box-shadow:0 0 0 1px var(--node-accent);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/></svg></span>
+            <span style="font-weight:700; font-size:13px;">Data Lake</span>
+          </div>
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="17.5" r="2"/><circle cx="19" cy="17.5" r="2"/><circle cx="12" cy="13" r="2"/><path d="M12 7v4M10.4 14.3 6.5 16.2M13.6 14.3l3.9 1.9"/></svg></span>
+            <span style="font-weight:700; font-size:13px;">Knowledge Graph</span>
+          </div>
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2.2"/><rect x="9.5" y="9.8" width="5" height="4.4" rx="1"/><circle cx="19" cy="12" r="2.2"/><path d="M7.2 12h2.3M14.5 12h2.3"/></svg></span>
+            <span style="font-weight:700; font-size:13px;">Curate</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; justify-content:center; gap:8px; height:20px; padding-left:96px;">
+        <span style="font-family:var(--font-mono,monospace); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--node-fg-dim);">serve</span>
+        <svg viewBox="0 0 24 20" preserveAspectRatio="none" style="width:24px; height:20px; overflow:visible;"><line x1="12" y1="0" x2="12" y2="12" stroke="var(--edge)" stroke-width="1.5"/><polygon points="7,10 12,20 17,10" fill="var(--edge)"/></svg>
+      </div>
+
+      <div class="zone" style="display:flex; align-items:stretch; gap:14px; padding-left:12px;">
+        <span style="width:84px; flex-shrink:0; display:flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--node-fg-dim);">Consumers</span>
+        <div style="display:flex; gap:12px; flex:1;">
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8.5" width="14" height="9.5" rx="2.5"/><path d="M12 8.5V6"/><circle cx="12" cy="4.7" r="1.1"/><circle cx="9.6" cy="13.2" r="1"/><circle cx="14.4" cy="13.2" r="1"/></svg></span>
+            <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Agents</span><span style="font-size:11px; color:var(--node-fg-dim);">autonomous</span></span>
+          </div>
+          <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+            <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M8 15.5v-3M12 15.5v-6M16 15.5v-4.5"/></svg></span>
+            <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Insights</span><span style="font-size:11px; color:var(--node-fg-dim);">dashboards</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <span><span class="fig">FIG. A</span> · ARCHITECTURE-CANVAS · icon-node zones + labeled connectors</span>
+      <span>SCHEMATIC BLUEPRINT · icons via assets/icons/ (currentColor)</span>
+    </footer>
+  </div>
+</body>
+</html>

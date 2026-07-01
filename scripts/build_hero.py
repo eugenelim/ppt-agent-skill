@@ -24,12 +24,12 @@ CATEGORIES = {
     "dark_professional": {
         "cn": "暗色专业",
         "en": "Dark Professional",
-        "ids": ["dark_tech", "xiaomi_orange", "luxury_purple", "nocturne_violet", "cyberpunk_neon", "chrome_y2k", "noir_film"],
+        "ids": ["dark_tech", "xiaomi_orange", "luxury_purple", "nocturne_violet", "cyberpunk_neon", "chrome_y2k", "noir_film", "graphite_gold"],
     },
     "light_premium": {
         "cn": "浅色高级",
         "en": "Light Premium",
-        "ids": ["blue_white", "fresh_green", "minimal_gray", "mocha_editorial", "medical_pulse", "earth_concrete", "champagne_gold", "liquid_glass"],
+        "ids": ["blue_white", "fresh_green", "minimal_gray", "mocha_editorial", "medical_pulse", "earth_concrete", "champagne_gold", "liquid_glass", "editorial_paper", "schematic_blueprint"],
     },
     "vibrant": {
         "cn": "活力鲜明",

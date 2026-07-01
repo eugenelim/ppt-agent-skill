@@ -1,6 +1,6 @@
 # diagram-architecture（架构视图族）
 
-> family `block_ref`: `diagram-architecture`。配方：`architecture-component` / `architecture-deployment` / `er-data-model` / `layers`。
+> family `block_ref`: `diagram-architecture`。配方：`architecture-component` / `architecture-deployment` / `er-data-model` / `layers` / `architecture-canvas`。
 > 前置：先读 `blocks/diagram.md` 的**主题契约**与**共享基元**（节点盒/连线/箭头/标注/8px 栅格）。本族所有模板的颜色字体只用契约里的局部变量。
 > 管线：HTML→SVG→PPTX，遵守 pipeline-compat.md（SVG `<polygon>` 箭头、真实 `<div>`/SVG `<line>` 连线、HTML 叠加标注、禁 `<text>`/`mask-image`/`conic-gradient`/`background-clip:text`）。
 
@@ -263,3 +263,104 @@
 **自检**：每层等高（`min-height:52px`）；focus 层用 accent 左边条；全宽堆叠 gap=8px。
 
 **管线安全**：纯 `<div>` 堆叠 + `linear-gradient`；无 SVG/伪元素/mask；颜色全用契约变量。
+
+---
+
+### 架构-图标画布 (architecture-canvas)
+
+**何时用**：数据/平台架构的"分层带 + 图标节点"画布——若干**带名横向 zone**，每个 zone 内是一排**图标节点卡**（来自 `assets/icons/` 图标库，内联 `<svg>`），中间一条**高亮主脊 zone**（如数据湖/知识层），zone 之间用**带标注连接线**相接。适合"平台由哪些层构成、每层有哪些能力、数据如何流动"。比 `architecture-component` 多了图标语义与命名脊层；节点少时退化为 `layers`。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "architecture-canvas",
+  "zones": [
+    {"label":"Sources", "connector_out":"ingest", "nodes":[
+      {"icon":"users","label":"Channels","desc":"web · mobile · partners"},
+      {"icon":"connector","label":"Connectors","desc":"SaaS · systems"}]},
+    {"label":"Platform", "spine":true, "connector_out":"serve", "nodes":[
+      {"icon":"database","label":"Data Lake","focus":true},
+      {"icon":"knowledge-graph","label":"Knowledge Graph"},
+      {"icon":"pipeline","label":"Curate"}]},
+    {"label":"Consumers", "nodes":[
+      {"icon":"agent","label":"Agents","desc":"autonomous"},
+      {"icon":"dashboard","label":"Insights"}]}
+  ]
+}
+```
+> `icon` = `assets/icons/<id>.svg` 的 id（用 `python3 scripts/icon_search.py <concept> --snippet` 取内联片段）。图标 `stroke=currentColor`，颜色随节点 `color` 变。
+
+**模板**（zone 带 + 图标节点卡 + 主脊高亮 + 带标注连接线）：
+```html
+<div class="diagram arch-canvas" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  font-family:var(--font-primary); display:flex; flex-direction:column; gap:6px; width:840px;">
+
+  <!-- zone：左侧 zone 名 + 右侧图标节点卡行 -->
+  <div class="zone" style="display:flex; align-items:stretch; gap:14px; padding-left:12px;">
+    <span style="width:84px; flex-shrink:0; display:flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--node-fg-dim);">Sources</span>
+    <div style="display:flex; gap:12px; flex:1;">
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.7 19a5.3 5.3 0 0 1 10.6 0"/><path d="M16 6.3a3 3 0 0 1 0 5.4M17.6 19a5.3 5.3 0 0 0-2.9-4.75"/></svg></span>
+        <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Channels</span><span style="font-size:11px; color:var(--node-fg-dim);">web · mobile · partners</span></span>
+      </div>
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15 6.6 17.4a3 3 0 0 1-4.24-4.24L4.8 10.7"/><path d="M15 9l2.4-2.4a3 3 0 0 0-4.24-4.24L10.7 4.8"/><path d="M9.4 14.6 14.6 9.4"/></svg></span>
+        <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Connectors</span><span style="font-size:11px; color:var(--node-fg-dim);">SaaS · systems</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 带标注连接线：SVG 线 + polygon 箭头 + HTML mono 标注 -->
+  <div style="display:flex; align-items:center; justify-content:center; gap:8px; height:20px; padding-left:96px;">
+    <span style="font-family:var(--font-mono,monospace); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--node-fg-dim);">ingest</span>
+    <svg viewBox="0 0 24 20" preserveAspectRatio="none" style="width:24px; height:20px; overflow:visible;"><line x1="12" y1="0" x2="12" y2="12" stroke="var(--edge)" stroke-width="1.5"/><polygon points="7,10 12,20 17,10" fill="var(--edge)"/></svg>
+  </div>
+
+  <!-- 主脊 zone：accent 左边条 + accent zone 名 + focus 节点 -->
+  <div class="zone spine" style="display:flex; align-items:stretch; gap:14px; padding-left:9px; border-left:3px solid var(--node-accent);">
+    <span style="width:84px; flex-shrink:0; display:flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--node-accent);">Platform</span>
+    <div style="display:flex; gap:12px; flex:1;">
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg); box-shadow:0 0 0 1px var(--node-accent);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.6"/><path d="M5 6v12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6V6"/><path d="M5 12c0 1.4 3.1 2.6 7 2.6s7-1.2 7-2.6"/></svg></span>
+        <span style="font-weight:700; font-size:13px;">Data Lake</span>
+      </div>
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="17.5" r="2"/><circle cx="19" cy="17.5" r="2"/><circle cx="12" cy="13" r="2"/><path d="M12 7v4M10.4 14.3 6.5 16.2M13.6 14.3l3.9 1.9"/></svg></span>
+        <span style="font-weight:700; font-size:13px;">Knowledge Graph</span>
+      </div>
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2.2"/><rect x="9.5" y="9.8" width="5" height="4.4" rx="1"/><circle cx="19" cy="12" r="2.2"/><path d="M7.2 12h2.3M14.5 12h2.3"/></svg></span>
+        <span style="font-weight:700; font-size:13px;">Curate</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; align-items:center; justify-content:center; gap:8px; height:20px; padding-left:96px;">
+    <span style="font-family:var(--font-mono,monospace); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:var(--node-fg-dim);">serve</span>
+    <svg viewBox="0 0 24 20" preserveAspectRatio="none" style="width:24px; height:20px; overflow:visible;"><line x1="12" y1="0" x2="12" y2="12" stroke="var(--edge)" stroke-width="1.5"/><polygon points="7,10 12,20 17,10" fill="var(--edge)"/></svg>
+  </div>
+
+  <div class="zone" style="display:flex; align-items:stretch; gap:14px; padding-left:12px;">
+    <span style="width:84px; flex-shrink:0; display:flex; align-items:center; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--node-fg-dim);">Consumers</span>
+    <div style="display:flex; gap:12px; flex:1;">
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8.5" width="14" height="9.5" rx="2.5"/><path d="M12 8.5V6"/><circle cx="12" cy="4.7" r="1.1"/><circle cx="9.6" cy="13.2" r="1"/><circle cx="14.4" cy="13.2" r="1"/></svg></span>
+        <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Agents</span><span style="font-size:11px; color:var(--node-fg-dim);">autonomous</span></span>
+      </div>
+      <div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px; background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+        <span style="flex-shrink:0; width:24px; height:24px; color:var(--node-accent); display:inline-flex;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M8 15.5v-3M12 15.5v-6M16 15.5v-4.5"/></svg></span>
+        <span style="display:flex; flex-direction:column; gap:1px; min-width:0;"><span style="font-weight:700; font-size:13px;">Insights</span><span style="font-size:11px; color:var(--node-fg-dim);">dashboards</span></span>
+      </div>
+    </div>
+  </div>
+</div>
+```
+> 复制规律：每个 zone 一行（左 zone 名 + 右等宽图标节点卡）；主脊 zone 加 `border-left:3px solid var(--node-accent)` + accent zone 名；zone 间夹"标注 + SVG 箭头"连接行（`padding-left:96px` 让箭头对齐节点列）。图标一律内联 `<svg>` + `stroke=currentColor`，颜色随卡片 `color`/`--node-accent`。
+
+**自检**：图标全部内联 `<svg currentColor>`（禁 `<img>`/`url()`）；zone 名/节点名/描述均为 HTML 文本；主脊用 `--node-accent` 左边条 + focus 节点描边拉主次；节点卡 `box-sizing:border-box` + `min-height:52px` 防坍缩；颜色字体只用契约局部变量。
+
+**管线安全**：连接线箭头 `<polygon>`、连线 SVG `<line>`；图标内联 `<svg>`（`<circle>`/`<rect>`/`<ellipse>`/`<path>`/`<polygon>`）；无 SVG `<text>`（标注是 HTML `<span>`）；无 `mask-image`/`conic-gradient`/`background-image:url()`/`background-clip:text`/伪元素装饰。
