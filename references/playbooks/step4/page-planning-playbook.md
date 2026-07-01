@@ -41,6 +41,16 @@
 - `chart.chart_type`：写 validator 认可的枚举，**使用下划线命名**，如 `metric_row`、`comparison_bar`、`stacked_bar`、`progress_bar`。
 - `resources.*_refs` 与 `card.resource_ref.*`：推荐写 `references/` 中的真实文件 stem，如 `metric-row`、`comparison-bar`、`visual-hierarchy`；`resource_loader.py` 会自动做下划线/连字符归一化。
 - `process` 是 schema 原生 `card_type`，但当前没有 `blocks/process.md`。若使用它，必须同时给出更强的 `layout_refs`、`principle_refs`、`director_command` 和必要的 `chart_refs` / `resource_ref`，不要假设会有专属 block 正文可加载。
+- **diagram 配方按 family 加载（重要）**：`card_type:diagram` 永远会注入选择器 `blocks/diagram.md`（主题契约 + 共享基元），但**每类图解的配方正文在按需加载的 family 文件里**。根据 `diagram_type` 在 `resources.block_refs` 里加上对应 family stem，否则 HTML 阶段拿不到该类配方正文：
+
+  | diagram_type | block_refs 追加 |
+  |--------------|-----------------|
+  | `flowchart` `swimlane` `sequence` `state-machine` `data-flow` | `diagram-process-flow` |
+  | `architecture-component` `architecture-deployment` `er-data-model` `layers` | `diagram-architecture` |
+  | `gantt` `dependency-network` `org-tree` `kanban` | `diagram-project` |
+  | `mind-map` `matrix-quadrant` `venn` `pyramid` `funnel` `cycle` `hub-spoke` `onion` `fishbone` | `diagram-concept` |
+
+  例：一页用 `diagram_type:architecture-deployment` → `"block_refs": ["diagram-architecture"]`。`timeline` 卡走 `card_type:timeline`（自动加载 `blocks/timeline.md`），不需要 family ref。
 
 ### principle_refs 指导（重要：设计原则文件按场景选用）
 

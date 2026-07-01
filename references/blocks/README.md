@@ -32,3 +32,16 @@
 - 一页中复合组件与基础卡片共存时，让复合组件用跨列成为画面的主角，基础卡片退为配角
 - 同一页不宜超过 1 个跨列跨行的复合组件，否则两个"主角"会互相抢戏
 - 当复合组件用 `transparent` 裸露在画面中时，它的视觉张力来自组件自身的结构（轴线、节点、面板），不需要额外的卡片边框去"框住"它
+
+## diagram 配方族（按需加载）
+
+`diagram` 不是单文件：`blocks/diagram.md` 是**永远注入的选择器 + 主题契约 + 共享基元**，每类图解的配方正文在四个 family 文件里，由 planning 的 `block_refs` 按 `diagram_type` 选取（见 `playbooks/step4/page-planning-playbook.md` 的映射表）：
+
+| family 文件 | 覆盖的 diagram_type |
+|------------|---------------------|
+| `diagram-architecture.md` | architecture-component / architecture-deployment / er-data-model / layers |
+| `diagram-process-flow.md` | flowchart / swimlane / sequence / state-machine / data-flow |
+| `diagram-project.md` | gantt / dependency-network / org-tree / kanban |
+| `diagram-concept.md` | mind-map / matrix-quadrant / venn / pyramid / funnel / cycle / hub-spoke / onion / fishbone |
+
+**主题契约**：所有图解颜色/字体只绑定 deck 的 CSS 变量（经 `diagram.md` 的 `--node-*` 局部变量），换风格整图随 `:root` 改色。**管线安全**：箭头 SVG `<polygon>`、连线真实 `<div>`/SVG `<line>`、标注 HTML 叠加、禁 SVG `<text>`，由 `scripts/lint_diagram_recipes.py` 把关。
