@@ -164,19 +164,19 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 #### 5a. 风格决策
 
-**执行**：阅读 `references/styles/index.md` 主索引（含决策矩阵），按主题关键词匹配 28 种预置风格之一
+**执行**：阅读 `references/styles/index.md` 主索引（含决策矩阵），按主题关键词匹配 29 种预置风格之一
 
-**28 风格按 5 板块分组**（详细 JSON 定义在板块文件中）：
+**29 风格按 5 板块分组**（详细 JSON 定义在板块文件中）：
 
 | 板块 | 数量 | 风格 ID | 板块文件 |
 |------|------|--------|---------|
-| 暗色专业 | 7 | dark_tech / xiaomi_orange / luxury_purple / nocturne_violet / cyberpunk_neon / chrome_y2k / noir_film | `references/styles/dark.md` |
+| 暗色专业 | 8 | dark_tech / xiaomi_orange / luxury_purple / nocturne_violet / cyberpunk_neon / chrome_y2k / noir_film / graphite_gold | `references/styles/dark.md` |
 | 浅色高级 | 10 | blue_white / fresh_green / minimal_gray / mocha_editorial / medical_pulse / earth_concrete / champagne_gold / liquid_glass / editorial_paper / schematic_blueprint | `references/styles/light.md` |
 | 活力鲜明 | 4 | vibrant_rainbow / kindergarten_pop / bauhaus_block / candy_pastel | `references/styles/vibrant.md` |
 | 东方文化 | 3 | royal_red / sakura_wabi / ink_jade | `references/styles/cultural.md` |
 | 自然/复古 | 4 | botanic_forest / safari_savanna / retro_70s / gov_authority | `references/styles/natural.md` |
 
-**风格预览**：执行 `python3 SKILL_DIR/scripts/gallery.py` 生成 `ppt-output/style-gallery/index.html`，浏览器打开可视化对比 28 风格。
+**风格预览**：执行 `python3 SKILL_DIR/scripts/gallery.py` 生成 `ppt-output/style-gallery/index.html`，浏览器打开可视化对比 29 风格。
 
 **也必读**：`references/typography.md`（排版铁律：字距 / tabular-nums / OpenType / serif italic 混排 / 首字下沉 / 不对称网格 / 字体栈三层降级 / 微妙纹理）
 
@@ -380,7 +380,7 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 | `references/prompts.md` | 每步生成前（合并版）| 5 套 Prompt 模板（调研/大纲/策划/设计/备注）|
 | `references/prompts/*.md` | 模块化版本（23 文件）| 按 step + module + tpl 拆分的 Prompt 模板 |
 | `references/playbooks/*.md` | 每步执行手册（11 文件）| outline / research / source / style / step4 各 phase 的执行 playbook |
-| `references/styles/index.md` | **Step 5a** | 28 种预置风格索引 + 决策矩阵 + JSON Schema |
+| `references/styles/index.md` | **Step 5a** | 29 种预置风格索引 + 决策矩阵 + JSON Schema |
 | `references/styles/{dark,light,vibrant,cultural,natural}.md` | Step 5a 选定风格后 | 该板块所有风格的完整 JSON + CSS 变量 + Mock 链接 |
 | `references/typography.md` | **Step 5c** | 排版铁律 14 条（字距/tabular-nums/OpenType/serif italic 混排/字体栈降级）|
 | `references/charts/index.md` | **Step 5c 涉及数据可视化时** | 18 种图表索引 + 决策矩阵 |

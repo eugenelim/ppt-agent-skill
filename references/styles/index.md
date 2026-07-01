@@ -1,4 +1,4 @@
-# 风格系统索引（28 风格 / 5 板块）
+# 风格系统索引（29 风格 / 5 板块）
 
 > 本目录下每个 `<quadrant>.md` 文件包含一个板块的所有风格定义。
 >
@@ -8,7 +8,7 @@
 
 ---
 
-## 1. 28 风格全景表
+## 1. 29 风格全景表
 
 | # | style_id | 板块 | 灵感 | 适用场景 | 板块文件 |
 |---|----------|------|------|---------|---------|
@@ -40,6 +40,7 @@
 | 26 | `safari_savanna` | 自然/复古 | 萨凡纳暖橙 | 旅行 / 探险 / 纪录片 | [natural.md](natural.md) |
 | 27 | `retro_70s` | 自然/复古 | 70 年代复古 | 独立咖啡 / 唱片 / 复古 | [natural.md](natural.md) |
 | 28 | `gov_authority` | 自然/复古 | 国徽 / 国宴 | 党政 / 重大会议 / 严肃 | [natural.md](natural.md) |
+| 29 | `graphite_gold` | 暗色专业 | 高端顾问简报（黄昏会议室）| 咨询战略简报 / 顾问汇报 / 内部提案 / 论证型暗色 deck | [dark.md](dark.md) |
 
 ---
 
@@ -50,6 +51,7 @@
 | 主题关键词 | 推荐板块 | 默认风格 |
 |-----------|---------|---------|
 | AI / SaaS / 开发者 / 大模型 / 数据 | 暗色专业 | `dark_tech` |
+| 咨询战略简报 / 顾问汇报 / 内部提案 / 论证型暗色（暖金 + 尘调多信号）| 暗色专业 | `graphite_gold` |
 | 硬件 / 手机 / IoT / 汽车 / 智能家居 | 暗色专业 | `xiaomi_orange` |
 | 奢侈品 / 时尚 / 高端品牌 | 暗色专业 | `luxury_purple` 或 `noir_film` |
 | 游戏 / 电竞 / Web3 | 暗色专业 | `cyberpunk_neon` 或 `chrome_y2k` |
@@ -191,7 +193,7 @@
 ## 4. 兼容性
 
 - 8 个原 `style_id`（`dark_tech` / `xiaomi_orange` / `blue_white` / `royal_red` / `fresh_green` / `luxury_purple` / `minimal_gray` / `vibrant_rainbow`）保留不变，但视觉按世界级标杆重做。
-- 20 个新风格使用诗意新名（含较晚加入的 `editorial_paper` / `schematic_blueprint`）。
+- 21 个新风格使用诗意新名（含较晚加入的 `editorial_paper` / `schematic_blueprint` / `graphite_gold`）。
 - 旧的 `references/style-system.md` 改为引导文件，redirect 到本目录。
 - Prompt #4 中所有原字段保持兼容；新字段（`mood_keywords` / `design_soul` / `decoration_dna` / `typography` / `decorations`）为可选注入。
 

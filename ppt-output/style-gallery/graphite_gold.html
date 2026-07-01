@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>graphite_gold — 高端顾问战略简报</title>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#111118; --bg2:#16161f; --card:#1c1d28; --card2:#21222f;
+    --ink:#ECECF2; --muted:#9A9BA8; --line:#2C2D3A;
+    --gold:#D4A96E; --gold-deep:#B98E4E; --teal:#6DBEA3; --blue:#7BB4CC; --red:#D46B6B; --violet:#9B8BD4;
+    --foot:#54556a;
+    --sans:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+    --head:'Sora','Inter Tight',-apple-system,sans-serif;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;position:relative;
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-feature-settings:'kern','liga','calt','tnum';font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;}
+  .grid{position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,0.015) 1px,transparent 1px);
+    background-size:80px 80px;}
+  .page{position:absolute;inset:0;padding:38px 64px 56px;display:flex;flex-direction:column;}
+
+  /* topbar + rule */
+  .topbar{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px;}
+  .eyebrow{font-family:var(--head);font-size:12px;letter-spacing:0.22em;text-transform:uppercase;
+    color:var(--gold);font-weight:600;margin-bottom:6px;}
+  h2{font-family:var(--head);font-size:31px;font-weight:700;line-height:1.1;letter-spacing:-0.01em;}
+  .brand{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:0.04em;color:var(--muted);}
+  .brand b{color:var(--ink);}
+  .rule{height:2px;background:linear-gradient(90deg,var(--gold),transparent);margin:9px 0 15px;border:0;}
+  .flowintro{font-size:15px;color:#CfCfD8;line-height:1.5;max-width:96ch;margin-bottom:14px;}
+  .flowintro b{color:var(--ink);}
+
+  /* reasoning cards */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;flex:1;min-height:0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:17px 18px;
+    display:flex;flex-direction:column;}
+  .topline{height:3px;border-radius:3px 3px 0 0;margin:-17px -18px 14px;background:var(--cdot);}
+  .tag{font-family:var(--head);font-size:18px;font-weight:800;line-height:1.12;}
+  .subtag{font-size:12px;color:#B9BAC6;margin:4px 0 13px;line-height:1.3;}
+  .psec{margin-bottom:11px;}
+  .sl2{display:block;font-family:var(--head);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;
+    font-weight:700;margin-bottom:5px;}
+  .sb{display:flex;flex-direction:column;gap:5px;list-style:none;}
+  .sb li{position:relative;padding-left:12px;font-size:11.5px;line-height:1.36;color:#D4D5E0;}
+  .sb li .d{position:absolute;left:0;top:6px;width:4px;height:4px;border-radius:50%;background:var(--cdot);}
+  .sb li b{color:#fff;font-weight:700;}
+  .netline{margin-top:auto;padding-top:11px;border-top:1px solid var(--line);font-family:var(--head);
+    font-weight:700;font-size:12.5px;line-height:1.38;color:#EFE3CC;}
+  .netline .nk{color:var(--gold);letter-spacing:0.05em;text-transform:uppercase;font-size:10px;display:block;margin-bottom:2px;}
+
+  /* condition band */
+  .condlist{display:flex;flex-direction:column;gap:10px;margin-top:15px;}
+  .cond{display:flex;gap:16px;align-items:center;background:var(--card);border:1px solid var(--line);
+    border-radius:11px;padding:11px 18px;}
+  .cond .cn{font-family:var(--head);font-weight:800;font-size:14px;color:#fff;flex:0 0 176px;line-height:1.18;}
+  .cond .cd{font-size:12.5px;line-height:1.4;color:#D4D5E0;flex:1;}
+  .cond .cd b{color:#fff;}
+  .cond .ctag{flex:0 0 auto;font-family:var(--head);font-size:9px;letter-spacing:0.13em;text-transform:uppercase;
+    font-weight:800;padding:4px 9px;border-radius:5px;color:#16140d;}
+  .cond.key{border-left:4px solid var(--gold);}
+  .cond.key .ctag{background:var(--gold);}
+  .cond.key.red{border-left-color:var(--red);}
+  .cond.key.red .ctag{background:var(--red);}
+
+  .pagefoot{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:space-between;
+    padding:0 64px;font-family:var(--head);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--foot);}
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="page">
+
+    <div class="topbar">
+      <div>
+        <div class="eyebrow">01 · The approach</div>
+        <h2>Two levers, working together</h2>
+      </div>
+      <div class="brand"><b>Acme</b> Program</div>
+    </div>
+    <hr class="rule">
+    <p class="flowintro">Productivity comes from <b>two levers at once</b>: AI does more of the actual work, <em style="color:var(--gold);font-style:italic">and</em> a new operating model removes the waits between the work. Tools alone move only the first lever — which is why tool-only teams plateau.</p>
+
+    <div class="cols">
+      <div class="card" style="--cdot:var(--blue)">
+        <div class="topline"></div>
+        <div class="tag">Platform Engineering</div>
+        <div class="subtag">Working pipelines and migrations, faster — with the waiting taken out.</div>
+        <div class="psec"><span class="sl2" style="color:var(--gold)">AI does the work</span>
+          <ul class="sb"><li><span class="d"></span>From intent, agents <b>generate code, translations, and the tests that prove it</b> — human-approved at each gate.</li></ul></div>
+        <div class="psec"><span class="sl2" style="color:var(--blue)">Remove the waits</span>
+          <ul class="sb"><li><span class="d"></span><b>No handoff queues</b> — modelers, developers, and testers collapse into one flow.</li><li><span class="d"></span><b>No context-hunting</b> — the knowledge layer answers instantly.</li></ul></div>
+        <div class="netline"><span class="nk">Result</span>The whole intent&nbsp;&rarr;&nbsp;production cycle shrinks — not just the coding step.</div>
+      </div>
+      <div class="card" style="--cdot:var(--teal)">
+        <div class="topline"></div>
+        <div class="tag">Pipeline Support</div>
+        <div class="subtag">Incidents resolved faster — recurring ones prevented before they page anyone.</div>
+        <div class="psec"><span class="sl2" style="color:var(--gold)">AI does the work</span>
+          <ul class="sb"><li><span class="d"></span>Agents <b>triage, find root cause, and draft the fix</b> — recurring patterns automated before they escalate.</li></ul></div>
+        <div class="psec"><span class="sl2" style="color:var(--teal)">Remove the waits</span>
+          <ul class="sb"><li><span class="d"></span><b>No triage backlog</b> — failures routed the moment they land.</li><li><span class="d"></span><b>No re-diagnosing</b> — known patterns resolve automatically.</li></ul></div>
+        <div class="netline"><span class="nk">Result</span>MTTR drops and the recurring-failure tail shrinks — the team gets off the treadmill.</div>
+      </div>
+    </div>
+
+    <div class="condlist">
+      <div class="cond key">
+        <div class="cn">Leadership support</div>
+        <div class="cd">A named sponsor who <b>funds the work</b>, clears blockers, and <b>protects the team's time</b>.</div>
+        <div class="ctag">Make-or-break</div>
+      </div>
+      <div class="cond key red">
+        <div class="cn">The team wants it</div>
+        <div class="cd">Genuinely interested and leaning in. If they don't want it, no amount of tooling fixes that.</div>
+        <div class="ctag">Make-or-break</div>
+      </div>
+    </div>
+
+    <div class="pagefoot"><span>graphite_gold · charcoal + champagne gold · advisory brief</span><span>03 / 07</span></div>
+
+  </div>
+</body>
+</html>
