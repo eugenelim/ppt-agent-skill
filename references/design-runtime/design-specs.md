@@ -346,9 +346,17 @@ body {
 | 4 | 容器内文字不溢出（`overflow:hidden` + `line-clamp`） | 容器壳可随意移动叠压 |
 | 5 | 只使用纯静态视觉（无 `@keyframes`/`animation`/`transition`） | PPTX 导出不支持动画 |
 
-### CSS 能力释放
+### CSS 能力释放（以 pipeline-compat.md 为准）
 
-可自由使用：`background-clip:text` / `clip-path` / `mask-image` / `conic-gradient` / `backdrop-filter` / `mix-blend-mode` / 多层 `box-shadow` / 伪元素 / `writing-mode` / `filter`。禁止 `@keyframes`/`animation`/`transition`。
+> **权威来源**：本表只是创意提示；能力边界由 [pipeline-compat.md](../pipeline-compat.md) 裁定。HTML→SVG→PPTX 不是浏览器，下面"降级/禁用"列的特性在导出后会丢失或偏移，html2svg 仅对其中 6 种做**效果远逊**的兜底。两者冲突时一律服从 pipeline-compat.md。
+
+| 档位 | 特性 | 说明 |
+|------|------|------|
+| **安全可用** | `clip-path`(多边形) / 多层 `box-shadow` / `writing-mode` / `border-radius` / `linear-gradient` / `radial-gradient` | 转换稳定 |
+| **降级/禁用（导出会坏，优先用管线安全替代）** | `background-clip:text` / `-webkit-text-fill-color` / `mask-image` / `conic-gradient` / `mix-blend-mode` / `filter:blur()` / 伪元素做视觉内容 / CSS background-image / CSS border 三角形 | 见 pipeline-compat.md §1 的正确替代写法（纯色文字 / div 遮罩 / 内联 SVG circle+dasharray / opacity 叠加 / 真实 `<span>` / `<img>` / SVG `<polygon>`） |
+| **始终禁止** | `@keyframes` / `animation` / `transition` | PPTX 不支持动画 |
+
+> 纯 HTML 预览（不导出 PPTX）时降级列可放开；只要目标是 PPTX，就按"安全可用"列施工。图解/图表配方一律按 PPTX 标准（最严）写。
 
 ### 设计倾向
 
