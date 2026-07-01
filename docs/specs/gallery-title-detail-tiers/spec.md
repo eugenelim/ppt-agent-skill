@@ -131,17 +131,20 @@ Rails for the implementer — do these by default, pause on these, never these.
 
 ## Testing Strategy
 
-- **Mechanical gate:** `python3 scripts/smoke_test.py --phase 1` — extended to
-  both tiers; must show 0 net-new failures vs. the pre-change baseline (10 warns
-  on the untouched mocks are baseline).
+- **Mechanical gate:** `python3 scripts/smoke_test.py --phase 1` — validates
+  **both** tiers and **fails-closed if either tier is missing** for any style
+  (both `<id>.html` and `<id>.cover.html` are required), so a future one-tier
+  style is caught mechanically (this is what makes the forward standard
+  structural, not doc-only). Must show 0 failures. Also runs the
+  `test_gallery_toggle.py` construction check as a subprocess self-check.
 - **Warn budget:** the typography heuristics *warn* (not fail) when numbers
   appear without `tabular-nums`, or when `font-feature-settings` is absent
   (`smoke_test.py:231,235`). Every net-new slide **must** carry both
   `font-feature-settings` and (when it shows any 2+-digit number)
-  `tabular-nums` — so the expected **net-new warn count is 0**. Any net-new warn
-  is a real omission to fix, not accepted drift. (The 3 existing `.cover.html`
-  already carry 0 warns, so the 10-warn baseline is invariant under the both-tier
-  scan expansion — it only stays invariant if every net-new cover holds this bar.)
+  `tabular-nums` — so the expected **net-new warn count is 0** (baseline 10 warns
+  on untouched mocks). The budget is **enforceable, not prose-only**:
+  `smoke_test.py --phase 1 --max-warn 10` exits non-zero if the total warn count
+  exceeds the baseline (CI can pin this).
 - **Goal-based:** grep `index.html` for both tier iframe sources + the toggle
   controls; `gallery.py` regenerates deterministically; the degradation
   construction check on `build_index_html`.

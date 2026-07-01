@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """test_gallery_toggle.py — construction check for the gallery cover/detail toggle.
 
-Drives `gallery.build_index_html` with synthetic styles under a temp GALLERY_DIR
-and asserts the missing-tier guard: a style with both tiers emits a toggle
-control (`class="tier-toggle"` + `card has-both`); a style with only one tier
-emits none; the global switch is always present. See
-docs/specs/gallery-title-detail-tiers/. No pytest harness required — run
-directly or via smoke_test. Exit 0 = all pass, 1 = a failure.
+Pins the **emitted-markup contract** of `gallery.build_index_html` (a build-time
+check, not a JS-behavior test): given synthetic styles under a temp GALLERY_DIR,
+a style with both tiers emits a toggle control (`class="tier-toggle"` +
+`card has-both`) with correct `data-cover`/`data-detail` URLs; a style with only
+one tier emits none; the global switch is always present; the both-tier default
+face is the cover. The runtime swap/guard behavior of the inline `setTier` JS
+(clicking Detail actually changes `iframe.src`, the `if(!url) return` degradation
+guard) is verified by the T1 manual-QA transcript, not here. See
+docs/specs/gallery-title-detail-tiers/. No pytest harness required — run directly
+or via `smoke_test.py --phase 1` (wired into its subprocess self-checks). Exit
+0 = all pass, 1 = a failure.
 """
 from __future__ import annotations
 
