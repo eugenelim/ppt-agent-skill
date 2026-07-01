@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gallery.py -- 风格预览画廊生成器
 
-读取 references/styles/*.md 中的 26 风格定义，生成：
+读取 references/styles/*.md 中的 28 风格定义，生成：
 - ppt-output/style-gallery/index.html  统一卡片墙索引（按 5 板块分组）
 - 可选：调用 puppeteer 截图每个 mock 为 PNG（--screenshots 选项）
 
@@ -59,10 +59,11 @@ def extract_style_jsons(md_path: Path) -> list:
 
 
 def collect_all_styles() -> list:
-    """收集所有 26 风格。"""
+    """收集所有 28 风格。"""
     styles = []
     for md in sorted(STYLES_DIR.glob("*.md")):
-        if md.name == "index.md":
+        # index.md 与 README.md 只含 schema 示例块（非真实风格），跳过以免污染计数
+        if md.name.lower() in ("index.md", "readme.md"):
             continue
         styles.extend(extract_style_jsons(md))
     return styles
@@ -159,7 +160,7 @@ def build_index_html(grouped: dict) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PPT Agent Skill · 26 风格预览画廊</title>
+<title>PPT Agent Skill · 28 风格预览画廊</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -354,7 +355,7 @@ def build_index_html(grouped: dict) -> str:
   <header class="header">
     <div class="label">PPT AGENT SKILL · WORLD-CLASS</div>
     <h1>风格预览<em>画廊。</em></h1>
-    <p class="deck">26 个世界级演示文稿风格，按 5 板块分组。每张卡片是真实 1280×720 设计稿的缩略预览，点击打开看原尺寸。</p>
+    <p class="deck">28 个世界级演示文稿风格，按 5 板块分组。每张卡片是真实 1280×720 设计稿的缩略预览，点击打开看原尺寸。</p>
     <div class="stats">
       <div class="stat"><div class="num">{total}</div><div class="l">STYLES</div></div>
       <div class="stat"><div class="num">5</div><div class="l">CATEGORIES</div></div>
@@ -460,7 +461,7 @@ def main():
         cnt = len(grouped.get(cat, []))
         print(f"   · {cn} ({en}): {cnt}")
     print(f"\n📄 Output: {out_path}")
-    print(f"   Open in browser to preview all 26 styles")
+    print(f"   Open in browser to preview all 28 styles")
 
     if args.screenshots:
         print(f"\n📸 Taking screenshots...")

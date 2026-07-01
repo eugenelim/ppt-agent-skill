@@ -5,7 +5,7 @@
 HTML 模板抽出来，套上一套 canonical 主题 :root（deck 变量），渲染成 PNG，并生成
 index.html 网格预览 —— 让本会话新增的图解 block 可以直接被"看到"。
 
-与 gallery.py 互补：gallery.py 预览 26 种风格，本脚本预览图解配方本身。
+与 gallery.py 互补：gallery.py 预览 28 种风格，本脚本预览图解配方本身。
 
 用法:
     python3 scripts/diagram_gallery.py                 # 生成 HTML（dark 主题）

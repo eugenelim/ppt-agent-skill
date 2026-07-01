@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>editorial_paper — 温润研究手记</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-primary:#faf9f5; --bg-2:#f0eee6;
+    --card-from:#ffffff; --card-to:#faf9f5; --card-border:rgba(20,20,19,0.10);
+    --text-primary:#141413; --text-secondary:#5e5d59;
+    --accent-1:#d97757; --accent-2:#6a9bcc;
+    --serif:'Fraunces','Tiempos Headline',Georgia,serif;
+    --sans:'Inter',-apple-system,'Segoe UI',sans-serif;
+    --mono:'Geist Mono','IBM Plex Mono','SF Mono',monospace;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;background:var(--bg-primary);
+    color:var(--text-primary);font-family:var(--sans);position:relative;}
+  .masthead{position:absolute;top:44px;left:64px;right:64px;display:flex;
+    justify-content:space-between;align-items:baseline;
+    border-bottom:1px solid var(--card-border);padding-bottom:14px;}
+  .masthead .kicker{font-family:var(--mono);font-size:12px;letter-spacing:0.18em;
+    text-transform:uppercase;color:var(--accent-1);}
+  .masthead .meta{font-family:var(--mono);font-size:12px;letter-spacing:0.12em;color:var(--text-secondary);}
+  h1{font-family:var(--serif);font-weight:600;font-size:72px;line-height:1.02;
+    letter-spacing:-0.02em;position:absolute;top:118px;left:64px;right:120px;}
+  h1 em{font-style:italic;color:var(--accent-1);}
+  .lede{position:absolute;top:300px;left:64px;width:560px;font-size:15px;line-height:1.85;color:var(--text-secondary);}
+  .lede .dropcap{float:left;font-family:var(--serif);font-size:74px;line-height:0.72;
+    padding:6px 12px 0 0;color:var(--text-primary);font-weight:600;}
+  .rail{position:absolute;top:300px;right:64px;width:520px;display:grid;grid-template-columns:1.1fr 0.9fr;gap:18px;}
+  .card{background:linear-gradient(180deg,var(--card-from),var(--card-to));
+    border:1px solid var(--card-border);border-radius:6px;padding:22px 22px 20px;}
+  .card .tag{font-family:var(--mono);font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text-secondary);}
+  .card .num{font-family:var(--serif);font-size:52px;font-weight:600;line-height:1;margin-top:10px;
+    font-variant-numeric:tabular-nums;}
+  .card.focus .num{color:var(--accent-1);}
+  .card .cap{font-size:12.5px;color:var(--text-secondary);margin-top:8px;line-height:1.5;}
+  .rule{position:absolute;left:64px;right:64px;bottom:96px;height:1px;background:var(--card-border);}
+  footer{position:absolute;bottom:44px;left:64px;right:64px;display:flex;justify-content:space-between;
+    font-family:var(--mono);font-size:11px;letter-spacing:0.1em;color:var(--text-secondary);}
+</style>
+</head>
+<body>
+  <div class="masthead">
+    <span class="kicker">Field Notes — Vol. 04</span>
+    <span class="meta">2026 · EDITORIAL PAPER</span>
+  </div>
+  <h1>Warm paper, <em>one</em> deliberate accent, and type that carries the argument.</h1>
+  <p class="lede"><span class="dropcap">R</span>estraint is the whole aesthetic. A serif display face states the thesis, a clean sans carries the body, and a monospace utility face marks every reference, date, and figure — so structure reads as information, not decoration. Colour appears once, where it earns its place.</p>
+  <div class="rail">
+    <div class="card focus"><span class="tag">Accent budget</span><div class="num">1</div><div class="cap">One clay accent per surface — signal, not flag.</div></div>
+    <div class="card"><span class="tag">Type roles</span><div class="num">3</div><div class="cap">Serif · sans · mono, each doing one job.</div></div>
+    <div class="card"><span class="tag">Radius</span><div class="num">6<span style="font-size:22px">px</span></div><div class="cap">Hairline borders over drop shadows.</div></div>
+    <div class="card"><span class="tag">Whitespace</span><div class="num">55<span style="font-size:22px">%</span></div><div class="cap">Breathing room is the luxury signal.</div></div>
+  </div>
+  <div class="rule"></div>
+  <footer><span>EDITORIAL PAPER · warm cream + clay</span><span>01 / 12</span></footer>
+</body>
+</html>

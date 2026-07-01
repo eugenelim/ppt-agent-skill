@@ -1,6 +1,6 @@
 # diagram-concept（概念与 SVG 隐喻族）
 
-> family `block_ref`: `diagram-concept`。配方：`mind-map` / `matrix-quadrant` / `venn` / `pyramid` / `funnel` / `cycle` / `hub-spoke` / `onion` / `fishbone`。
+> family `block_ref`: `diagram-concept`。配方：`mind-map` / `matrix-quadrant`（含 `consultant-2x2` / `quadrant-trajectory` 变体） / `venn` / `pyramid` / `funnel` / `cycle` / `hub-spoke` / `onion` / `fishbone` / `spectrum-marker` / `iceberg` / `force-field` / `before-after` / `causal-loop`。
 > 前置：先读 `blocks/diagram.md` 的**主题契约**与**共享基元**（节点盒/连线/箭头/标注/8px 栅格）。本族所有模板的颜色字体只用契约里的局部变量。
 > 管线：HTML→SVG→PPTX，遵守 pipeline-compat.md（SVG `<polygon>`/`<path>`/`<circle>` 几何，HTML 叠加标注，禁 `<text>`/`mask-image`/`conic-gradient`/`background-clip:text`）。
 
@@ -216,6 +216,58 @@
 **自检**：轴线/箭头 SVG `<polygon>`；轴标签/象限标签/散点标签全是 HTML `<span>`；散点是 `border-radius:50%` div；颜色全用契约变量。
 
 **管线安全**：无 SVG `<text>`；轴箭头用 `<polygon>`；无伪元素；无 `mask-image`/`conic-gradient`。
+
+#### 顾问 2×2 情景矩阵（consultant-2x2 变体）
+
+`diagram_type: "consultant-2x2"`（同族路由到本配方）。用于**四种未来/四种战略选项**的情景框架（BCG/麦肯锡式），不是散点定位。与基础 matrix-quadrant 的差异只有四点，模板其余部分复用上面的轴线骨架：
+
+1. **双向轴**：X/Y 轴线两端各加一个 `<polygon>` 箭头（`marker-start` + `marker-end` 语义），线宽 `stroke-width:1.2`（轴承担更多信息）。
+2. **命名单元格**：四个象限不放散点，改放 `position:absolute` 的 `<div>` 卡片，每格含一个标题（`font-weight:700; font-size:16px; color:var(--node-fg)`）+ 1–3 行描述（`font-size:11px; color:var(--node-fg-dim)`）。
+3. **单一焦点格**：只有一个象限着色 —— `background:var(--node-accent); opacity:0.06` 的整格底 + `border:1px solid var(--node-accent)`；其余三格 `border:1px solid var(--node-border)`。选两个焦点等于没有焦点。
+4. **Jobs 式轴标**：每个箭头端点只放**一个词**（HTML `<span>`），不带 `↑→` 字形、不带「高/低」括注、不在轴中点放标签。角标编号用 mono：`NN · 维度A / 维度B`。
+
+```html
+<!-- 双向轴片段（替换基础模板的单向轴线；其余骨架不变） -->
+<svg viewBox="0 0 560 480" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;">
+  <line x1="308" y1="30" x2="308" y2="450" stroke="var(--edge)" stroke-width="1.2"/>
+  <polygon points="302,36 308,22 314,36" fill="var(--edge)"/>
+  <polygon points="302,444 308,458 314,444" fill="var(--edge)"/>
+  <line x1="70" y1="240" x2="546" y2="240" stroke="var(--edge)" stroke-width="1.2"/>
+  <polygon points="76,234 62,240 76,246" fill="var(--edge)"/>
+  <polygon points="540,234 554,240 540,246" fill="var(--edge)"/>
+</svg>
+<!-- 焦点单元格（右上，唯一着色）：底色单独一层用 opacity（不含 border），描边放在满不透明的内容层 -->
+<div style="position:absolute; left:320px; top:40px; width:210px; height:130px; box-sizing:border-box;
+  background:var(--node-accent); opacity:0.06; border-radius:var(--node-radius);"></div>
+<div style="position:absolute; left:320px; top:40px; width:210px; height:130px; padding:14px 16px; box-sizing:border-box;
+  border:1px solid var(--node-accent); border-radius:var(--node-radius);">
+  <div style="font-weight:700; font-size:16px; color:var(--node-accent);">领跑者</div>
+  <div style="font-size:11px; color:var(--node-fg-dim); line-height:1.6;">高增长 · 高份额：优先加注</div>
+</div>
+```
+
+**自检（变体）**：轴两端各一 `<polygon>`；仅 1 格着色（`--node-accent` + 低 opacity 底）；轴标一词、无字形/括注；角标 mono；颜色全用契约变量。
+
+#### 象限轨迹图（quadrant-trajectory 变体）
+
+`diagram_type: "quadrant-trajectory"`（同族路由到本配方）。在基础散点 2×2 上叠加**从"现状点"到"目标点"的移动箭头**，一张图说清"我们在哪 → 要去哪"，省掉单独的前后对比页。差异：
+
+- 现状点用**空心圆**（`fill:transparent; stroke:var(--node-fg-dim); stroke-width:1.5`），目标点用**实心 accent 圆**。
+- 两点之间加一条 `<line>` + `<polygon>` 箭头（`stroke="var(--edge-strong)"`，可 `stroke-dasharray="5 4"` 表意图）。
+
+```html
+<!-- 轨迹：现状(空心) → 目标(实心 accent)，叠加在基础散点层之上 -->
+<svg viewBox="0 0 560 480" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
+  <line x1="200" y1="300" x2="410" y2="130" stroke="var(--edge-strong)" stroke-width="2" stroke-dasharray="5 4"/>
+  <polygon points="420,120 408,144 400,133" fill="var(--edge-strong)"/>
+  <circle cx="200" cy="300" r="9" fill="transparent" stroke="var(--node-fg-dim)" stroke-width="1.5"/>
+  <circle cx="410" cy="130" r="9" fill="var(--node-accent)"/>
+</svg>
+<span style="position:absolute; left:170px; top:312px; font-size:11px; color:var(--node-fg-dim);">现状</span>
+<span style="position:absolute; left:420px; top:118px; font-size:11px; color:var(--node-fg);">2027 目标</span>
+```
+
+**自检（变体）**：现状空心 / 目标实心；轨迹 `<line>`+`<polygon>` 箭头用 `--edge-strong`；标注 HTML `<span>`；颜色全用契约变量。
 
 ---
 
@@ -870,3 +922,313 @@
 **自检**：主骨/大骨/小骨全是 SVG `<line>`；效果节点 accent 实底；末端箭头 `<polygon>`；所有标注 HTML；颜色全用契约变量。
 
 **管线安全**：无 SVG `<text>`；无伪元素连线；无 `mask-image`/`conic-gradient`；`<line>` 连线管线安全；`<polygon>` 箭头管线安全。
+
+---
+
+### 光谱定位 (spectrum-marker)
+
+**何时用**：单一维度上的一排选项 + 标出"现状/建议"位置；治理模式（集中↔去中心）、风险偏好、成熟度、自建vs外购。用一条空间论证替代五条选项 bullet —— 冷门但极高价值的"思考型"图解。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "spectrum-marker",
+  "axis": {"left": "集中式", "right": "完全去中心"},
+  "ticks": ["强管控", "混合", "联邦", "自治"],
+  "current": {"label": "现状", "pos": 0.25},
+  "recommended": {"label": "建议", "pos": 0.68}
+}
+```
+
+**模板**（水平连续轴 + 空心现状点 + 实心建议点 + 意图箭头）：
+```html
+<div class="diagram spectrum-marker" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  --node-accent-2:var(--accent-2); --label-font:var(--font-primary);
+  font-family:var(--label-font); position:relative; width:640px; height:170px;">
+
+  <!-- 轴 + 端帽 + 刻度 + 标记（无 <text>） -->
+  <!-- pos→x：60 + pos*520 -->
+  <svg viewBox="0 0 640 170" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
+    <line x1="60" y1="96" x2="580" y2="96" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="60" y1="86" x2="60" y2="106" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="580" y1="86" x2="580" y2="106" stroke="var(--edge)" stroke-width="2"/>
+    <!-- 刻度：190 / 320 / 450 -->
+    <line x1="190" y1="90" x2="190" y2="102" stroke="var(--edge)" stroke-width="1"/>
+    <line x1="320" y1="90" x2="320" y2="102" stroke="var(--edge)" stroke-width="1"/>
+    <line x1="450" y1="90" x2="450" y2="102" stroke="var(--edge)" stroke-width="1"/>
+    <!-- 意图箭头：现状(190)→建议(414)，虚线在轴上方 -->
+    <line x1="190" y1="62" x2="404" y2="62" stroke="var(--node-accent)" stroke-width="1.5" stroke-dasharray="5 4"/>
+    <polygon points="404,56 416,62 404,68" fill="var(--node-accent)"/>
+    <!-- 现状点：空心 -->
+    <circle cx="190" cy="96" r="8" fill="transparent" stroke="var(--node-fg-dim)" stroke-width="1.5"/>
+    <!-- 建议点：实心 accent -->
+    <circle cx="414" cy="96" r="9" fill="var(--node-accent)"/>
+  </svg>
+
+  <!-- 端锚标签（nowrap 防止右端标签换行） -->
+  <span style="position:absolute; left:60px; top:116px; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--node-fg); white-space:nowrap;">集中式</span>
+  <span style="position:absolute; left:580px; top:116px; transform:translateX(-50%); font-size:12px; font-weight:700; color:var(--node-fg); white-space:nowrap;">完全去中心</span>
+  <!-- 刻度标签 -->
+  <span style="position:absolute; left:190px; top:116px; transform:translateX(-50%); font-size:10px; color:var(--node-fg-dim);">强管控</span>
+  <span style="position:absolute; left:320px; top:116px; transform:translateX(-50%); font-size:10px; color:var(--node-fg-dim);">混合</span>
+  <span style="position:absolute; left:450px; top:116px; transform:translateX(-50%); font-size:10px; color:var(--node-fg-dim);">联邦</span>
+  <!-- 标记标签 -->
+  <span style="position:absolute; left:190px; top:36px; transform:translateX(-50%); font-size:11px; color:var(--node-fg-dim);">现状</span>
+  <span style="position:absolute; left:414px; top:36px; transform:translateX(-50%); font-size:11px; font-weight:700; color:var(--node-accent);">建议</span>
+</div>
+```
+> 规律：轴/刻度/标记全 SVG 几何；标签全 HTML `<span>`；现状空心、建议实心 accent；意图箭头虚线；≤5 个刻度，多了就失去"连续"感。
+
+**自检**：轴/刻度是 SVG `<line>`；标记是 `<circle>`（现状 `fill:transparent`）；箭头 `<polygon>`；标签全 HTML；颜色全用契约变量。
+
+**管线安全**：无 SVG `<text>`；无伪元素；无 `mask-image`/`conic-gradient`；`<line>`/`<circle>`/`<polygon>` 管线安全。
+
+---
+
+### 冰山模型 (iceberg)
+
+**何时用**：揭示"可见表象"下的深层结构 —— 组织文化（Schein）、系统思考（事件→趋势→结构→心智模型）、成本结构、软实力。上约 10% 露出水面、下约 90% 在水下是核心隐喻。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "iceberg",
+  "above": {"label": "可见事件 / 行为"},
+  "below": [
+    {"label": "潜在模式与趋势"},
+    {"label": "结构与流程"},
+    {"label": "心智模型 · 根本假设"}
+  ]
+}
+```
+
+**模板**（水线 + 水上小三角 + 水下大冰体 + HTML 标注）：
+```html
+<div class="diagram iceberg" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  --node-accent-2:var(--accent-2); --label-font:var(--font-primary);
+  font-family:var(--label-font); position:relative; width:520px; height:460px;">
+
+  <svg viewBox="0 0 520 460" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;">
+    <!-- 水线（虚线） -->
+    <line x1="30" y1="130" x2="490" y2="130" stroke="var(--edge)" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <!-- 水上冰尖（约 10%） -->
+    <polygon points="260,44 216,124 304,124" fill="var(--node-accent)" opacity="0.16" stroke="var(--node-accent)" stroke-width="1.5"/>
+    <!-- 水下冰体（约 90%，更深） -->
+    <polygon points="216,136 304,136 356,300 260,430 164,300" fill="var(--node-accent)" opacity="0.30" stroke="var(--node-border)" stroke-width="1.5"/>
+  </svg>
+
+  <!-- 水线标注 -->
+  <span style="position:absolute; left:494px; top:130px; transform:translateY(-50%); font-size:10px; color:var(--node-fg-dim);">水面</span>
+  <!-- 水上：可见（主色） -->
+  <span style="position:absolute; left:260px; top:96px; transform:translateX(-50%); font-size:13px; font-weight:700; color:var(--node-fg); white-space:nowrap;">可见事件 / 行为</span>
+  <!-- 水下：三层（dim 色，逐层更深） -->
+  <span style="position:absolute; left:260px; top:186px; transform:translateX(-50%); font-size:12px; color:var(--node-fg-dim); white-space:nowrap;">潜在模式与趋势</span>
+  <span style="position:absolute; left:260px; top:270px; transform:translateX(-50%); font-size:12px; color:var(--node-fg-dim); white-space:nowrap;">结构与流程</span>
+  <span style="position:absolute; left:260px; top:356px; transform:translateX(-50%); font-size:12px; color:var(--node-fg-dim); white-space:nowrap;">心智模型 · 根本假设</span>
+</div>
+```
+> 规律：水上/水下面积比约 1:9（画等分是最常见错误）；水上标注用主色、水下用 dim 色强化"隐藏"隐喻；2–3 个水下层，超过 4 层就乱。
+
+**自检**：水线/冰体是 SVG `<line>`/`<polygon>`；水上主色、水下 dim 色；面积比≈1:9；标注全 HTML `<span>`；颜色全用契约变量。
+
+**管线安全**：无 SVG `<text>`；无伪元素；无 `mask-image`/`conic-gradient`；`<polygon>` 冰体管线安全。
+
+---
+
+### 力场分析 (force-field)
+
+**何时用**：变革管理 —— 对比"驱动力"（推动变革）与"阻力"（阻碍变革），决定从哪里发力。Lewin 洞见：削弱阻力比增强驱动力更有效，所以阻力一侧值得重点分析。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "force-field",
+  "change": "全面推行远程办公",
+  "driving": [{"label": "人才吸引", "strength": 3}, {"label": "成本节约", "strength": 2}, {"label": "员工诉求", "strength": 3}],
+  "restraining": [{"label": "协作损耗", "strength": 3}, {"label": "管理惯性", "strength": 2}, {"label": "合规风险", "strength": 2}]
+}
+```
+
+**模板**（中央变革轴 + 左驱动箭头→ + 右阻力箭头← ，箭头长度=强度）：
+```html
+<div class="diagram force-field" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  --node-accent-2:var(--accent-2); --label-font:var(--font-primary);
+  font-family:var(--label-font); position:relative; width:640px; height:400px;">
+
+  <svg viewBox="0 0 640 400" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
+    <!-- 中央变革轴 -->
+    <line x1="320" y1="70" x2="320" y2="360" stroke="var(--node-accent)" stroke-width="2"/>
+    <!-- 驱动力（左→中，长度=强度）箭头指右 -->
+    <line x1="150" y1="130" x2="302" y2="130" stroke="var(--edge)" stroke-width="2"/><polygon points="302,124 314,130 302,136" fill="var(--edge)"/>
+    <line x1="190" y1="200" x2="302" y2="200" stroke="var(--edge)" stroke-width="2"/><polygon points="302,194 314,200 302,206" fill="var(--edge)"/>
+    <line x1="150" y1="270" x2="302" y2="270" stroke="var(--edge)" stroke-width="2"/><polygon points="302,264 314,270 302,276" fill="var(--edge)"/>
+    <!-- 阻力（右→中，长度=强度）箭头指左，用 accent 提示"待削弱" -->
+    <line x1="490" y1="130" x2="338" y2="130" stroke="var(--node-accent)" stroke-width="2"/><polygon points="338,124 326,130 338,136" fill="var(--node-accent)"/>
+    <line x1="450" y1="200" x2="338" y2="200" stroke="var(--node-accent)" stroke-width="2"/><polygon points="338,194 326,200 338,206" fill="var(--node-accent)"/>
+    <line x1="450" y1="270" x2="338" y2="270" stroke="var(--node-accent)" stroke-width="2"/><polygon points="338,264 326,270 338,276" fill="var(--node-accent)"/>
+  </svg>
+
+  <!-- 中央变革标签 -->
+  <div style="position:absolute; left:320px; top:20px; transform:translateX(-50%); padding:6px 14px; box-sizing:border-box;
+    background:var(--node-accent); color:var(--card-bg-from); border-radius:var(--node-radius); font-size:13px; font-weight:700; white-space:nowrap;">全面推行远程办公</div>
+  <!-- 表头 -->
+  <span style="position:absolute; left:120px; top:92px; font-size:12px; font-weight:700; color:var(--node-fg-dim);">驱动力 →</span>
+  <span style="position:absolute; right:120px; top:92px; font-size:12px; font-weight:700; color:var(--node-fg-dim);">← 阻力</span>
+  <!-- 驱动力标签（左端，右对齐贴近箭头起点） -->
+  <span style="position:absolute; left:20px; top:130px; width:120px; text-align:right; transform:translateY(-50%); font-size:11px; color:var(--node-fg);">人才吸引</span>
+  <span style="position:absolute; left:20px; top:200px; width:120px; text-align:right; transform:translateY(-50%); font-size:11px; color:var(--node-fg);">成本节约</span>
+  <span style="position:absolute; left:20px; top:270px; width:120px; text-align:right; transform:translateY(-50%); font-size:11px; color:var(--node-fg);">员工诉求</span>
+  <!-- 阻力标签（右端，左对齐） -->
+  <span style="position:absolute; right:20px; top:130px; width:120px; text-align:left; transform:translateY(-50%); font-size:11px; color:var(--node-fg);">协作损耗</span>
+  <span style="position:absolute; right:20px; top:200px; width:120px; text-align:left; transform:translateY(-50%); font-size:11px; color:var(--node-fg);">管理惯性</span>
+  <span style="position:absolute; right:20px; top:270px; width:120px; text-align:left; transform:translateY(-50%); font-size:11px; color:var(--node-fg);">合规风险</span>
+</div>
+```
+> 规律：箭头长度编码强度（strength 1–5 → 像素长度）；阻力一侧用 accent 提示"这是要削弱的对象"；每侧 ≤5 个力，多了就是带箭头的列表。
+
+**自检**：中央轴/箭杆是 SVG `<line>`、箭头 `<polygon>`；箭头长度随 strength；阻力用 `--node-accent`；标签全 HTML；颜色全用契约变量。
+
+**管线安全**：无 SVG `<text>`；无伪元素；无 CSS border 三角形（箭头用 `<polygon>`）；无 `mask-image`/`conic-gradient`。
+
+---
+
+### 前后 / 差距桥接 (before-after)
+
+**何时用**：现状 vs 目标态、差距分析、转型叙事、as-is/to-be。三栏（现状｜差距·干预｜目标）比两条 bullet 列表更有说服力，是转型 deck 的常客。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "before-after",
+  "current": {"title": "现状 (As-Is)", "items": ["人工审批 3 天", "数据分散 5 系统", "无实时视图"]},
+  "bridge": {"title": "差距 · 干预", "items": ["流程自动化", "统一数据中台"]},
+  "future": {"title": "目标 (To-Be)", "items": ["审批 2 小时", "单一可信源", "实时看板"]}
+}
+```
+
+**模板**（现状卡[中性] → 桥接箭头 → 目标卡[accent]）：
+```html
+<div class="diagram before-after" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  --node-accent-2:var(--accent-2); --edge-strong:var(--accent-1); --label-font:var(--font-primary);
+  font-family:var(--label-font); position:relative; width:680px; height:340px;">
+
+  <!-- 现状卡（中性描边） -->
+  <div style="position:absolute; left:20px; top:60px; width:190px; height:240px; box-sizing:border-box;
+    background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
+    border:1px solid var(--node-border); border-radius:var(--node-radius); padding:18px 16px;">
+    <div style="font-size:14px; font-weight:700; color:var(--node-fg); margin-bottom:12px;">现状 (As-Is)</div>
+    <div style="font-size:12px; color:var(--node-fg-dim); line-height:2.0;">人工审批 3 天<br>数据分散 5 系统<br>无实时视图</div>
+  </div>
+
+  <!-- 中间桥接：箭头 + 干预项 -->
+  <svg viewBox="0 0 680 340" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
+    <line x1="222" y1="180" x2="454" y2="180" stroke="var(--edge-strong)" stroke-width="2.5"/>
+    <polygon points="454,171 470,180 454,189" fill="var(--edge-strong)"/>
+  </svg>
+  <div style="position:absolute; left:250px; top:96px; width:180px; text-align:center;">
+    <div style="font-size:11px; font-weight:700; letter-spacing:0.1em; color:var(--node-accent); margin-bottom:6px;">差距 · 干预</div>
+    <div style="font-size:11px; color:var(--node-fg-dim); line-height:1.8;">流程自动化<br>统一数据中台</div>
+  </div>
+
+  <!-- 目标卡：底色单独一层用 opacity（不含 border），描边放在满不透明的内容层，避免 opacity 把描边一起淡掉 -->
+  <div style="position:absolute; left:470px; top:60px; width:190px; height:240px; box-sizing:border-box;
+    background:var(--node-accent); opacity:0.06; border-radius:var(--node-radius);"></div>
+  <div style="position:absolute; left:470px; top:60px; width:190px; height:240px; box-sizing:border-box; padding:18px 16px;
+    border:1px solid var(--node-accent); border-radius:var(--node-radius);">
+    <div style="font-size:14px; font-weight:700; color:var(--node-accent); margin-bottom:12px;">目标 (To-Be)</div>
+    <div style="font-size:12px; color:var(--node-fg-dim); line-height:2.0;">审批 2 小时<br>单一可信源<br>实时看板</div>
+  </div>
+</div>
+```
+> 规律：两卡行数/类目对齐，delta 才一目了然；现状用中性色、目标用 accent、干预用第二强调；每栏 ≤5 行，多了改用表格。
+
+**自检**：卡片是真实 `<div>`；桥接箭头 SVG `<line>`+`<polygon>`；目标卡 accent 描边 + 低 opacity 底；文字全 HTML；颜色全用契约变量。
+
+**管线安全**：无 SVG `<text>`；无伪元素；箭头 `<polygon>`；无 `mask-image`/`conic-gradient`；卡片 `overflow` 用 `box-sizing:border-box` 防坍缩。
+
+---
+
+### 因果回路 (causal-loop)
+
+**何时用**：展示增强回路(R)与调节回路(B)；解释反直觉的系统动态、"干预为何反噬"、复杂利益相关者系统。需要讲解者陪同，不适合冷启动自读。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "causal-loop",
+  "loop_type": "R",
+  "nodes": ["投放预算", "新用户", "口碑传播", "活跃度"],
+  "links": [
+    {"from": "投放预算", "to": "新用户", "polarity": "+"},
+    {"from": "新用户", "to": "口碑传播", "polarity": "+"},
+    {"from": "口碑传播", "to": "活跃度", "polarity": "+"},
+    {"from": "活跃度", "to": "投放预算", "polarity": "+"}
+  ]
+}
+```
+
+**模板**（4 节点闭环 + 弯曲有向连线 + 极性标注 + 中心 R/B 标签）：
+```html
+<div class="diagram causal-loop" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  --node-accent-2:var(--accent-2); --label-font:var(--font-primary);
+  font-family:var(--label-font); position:relative; width:520px; height:400px;">
+
+  <svg viewBox="0 0 520 400" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
+    <!-- 顺时针 4 段弯曲连线（顶→右→底→左→顶），末端 polygon 箭头 -->
+    <path d="M300 78 Q400 96 420 166" fill="none" stroke="var(--edge)" stroke-width="1.8"/><polygon points="412,158 424,172 408,172" fill="var(--edge)"/>
+    <path d="M424 232 Q404 302 306 320" fill="none" stroke="var(--edge)" stroke-width="1.8"/><polygon points="314,312 300,324 314,326" fill="var(--edge)"/>
+    <path d="M214 320 Q116 302 96 232" fill="none" stroke="var(--edge)" stroke-width="1.8"/><polygon points="106,240 92,228 108,226" fill="var(--edge)"/>
+    <path d="M96 166 Q116 96 214 78" fill="none" stroke="var(--edge)" stroke-width="1.8"/><polygon points="206,86 220,74 206,72" fill="var(--edge)"/>
+    <!-- 中心回路标记圆 -->
+    <circle cx="260" cy="200" r="22" fill="transparent" stroke="var(--node-accent)" stroke-width="1.5"/>
+  </svg>
+
+  <!-- 中心 R/B -->
+  <span style="position:absolute; left:260px; top:200px; transform:translate(-50%,-50%); font-size:16px; font-weight:800; color:var(--node-accent);">R</span>
+
+  <!-- 4 节点（居中于四个方位） -->
+  <div style="position:absolute; left:260px; top:60px; transform:translate(-50%,-50%); min-width:104px; padding:10px 12px; box-sizing:border-box;
+    background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius);
+    text-align:center; font-size:12px; font-weight:700; color:var(--node-fg);">投放预算</div>
+  <div style="position:absolute; left:430px; top:200px; transform:translate(-50%,-50%); min-width:104px; padding:10px 12px; box-sizing:border-box;
+    background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius);
+    text-align:center; font-size:12px; font-weight:700; color:var(--node-fg);">新用户</div>
+  <div style="position:absolute; left:260px; top:340px; transform:translate(-50%,-50%); min-width:104px; padding:10px 12px; box-sizing:border-box;
+    background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius);
+    text-align:center; font-size:12px; font-weight:700; color:var(--node-fg);">口碑传播</div>
+  <div style="position:absolute; left:90px; top:200px; transform:translate(-50%,-50%); min-width:104px; padding:10px 12px; box-sizing:border-box;
+    background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-radius:var(--node-radius);
+    text-align:center; font-size:12px; font-weight:700; color:var(--node-fg);">活跃度</div>
+
+  <!-- 极性标注（连线中点附近） -->
+  <span style="position:absolute; left:392px; top:118px; font-size:13px; font-weight:800; color:var(--node-fg-dim);">+</span>
+  <span style="position:absolute; left:378px; top:286px; font-size:13px; font-weight:800; color:var(--node-fg-dim);">+</span>
+  <span style="position:absolute; left:128px; top:286px; font-size:13px; font-weight:800; color:var(--node-fg-dim);">+</span>
+  <span style="position:absolute; left:128px; top:118px; font-size:13px; font-weight:800; color:var(--node-fg-dim);">+</span>
+</div>
+```
+> 规律：闭环连线用 SVG `<path>` 弯曲、末端手算 `<polygon>` 箭头；每条边标 +/−（HTML `<span>`）；回路内标 R（增强）或 B（调节）；≤12 变量，超了就抽一条"主回路"。
+
+**自检**：连线是 SVG `<path>`、箭头 `<polygon>`；极性/节点/回路标记全 HTML；回路标 R/B；焦点用 `--node-accent`；颜色全用契约变量。
+
+**管线安全**：无 SVG `<text>`；无伪元素连线；箭头 `<polygon>`（不依赖 `<marker orient>`）；无 `mask-image`/`conic-gradient`/`stroke-dashoffset`。

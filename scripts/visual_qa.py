@@ -4,6 +4,11 @@
 在 subagent review 完成后，由主 agent 运行此脚本对 slide PNG 做客观检测。
 检测项全部基于像素分析，不依赖 LLM 判断。
 
+注意：本脚本是机械客观项，只是图审的**下限**，不是图审本身。人工/子代理的
+"找茬心态 + 新鲜眼睛"冷读（见 references/playbooks/step4/page-review-playbook.md
+的 Part A-bug）才是主力：假设一定有问题、零发现=没看够狠、修一处必重扫一轮。
+脚本退出码 0 不代表设计过关，只代表没触发这几条像素级红线。
+
 用法：
     # 检查单页
     python3 scripts/visual_qa.py OUTPUT_DIR/png/slide-1.png --planning OUTPUT_DIR/planning/planning1.json --html OUTPUT_DIR/slides/slide-1.html
