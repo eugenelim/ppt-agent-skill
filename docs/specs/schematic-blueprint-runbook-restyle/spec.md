@@ -2,7 +2,7 @@
 
 Mode: light (no risk trigger fired)
 
-- **Status:** Implementing
+- **Status:** Shipped
 
 ## Objective
 
