@@ -3,7 +3,7 @@
 > 本文档收录 8 种基础图表的世界级 HTML 模板。所有模板：
 >
 > - **纯 HTML/CSS/SVG**，无任何 JS 运行时依赖
-> - **CSS 变量驱动**（`--accent-1`, `--card-bg-from` 等），自动适配 26 风格
+> - **CSS 变量驱动**（`--accent-1`, `--card-bg-from` 等），自动适配 28 风格
 > - **数字 `tabular-nums`**，PPT 中数字不跳动
 > - **SVG 内零 `<text>`**，所有标签用 HTML `<div>`/`<span>` 绝对定位叠加（防偏移铁律）
 > - **环形图用 `stroke-dasharray="弧长 圆周"` 两值格式**，禁止 `stroke-dashoffset`
@@ -542,7 +542,7 @@
 - [x] 端点高亮用 SVG `<circle>`（实心 2.5px + 半透明光晕 5px）
 - [x] **趋势箭头用 SVG `<polygon>`**，不用 CSS border 三角形（`width: 0` 技巧禁用）
 - [x] 增长率数字 `font-variant-numeric: tabular-nums proportional-nums`
-- [x] 上涨绿（#22c55e）/ 下跌红（#ef4444）两色为业界惯例，硬编码可接受（不参与 26 风格切换）
+- [x] 上涨绿（#22c55e）/ 下跌红（#ef4444）两色为业界惯例，硬编码可接受（不参与 28 风格切换）
 - [x] 折线本体颜色用 `var(--accent-1)` 跟随主题
 - [x] **SVG 内无 `<text>`**
 - [x] 通过 puppeteer 渲染无错误

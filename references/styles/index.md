@@ -1,4 +1,4 @@
-# 风格系统索引（26 风格 / 5 板块）
+# 风格系统索引（28 风格 / 5 板块）
 
 > 本目录下每个 `<quadrant>.md` 文件包含一个板块的所有风格定义。
 >
@@ -8,7 +8,7 @@
 
 ---
 
-## 1. 26 风格全景表
+## 1. 28 风格全景表
 
 | # | style_id | 板块 | 灵感 | 适用场景 | 板块文件 |
 |---|----------|------|------|---------|---------|
@@ -27,6 +27,8 @@
 | 13 | `earth_concrete` | 浅色高级 | Suisse Int'l | 建筑 / 工业 / 咖啡 | [light.md](light.md) |
 | 14 | `champagne_gold` | 浅色高级 | 香槟金 | 婚庆 / 宴会 / 庆典 | [light.md](light.md) |
 | 15 | `liquid_glass` | 浅色高级 | iOS 26 / visionOS | XR / AR / 苹果生态 | [light.md](light.md) |
+| 27 | `editorial_paper` | 浅色高级 | 温润研究手记 | 研究/出版/白皮书/思考型汇报 | [light.md](light.md) |
+| 28 | `schematic_blueprint` | 浅色高级 | 工程蓝图线稿 | 架构/系统/建模/图解密集（线稿图解）| [light.md](light.md) |
 | 16 | `vibrant_rainbow` | 活力鲜明 | Stripe Sessions | 营销 / 创作者 | [vibrant.md](vibrant.md) |
 | 17 | `kindergarten_pop` | 活力鲜明 | Quicksand 童趣 | 儿童教育 / 启蒙 | [vibrant.md](vibrant.md) |
 | 18 | `bauhaus_block` | 活力鲜明 | Bauhaus / Swiss | 教育 / 创意品牌 | [vibrant.md](vibrant.md) |
@@ -53,6 +55,8 @@
 | 游戏 / 电竞 / Web3 | 暗色专业 | `cyberpunk_neon` 或 `chrome_y2k` |
 | 企业 / 培训 / 商务 / 金融 | 浅色高级 | `blue_white` |
 | 学术 / 研究 / 白皮书 / 法务 | 浅色高级 | `minimal_gray` 或 `mocha_editorial` |
+| 研究手记 / 思考型汇报 / 温润出版 | 浅色高级 | `editorial_paper` |
+| 架构 / 系统 / 建模 / 图解密集（想要线稿图解）| 浅色高级 | `schematic_blueprint` |
 | 医疗 / 医药 / 健康 | 浅色高级 | `medical_pulse` |
 | 建筑 / 工业 / 制造 | 浅色高级 | `earth_concrete` |
 | 婚礼 / 庆典 / 颁奖 | 浅色高级 | `champagne_gold` |
@@ -176,6 +180,7 @@
 | `accent` | ✓ | 强调色（primary 2 色 + secondary 2 色）|
 | `typography` | ✓ | 字体栈 + 字距 + OpenType 特性 |
 | `decorations` | ✓ | 签名手法清单（boolean 开关） |
+| `decorations.diagram_mode` | ✗ | 图解渲染模式：`"filled"`（默认，可省略）或 `"lineart"`（线稿模式，见 [`blocks/diagram.md`](../blocks/diagram.md#线稿模式-line-art--主题门控)）。仅少数「线稿主题」置为 `"lineart"`；其余风格省略此键，图解按默认填充渲染，视觉零变化。 |
 | `font_imports` | ✓ | Google Fonts URL 数组 |
 
 ---

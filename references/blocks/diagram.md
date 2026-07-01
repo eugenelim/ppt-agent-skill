@@ -14,7 +14,7 @@
 | `flowchart` `swimlane` `sequence` `state-machine` `data-flow` | 步骤/决策逻辑、谁做哪步、时序消息、状态机、数据流 | `diagram-process-flow` |
 | `architecture-component` `architecture-deployment` `er-data-model` `layers` | 组件/分层架构、部署/云/网络拓扑、数据模型、技术栈分层 | `diagram-architecture` |
 | `gantt` `dependency-network` `org-tree` `kanban` | 排期/路线图/里程碑、依赖网络/PERT、组织树/WBS、看板 | `diagram-project` |
-| `mind-map` `matrix-quadrant` `venn` `pyramid` `funnel` `cycle` `hub-spoke` `onion` `fishbone` | 思维导图、矩阵/象限(含 SWOT/RACI/风险)、韦恩、金字塔、漏斗、循环/飞轮、中心辐射、同心圆、鱼骨 | `diagram-concept` |
+| `mind-map` `matrix-quadrant` `venn` `pyramid` `funnel` `cycle` `hub-spoke` `onion` `fishbone` `spectrum-marker` `iceberg` `force-field` `before-after` `causal-loop` `consultant-2x2` `quadrant-trajectory` | 思维导图、矩阵/象限(含 SWOT/RACI/风险)、韦恩、金字塔、漏斗、循环/飞轮、中心辐射、同心圆、鱼骨、光谱定位、冰山、力场分析、前后/差距、因果回路；`consultant-2x2` / `quadrant-trajectory` 为 `matrix-quadrant` 变体（同族路由） | `diagram-concept` |
 
 > 兼容旧枚举：`pyramid` / `flowchart` / `hub-spoke` / `cycle` / `layers` 仍各自有同名配方（`layers` 为分层栈，归在 architecture family），不改名、不别名。
 
@@ -40,6 +40,47 @@
 ```
 
 内联 SVG 直接引用这些变量：`stroke="var(--edge)"`、`fill="var(--node-accent)"`（CSS 变量会被继承进内联 SVG）。**禁止**在节点/连线里写 `#xxxxxx`、`rgb(...)`；唯一例外是趋势绿 `#22c55e` / 红 `#ef4444`。
+
+## 线稿模式 (line-art) — 主题门控（默认关闭，仅特定主题开启）
+
+**这是"Claude/编辑部式"锐利线稿图解的实现方式：不新增任何配方，只重绑主题契约的局部变量。**
+
+判定：读当前 `style.json` 的 `decorations.diagram_mode`。
+
+- **`"filled"` 或该键缺失（25+ 既有风格全部如此）** → 图解按上文默认契约渲染（填充节点 + 渐变底 + accent 描边）。**视觉零变化。**
+- **`"lineart"`（仅 `schematic_blueprint` 等线稿主题）** → 生成图解 HTML 时，把每个配方**根容器**上内联声明的局部变量改写为下方线稿规制。因为每个配方的 `.diagram` 根都是自带一份内联 `--node-* : var(--card-*)` 绑定（不走中央级联），所以线稿化是**在根容器上覆写这几个变量**，其余模板 body 一字不改。
+
+**根容器覆写（filled → lineart 对照）：**
+
+```css
+/* filled（默认）：节点有渐变底 + 卡片描边 */
+.diagram {
+  --node-bg-from: var(--card-bg-from);
+  --node-bg-to:   var(--card-bg-to);
+  --node-border:  var(--card-border);
+  --label-font:   var(--font-primary);
+}
+/* lineart：节点透明无填充、发丝描边、mono 标注、仅焦点着色 */
+.diagram {
+  --node-bg-from: transparent;         /* 节点无填充 —— 只剩线 */
+  --node-bg-to:   transparent;
+  --node-border:  var(--card-border);  /* 发丝细线（本主题 card.border 即 1px hairline）*/
+  --edge:         var(--card-border);  /* 连线同为发丝 */
+  --edge-strong:  var(--node-accent);  /* 关键路径才用强调色 */
+  --label-mono:   var(--font-mono);    /* 端口/坐标/轴标/图号走等宽 */
+  --label-font:   var(--font-primary); /* 人类可读节点名仍用 sans/serif 主字体 */
+}
+```
+
+**线稿模式五铁律：**
+
+1. **透明节点**：`--node-bg-from/to` 置 `transparent`，共享基元里的 `linear-gradient(var(--node-bg-from),var(--node-bg-to))` 自然渲染为无填充 —— 无需改基元。
+2. **发丝描边**：所有 `stroke-width` 收到 `1`（关键路径 `1.2`），描边取 `var(--edge)`；焦点节点用 `border-color:var(--node-accent)`。
+3. **焦点纪律**：`--node-accent` 只落在 **1–2 个焦点节点/关键路径**上，其余全部 `--node-fg`/`--node-fg-dim`。强调色用在 5 个节点上等于没有强调。
+4. **mono 承载技术标注**：端口、URL、字段类型、坐标、轴标签、图号用 `font-family:var(--label-mono)`；节点**名称**仍用主字体（`--label-font`）。别把等宽体当"技术味"滤镜全局套。
+5. **零投影零大圆角**：不加 `box-shadow`；`--node-radius` 收到 `4px` 或 `0`。层次靠线与留白，不靠阴影。
+
+**管线安全**：以上全部是 `var(...)` 与 `transparent` 关键字，无硬编码颜色、无 `<text>`、无 `mask-image`/`conic-gradient`/伪元素 —— 与默认契约同样安全。线稿模式是**变量重绑**，不是新配方，因此上文所有 family 配方（本族与 process-flow/architecture/project）自动获得线稿变体。
 
 ## 共享基元（所有 family 配方复用，均为管线安全写法）
 

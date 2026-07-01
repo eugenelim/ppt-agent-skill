@@ -1,6 +1,6 @@
 # 世界级排版铁律 (Typography Bible)
 
-> 本文件汇总所有 26 风格共享的排版规则。**每张 HTML 设计稿生成前必读**。
+> 本文件汇总所有 28 风格共享的排版规则。**每张 HTML 设计稿生成前必读**。
 >
 > 灵感来源：Linear / Anthropic / Stripe / Apple / Vercel / NYT Magazine / Tom Ford / Pitch / Mercury / Arc / Notion 等品牌的实际排版做法。
 
@@ -83,6 +83,38 @@
 ```
 
 适用：所有暗色专业风格 + 浅色高级风格。
+
+---
+
+## 4b. Mono 工具字层（等宽功能字 —— "锐利感"的关键第三体）
+
+> 借鉴 Anthropic / Vercel Geist / IBM Plex 与 "Schematic" 线稿图解技能：**衬线（display）+ 无衬线（body）+ 等宽（mono）三体分工**，其中 mono 专门承载"数据/技术/参照"信息，是让画面从"PPT 感"走向"工程手记/编辑部"锐利感的关键。
+
+**字体栈（按可得性三层降级）**：
+
+```css
+--font-mono: 'Geist Mono', 'IBM Plex Mono', 'DM Mono', 'SF Mono', 'JetBrains Mono', 'Courier New', monospace;
+```
+
+**Mono 的唯一职责 —— 技术/参照信息，绝不当"码农味滤镜"全局套**：
+
+| 用途 | 例 | 排版参数 |
+|------|-----|---------|
+| Overline / eyebrow 标签 | `PART 02 — 方法论`、`FIG. 01` | 10–12px, `letter-spacing:0.16–0.2em`, uppercase |
+| 数据标注 / 单位 / 端口 | `2,481 ms`、`:8080`、`v2.1` | 与数字同层，`font-variant-numeric:tabular-nums` |
+| 图号 / 坐标 / 来源 | `X:064 Y:214`、`Source: 2026Q1` | 9–11px, `--text-secondary`, opacity 0.5–0.7 |
+| 图解轴标 / 箭头标注 | 象限轴、`WRITE`、`+/−` 极性 | 8–9px, uppercase, tracked |
+| 叙事化页脚（W12 终端栏） | `STATUS: ACTIVE | PAGE 03/12` | 11px, `--accent-1`, opacity 0.6 |
+
+**铁律**：
+
+1. **人类可读的名字仍用 sans/serif 主字体** —— 节点名、卡片标题、正文绝不用 mono。mono 只给"机器/技术/参照"字段。
+2. **不要为了"技术感"把整页塞进等宽体** —— 那是最常见的 AI 味来源（见 [principles/taste-gate.md](principles/taste-gate.md)）。
+3. **等宽体自带 tabular 特性**，做数字列/对齐表时优先用它，与 `tabular-nums`（第 2 节）配合。
+
+**线稿主题的强绑定**：`schematic_blueprint` 等 `diagram_mode:"lineart"` 风格里，图解的所有技术标注（端口/坐标/轴标/图号）统一走 `--font-mono`（见 [blocks/diagram.md](blocks/diagram.md#线稿模式-line-art--主题门控)）。
+
+适用：全部风格皆可启用 mono 工具字层；线稿/研究/技术类风格（`schematic_blueprint` / `editorial_paper` / `dark_tech` 等）尤其推荐。
 
 ---
 

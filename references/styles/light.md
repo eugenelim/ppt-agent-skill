@@ -1,4 +1,4 @@
-# 浅色高级板块（8 风格）
+# 浅色高级板块（10 风格）
 
 > 板块定位：浅色背景 + 高级感 + 学术/专业/温润/医疗/工业。Apple / Anthropic / NYT / Mayo Clinic / Suisse 风格。
 >
@@ -18,6 +18,8 @@
 | 6 | `earth_concrete` | Suisse Int'l | 水泥灰 + 暖橙丝带 + 网格秩序感 |
 | 7 | `champagne_gold` | 高端婚礼请柬 | 米白渐变 + 金色 Playfair italic + 双线装饰 |
 | 8 | `liquid_glass` | iOS 26 / visionOS | 彩色渐变 + 模糊 blob + 多层液态玻璃 |
+| 9 | `editorial_paper` | 温润研究手记 | 米白纸感 + 陶土红 + serif/sans/mono 三体 + 大留白 |
+| 10 | `schematic_blueprint` | 工程蓝图线稿 | 暖白网格纸 + 电光紫强调 + 发丝细线 + mono 标注（线稿图解）|
 
 ---
 
@@ -346,3 +348,87 @@ Mock: [`ppt-output/style-gallery/champagne_gold.html`](../../ppt-output/style-ga
 ```
 
 Mock: [`ppt-output/style-gallery/liquid_glass.html`](../../ppt-output/style-gallery/liquid_glass.html)
+
+---
+
+## 9. editorial_paper — 温润研究手记（serif/sans/mono 三体）
+
+```json
+{
+  "style_id": "editorial_paper",
+  "style_name": "温润研究手记 (Editorial Paper)",
+  "category": "light_premium",
+  "inspiration": "研究实验室出版物 / 温润学术手记 / 陶土色印刷",
+  "mood_keywords": ["米白纸感", "陶土红", "serif 显示体", "mono 标注", "克制留白"],
+  "design_soul": "一份被反复翻阅的研究手记，米白纸面泛着微暖，陶土红只在标题与关键结论处轻点一笔，衬线大标题旁配着一行等宽体的编号与日期。",
+  "variation_strategy": "封面用 serif 大标题 + masthead 刊号头 + 大留白，章节页用超大低透明编号 + 一行陶土色 eyebrow，数据页用米白卡片 + tabular-nums + mono 脚注。",
+  "decoration_dna": {
+    "signature_move": "衬线大标题 + mono 等宽 eyebrow/编号/日期 + 陶土红单一强调 + 发丝分隔线 + 首字下沉 + 大量暖白留白",
+    "forbidden": ["渐变文字", "霓虹辉光", "暗色背景", "多强调色堆叠", "大圆角卡通感", "标题下方彩色装饰横线"],
+    "recommended_combos": ["serif 主标题 + mono 刊号头 + 大留白", "陶土色 eyebrow + 首字下沉 + 老式数字 onum"]
+  },
+  "background": { "primary": "#faf9f5", "gradient_to": "#f0eee6", "texture": { "type": "grain", "opacity": 0.03 } },
+  "card": { "gradient_from": "#ffffff", "gradient_to": "#faf9f5", "border": "rgba(20,20,19,0.10)", "border_radius": 6, "backdrop_blur": 0 },
+  "text": { "primary": "#141413", "secondary": "#5e5d59", "title_size": 72, "body_size": 14, "card_title_size": 18 },
+  "accent": { "primary": ["#d97757", "#c6613f"], "secondary": ["#6a9bcc", "#788c5d"] },
+  "typography": {
+    "display_font": "'Fraunces', 'Tiempos Headline', 'Iowan Old Style', Georgia, serif",
+    "body_font": "'Inter', -apple-system, 'Segoe UI', sans-serif",
+    "serif_italic_font": "'Fraunces', 'Tiempos Headline', Georgia, serif",
+    "mono_font": "'Geist Mono', 'IBM Plex Mono', 'SF Mono', monospace",
+    "display_letter_spacing": "-0.02em",
+    "headline_letter_spacing": "-0.012em",
+    "body_letter_spacing": "-0.004em",
+    "label_letter_spacing": "0.18em",
+    "feature_settings": "'kern', 'liga', 'onum', 'calt', 'ss01'",
+    "tabular_nums": true
+  },
+  "decorations": { "label_anchor": "mono_tag", "title_serif_italic": true, "corner_lines": false, "vertical_divider": true, "drop_cap": true, "masthead": true, "diagram_mode": "filled" },
+  "font_imports": ["https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"]
+}
+```
+
+Mock: [`ppt-output/style-gallery/editorial_paper.html`](../../ppt-output/style-gallery/editorial_paper.html)
+
+---
+
+## 10. schematic_blueprint — 工程蓝图线稿（线稿图解主题）
+
+> 本风格开启 `decorations.diagram_mode: "lineart"` —— 图解块按 [`blocks/diagram.md`](../blocks/diagram.md) 的**线稿模式**渲染（透明节点填充 + 发丝描边 + mono 标注 + 仅焦点用强调色）。其余 25 个既有风格不带此开关，图解仍按默认填充模式渲染，视觉零变化。
+
+```json
+{
+  "style_id": "schematic_blueprint",
+  "style_name": "工程蓝图线稿 (Schematic Blueprint)",
+  "category": "light_premium",
+  "inspiration": "工程图纸 / 技术白皮书线稿 / 编辑部示意图",
+  "mood_keywords": ["暖白网格纸", "电光紫", "发丝细线", "mono 定位标注", "克制线稿"],
+  "design_soul": "一张摊开的工程蓝图，暖白纸上印着极淡的网格，所有结构都用发丝般的细线勾勒，只有真正关键的那一处用电光紫点亮，角落是一行等宽体的图号与坐标。",
+  "variation_strategy": "封面用 serif 大标题 + 四角定位角标 + 极淡网格，图解页用线稿图解（透明节点 + 发丝连线 + 单一紫色焦点），数据页用发丝分隔的极简卡片 + mono 脚注。",
+  "decoration_dna": {
+    "signature_move": "发丝细线（1px）+ 四角取景角标 + mono 图号/坐标标注 + 单一电光紫焦点 + 极淡网格纸底 + 零投影零大圆角",
+    "forbidden": ["投影 box-shadow", "渐变填充", "大圆角（rounded-2xl）", "多强调色", "霓虹辉光", "暗色背景", "标题下方装饰横线"],
+    "recommended_combos": ["线稿图解 + 单一紫色焦点 + mono 图号", "四角角标 + 发丝分隔 + 极淡网格"]
+  },
+  "background": { "primary": "#f6f5f1", "gradient_to": "#efede7", "texture": { "type": "grid_dot", "size": 32, "opacity": 0.03 } },
+  "card": { "gradient_from": "#ffffff", "gradient_to": "#fbfaf7", "border": "rgba(28,25,23,0.14)", "border_radius": 4, "backdrop_blur": 0 },
+  "text": { "primary": "#1c1917", "secondary": "#57534e", "title_size": 66, "body_size": 14, "card_title_size": 17 },
+  "accent": { "primary": ["#a100ff", "#7500c0"], "secondary": ["#4f5d75", "#3c4657"] },
+  "typography": {
+    "display_font": "'Instrument Serif', 'Fraunces', Georgia, serif",
+    "body_font": "'Geist', 'Inter', -apple-system, sans-serif",
+    "serif_italic_font": "'Instrument Serif', Georgia, serif",
+    "mono_font": "'Geist Mono', 'IBM Plex Mono', 'SF Mono', monospace",
+    "display_letter_spacing": "-0.01em",
+    "headline_letter_spacing": "-0.008em",
+    "body_letter_spacing": "0em",
+    "label_letter_spacing": "0.2em",
+    "feature_settings": "'kern', 'liga', 'calt', 'tnum'",
+    "tabular_nums": true
+  },
+  "decorations": { "label_anchor": "mono_tag", "title_serif_italic": true, "corner_lines": true, "vertical_divider": false, "drop_cap": false, "masthead": false, "diagram_mode": "lineart" },
+  "font_imports": ["https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"]
+}
+```
+
+Mock: [`ppt-output/style-gallery/schematic_blueprint.html`](../../ppt-output/style-gallery/schematic_blueprint.html)

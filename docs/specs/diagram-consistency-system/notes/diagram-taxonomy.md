@@ -50,6 +50,29 @@ stair/pillar→`pyramid`; flywheel→`cycle`; C4 ctx/container/component→`arch
 C4 deployment/network→`architecture-deployment`; UML activity→`flowchart`; UML class→`er-data-model`;
 UML sequence→`sequence`; UML state→`state-machine`.
 
+## v2 additions — thinking / modeling recipes (spec: claude-design-absorption)
+
+Additive to Family 4 (Concept & relationship). All bind to the same theming contract,
+pass `lint_diagram_recipes.py`, and route via the `diagram-concept` block_ref. None
+re-home an existing id.
+
+| id | type | when to use | primitives |
+|----|------|-------------|-----------|
+| `spectrum-marker` | Spectrum / continuum with marked position | one-axis range of options + current/recommended marker | axis line, ticks, open (current) + filled-accent (recommended) circles, intent arrow |
+| `iceberg` | Iceberg model | visible surface vs hidden depth (culture, systems, cost) | waterline, ~10% above / ~90% below polygons, HTML labels |
+| `force-field` | Force-field analysis (Lewin) | driving vs restraining forces for a change | center change axis, length-encoded arrows both sides |
+| `before-after` | Before → after / gap bridge | as-is vs to-be, gap analysis, transformation | current[neutral] / bridge-arrow / future[accent] columns |
+| `causal-loop` | Causal-loop diagram (systems) | reinforcing (R) / balancing (B) feedback loops | variable nodes, `<path>` directed edges, +/− polarity, R/B label |
+
+Variants of `matrix-quadrant` (same recipe, no separate lint entry; registered as
+routable `diagram_type` aliases): `consultant-2x2` (BCG/McKinsey 2×2 scenario matrix —
+double-ended axes, named cells, one focal cell, Jobs-minimal axis labels) and
+`quadrant-trajectory` (2×2 with a current→target movement arrow).
+
+Line-art rendering of any recipe is a **theme property**, not a separate recipe — a style
+with `decorations.diagram_mode: "lineart"` rebinds the theming-contract vars to a
+stroke-only regime (see `blocks/diagram.md` 线稿模式). Default styles render filled.
+
 ## Explicitly out of scope (scope-creep flags from survey)
 Sankey (data-flow-volume chart, belongs to charts/), Wardley map (niche strategy),
 GitGraph (dev tooling), ArchiMate full layered view (enterprise-architect niche).

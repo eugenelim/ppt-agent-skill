@@ -43,6 +43,22 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   contradiction). Unblocked by a follow-up that regenerates the gallery mocks
   against the canonical variable set, or documents the mocks as non-canonical.
 
+## claude-design-absorption
+
+- **Follow-up (not an AC deferral): visual QA of the 5 new diagram recipes + 2 style mocks.**
+  `spectrum-marker` / `iceberg` / `force-field` / `before-after` / `causal-loop` are
+  hand-placed SVG geometry; `lint_diagram_recipes.py` verifies markers/colors/pipeline-safety
+  but **cannot** catch mis-aligned coordinates or off-canvas labels. Same for the two new
+  gallery mocks (`editorial_paper.html`, `schematic_blueprint.html`). Unblocked by rendering
+  each at 1280×720 (html2png / a browser) and eyeballing, ideally via a fresh-eyes subagent.
+- **Follow-up: regenerate PNGs for the two new styles.** The 26 existing styles ship committed
+  `<style_id>.png` thumbnails; the two new styles have HTML mocks only (tiles render from the
+  HTML iframe, so the gallery is correct). Unblocked by `python3 scripts/gallery.py --screenshots`
+  where puppeteer is available.
+- **Note:** the work-loop post-diff `adversarial-reviewer` REVIEW pass was not run in-session
+  (shipped on green mechanical gates + the addressed pre-EXECUTE review). A diff review before
+  merge is recommended.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

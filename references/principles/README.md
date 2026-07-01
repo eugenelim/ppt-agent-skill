@@ -12,6 +12,7 @@
 | `color-psychology.md` | 色彩心理与运用 | 60-30-10 法则 / 色彩情感映射 | 强调色是调味料不是主菜，同页最多 2 种 accent，大面积使用 = 不再是强调 |
 | `data-visualization.md` | 数据可视化原则 | Edward Tufte / Stephen Few | 可视化的目标是让观众 3 秒内理解结论，不是展示数据 |
 | `narrative-arc.md` | 叙事结构与节奏 | 金字塔原理 / SCQA / 故事弧线 | 禁止连续 3 页高密度或连续 3 页低密度，波浪形节奏才能维持注意力 |
+| `taste-gate.md` | 反 AI 感自审与品味闸门 | Anthropic frontend-design / canvas-design / Schematic 线稿技能 | 出片前问"换个主题会不会做出一样的东西"，跑删除测试、焦点 ≤ 2、无标题装饰横线 |
 
 ## 操作手册（策划阶段的地基）
 

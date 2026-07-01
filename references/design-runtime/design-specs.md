@@ -62,7 +62,9 @@
 }
 ```
 
-> **创意自由空间**：overline 的内容（Part 编号/品牌标签/空白）、page-title 的具体字号和装饰线、标题与 overline 的位置关系，都允许按风格变化。但 **HTML 结构（`header.slide-header > span.overline + h1.page-title`）和定位方式（`position:absolute; top:20px`）必须全 deck 统一。**
+> **创意自由空间**：overline 的内容（Part 编号/品牌标签/空白）、page-title 的具体字号、标题与 overline 的位置关系，都允许按风格变化。但 **HTML 结构（`header.slide-header > span.overline + h1.page-title`）和定位方式（`position:absolute; top:20px`）必须全 deck 统一。**
+>
+> **⚠️ 反 AI 感铁律 —— 标题下方的装饰性 accent 横线默认不用。** 标题正下方一条彩色/渐变的"下划线 rule"是 AI 生成 PPT 最典型的信号之一。制造层级请用**留白、背景色块、字号/字重反差**，而不是那条横线。**注意区分**：顶部的 mono/小型 `.overline` eyebrow 标签（PART 编号等）是保留且推荐的 —— 被否定的只是标题与正文之间那条纯装饰横线。仅当某风格的 `decoration_dna.signature_move` 明确以某种线条为招牌（如 champagne_gold 的双线）时才作为该风格的有意选择。
 
 #### 统一页脚区 HTML 骨架（适用于 content / toc / section 页）
 
@@ -362,7 +364,7 @@ body {
 
 | 平庸倾向 | 更好的选择 |
 |---------|-----------|
-| 标题 `text-align:center` | 偏心定位 + 装饰线 |
+| 标题 `text-align:center` | 偏心定位 + 留白/字重分层（**不要**在标题下加装饰横线——见上文反 AI 感铁律）|
 | 所有卡片同 padding | 核心更大，辅助更紧凑 |
 | 全页 `flex; center; center` | 三分法偏心 + 对角线张力 |
 | 所有卡片等大等高 | 主副节奏 / 递减 / 孤岛+群落 |
