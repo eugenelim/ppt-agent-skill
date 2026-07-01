@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>retro_70s · 70 年代复古 · World-Class Mock</title>
+<title>retro_70s · Vinyl Catalogue &amp; Festival Lineup · Detail Slide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Bowlby+One&family=Inter+Tight:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Bowlby+One&family=Inter+Tight:wght@500;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
   :root {
     --bg-cream: #f4e9d0;
@@ -13,8 +13,9 @@
     --mustard: #d4a82a;
     --vermilion: #c14d3f;
     --ink: #2a1810;
-    --ink-soft: rgba(42, 24, 16, 0.62);
-    --ink-faint: rgba(42, 24, 16, 0.38);
+    --ink-soft: rgba(42,24,16,0.62);
+    --ink-faint: rgba(42,24,16,0.38);
+    --ink-xfaint: rgba(42,24,16,0.18);
 
     --display-font: 'Bagel Fat One', 'Bowlby One', 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
     --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -27,7 +28,8 @@
     background: var(--bg-cream);
     color: var(--ink);
     font-family: var(--body-font);
-    font-feature-settings: 'kern', 'liga', 'ss01', 'cv11', 'calt', 'ccmp';
+    font-feature-settings: 'kern', 'liga', 'ss01', 'cv11', 'calt';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -37,249 +39,243 @@
   .warm-wash {
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 60% 45% at 18% 22%, rgba(212, 168, 42, 0.18) 0%, transparent 60%),
-      radial-gradient(ellipse 55% 40% at 86% 84%, rgba(224, 122, 62, 0.14) 0%, transparent 65%);
-    pointer-events: none;
-    z-index: 0;
+      radial-gradient(ellipse 60% 45% at 18% 22%, rgba(212,168,42,0.15) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 40% at 86% 84%, rgba(224,122,62,0.12) 0%, transparent 65%);
+    pointer-events: none; z-index: 0;
   }
 
   .stripe-band {
-    position: absolute; left: 0; right: 0;
-    height: 14px;
+    position: absolute; left: 0; right: 0; height: 10px;
     background: repeating-linear-gradient(
       90deg,
-      var(--brown) 0 36px,
-      var(--orange) 36px 72px,
-      var(--mustard) 72px 108px,
-      var(--vermilion) 108px 144px
+      var(--brown) 0 28px,
+      var(--orange) 28px 56px,
+      var(--mustard) 56px 84px,
+      var(--vermilion) 84px 112px
     );
-    opacity: 0.78;
-    z-index: 1;
+    opacity: 0.80; z-index: 1;
   }
   .stripe-top { top: 0; }
   .stripe-bottom { bottom: 0; }
 
-  .sun-orange {
-    position: absolute; right: 96px; top: 96px;
-    width: 148px; height: 148px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 32%, #ec946a 0%, var(--orange) 48%, #b75a23 100%);
-    box-shadow:
-      0 0 0 8px rgba(244, 233, 208, 1),
-      0 0 0 9px rgba(107, 68, 35, 0.55);
-    z-index: 2;
-  }
-  .sun-orange-ring {
-    position: absolute; right: 76px; top: 76px;
-    width: 188px; height: 188px;
-    border-radius: 50%;
-    border: 2px dashed rgba(107, 68, 35, 0.42);
-    z-index: 2;
-  }
-  .sun-mustard {
-    position: absolute; left: 78px; bottom: 110px;
-    width: 96px; height: 96px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 38% 35%, #ecc35a 0%, var(--mustard) 55%, #9a7813 100%);
-    box-shadow: 0 0 0 6px rgba(244, 233, 208, 1), 0 0 0 7px rgba(107, 68, 35, 0.45);
-    z-index: 2;
-  }
-  .arc-half {
-    position: absolute; left: 60px; top: 290px;
-    width: 78px; height: 156px;
-    border-radius: 0 156px 156px 0;
-    background: var(--vermilion);
-    z-index: 2;
-  }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 56px 80px 56px 80px;
+  /* Layout */
+  .page {
+    position: absolute; inset: 0;
+    padding: 16px 52px 16px 52px;
     display: flex; flex-direction: column;
-    z-index: 5;
-  }
-
-  .top {
-    display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 22px;
-  }
-  .logo {
-    font-family: var(--mono-font);
-    font-size: 12px; font-weight: 700;
-    letter-spacing: 0.22em;
-    color: var(--brown);
-    text-transform: uppercase;
-    display: flex; align-items: center; gap: 12px;
-  }
-  .logo-mark {
-    width: 22px; height: 22px; border-radius: 50%;
-    background: var(--brown);
-    position: relative;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .logo-mark-inner {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--bg-cream);
-  }
-  .nav {
-    font-family: var(--mono-font);
-    font-size: 11px;
-    color: var(--brown);
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    font-weight: 500;
-    display: flex; gap: 22px;
-    opacity: 0.78;
-  }
-
-  .label-row {
-    display: inline-flex; align-items: center; gap: 12px;
-    margin-top: 30px;
-  }
-  .label-dot {
-    width: 9px; height: 9px; border-radius: 50%;
-    background: var(--vermilion);
-    box-shadow: 0 0 0 3px rgba(193, 77, 63, 0.18);
-  }
-  .label-line {
-    width: 28px; height: 2px;
-    background: var(--brown);
-    border-radius: 2px;
-  }
-  .label {
-    font-family: var(--body-font);
-    font-size: 11.5px;
-    color: var(--brown);
-    letter-spacing: 0.4em;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .headline {
-    font-family: var(--display-font);
-    font-size: 116px;
-    font-weight: 400;
-    line-height: 0.92;
-    letter-spacing: -0.035em;
-    color: var(--brown);
-    margin-top: 18px;
-    text-shadow: 4px 4px 0 rgba(193, 77, 63, 0.18);
-  }
-  .headline .accent {
-    color: var(--vermilion);
-    display: inline-block;
-  }
-  .headline .dot {
-    color: var(--mustard);
-  }
-
-  .deck {
-    font-family: var(--body-font);
-    font-size: 16.5px;
-    line-height: 1.55;
-    color: var(--ink-soft);
-    max-width: 560px;
-    margin-top: 22px;
-    letter-spacing: -0.005em;
-    font-weight: 500;
-  }
-  .deck .bold { color: var(--brown); font-weight: 700; }
-
-  .cards {
-    display: flex; gap: 22px;
-    margin-top: 38px;
-  }
-  .card {
-    width: 168px; height: 132px;
-    border-radius: 10px;
-    padding: 18px 18px 16px 18px;
-    display: flex; flex-direction: column; justify-content: space-between;
-    position: relative;
-    box-shadow: 4px 4px 0 rgba(42, 24, 16, 0.85);
-    border: 2px solid var(--ink);
-  }
-  .card-brown { background: var(--brown); color: var(--bg-cream); }
-  .card-orange { background: var(--orange); color: var(--ink); }
-  .card-mustard { background: var(--mustard); color: var(--ink); }
-
-  .card-num {
-    font-family: var(--display-font);
-    font-size: 44px;
-    font-weight: 400;
-    letter-spacing: -0.04em;
-    line-height: 1;
-    font-variant-numeric: tabular-nums proportional-nums;
-  }
-  .card-label {
-    font-family: var(--mono-font);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    opacity: 0.86;
-  }
-  .card-corner {
-    position: absolute; top: 12px; right: 12px;
-    width: 10px; height: 10px; border-radius: 50%;
-    background: currentColor;
-    opacity: 0.9;
-  }
-  .card-brown .card-corner { background: var(--mustard); opacity: 1; }
-  .card-orange .card-corner { background: var(--brown); opacity: 1; }
-  .card-mustard .card-corner { background: var(--vermilion); opacity: 1; }
-
-  .vinyl {
-    position: absolute;
-    right: 96px; bottom: 96px;
-    width: 168px; height: 168px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at center,
-        var(--vermilion) 0 18px,
-        var(--ink) 18px 22px,
-        #1d100a 22px 36px,
-        var(--ink) 36px 38px,
-        #1d100a 38px 56px,
-        var(--ink) 56px 58px,
-        #1d100a 58px 78px,
-        var(--ink) 78px 80px,
-        #1d100a 80px 84px);
-    box-shadow: 0 0 0 4px rgba(244, 233, 208, 1), 0 0 0 6px rgba(107, 68, 35, 0.55);
     z-index: 4;
   }
-  .vinyl-center-dot {
-    position: absolute;
-    right: 174px; bottom: 174px;
-    width: 12px; height: 12px;
-    border-radius: 50%;
-    background: var(--bg-cream);
-    z-index: 5;
+
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 6px; padding-bottom: 10px;
+    border-bottom: 1.5px solid var(--brown);
+    margin-bottom: 12px;
+  }
+  .logo-group { display: flex; align-items: center; gap: 12px; }
+  .logo-mark {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--brown);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .logo-mark-inner { width: 8px; height: 8px; border-radius: 50%; background: var(--bg-cream); }
+  .logo-name {
+    font-family: var(--mono-font);
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.22em; color: var(--brown);
+    text-transform: uppercase;
+  }
+  .header-title {
+    font-family: var(--display-font);
+    font-size: 22px; letter-spacing: -0.02em;
+    color: var(--brown);
+  }
+  .header-title .accent { color: var(--vermilion); }
+  .header-meta {
+    font-family: var(--mono-font);
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.28em; color: var(--ink-faint);
+    text-transform: uppercase;
   }
 
-  .footer {
-    position: absolute;
-    bottom: 26px; left: 80px; right: 80px;
-    display: flex; justify-content: space-between; align-items: center;
+  /* layout: flex-1 container wrapping both the 3-col grid and the bottom strip */
+  .main-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  /* 3-column layout */
+  .main { display: grid; grid-template-columns: 1.4fr 1px 1.2fr 1px 0.95fr; flex: 1; min-height: 0; gap: 0; align-items: stretch; }
+  .divider-v { background: var(--ink-xfaint); margin: 0 18px; }
+
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .col-label {
     font-family: var(--mono-font);
-    font-size: 10.5px;
-    color: var(--brown);
-    letter-spacing: 0.32em;
+    font-size: 9px; font-weight: 700;
+    letter-spacing: 0.36em; color: var(--brown);
     text-transform: uppercase;
-    font-weight: 600;
-    opacity: 0.72;
-    z-index: 6;
+    display: flex; align-items: center; gap: 8px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--ink-xfaint);
   }
-  .footer-page {
-    font-variant-numeric: tabular-nums;
+  .dot-lead { width: 8px; height: 8px; border-radius: 50%; background: var(--orange); }
+
+  /* Vinyl catalogue table */
+  .vinyl-table { width: 100%; border-collapse: collapse; }
+  .vinyl-table thead tr { border-bottom: 1px solid rgba(42,24,16,0.22); }
+  .vinyl-table th {
+    font-family: var(--mono-font);
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.26em; color: var(--ink-faint);
+    text-transform: uppercase;
+    padding: 0 0 7px 0; text-align: left;
+  }
+  .vinyl-table th:not(:first-child) { padding-left: 10px; }
+  .vinyl-table th.right { text-align: right; }
+  .vinyl-table tbody tr { border-bottom: 1px solid rgba(42,24,16,0.10); }
+  .vinyl-table tbody tr:last-child { border-bottom: none; }
+  .vinyl-table td {
+    font-family: var(--body-font);
+    font-size: 11px; color: var(--ink-soft);
+    padding: 4px 0; vertical-align: middle;
+  }
+  .vinyl-table td:not(:first-child) { padding-left: 10px; }
+  .vinyl-table td.title { font-weight: 700; color: var(--ink); font-size: 11.5px; }
+  .vinyl-table td.cat {
+    font-family: var(--mono-font);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .vinyl-table td.price {
+    font-family: var(--mono-font);
+    font-size: 11px; text-align: right; font-weight: 600;
+    color: var(--brown);
+  }
+  .badge {
+    display: inline-block;
+    padding: 1px 6px; border-radius: 2px;
+    font-family: var(--mono-font);
+    font-size: 8.5px; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; vertical-align: middle;
+  }
+  .badge-brown { background: var(--brown); color: var(--bg-cream); }
+  .badge-orange { background: var(--orange); color: var(--ink); }
+  .badge-mustard { background: var(--mustard); color: var(--ink); }
+  .badge-vermilion { background: var(--vermilion); color: var(--bg-cream); }
+
+  /* Sales chart */
+  .sales-bars { display: flex; flex-direction: column; gap: 7px; }
+  .sbar-row { display: flex; align-items: center; gap: 8px; }
+  .sbar-lbl {
+    font-family: var(--mono-font);
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 0.14em; color: var(--ink-soft);
+    min-width: 64px; text-transform: uppercase;
+  }
+  .sbar-track {
+    flex: 1; height: 12px;
+    background: rgba(42,24,16,0.10);
+    border-radius: 2px; overflow: hidden;
+  }
+  .sbar-fill { height: 100%; border-radius: 2px; }
+  .fill-brown { background: var(--brown); }
+  .fill-orange { background: var(--orange); }
+  .fill-mustard { background: var(--mustard); }
+  .fill-vermilion { background: var(--vermilion); }
+  .sbar-val {
+    font-family: var(--mono-font);
+    font-size: 9.5px; font-weight: 600;
+    color: var(--brown); min-width: 36px; text-align: right;
+  }
+
+  /* Festival lineup table */
+  .lineup-table { width: 100%; border-collapse: collapse; }
+  .lineup-table thead tr { border-bottom: 1.5px solid var(--brown); }
+  .lineup-table th {
+    font-family: var(--mono-font);
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.28em; color: var(--brown);
+    text-transform: uppercase;
+    padding: 0 0 7px 0; text-align: left;
+  }
+  .lineup-table th:not(:first-child) { padding-left: 10px; }
+  .lineup-table tbody tr { border-bottom: 1px solid rgba(42,24,16,0.10); }
+  .lineup-table tbody tr:last-child { border-bottom: none; }
+  .lineup-table td {
+    font-family: var(--body-font);
+    font-size: 11px; color: var(--ink-soft);
+    padding: 4px 0; vertical-align: middle;
+  }
+  .lineup-table td:not(:first-child) { padding-left: 10px; }
+  .lineup-table td.act { font-weight: 700; color: var(--ink); }
+  .lineup-table td.stage {
+    font-family: var(--mono-font);
+    font-size: 9.5px; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--brown);
+  }
+  .lineup-table td.time {
+    font-family: var(--mono-font);
+    font-size: 10px; font-weight: 600;
+    color: var(--ink-faint);
+  }
+
+  /* Summary stats row */
+  .summary-row {
+    display: flex; gap: 0;
+    border-top: 1.5px solid var(--brown);
+    border-bottom: 1.5px solid var(--brown);
+    margin-top: 10px;
+  }
+  .summary-cell {
+    flex: 1; padding: 8px 12px; text-align: center;
+    border-right: 1px solid rgba(42,24,16,0.22);
+  }
+  .summary-cell:last-child { border-right: none; }
+  .summary-num {
+    font-family: var(--display-font);
+    font-size: 28px; letter-spacing: -0.03em;
+    color: var(--brown); line-height: 1;
+  }
+  .summary-num .u {
+    font-family: var(--mono-font);
+    font-size: 11px; font-weight: 700;
+    color: var(--orange); letter-spacing: 0.1em;
+  }
+  .summary-lbl {
+    font-family: var(--mono-font);
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.24em; color: var(--ink-faint);
+    text-transform: uppercase; margin-top: 3px;
+  }
+
+  /* Footer */
+  .footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 8px; border-top: 1px solid rgba(42,24,16,0.22);
+    margin-top: 8px;
+  }
+  .footer-left {
+    font-family: var(--mono-font);
+    font-size: 9.5px; letter-spacing: 0.28em;
+    color: var(--ink-faint); text-transform: uppercase; font-weight: 600;
+  }
+  .footer-right {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .ftag {
+    border: 1.5px solid var(--brown);
+    padding: 2px 8px; border-radius: 2px;
+    font-family: var(--mono-font);
+    font-size: 8.5px; letter-spacing: 0.18em;
+    color: var(--brown); text-transform: uppercase; font-weight: 700;
+  }
+  .fpage {
+    font-family: var(--mono-font);
+    font-size: 9.5px; letter-spacing: 0.26em;
+    color: var(--ink-faint); font-weight: 600;
   }
 
   .grain {
     position: absolute; inset: 0;
     width: 100%; height: 100%;
-    opacity: 0.08;
-    pointer-events: none;
-    z-index: 9;
+    opacity: 0.06; pointer-events: none; z-index: 9;
   }
 </style>
 </head>
@@ -288,59 +284,273 @@
   <div class="stripe-band stripe-top"></div>
   <div class="stripe-band stripe-bottom"></div>
 
-  <div class="sun-orange-ring"></div>
-  <div class="sun-orange"></div>
-  <div class="sun-mustard"></div>
-  <div class="arc-half"></div>
-
-  <div class="stage">
-    <div class="top">
-      <div class="logo">
-        <span class="logo-mark"><span class="logo-mark-inner"></span></span>
-        VINYL &amp; BREW · EST. 1972
+  <div class="page">
+    <div class="header">
+      <div class="logo-group">
+        <div class="logo-mark"><div class="logo-mark-inner"></div></div>
+        <div class="logo-name">VINYL &amp; BREW · EST. 1972</div>
       </div>
-      <div class="nav">
-        <span>SHOP</span>
-        <span>STORIES</span>
-        <span>VISIT</span>
-      </div>
+      <div class="header-title">CATALOGUE <span class="accent">&amp;</span> LINEUP — MMXXVI</div>
+      <div class="header-meta">ISSUE 042 · GROOVE TIME · BROOKLYN</div>
     </div>
 
-    <div class="label-row">
-      <span class="label-dot"></span>
-      <span class="label-line"></span>
-      <span class="label">VOL. 042 · GROOVE TIME</span>
+    <div class="main-wrap">
+    <div class="main">
+      <!-- Column 1: Vinyl catalogue table -->
+      <div class="col">
+        <div class="col-label"><span class="dot-lead"></span>Vinyl Catalogue — Best Sellers Q3 2026</div>
+        <table class="vinyl-table">
+          <thead>
+            <tr>
+              <th>Title / Artist</th>
+              <th>Genre</th>
+              <th>Year</th>
+              <th class="right">Price</th>
+              <th>Stock</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="title">Rocketman Sessions<br><span style="font-weight:400; font-size:10.5px; color:var(--ink-soft);">The Sunset Horns</span></td>
+              <td class="cat">Funk</td>
+              <td>1974</td>
+              <td class="price">$38</td>
+              <td><span class="badge badge-orange">Hot</span></td>
+            </tr>
+            <tr>
+              <td class="title">Desert Morning<br><span style="font-weight:400; font-size:10.5px; color:var(--ink-soft);">Rosa Fontaine</span></td>
+              <td class="cat">Soul</td>
+              <td>1971</td>
+              <td class="price">$54</td>
+              <td><span class="badge badge-vermilion">Rare</span></td>
+            </tr>
+            <tr>
+              <td class="title">Copper &amp; Rust<br><span style="font-weight:400; font-size:10.5px; color:var(--ink-soft);">The Rolling Pines</span></td>
+              <td class="cat">Folk</td>
+              <td>1976</td>
+              <td class="price">$29</td>
+              <td><span class="badge badge-mustard">12 left</span></td>
+            </tr>
+            <tr>
+              <td class="title">Liquid Groove Vol. 3<br><span style="font-weight:400; font-size:10.5px; color:var(--ink-soft);">DJ Copper Street</span></td>
+              <td class="cat">Jazz</td>
+              <td>1972</td>
+              <td class="price">$44</td>
+              <td><span class="badge badge-brown">Classic</span></td>
+            </tr>
+            <tr>
+              <td class="title">Golden Hour Tapes<br><span style="font-weight:400; font-size:10.5px; color:var(--ink-soft);">Meadow Larks</span></td>
+              <td class="cat">Country</td>
+              <td>1978</td>
+              <td class="price">$32</td>
+              <td><span class="badge badge-orange">Hot</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="summary-row">
+          <div class="summary-cell">
+            <div class="summary-num">2,840<span class="u">LP</span></div>
+            <div class="summary-lbl">Titles in stock</div>
+          </div>
+          <div class="summary-cell">
+            <div class="summary-num">$48<span class="u">avg</span></div>
+            <div class="summary-lbl">Avg. price</div>
+          </div>
+          <div class="summary-cell">
+            <div class="summary-num">316<span class="u">sold</span></div>
+            <div class="summary-lbl">This week</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- Column 2: Genre sales chart -->
+      <div class="col">
+        <div class="col-label"><span class="dot-lead" style="background:var(--mustard);"></span>Sales by Genre — Last 12 Weeks</div>
+        <div class="sales-bars">
+          <div class="sbar-row">
+            <div class="sbar-lbl">FUNK</div>
+            <div class="sbar-track"><div class="sbar-fill fill-orange" style="width:88%"></div></div>
+            <div class="sbar-val">882</div>
+          </div>
+          <div class="sbar-row">
+            <div class="sbar-lbl">SOUL</div>
+            <div class="sbar-track"><div class="sbar-fill fill-brown" style="width:76%"></div></div>
+            <div class="sbar-val">764</div>
+          </div>
+          <div class="sbar-row">
+            <div class="sbar-lbl">JAZZ</div>
+            <div class="sbar-track"><div class="sbar-fill fill-mustard" style="width:62%"></div></div>
+            <div class="sbar-val">618</div>
+          </div>
+          <div class="sbar-row">
+            <div class="sbar-lbl">FOLK</div>
+            <div class="sbar-track"><div class="sbar-fill fill-vermilion" style="width:48%"></div></div>
+            <div class="sbar-val">482</div>
+          </div>
+          <div class="sbar-row">
+            <div class="sbar-lbl">COUNTRY</div>
+            <div class="sbar-track"><div class="sbar-fill fill-brown" style="width:38%"></div></div>
+            <div class="sbar-val">376</div>
+          </div>
+          <div class="sbar-row">
+            <div class="sbar-lbl">BLUES</div>
+            <div class="sbar-track"><div class="sbar-fill fill-orange" style="width:30%"></div></div>
+            <div class="sbar-val">298</div>
+          </div>
+          <div class="sbar-row">
+            <div class="sbar-lbl">ROCK</div>
+            <div class="sbar-track"><div class="sbar-fill fill-mustard" style="width:22%"></div></div>
+            <div class="sbar-val">218</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(42,24,16,0.22);">
+          <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.22em; color:var(--ink-faint); text-transform:uppercase; margin-bottom:6px;">Top-selling stores</div>
+          <div style="display:flex; gap:10px;">
+            <div style="flex:1; background:rgba(107,68,35,0.08); border:1px solid rgba(107,68,35,0.22); border-radius:2px; padding:8px 10px; text-align:center;">
+              <div style="font-family:var(--display-font); font-size:20px; color:var(--brown); letter-spacing:-0.02em;">Brooklyn</div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.18em; color:var(--ink-faint); text-transform:uppercase; margin-top:2px;">Est. 1972</div>
+            </div>
+            <div style="flex:1; background:rgba(224,122,62,0.10); border:1px solid rgba(224,122,62,0.28); border-radius:2px; padding:8px 10px; text-align:center;">
+              <div style="font-family:var(--display-font); font-size:20px; color:var(--orange); letter-spacing:-0.02em;">Portland</div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.18em; color:var(--ink-faint); text-transform:uppercase; margin-top:2px;">Est. 1988</div>
+            </div>
+            <div style="flex:1; background:rgba(212,168,42,0.10); border:1px solid rgba(212,168,42,0.28); border-radius:2px; padding:8px 10px; text-align:center;">
+              <div style="font-family:var(--display-font); font-size:20px; color:var(--mustard); letter-spacing:-0.02em;">Austin</div>
+              <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.18em; color:var(--ink-faint); text-transform:uppercase; margin-top:2px;">Est. 2001</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- Column 3: Festival lineup -->
+      <div class="col">
+        <div class="col-label"><span class="dot-lead" style="background:var(--vermilion);"></span>Groove Fest 2026 — Lineup</div>
+        <table class="lineup-table">
+          <thead>
+            <tr>
+              <th>Act</th>
+              <th>Stage</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="act">The Sunset Horns</td>
+              <td class="stage">Main</td>
+              <td class="time">19:30</td>
+            </tr>
+            <tr>
+              <td class="act">Rosa Fontaine Trio</td>
+              <td class="stage">Garden</td>
+              <td class="time">17:45</td>
+            </tr>
+            <tr>
+              <td class="act">DJ Copper Street</td>
+              <td class="stage">Loft</td>
+              <td class="time">22:00</td>
+            </tr>
+            <tr>
+              <td class="act">Meadow Larks</td>
+              <td class="stage">Main</td>
+              <td class="time">15:00</td>
+            </tr>
+            <tr>
+              <td class="act">The Rolling Pines</td>
+              <td class="stage">Garden</td>
+              <td class="time">21:15</td>
+            </tr>
+            <tr>
+              <td class="act">Blue Canal Band</td>
+              <td class="stage">Loft</td>
+              <td class="time">18:30</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top:12px; padding:10px 12px; background:rgba(107,68,35,0.08); border-left:3px solid var(--vermilion);">
+          <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.26em; color:var(--vermilion); text-transform:uppercase; font-weight:700; margin-bottom:4px;">Festival Stats</div>
+          <div style="display:flex; gap:16px; align-items:center;">
+            <div>
+              <div style="font-family:var(--display-font); font-size:22px; color:var(--brown); letter-spacing:-0.02em;">12</div>
+              <div style="font-family:var(--mono-font); font-size:8px; letter-spacing:0.18em; color:var(--ink-faint); text-transform:uppercase;">acts</div>
+            </div>
+            <div>
+              <div style="font-family:var(--display-font); font-size:22px; color:var(--orange); letter-spacing:-0.02em;">3</div>
+              <div style="font-family:var(--mono-font); font-size:8px; letter-spacing:0.18em; color:var(--ink-faint); text-transform:uppercase;">stages</div>
+            </div>
+            <div>
+              <div style="font-family:var(--display-font); font-size:22px; color:var(--mustard); letter-spacing:-0.02em;">820</div>
+              <div style="font-family:var(--mono-font); font-size:8px; letter-spacing:0.18em; color:var(--ink-faint); text-transform:uppercase;">tickets sold</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+    <!-- End .main grid -->
 
-    <h1 class="headline">STAY<br>GROOVY<span class="dot">.</span></h1>
-
-    <p class="deck">Coffee &amp; vinyl since the seventies. Hand-roasted beans, hand-picked records, served slow. Now spinning in <span class="bold">twelve cities</span> across the United States.</p>
-
-    <div class="cards">
-      <div class="card card-brown">
-        <span class="card-corner"></span>
-        <div class="card-num">12</div>
-        <div class="card-label">CITIES SPUN</div>
+    <!-- Monthly revenue strip -->
+    <div style="border-top:1.5px solid var(--brown); border-bottom:1.5px solid var(--brown); margin-bottom:8px; display:flex; align-items:stretch; gap:0; overflow:hidden;">
+      <div style="font-family:var(--mono-font); font-size:9px; font-weight:700; letter-spacing:0.3em; color:var(--brown); text-transform:uppercase; padding:8px 14px 8px 0; display:flex; align-items:center; white-space:nowrap; border-right:1px solid rgba(42,24,16,0.22); margin-right:16px;">MONTHLY REVENUE</div>
+      <div style="flex:1; display:flex; align-items:flex-end; gap:4px; padding:6px 0;">
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--brown); height:28px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">JAN</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--orange); height:34px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">FEB</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--mustard); height:22px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">MAR</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--brown); height:38px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">APR</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--orange); height:44px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">MAY</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--vermilion); height:52px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">JUN</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--mustard); height:48px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">JUL</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--brown); height:56px; border-radius:2px 2px 0 0;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--ink-faint); text-transform:uppercase;">AUG</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:2px;">
+          <div style="width:100%; background:var(--orange); height:62px; border-radius:2px 2px 0 0; opacity:0.9;"></div>
+          <div style="font-family:var(--mono-font); font-size:8px; color:var(--brown); font-weight:700; text-transform:uppercase;">SEP&#x25B2;</div>
+        </div>
       </div>
-      <div class="card card-orange">
-        <span class="card-corner"></span>
-        <div class="card-num">48</div>
-        <div class="card-label">RECORDS / WK</div>
-      </div>
-      <div class="card card-mustard">
-        <span class="card-corner"></span>
-        <div class="card-num">1972</div>
-        <div class="card-label">EST. BROOKLYN</div>
+      <div style="padding:8px 14px; display:flex; flex-direction:column; justify-content:center; border-left:1px solid rgba(42,24,16,0.22); margin-left:16px; gap:4px;">
+        <div style="font-family:var(--display-font); font-size:22px; letter-spacing:-0.02em; color:var(--orange);">$14,280</div>
+        <div style="font-family:var(--mono-font); font-size:8.5px; letter-spacing:0.2em; color:var(--ink-faint); text-transform:uppercase;">Sep Revenue</div>
+        <div style="font-family:var(--mono-font); font-size:9px; letter-spacing:0.14em; color:var(--vermilion); font-weight:700;">&#8593; +22% MoM</div>
       </div>
     </div>
-  </div>
+    </div><!-- End .main-wrap -->
 
-  <div class="vinyl"></div>
-  <div class="vinyl-center-dot"></div>
-
-  <div class="footer">
-    <span>MMXXVI · ESTABLISHED IN BROOKLYN</span>
-    <span class="footer-page">SIDE A · 01 / 12</span>
+    <div class="footer">
+      <div class="footer-left">MMXXVI · VINYL &amp; BREW · CATALOGUE VOL. 042 · BROOKLYN, NY</div>
+      <div class="footer-right">
+        <span class="ftag">Catalogue</span>
+        <span class="ftag">Groove Fest</span>
+        <span class="fpage">SIDE B · 06 / 12</span>
+      </div>
+    </div>
   </div>
 
   <svg class="grain" preserveAspectRatio="none">

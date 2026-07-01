@@ -53,7 +53,8 @@
 }
 ```
 
-Mock: [`ppt-output/style-gallery/vibrant_rainbow.html`](../../ppt-output/style-gallery/vibrant_rainbow.html)
+Cover: [`ppt-output/style-gallery/vibrant_rainbow.cover.html`](../../ppt-output/style-gallery/vibrant_rainbow.cover.html) — "Payments, reimagined." keynote hero + 3 stat cards + glass orbs.
+Detail: [`ppt-output/style-gallery/vibrant_rainbow.html`](../../ppt-output/style-gallery/vibrant_rainbow.html) — Global Payment Flow Report: KPI stack + regional rails table with market-share bars.
 
 ---
 
@@ -95,7 +96,8 @@ Mock: [`ppt-output/style-gallery/vibrant_rainbow.html`](../../ppt-output/style-g
 }
 ```
 
-Mock: [`ppt-output/style-gallery/kindergarten_pop.html`](../../ppt-output/style-gallery/kindergarten_pop.html)
+Cover: [`ppt-output/style-gallery/kindergarten_pop.cover.html`](../../ppt-output/style-gallery/kindergarten_pop.cover.html) — "一起探索世界的奥秘" hero + 3 blob-icon stat cards + progress ring.
+Detail: [`ppt-output/style-gallery/kindergarten_pop.html`](../../ppt-output/style-gallery/kindergarten_pop.html) — 学期成果报告: 4 metric cards + 6-row activity-progress table with coloured bars and status badges.
 
 ---
 
@@ -137,7 +139,8 @@ Mock: [`ppt-output/style-gallery/kindergarten_pop.html`](../../ppt-output/style-
 }
 ```
 
-Mock: [`ppt-output/style-gallery/bauhaus_block.html`](../../ppt-output/style-gallery/bauhaus_block.html)
+Cover: [`ppt-output/style-gallery/bauhaus_block.cover.html`](../../ppt-output/style-gallery/bauhaus_block.cover.html) — "Less is more." 112px Helvetica + three primary-shape identity badges + exhibition meta.
+Detail: [`ppt-output/style-gallery/bauhaus_block.html`](../../ppt-output/style-gallery/bauhaus_block.html) — Exhibition 03 layout: principle-cards grid + geometric composition poster + curator footnote.
 
 ---
 
@@ -179,4 +182,5 @@ Mock: [`ppt-output/style-gallery/bauhaus_block.html`](../../ppt-output/style-gal
 }
 ```
 
-Mock: [`ppt-output/style-gallery/candy_pastel.html`](../../ppt-output/style-gallery/candy_pastel.html)
+Cover: [`ppt-output/style-gallery/candy_pastel.cover.html`](../../ppt-output/style-gallery/candy_pastel.cover.html) — "Douceur de printemps." Playfair italic hero + 5 macaron dots + 3 product cards + circular saveurs badge.
+Detail: [`ppt-output/style-gallery/candy_pastel.html`](../../ppt-output/style-gallery/candy_pastel.html) — Rapport de ventes: 4 KPI cards + 6-row collection table with macaron-dot colours, star ratings, and stock bars.

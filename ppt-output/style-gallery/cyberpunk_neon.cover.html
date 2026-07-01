@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>cyberpunk_neon · 赛博霓虹 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Orbitron:wght@500;700;900&family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --bg-0: #0a0014;
+    --bg-1: #1a0020;
+    --bg-2: #14002a;
+    --neon-cyan: #00ffff;
+    --neon-magenta: #ff00c8;
+    --neon-yellow: #ffd60a;
+    --neon-violet: #b56bff;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255,255,255,0.62);
+    --text-faint: rgba(255,255,255,0.38);
+    --grid-line: rgba(0,255,255,0.07);
+    --display-font: 'Orbitron', 'JetBrains Mono', 'Courier New', monospace;
+    --mono-font: 'JetBrains Mono', 'DM Mono', 'Courier New', monospace;
+    --body-font: 'JetBrains Mono', 'DM Mono', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 60% 50% at 18% 22%, rgba(0,255,255,0.16) 0%, transparent 60%),
+      radial-gradient(ellipse 70% 55% at 88% 78%, rgba(255,0,200,0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 50% 110%, rgba(181,107,255,0.18) 0%, transparent 60%),
+      linear-gradient(160deg, var(--bg-1) 0%, var(--bg-0) 55%, var(--bg-2) 100%);
+    color: var(--text-primary);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern','liga','calt','ss01','cv11','ccmp';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+    letter-spacing: -0.01em;
+  }
+
+  .grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+  }
+
+  .scanlines {
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0,255,255,0.035) 3px,
+      rgba(0,255,255,0.035) 4px
+    );
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  .horizon-line {
+    position: absolute; left: 0; right: 0; top: 62%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(0,255,255,0.55) 30%, rgba(255,0,200,0.55) 70%, transparent 100%);
+    box-shadow: 0 0 18px rgba(0,255,255,0.4);
+    z-index: 1;
+  }
+
+  .frame {
+    position: absolute; inset: 18px;
+    border: 1px solid rgba(0,255,255,0.18);
+    clip-path: polygon(
+      0 0,
+      calc(100% - 22px) 0,
+      100% 22px,
+      100% 100%,
+      22px 100%,
+      0 calc(100% - 22px)
+    );
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .corner-tag {
+    position: absolute;
+    font-family: var(--mono-font);
+    font-size: 9px;
+    color: var(--neon-cyan);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    z-index: 6;
+  }
+  .corner-tl { top: 30px; left: 30px; }
+  .corner-tr { top: 30px; right: 30px; }
+  .corner-bl { bottom: 30px; left: 30px; }
+  .corner-br { bottom: 30px; right: 30px; color: var(--neon-magenta); }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 64px 80px 60px 80px;
+    display: flex; flex-direction: column;
+    z-index: 3;
+  }
+
+  .top {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .logo {
+    font-family: var(--mono-font);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--neon-cyan);
+    letter-spacing: 0.04em;
+    display: inline-flex; align-items: center; gap: 8px;
+    text-shadow: 0 0 8px rgba(0,255,255,0.7), 0 0 18px rgba(0,255,255,0.35);
+  }
+  .logo .arrow { color: var(--neon-magenta); text-shadow: 0 0 8px rgba(255,0,200,0.7); }
+  .nav {
+    font-family: var(--mono-font);
+    font-size: 11px;
+    color: var(--text-secondary);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    display: inline-flex; gap: 22px;
+    font-variant-numeric: tabular-nums;
+  }
+  .nav .dim { color: var(--text-faint); }
+  .nav .live {
+    color: var(--neon-yellow);
+    text-shadow: 0 0 10px rgba(255,214,10,0.6);
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .nav .live::before {
+    content: '';
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--neon-yellow);
+    box-shadow: 0 0 10px var(--neon-yellow);
+  }
+
+  .part-label {
+    margin-top: 56px;
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--mono-font);
+    font-size: 11px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--neon-cyan);
+    padding: 7px 14px 7px 12px;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,255,255,0.10) 2px,
+        rgba(0,255,255,0.10) 3px
+      ),
+      rgba(0,255,255,0.05);
+    border: 1px solid rgba(0,255,255,0.45);
+    clip-path: polygon(
+      0 0,
+      calc(100% - 8px) 0,
+      100% 8px,
+      100% 100%,
+      8px 100%,
+      0 calc(100% - 8px)
+    );
+    align-self: flex-start;
+    text-shadow: 0 0 8px rgba(0,255,255,0.6);
+  }
+  .part-label .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan), 0 0 16px var(--neon-cyan);
+  }
+
+  .headline {
+    margin-top: 26px;
+    font-family: var(--display-font);
+    font-size: 152px;
+    font-weight: 900;
+    line-height: 0.88;
+    letter-spacing: -0.035em;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    text-shadow:
+      3px 0 0 rgba(255,0,200,0.55),
+      -3px 0 0 rgba(0,255,255,0.55),
+      0 0 24px rgba(0,255,255,0.22);
+  }
+  .headline .accent {
+    color: var(--neon-cyan);
+    text-shadow:
+      3px 0 0 rgba(255,0,200,0.65),
+      -3px 0 0 rgba(0,255,255,0.65),
+      0 0 18px rgba(0,255,255,0.85),
+      0 0 36px rgba(0,255,255,0.5);
+  }
+  .headline .dot-end { color: var(--neon-magenta); text-shadow: 0 0 18px rgba(255,0,200,0.9), 0 0 36px rgba(255,0,200,0.55); }
+
+  .deck {
+    margin-top: 28px;
+    font-family: var(--mono-font);
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    letter-spacing: 0.02em;
+    max-width: 560px;
+  }
+  .deck .hot { color: var(--neon-magenta); text-shadow: 0 0 8px rgba(255,0,200,0.55); }
+  .deck .ok { color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0,255,255,0.55); }
+
+  .stats {
+    position: absolute;
+    right: 80px; top: 168px;
+    display: flex; flex-direction: column; gap: 14px;
+    width: 320px;
+    z-index: 4;
+  }
+  .stat {
+    position: relative;
+    padding: 16px 18px 14px 18px;
+    background: linear-gradient(135deg, rgba(255,0,200,0.10) 0%, rgba(0,255,255,0.05) 100%);
+    border: 1px solid var(--neon-magenta);
+    clip-path: polygon(
+      0 0,
+      calc(100% - 12px) 0,
+      100% 12px,
+      100% 100%,
+      12px 100%,
+      0 calc(100% - 12px)
+    );
+    box-shadow:
+      0 0 0 1px rgba(255,0,200,0.15),
+      0 0 24px rgba(255,0,200,0.18) inset;
+  }
+  .stat-head {
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--mono-font);
+    font-size: 9px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+  .stat-head .id { color: var(--neon-magenta); text-shadow: 0 0 8px rgba(255,0,200,0.55); }
+  .stat-row {
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .stat-num {
+    font-family: var(--display-font);
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
+    color: var(--neon-cyan);
+    text-shadow: 0 0 10px rgba(0,255,255,0.75), 0 0 22px rgba(0,255,255,0.35);
+  }
+  .stat-unit {
+    font-family: var(--mono-font);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.06em;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    font-family: var(--mono-font);
+    font-size: 10px;
+    color: var(--text-secondary);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  .stat.alt { border-color: var(--neon-cyan); box-shadow: 0 0 0 1px rgba(0,255,255,0.15), 0 0 24px rgba(0,255,255,0.18) inset; }
+  .stat.alt .stat-num { color: var(--neon-magenta); text-shadow: 0 0 10px rgba(255,0,200,0.75), 0 0 22px rgba(255,0,200,0.35); }
+  .stat.alt .stat-head .id { color: var(--neon-cyan); text-shadow: 0 0 8px rgba(0,255,255,0.55); }
+
+  .stat.warn { border-color: var(--neon-yellow); box-shadow: 0 0 0 1px rgba(255,214,10,0.18), 0 0 24px rgba(255,214,10,0.16) inset; }
+  .stat.warn .stat-num { color: var(--neon-yellow); text-shadow: 0 0 10px rgba(255,214,10,0.75), 0 0 22px rgba(255,214,10,0.35); }
+  .stat.warn .stat-head .id { color: var(--neon-yellow); text-shadow: 0 0 8px rgba(255,214,10,0.6); }
+
+  .pixel-art {
+    position: absolute;
+    bottom: 70px; right: 80px;
+    display: grid;
+    grid-template-columns: repeat(8, 9px);
+    grid-template-rows: repeat(8, 9px);
+    gap: 2px;
+    z-index: 4;
+  }
+  .px { background: transparent; }
+  .px-c { background: var(--neon-cyan); box-shadow: 0 0 6px rgba(0,255,255,0.7); }
+  .px-m { background: var(--neon-magenta); box-shadow: 0 0 6px rgba(255,0,200,0.7); }
+  .px-y { background: var(--neon-yellow); box-shadow: 0 0 6px rgba(255,214,10,0.7); }
+  .px-w { background: rgba(255,255,255,0.85); }
+  .px-d { background: rgba(0,255,255,0.18); }
+
+  .bottom-bar {
+    position: absolute;
+    left: 80px; bottom: 80px;
+    display: flex; gap: 10px;
+    align-items: center;
+    z-index: 4;
+  }
+  .meter {
+    display: inline-flex; gap: 3px;
+  }
+  .meter span {
+    display: inline-block;
+    width: 10px; height: 18px;
+    background: rgba(0,255,255,0.12);
+  }
+  .meter span.on { background: var(--neon-cyan); box-shadow: 0 0 6px var(--neon-cyan); }
+  .meter span.hot { background: var(--neon-magenta); box-shadow: 0 0 6px var(--neon-magenta); }
+  .meter-label {
+    font-family: var(--mono-font);
+    font-size: 10px;
+    color: var(--text-secondary);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-left: 8px;
+  }
+  .meter-label .v {
+    color: var(--neon-cyan);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 8px rgba(0,255,255,0.6);
+  }
+
+  .footer {
+    position: absolute;
+    left: 80px; right: 80px; bottom: 36px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--mono-font);
+    font-size: 10px;
+    color: var(--text-faint);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    z-index: 4;
+    font-variant-numeric: tabular-nums;
+  }
+  .footer .left .accent { color: var(--neon-cyan); }
+  .footer .right .accent { color: var(--neon-magenta); }
+
+  .city {
+    position: absolute;
+    left: 0; right: 0;
+    bottom: 152px;
+    height: 110px;
+    z-index: 1;
+    opacity: 0.55;
+  }
+  .city svg { width: 100%; height: 100%; display: block; }
+
+  .vert-line {
+    position: absolute;
+    top: 110px; bottom: 110px;
+    width: 1px;
+    background: linear-gradient(180deg, transparent 0%, rgba(0,255,255,0.35) 20%, rgba(255,0,200,0.35) 80%, transparent 100%);
+    z-index: 2;
+  }
+  .vert-line.l { left: 60px; }
+  .vert-line.r { right: 60px; }
+
+  .barcode {
+    position: absolute;
+    left: 50%; top: 30px;
+    transform: translateX(-50%);
+    display: inline-flex; gap: 2px;
+    z-index: 6;
+    align-items: center;
+  }
+  .barcode span {
+    display: inline-block;
+    width: 2px;
+    background: rgba(0,255,255,0.55);
+  }
+  .barcode .h1 { height: 14px; }
+  .barcode .h2 { height: 8px; }
+  .barcode .h3 { height: 12px; }
+  .barcode .h4 { height: 6px; }
+  .barcode .label {
+    margin-left: 10px;
+    font-family: var(--mono-font);
+    font-size: 9px;
+    color: var(--neon-cyan);
+    letter-spacing: 0.3em;
+    text-shadow: 0 0 6px rgba(0,255,255,0.55);
+  }
+</style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+
+  <div class="city">
+    <svg viewBox="0 0 1280 110" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="cgrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#00ffff" stop-opacity="0.0"/>
+          <stop offset="60%" stop-color="#00ffff" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#ff00c8" stop-opacity="0.55"/>
+        </linearGradient>
+      </defs>
+      <path d="M0,110 L0,80 L40,80 L40,55 L80,55 L80,75 L110,75 L110,40 L140,40 L140,30 L170,30 L170,62 L200,62 L200,48 L235,48 L235,72 L270,72 L270,38 L300,38 L300,58 L335,58 L335,30 L365,30 L365,18 L395,18 L395,52 L425,52 L425,68 L460,68 L460,42 L495,42 L495,60 L525,60 L525,32 L555,32 L555,50 L585,50 L585,72 L615,72 L615,40 L645,40 L645,22 L680,22 L680,52 L710,52 L710,38 L740,38 L740,68 L775,68 L775,46 L805,46 L805,28 L835,28 L835,58 L865,58 L865,72 L900,72 L900,42 L930,42 L930,60 L960,60 L960,36 L995,36 L995,52 L1025,52 L1025,72 L1055,72 L1055,42 L1085,42 L1085,28 L1115,28 L1115,56 L1145,56 L1145,72 L1175,72 L1175,48 L1210,48 L1210,68 L1240,68 L1240,52 L1280,52 L1280,110 Z"
+            fill="url(#cgrad)" stroke="rgba(0,255,255,0.5)" stroke-width="1"/>
+      <line x1="155" y1="22" x2="155" y2="40" stroke="#ffd60a" stroke-width="1" opacity="0.9"/>
+      <line x1="380" y1="10" x2="380" y2="22" stroke="#ff00c8" stroke-width="1" opacity="0.9"/>
+      <line x1="660" y1="14" x2="660" y2="32" stroke="#00ffff" stroke-width="1" opacity="0.9"/>
+      <line x1="820" y1="20" x2="820" y2="36" stroke="#ffd60a" stroke-width="1" opacity="0.9"/>
+      <line x1="1100" y1="20" x2="1100" y2="38" stroke="#ff00c8" stroke-width="1" opacity="0.9"/>
+    </svg>
+  </div>
+
+  <div class="horizon-line"></div>
+  <div class="vert-line l"></div>
+  <div class="vert-line r"></div>
+
+  <div class="frame"></div>
+
+  <div class="barcode">
+    <span class="h1"></span><span class="h2"></span><span class="h1"></span><span class="h3"></span>
+    <span class="h2"></span><span class="h1"></span><span class="h4"></span><span class="h3"></span>
+    <span class="h1"></span><span class="h2"></span><span class="h3"></span><span class="h1"></span>
+    <span class="h4"></span><span class="h2"></span><span class="h1"></span><span class="h3"></span>
+    <span class="label">ID-2077-A7</span>
+  </div>
+
+  <div class="corner-tag corner-tl">[ NODE_01 ]</div>
+  <div class="corner-tag corner-tr">[ SECTOR-7G ]</div>
+  <div class="corner-tag corner-bl">[ TRACE_OK ]</div>
+  <div class="corner-tag corner-br">[ ENC : AES-256 ]</div>
+
+  <div class="stage">
+    <div class="top">
+      <div class="logo">
+        <span class="arrow">&#9654;</span>
+        NEXUS://2077
+      </div>
+      <div class="nav">
+        <span>SYSTEM</span>
+        <span class="dim">/</span>
+        <span>NETRUNNER</span>
+        <span class="dim">/</span>
+        <span>DECK_OS</span>
+        <span class="dim">/</span>
+        <span class="live">LIVE</span>
+      </div>
+    </div>
+
+    <div class="part-label">
+      <span class="dot"></span>
+      // SYSTEM v2.077 &nbsp; · &nbsp; INTRUSION_PROTOCOL
+    </div>
+
+    <h1 class="headline">
+      <span class="accent">JACK</span><br>
+      IN<span class="dot-end">.</span>
+    </h1>
+
+    <p class="deck">
+      <span class="ok">// DECRYPTION COMPLETE.</span> WELCOME TO THE NET.<br>
+      Twelve seconds to breach the corp ICE — <span class="hot">847 ms</span> ping, <span class="ok">99.7%</span> uptime, zero traceback.
+    </p>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-head"><span>// METRIC_01</span><span class="id">UPTIME</span></div>
+      <div class="stat-row">
+        <span class="stat-num">99.7</span>
+        <span class="stat-unit">%</span>
+      </div>
+      <div class="stat-label">Mainframe Online &middot; 247d</div>
+    </div>
+
+    <div class="stat alt">
+      <div class="stat-head"><span>// METRIC_02</span><span class="id">LATENCY</span></div>
+      <div class="stat-row">
+        <span class="stat-num">847</span>
+        <span class="stat-unit">ms ping</span>
+      </div>
+      <div class="stat-label">Tokyo &rarr; Night City Relay</div>
+    </div>
+
+    <div class="stat warn">
+      <div class="stat-head"><span>// BUILD</span><span class="id">v2.077.05</span></div>
+      <div class="stat-row">
+        <span class="stat-num">v2.077</span>
+        <span class="stat-unit">.05</span>
+      </div>
+      <div class="stat-label">Deck_OS &middot; Patch 05/10</div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="meter">
+      <span class="on"></span><span class="on"></span><span class="on"></span>
+      <span class="on"></span><span class="on"></span><span class="on"></span>
+      <span class="on"></span><span class="on"></span><span class="hot"></span>
+      <span class="hot"></span><span></span><span></span>
+    </div>
+    <span class="meter-label">SIGNAL &nbsp; <span class="v">83%</span></span>
+  </div>
+
+  <div class="pixel-art">
+    <div class="px"></div><div class="px"></div><div class="px px-c"></div><div class="px px-c"></div><div class="px px-c"></div><div class="px px-c"></div><div class="px"></div><div class="px"></div>
+    <div class="px"></div><div class="px px-c"></div><div class="px px-w"></div><div class="px px-w"></div><div class="px px-w"></div><div class="px px-w"></div><div class="px px-c"></div><div class="px"></div>
+    <div class="px px-c"></div><div class="px px-w"></div><div class="px px-d"></div><div class="px px-m"></div><div class="px px-m"></div><div class="px px-d"></div><div class="px px-w"></div><div class="px px-c"></div>
+    <div class="px px-c"></div><div class="px px-w"></div><div class="px px-m"></div><div class="px px-y"></div><div class="px px-y"></div><div class="px px-m"></div><div class="px px-w"></div><div class="px px-c"></div>
+    <div class="px px-c"></div><div class="px px-w"></div><div class="px px-m"></div><div class="px px-y"></div><div class="px px-y"></div><div class="px px-m"></div><div class="px px-w"></div><div class="px px-c"></div>
+    <div class="px px-c"></div><div class="px px-w"></div><div class="px px-d"></div><div class="px px-m"></div><div class="px px-m"></div><div class="px px-d"></div><div class="px px-w"></div><div class="px px-c"></div>
+    <div class="px"></div><div class="px px-c"></div><div class="px px-w"></div><div class="px px-w"></div><div class="px px-w"></div><div class="px px-w"></div><div class="px px-c"></div><div class="px"></div>
+    <div class="px"></div><div class="px"></div><div class="px px-c"></div><div class="px px-c"></div><div class="px px-c"></div><div class="px px-c"></div><div class="px"></div><div class="px"></div>
+  </div>
+
+  <div class="footer">
+    <span class="left">// PART <span class="accent">03</span> &mdash; FRONTIER NETRUNNING</span>
+    <span class="right"><span class="accent">07 / 12</span> &nbsp; &middot; &nbsp; NEXUS_2077</span>
+  </div>
+
+  <div class="scanlines"></div>
+</body>
+</html>

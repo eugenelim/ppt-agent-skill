@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>nocturne_violet · 紫色辉光夜曲 · World-Class Mock</title>
+<title>nocturne_violet · Design Tools Dashboard · Detail Slide</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -32,18 +32,18 @@
     color: var(--text-primary);
     font-family: var(--body-font);
     font-feature-settings: 'ss01', 'cv11', 'calt', 'kern', 'liga', 'ccmp';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
   .aurora-glow {
     position: absolute; inset: 0;
     background:
-      radial-gradient(circle at 78% 22%, rgba(155, 100, 255, 0.42) 0%, transparent 38%),
-      radial-gradient(circle at 18% 75%, rgba(109, 61, 240, 0.28) 0%, transparent 35%),
-      radial-gradient(circle at 50% 110%, rgba(196, 168, 255, 0.18) 0%, transparent 40%);
+      radial-gradient(circle at 80% 18%, rgba(155,100,255,0.35) 0%, transparent 38%),
+      radial-gradient(circle at 16% 78%, rgba(109,61,240,0.22) 0%, transparent 35%),
+      radial-gradient(circle at 50% 112%, rgba(196,168,255,0.15) 0%, transparent 40%);
     filter: blur(60px);
     pointer-events: none;
   }
@@ -51,296 +51,138 @@
   .grid-dot {
     position: absolute; inset: 0;
     background-image:
-      linear-gradient(rgba(196,168,255,0.025) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(196,168,255,0.025) 1px, transparent 1px);
+      linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px);
     background-size: 80px 80px;
     pointer-events: none;
   }
 
+  .corner-tl { position: absolute; top: 18px; left: 18px; width: 20px; height: 20px; border-top: 1px solid rgba(155,100,255,0.4); border-left: 1px solid rgba(155,100,255,0.4); }
+  .corner-br { position: absolute; bottom: 18px; right: 18px; width: 20px; height: 20px; border-bottom: 1px solid rgba(155,100,255,0.4); border-right: 1px solid rgba(155,100,255,0.4); }
+
   .bottom-line {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, var(--accent-1) 35%, var(--accent-2) 50%, var(--accent-1) 65%, transparent);
-    opacity: 0.6;
+    position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-1), transparent);
+    opacity: 0.4;
   }
 
-  .corner-tl { position: absolute; top: 22px; left: 22px; width: 24px; height: 24px; border-top: 1px solid rgba(155,100,255,0.45); border-left: 1px solid rgba(155,100,255,0.45); }
-  .corner-br { position: absolute; bottom: 22px; right: 22px; width: 24px; height: 24px; border-bottom: 1px solid rgba(155,100,255,0.45); border-right: 1px solid rgba(155,100,255,0.45); }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 56px 80px;
+  /* Page */
+  .page {
+    position: absolute; inset: 0;
+    padding: 32px 50px 46px;
     display: flex; flex-direction: column;
     z-index: 2;
   }
 
-  .top {
+  /* Topbar */
+  .topbar {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 52px;
+    margin-bottom: 6px;
   }
-  .logo {
-    font-family: var(--display-font);
-    font-size: 14px; font-weight: 700; letter-spacing: -0.02em;
-    display: flex; align-items: center; gap: 10px;
-  }
-  .logo-mark {
-    width: 20px; height: 20px; border-radius: 5px;
-    background: linear-gradient(135deg, var(--accent-1), var(--accent-3));
-    box-shadow: 0 0 14px rgba(155,100,255,0.55), inset 0 0 6px rgba(255,255,255,0.18);
-  }
-  .nav {
-    font-family: var(--mono-font);
-    font-size: 11px; opacity: 0.6;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    display: flex; gap: 24px;
-  }
-  .nav .sep { opacity: 0.35; }
-
-  .label {
+  .eyebrow {
     font-family: var(--body-font);
-    font-size: 11px; letter-spacing: 0.20em;
-    color: var(--accent-2);
-    font-weight: 600;
-    text-transform: uppercase;
-    display: inline-flex; align-items: center; gap: 10px;
-  }
-  .label .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent-1);
-    box-shadow: 0 0 12px var(--accent-1), 0 0 4px #fff;
-    display: inline-block;
-  }
-
-  .headline {
-    font-family: var(--display-font);
-    font-size: 84px; font-weight: 700;
-    letter-spacing: -0.045em; line-height: 0.95;
-    margin-top: 22px;
-    color: #ffffff;
-  }
-  .headline em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-weight: 400;
-    letter-spacing: -0.02em;
-    color: var(--accent-2);
-  }
-
-  .deck {
-    font-family: var(--body-font);
-    font-size: 16px; line-height: 1.6;
-    color: var(--text-secondary);
-    max-width: 600px;
-    margin-top: 22px;
-    letter-spacing: -0.005em;
-    font-weight: 400;
-  }
-  .deck em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    color: var(--accent-2);
-    font-weight: 400;
-    font-size: 18px;
-  }
-
-  .glass-card {
-    position: absolute;
-    top: 232px;
-    right: 80px;
-    width: 282px;
-    padding: 22px 24px 20px;
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    border-radius: var(--card-radius);
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-    box-shadow: 0 12px 40px -12px rgba(155,100,255,0.35), inset 0 1px 0 rgba(255,255,255,0.08);
-    z-index: 3;
-  }
-  .glass-card .gc-label {
-    font-family: var(--mono-font);
-    font-size: 10px;
-    color: var(--accent-2);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent-1); font-weight: 600;
     display: flex; align-items: center; gap: 8px;
   }
-  .glass-card .gc-label .pulse {
-    width: 5px; height: 5px; border-radius: 50%;
-    background: var(--accent-1);
-    box-shadow: 0 0 8px var(--accent-1);
-    display: inline-block;
-  }
-  .glass-card .gc-row {
-    display: flex; align-items: baseline; gap: 8px;
-    margin-top: 10px;
-  }
-  .glass-card .gc-num {
-    font-family: var(--display-font);
-    font-size: 44px; font-weight: 700;
-    letter-spacing: -0.04em;
-    line-height: 1;
-    font-variant-numeric: tabular-nums proportional-nums;
-    color: #fff;
-  }
-  .glass-card .gc-unit {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-size: 22px;
-    color: var(--accent-2);
-    line-height: 1;
-  }
-  .glass-card .gc-cap {
-    font-family: var(--body-font);
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-top: 8px;
-    letter-spacing: -0.005em;
-  }
-  .glass-card .gc-bar {
-    margin-top: 14px;
-    height: 4px; border-radius: 2px;
-    background: rgba(255,255,255,0.06);
-    overflow: hidden;
-    position: relative;
-  }
-  .glass-card .gc-bar .fill {
-    position: absolute; top: 0; left: 0; bottom: 0;
-    width: 78%;
-    background: linear-gradient(90deg, var(--accent-3), var(--accent-1) 60%, var(--accent-2));
-    border-radius: 2px;
-    box-shadow: 0 0 10px rgba(155,100,255,0.55);
+  .eyebrow-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-1); box-shadow: 0 0 8px var(--accent-1); }
+  .page-id { font-family: var(--mono-font); font-size: 10px; opacity: 0.38; letter-spacing: 0.10em; text-transform: uppercase; }
+
+  .rule { height: 1px; background: linear-gradient(90deg, var(--accent-1), transparent); margin: 6px 0 14px; border: 0; }
+
+  .head-row { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 16px; }
+  h2 { font-family: var(--display-font); font-size: 26px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  h2 em { font-family: var(--serif-italic-font); font-style: italic; font-weight: 400; color: var(--accent-2); letter-spacing: -0.01em; }
+  .lead { font-size: 12.5px; color: var(--text-secondary); line-height: 1.5; max-width: 560px; }
+
+  /* Main grid: 3 large metric cards + right table */
+  .main-grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 12px;
   }
 
-  .glass-pill {
-    position: absolute;
-    top: 168px;
-    right: 200px;
-    padding: 8px 14px;
-    background: rgba(196,168,255,0.08);
+  /* Glass cards */
+  .glass-card {
+    background: var(--glass-bg);
     border: 1px solid var(--glass-border-soft);
-    border-radius: 999px;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    font-family: var(--mono-font);
-    font-size: 10px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: var(--accent-2);
-    z-index: 3;
-    display: inline-flex; align-items: center; gap: 8px;
+    border-radius: var(--card-radius);
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative; overflow: hidden;
   }
-  .glass-pill .glyph {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-size: 12px;
-    color: #fff;
-    letter-spacing: 0;
-    text-transform: none;
+  .glass-card .accent-topline {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 12px 12px 0 0;
   }
-
-  .stats {
-    display: flex; gap: 56px;
-    margin-top: 56px;
-  }
-  .stat {
-    display: flex; flex-direction: column; gap: 6px;
-  }
-  .stat .num {
-    font-family: var(--display-font);
-    font-size: 44px; font-weight: 700;
-    font-variant-numeric: tabular-nums proportional-nums;
-    letter-spacing: -0.035em;
-    line-height: 1;
-    display: flex; align-items: baseline; gap: 4px;
-    color: #fff;
-  }
-  .stat .num em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    color: var(--accent-2);
-    font-weight: 400;
-    font-size: 22px;
-    line-height: 1;
-  }
-  .stat .l {
+  .gc-label {
     font-family: var(--body-font);
-    font-size: 11px;
-    color: var(--text-secondary);
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    font-weight: 500;
+    font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-secondary); font-weight: 600; margin-top: 4px;
   }
-  .stat .sub {
-    font-family: var(--mono-font);
-    font-size: 10px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.08em;
-    margin-top: 2px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .progress-ring {
-    position: absolute;
-    bottom: 78px; right: 80px;
-    width: 130px; height: 130px;
-    z-index: 3;
-  }
-  .progress-ring svg { width: 100%; height: 100%; }
-  .progress-ring .ring-text {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-  }
-  .progress-ring .ring-text .v {
+  .gc-value {
     font-family: var(--display-font);
-    font-size: 26px; font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
-    color: var(--accent-2);
-    display: flex; align-items: baseline; justify-content: center; gap: 2px;
+    font-size: 38px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
   }
-  .progress-ring .ring-text .v .pct {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-size: 16px;
-    color: var(--accent-1);
-    font-weight: 400;
-  }
-  .progress-ring .ring-text .l {
-    font-family: var(--body-font);
-    font-size: 9px; color: var(--text-secondary);
-    letter-spacing: 0.18em; text-transform: uppercase;
-    margin-top: 4px;
-    font-weight: 500;
-  }
+  .gc-value .unit { font-size: 18px; font-weight: 500; color: var(--text-secondary); margin-left: 2px; }
+  .gc-delta { font-family: var(--mono-font); font-size: 10px; color: var(--accent-2); }
+  .gc-sub { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; }
 
-  .spec-strip {
-    position: absolute;
-    bottom: 78px; left: 80px;
-    display: flex; gap: 18px; align-items: center;
-    font-family: var(--mono-font);
-    font-size: 10px;
-    color: var(--text-tertiary);
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    z-index: 3;
+  /* Progress bars */
+  .bar-list { display: flex; flex-direction: column; gap: 9px; flex: 1; }
+  .bar-item { display: flex; flex-direction: column; gap: 4px; }
+  .bar-row { display: flex; justify-content: space-between; align-items: center; }
+  .bar-name { font-size: 10.5px; color: var(--text-secondary); }
+  .bar-val { font-family: var(--mono-font); font-size: 10px; color: var(--accent-2); }
+  .bar-track { height: 3px; background: rgba(155,100,255,0.15); border-radius: 2px; position: relative; }
+  .bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent-3), var(--accent-1)); position: absolute; top: 0; left: 0; }
+
+  /* Feature matrix (rightmost column — taller) */
+  .feature-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border-soft);
+    border-radius: var(--card-radius);
+    padding: 16px 18px;
+    display: flex; flex-direction: column;
   }
-  .spec-strip .tick { color: var(--accent-1); }
-  .spec-strip .div { width: 1px; height: 10px; background: rgba(255,255,255,0.12); }
+  .fc-head { font-size: 11px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: var(--accent-1); margin-bottom: 12px; }
+
+  .feat-table { width: 100%; border-collapse: collapse; }
+  .feat-table th {
+    font-family: var(--body-font); font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-tertiary); padding: 0 0 8px; text-align: left;
+    border-bottom: 1px solid rgba(155,100,255,0.12);
+  }
+  .feat-table td {
+    font-family: var(--body-font); font-size: 11px; color: var(--text-primary);
+    padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: middle; line-height: 1.3;
+  }
+  .feat-table td.faint { color: var(--text-secondary); }
+  .feat-table td .pip {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle;
+  }
+  .pip-on { background: var(--accent-1); box-shadow: 0 0 6px var(--accent-1); }
+  .pip-part { background: rgba(155,100,255,0.45); }
+  .pip-off { background: rgba(255,255,255,0.10); }
+
+  /* Netline across bottom */
+  .netline-row {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px solid rgba(155,100,255,0.14);
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .nk { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-tertiary); font-weight: 600; flex-shrink: 0; }
+  .ns { font-family: var(--display-font); font-size: 12px; font-weight: 700; color: var(--accent-2); line-height: 1.4; }
+  .ns span { color: rgba(255,255,255,0.8); font-weight: 400; }
 
   .footer {
-    position: absolute; bottom: 18px; left: 80px; right: 80px;
+    position: absolute; bottom: 14px; left: 50px; right: 50px;
     display: flex; justify-content: space-between;
-    font-family: var(--body-font);
-    font-size: 10px; opacity: 0.5;
-    letter-spacing: 0.12em;
-    color: var(--text-secondary);
-    text-transform: uppercase;
+    font-family: var(--mono-font); font-size: 9.5px; opacity: 0.35; letter-spacing: 0.10em; text-transform: uppercase;
     z-index: 3;
-    font-weight: 500;
   }
 </style>
 </head>
@@ -351,86 +193,159 @@
   <div class="corner-br"></div>
   <div class="bottom-line"></div>
 
-  <div class="stage">
-    <div class="top">
-      <div class="logo">
-        <div class="logo-mark"></div>
-        Aurora Studio
+  <div class="page">
+    <div class="topbar">
+      <div class="eyebrow">
+        <div class="eyebrow-dot"></div>
+        03 · Platform Health
       </div>
-      <div class="nav">
-        <span>CHANGELOG</span>
-        <span class="sep">·</span>
-        <span>DOCS</span>
-        <span class="sep">·</span>
-        <span>SIGN IN</span>
+      <div class="page-id">Nocturne Design Cloud · Q2 2026</div>
+    </div>
+    <hr class="rule">
+
+    <div class="head-row">
+      <div>
+        <h2>Product Usage <em>&amp; Reliability</em> Report</h2>
+        <p class="lead">Weekly active teams, render pipeline throughput, and feature adoption across the Nocturne Design Cloud platform — snapshot as of 2026-06-27.</p>
       </div>
     </div>
 
-    <div class="label"><span class="dot"></span>Build 2026.05 · Studio</div>
-    <h1 class="headline">Designed for<br><em>the dreamers.</em></h1>
-    <p class="deck">Aurora Studio 把设计师的夜晚还给灵感 — 深色画布、键盘优先、毫秒级实时协作。从首个像素到生产环境，团队速度提升 <em>184%</em>，迭代周期压缩到 <em>3.2 天</em>，让每一次发布都像一首夜曲。</p>
+    <div class="main-grid">
 
-    <div class="stats">
-      <div class="stat">
-        <div class="num">184<em>%</em></div>
-        <div class="l">TEAM VELOCITY</div>
-        <div class="sub">YoY · 12-WEEK ROLL</div>
+      <!-- Card 1: WAT -->
+      <div class="glass-card">
+        <div class="accent-topline" style="background: linear-gradient(90deg, var(--accent-1), var(--accent-2));"></div>
+        <div class="gc-label">Weekly Active Teams</div>
+        <div class="gc-value">14<span class="unit">k</span></div>
+        <div class="gc-delta">▲ +22 % vs. 4-wk avg</div>
+        <div class="gc-sub">Across 86 countries · Enterprise + Pro tiers</div>
+
+        <div class="bar-list" style="margin-top:8px;">
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">Enterprise</span><span class="bar-val">41 %</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:41%"></div></div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">Pro</span><span class="bar-val">38 %</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:38%"></div></div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">Starter</span><span class="bar-val">21 %</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:21%"></div></div>
+          </div>
+        </div>
       </div>
-      <div class="stat">
-        <div class="num">3.2<em>d</em></div>
-        <div class="l">SHIP CYCLE</div>
-        <div class="sub">P50 · IDEA → PROD</div>
+
+      <!-- Card 2: Render -->
+      <div class="glass-card">
+        <div class="accent-topline" style="background: linear-gradient(90deg, var(--accent-3), var(--accent-1));"></div>
+        <div class="gc-label">Renders / Day</div>
+        <div class="gc-value">2.8<span class="unit">M</span></div>
+        <div class="gc-delta">▲ +9 % WoW · peak 4.1 M Thu</div>
+        <div class="gc-sub">SVG · PPTX · PDF · PNG pipelines</div>
+
+        <div class="bar-list" style="margin-top:8px;">
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">SVG pipeline</span><span class="bar-val">52 %</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:52%"></div></div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">PPTX export</span><span class="bar-val">29 %</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:29%"></div></div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">PDF / PNG</span><span class="bar-val">19 %</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:19%"></div></div>
+          </div>
+        </div>
       </div>
-      <div class="stat">
-        <div class="num">99.98<em>%</em></div>
-        <div class="l">REALTIME SYNC</div>
-        <div class="sub">SLA · 30-DAY</div>
+
+      <!-- Card 3: Reliability -->
+      <div class="glass-card">
+        <div class="accent-topline" style="background: linear-gradient(90deg, rgba(196,168,255,0.6), var(--accent-3));"></div>
+        <div class="gc-label">P99 Render Latency</div>
+        <div class="gc-value" style="font-size:34px;">640<span class="unit">ms</span></div>
+        <div class="gc-delta">▼ −80 ms since async worker split</div>
+        <div class="gc-sub">SLA target: 800 ms · Current budget: 160 ms headroom</div>
+
+        <div class="bar-list" style="margin-top:8px;">
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">SVG (P99)</span><span class="bar-val">340 ms</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:43%"></div></div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">PPTX (P99)</span><span class="bar-val">640 ms</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:80%"></div></div>
+          </div>
+          <div class="bar-item">
+            <div class="bar-row"><span class="bar-name">PDF (P99)</span><span class="bar-val">510 ms</span></div>
+            <div class="bar-track"><div class="bar-fill" style="width:64%"></div></div>
+          </div>
+        </div>
       </div>
+
+      <!-- Card 4: Feature matrix -->
+      <div class="feature-card">
+        <div class="fc-head">Feature Rollout</div>
+        <table class="feat-table">
+          <thead>
+            <tr>
+              <th style="width:55%">Feature</th>
+              <th>Status</th>
+              <th>Adoption</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>AI Autolayout</td>
+              <td><span class="pip pip-on"></span>GA</td>
+              <td class="faint">78 %</td>
+            </tr>
+            <tr>
+              <td>Smart Components</td>
+              <td><span class="pip pip-on"></span>GA</td>
+              <td class="faint">61 %</td>
+            </tr>
+            <tr>
+              <td>Real-time Co-edit</td>
+              <td><span class="pip pip-on"></span>GA</td>
+              <td class="faint">54 %</td>
+            </tr>
+            <tr>
+              <td>Voice Annotation</td>
+              <td><span class="pip pip-part"></span>Beta</td>
+              <td class="faint">18 %</td>
+            </tr>
+            <tr>
+              <td>Brand Token Sync</td>
+              <td><span class="pip pip-part"></span>Beta</td>
+              <td class="faint">12 %</td>
+            </tr>
+            <tr>
+              <td>3D Perspective</td>
+              <td><span class="pip pip-off"></span>Alpha</td>
+              <td class="faint">4 %</td>
+            </tr>
+            <tr>
+              <td>Plugin Marketplace</td>
+              <td><span class="pip pip-off"></span>Alpha</td>
+              <td class="faint">6 %</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
     </div>
-  </div>
 
-  <div class="glass-pill"><span>NEW</span><span class="glyph">multi-cursor canvas</span></div>
-
-  <div class="glass-card">
-    <div class="gc-label"><span class="pulse"></span>Live · Studio Insight</div>
-    <div class="gc-row">
-      <span class="gc-num">+184</span>
-      <span class="gc-unit">% velocity</span>
+    <div class="netline-row">
+      <span class="nk">Therefore</span>
+      <span class="ns">PPTX pipeline is the bottleneck at 640 ms P99 — <span>migrate to async worker pool (Q3 target) to reclaim 200 ms headroom before planned 3× render volume at GA of Brand Token Sync.</span></span>
     </div>
-    <div class="gc-cap">Teams shipping nightly across 42 design systems.</div>
-    <div class="gc-bar"><div class="fill"></div></div>
-  </div>
-
-  <div class="progress-ring">
-    <svg viewBox="0 0 130 130">
-      <circle cx="65" cy="65" r="55" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
-      <circle cx="65" cy="65" r="55" fill="none" stroke="url(#ring-gradient)" stroke-width="6" stroke-dasharray="282 345" stroke-linecap="round" transform="rotate(-90 65 65)"/>
-      <defs>
-        <linearGradient id="ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#c4a8ff"/>
-          <stop offset="60%" stop-color="#9b64ff"/>
-          <stop offset="100%" stop-color="#6d3df0"/>
-        </linearGradient>
-      </defs>
-    </svg>
-    <div class="ring-text">
-      <div class="v">82<span class="pct">%</span></div>
-      <div class="l">FLOW STATE</div>
-    </div>
-  </div>
-
-  <div class="spec-strip">
-    <span class="tick">◆</span>
-    <span>v 4.2.0</span>
-    <span class="div"></span>
-    <span>WebGPU · 120 FPS</span>
-    <span class="div"></span>
-    <span>SOC 2 · TYPE II</span>
   </div>
 
   <div class="footer">
-    <span>PART 03 — STUDIO RELEASE NOTES</span>
-    <span>05 / 14  ·  AURORA STUDIO</span>
+    <span>Nocturne Design Cloud · Platform</span>
+    <span>03 / 10 · Confidential</span>
   </div>
 </body>
 </html>

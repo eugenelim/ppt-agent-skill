@@ -255,7 +255,8 @@ def phase1_tests(style_filter: str = None) -> dict:
 
     # 收集所有风格 JSON
     md_files = sorted(STYLES_DIR.glob("*.md"))
-    md_files = [f for f in md_files if f.name != "index.md"]
+    # 排除 schema 示例文件，与 gallery.py 的口径一致（index.md + readme.md）
+    md_files = [f for f in md_files if f.name.lower() not in ("index.md", "readme.md")]
     all_styles = []
     for md in md_files:
         all_styles.extend(extract_style_jsons(md))
@@ -278,34 +279,43 @@ def phase1_tests(style_filter: str = None) -> dict:
         else:
             results["summary"]["pass"] += 1
 
-        # 校验对应 mock HTML
-        html_path = GALLERY_DIR / f"{sid}.html"
-        compat_errors = check_html_pipeline_compat(html_path)
-        results["html_compat"][sid] = compat_errors
-        if compat_errors:
-            results["summary"]["fail"] += len(compat_errors)
-        elif html_path.exists():
-            results["summary"]["pass"] += 1
+        # 校验 mock HTML —— 两个层级都是**必备**夹具：详情 <id>.html + 封面
+        # <id>.cover.html。任一缺失 → check_html_pipeline_compat 返回
+        # "file not found" → 计 fail，从而机械保证"每个风格两版齐全"（forward
+        # standard，见 spec AC）。新增/吸收风格若只出一版，smoke 直接判 fail。
+        tiers = [
+            (sid, GALLERY_DIR / f"{sid}.html"),
+            (f"{sid} (cover)", GALLERY_DIR / f"{sid}.cover.html"),
+        ]
 
-        # 排版警告（不计 fail）
-        typo_warnings = check_html_typography(html_path)
-        results["html_typography"][sid] = typo_warnings
-        results["summary"]["warn"] += len(typo_warnings)
+        for key, html_path in tiers:
+            compat_errors = check_html_pipeline_compat(html_path)
+            results["html_compat"][key] = compat_errors
+            if compat_errors:
+                results["summary"]["fail"] += len(compat_errors)
+            elif html_path.exists():
+                results["summary"]["pass"] += 1
 
-        # 伪元素装饰警告（不计 fail）
-        pseudo_warnings = check_html_pseudo_decorations(html_path)
-        results["html_pseudo"][sid] = pseudo_warnings
-        results["summary"]["warn"] += len(pseudo_warnings)
+            # 排版警告（不计 fail）
+            typo_warnings = check_html_typography(html_path)
+            results["html_typography"][key] = typo_warnings
+            results["summary"]["warn"] += len(typo_warnings)
 
-    # diagram-consistency-system：图解配方结构/管线 lint + QA 自检
+            # 伪元素装饰警告（不计 fail）
+            pseudo_warnings = check_html_pseudo_decorations(html_path)
+            results["html_pseudo"][key] = pseudo_warnings
+            results["summary"]["warn"] += len(pseudo_warnings)
+
+    # 子进程自检：图解配方 lint + QA 自检 + 画廊 Cover|Detail 切换构造检查
     results["diagram_qa"] = {}
     for label, cmd in [
         ("recipe_lint", [sys.executable, str(ROOT / "scripts" / "lint_diagram_recipes.py"), "--refs-dir", str(ROOT / "references")]),
         ("qa_selftest", [sys.executable, str(ROOT / "scripts" / "test_diagram_qa.py")]),
+        ("gallery_toggle", [sys.executable, str(ROOT / "scripts" / "test_gallery_toggle.py")]),
     ]:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         ok = proc.returncode == 0
-        results["diagram_qa"][label] = {"ok": ok, "tail": (proc.stdout or proc.stderr).strip().splitlines()[-1:] }
+        results["diagram_qa"][label] = {"ok": ok, "tail": (proc.stdout or proc.stderr).strip().splitlines()[-1:] or ["(no output)"]}
         if ok:
             results["summary"]["pass"] += 1
         else:
@@ -490,15 +500,20 @@ def generate_report(results: dict, out_dir: Path):
     hc = results.get("html_compat", {})
     if hc:
         lines += ["## Mock HTML pipeline-compat 检查", ""]
-        for sid, errs in hc.items():
+        for key, errs in hc.items():
             if errs:
-                lines.append(f"### ❌ {sid}")
+                lines.append(f"### ❌ {key}")
                 for e in errs:
                     lines.append(f"  - {e}")
             else:
-                html_path = GALLERY_DIR / f"{sid}.html"
+                # key is the composite tier key: "<id>" (detail) or "<id> (cover)".
+                # Resolve to the real file rather than rebuilding "<id>.html" blindly.
+                if key.endswith(" (cover)"):
+                    html_path = GALLERY_DIR / f"{key[:-len(' (cover)')]}.cover.html"
+                else:
+                    html_path = GALLERY_DIR / f"{key}.html"
                 status = "✅" if html_path.exists() else "⚠️ (no mock yet)"
-                lines.append(f"### {status} {sid}")
+                lines.append(f"### {status} {key}")
         lines.append("")
 
     # Typography warnings
@@ -575,6 +590,9 @@ def main():
     parser.add_argument("--phase", type=int, default=1, choices=[0, 1, 2, 3, 4, 5],
                        help="只跑指定 Phase 测试 (0=check_skill, 1=style+pipeline-compat, 5=e2e)")
     parser.add_argument("--quiet", action="store_true", help="只输出失败")
+    parser.add_argument("--max-warn", type=int, default=None,
+                       help="警告预算：当 summary.warn 超过 N 时以非零退出（默认不启用）。"
+                            "把文档里的 warn 预算变成真实闸门，例如 CI 用 --phase 1 --max-warn 10。")
     args = parser.parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -600,9 +618,12 @@ def main():
     print(f"❌ Fail:  {s['fail']}")
     print(f"⚠️  Warn: {s['warn']}")
     print(f"📄 Report: {report}")
+    if args.max_warn is not None and s['warn'] > args.max_warn:
+        print(f"❌ Warn budget exceeded: {s['warn']} > --max-warn {args.max_warn}")
     print()
 
-    sys.exit(0 if s['fail'] == 0 else 1)
+    warn_over = args.max_warn is not None and s['warn'] > args.max_warn
+    sys.exit(0 if (s['fail'] == 0 and not warn_over) else 1)
 
 
 if __name__ == "__main__":

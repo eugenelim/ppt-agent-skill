@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>vibrant_rainbow · Stripe Sessions · World-Class Mock</title>
+<title>vibrant_rainbow · Prism Sessions · Network Analytics · Detail</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap');
 
   :root {
     --text-primary: #FFFFFF;
-    --text-secondary: rgba(255,255,255,0.85);
-    --text-tertiary: rgba(255,255,255,0.6);
+    --text-secondary: rgba(255,255,255,0.80);
+    --text-tertiary: rgba(255,255,255,0.55);
     --pink: #ff5b9d;
     --violet: #b266ff;
     --blue: #4a8cff;
@@ -27,407 +27,419 @@
     color: var(--text-primary);
     font-family: var(--body-font);
     font-feature-settings: 'kern', 'liga', 'ss01', 'cv11', 'calt', 'ccmp';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
-  .grain {
+  .glow-wash {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 600px 400px at 90% 10%, rgba(255,209,107,0.22) 0%, transparent 55%),
+      radial-gradient(ellipse 500px 400px at 8% 90%, rgba(0,216,212,0.20) 0%, transparent 55%),
+      radial-gradient(ellipse 400px 300px at 50% 50%, rgba(178,102,255,0.12) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .grid-overlay {
     position: absolute; inset: 0;
     background-image:
-      radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px);
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
     background-size: 64px 64px;
     pointer-events: none;
     z-index: 1;
   }
 
-  .glow-wash {
+  /* PAGE LAYOUT */
+  .page {
     position: absolute; inset: 0;
-    background:
-      radial-gradient(ellipse 800px 500px at 85% 15%, rgba(255,209,107,0.35) 0%, transparent 60%),
-      radial-gradient(ellipse 700px 400px at 10% 90%, rgba(0,216,212,0.30) 0%, transparent 60%),
-      radial-gradient(ellipse 500px 400px at 50% 50%, rgba(178,102,255,0.18) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 1;
-  }
-
-  .glass-orb-large {
-    position: absolute;
-    top: -110px; right: -90px;
-    width: 360px; height: 360px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 32% 28%,
-        rgba(255,255,255,0.95) 0%,
-        rgba(255,220,140,0.75) 18%,
-        rgba(255,140,200,0.55) 38%,
-        rgba(178,102,255,0.40) 58%,
-        rgba(74,140,255,0.30) 78%,
-        rgba(0,216,212,0.20) 92%,
-        transparent 100%);
-    box-shadow:
-      inset -28px -32px 60px rgba(120,60,180,0.45),
-      inset 12px 14px 36px rgba(255,255,255,0.35),
-      0 40px 100px rgba(60,20,100,0.35),
-      0 0 80px rgba(255,180,220,0.30);
-    z-index: 2;
-  }
-  .glass-orb-large .specular {
-    position: absolute;
-    top: 12%; left: 18%;
-    width: 90px; height: 60px;
-    border-radius: 50%;
-    background: radial-gradient(ellipse at center, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.4) 40%, transparent 75%);
-  }
-
-  .glass-orb-small {
-    position: absolute;
-    bottom: -70px; left: -60px;
-    width: 220px; height: 220px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 35% 30%,
-        rgba(255,255,255,0.90) 0%,
-        rgba(180,230,255,0.65) 22%,
-        rgba(74,140,255,0.50) 50%,
-        rgba(0,216,212,0.35) 75%,
-        transparent 95%);
-    box-shadow:
-      inset -18px -22px 42px rgba(40,80,160,0.45),
-      inset 8px 10px 24px rgba(255,255,255,0.30),
-      0 28px 70px rgba(20,40,90,0.30),
-      0 0 60px rgba(120,200,255,0.30);
-    z-index: 2;
-  }
-  .glass-orb-small .specular {
-    position: absolute;
-    top: 16%; left: 22%;
-    width: 60px; height: 38px;
-    border-radius: 50%;
-    background: radial-gradient(ellipse at center, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0.3) 45%, transparent 80%);
-  }
-
-  .glass-orb-tiny {
-    position: absolute;
-    top: 320px; right: 380px;
-    width: 70px; height: 70px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 35% 30%,
-        rgba(255,255,255,0.95) 0%,
-        rgba(255,209,107,0.7) 30%,
-        rgba(255,91,157,0.50) 65%,
-        transparent 95%);
-    box-shadow:
-      inset -6px -8px 14px rgba(180,60,120,0.40),
-      0 12px 28px rgba(120,40,80,0.25);
-    z-index: 2;
-  }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 36px 64px 28px;
+    padding: 26px 52px 40px;
     display: flex; flex-direction: column;
     z-index: 5;
   }
 
-  .top {
+  /* TOP BAR */
+  .topbar {
     display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px;
   }
   .logo {
     font-family: var(--display-font);
-    font-size: 16px; font-weight: 700; letter-spacing: -0.02em;
+    font-size: 14px; font-weight: 700; letter-spacing: -0.02em;
     display: flex; align-items: center; gap: 10px;
     color: #fff;
   }
   .logo-mark {
-    width: 22px; height: 22px; border-radius: 50%;
+    width: 20px; height: 20px; border-radius: 50%;
     background: radial-gradient(circle at 30% 30%, #fff 0%, #ffd16b 35%, #ff5b9d 70%, #b266ff 100%);
-    box-shadow: inset -2px -2px 4px rgba(120,60,180,0.5), 0 0 12px rgba(255,255,255,0.4);
+    box-shadow: inset -2px -2px 4px rgba(120,60,180,0.5), 0 0 10px rgba(255,255,255,0.35);
   }
-  .nav {
-    display: flex; align-items: center; gap: 28px;
+  .eyebrow {
     font-family: var(--body-font);
-    font-size: 11px;
-    color: rgba(255,255,255,0.85);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-weight: 500;
-  }
-  .nav .dot {
-    width: 3px; height: 3px; border-radius: 50%;
-    background: rgba(255,255,255,0.7);
-    display: inline-block;
-  }
-  .nav-pill {
-    padding: 8px 16px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.18);
-    border: 1px solid rgba(255,255,255,0.35);
-    color: #fff;
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    letter-spacing: 0.08em;
-    font-size: 11px;
-    font-weight: 600;
-  }
-
-  .badge-row {
-    margin-top: 88px;
-    display: flex; align-items: center; gap: 14px;
-  }
-  .pill-badge {
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 8px 16px 8px 12px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.18);
-    border: 1px solid rgba(255,255,255,0.40);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    font-family: var(--body-font);
-    font-size: 11px;
-    font-weight: 600;
-    color: #fff;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-  }
-  .pill-badge .pulse {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #ffd16b;
-    box-shadow: 0 0 10px #ffd16b, 0 0 20px rgba(255,209,107,0.6);
-  }
-  .badge-meta {
-    font-family: var(--body-font);
-    font-size: 11px;
-    color: rgba(255,255,255,0.85);
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    font-weight: 500;
-  }
-
-  .headline {
-    font-family: var(--display-font);
-    font-size: 116px;
-    font-weight: 700;
-    letter-spacing: -0.045em;
-    line-height: 0.92;
-    margin-top: 22px;
-    color: #fff;
-    text-shadow: 0 4px 30px rgba(80,30,140,0.25);
-  }
-  .headline em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-weight: 400;
-    letter-spacing: -0.025em;
-    color: #ffe8b0;
-    padding-right: 6px;
-  }
-
-  .deck {
-    font-family: var(--body-font);
-    font-size: 16px;
-    line-height: 1.55;
-    color: var(--text-secondary);
-    max-width: 520px;
-    margin-top: 22px;
-    letter-spacing: -0.005em;
-    font-weight: 400;
-  }
-  .deck em {
-    font-family: var(--serif-italic-font);
-    font-style: italic;
-    color: #fff;
-    font-weight: 400;
-    padding: 0 2px;
-  }
-
-  .cta-row {
-    display: flex; align-items: center; gap: 14px;
-    margin-top: 26px;
-  }
-  .btn-primary {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 14px 24px;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #6b1bb3;
-    font-family: var(--display-font);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.005em;
-    box-shadow: 0 12px 32px rgba(60,20,120,0.30), 0 2px 0 rgba(255,255,255,0.7) inset;
-  }
-  .btn-primary .arrow { font-size: 16px; }
-  .btn-ghost {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 14px 22px;
-    border-radius: 999px;
-    background: rgba(255,255,255,0.14);
-    border: 1px solid rgba(255,255,255,0.45);
-    color: #fff;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    font-family: var(--display-font);
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: -0.005em;
-  }
-  .btn-ghost .play {
-    width: 16px; height: 16px; border-radius: 50%;
-    background: rgba(255,255,255,0.95);
-    color: #6b1bb3;
-    font-size: 9px;
-    display: inline-flex; align-items: center; justify-content: center;
-    font-weight: 700;
-  }
-
-  .stats {
-    position: absolute;
-    left: 64px; right: 64px; bottom: 78px;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 18px;
-    z-index: 5;
-  }
-  .stat {
-    padding: 20px 22px;
-    border-radius: 18px;
-    background: rgba(255,255,255,0.14);
-    border: 1px solid rgba(255,255,255,0.32);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    display: flex; flex-direction: column; gap: 8px;
-    box-shadow: 0 14px 38px rgba(60,20,120,0.18), inset 0 1px 0 rgba(255,255,255,0.4);
-  }
-  .stat-head {
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: rgba(255,255,255,0.85); font-weight: 600;
     display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 8px var(--amber);
+  }
+  .page-id {
     font-family: var(--body-font);
-    font-size: 10px;
-    color: rgba(255,255,255,0.85);
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    font-weight: 600;
+    font-size: 10px; color: rgba(255,255,255,0.5); letter-spacing: 0.10em; text-transform: uppercase;
   }
-  .stat-head .swatch {
-    width: 8px; height: 8px; border-radius: 50%;
+
+  /* DIVIDER RULE */
+  .rule {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.45), transparent);
+    margin: 0 0 12px; border: 0;
   }
-  .stat .num {
+
+  /* HEADING ROW */
+  .head-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .head-row h2 {
     font-family: var(--display-font);
-    font-size: 44px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums proportional-nums;
-    letter-spacing: -0.04em;
-    line-height: 1;
+    font-size: 22px; font-weight: 700; letter-spacing: -0.025em;
     color: #fff;
-    display: flex; align-items: baseline; gap: 4px;
   }
-  .stat .num .unit {
+  .head-row h2 em {
     font-family: var(--serif-italic-font);
-    font-style: italic;
-    font-size: 28px;
-    font-weight: 400;
-    color: #ffe8b0;
+    font-style: italic; font-weight: 400;
+    color: var(--amber); font-size: 24px;
     letter-spacing: -0.015em;
   }
-  .stat .lbl {
+  .head-sub {
     font-family: var(--body-font);
-    font-size: 12px;
-    color: rgba(255,255,255,0.85);
-    letter-spacing: 0.05em;
-    font-weight: 500;
+    font-size: 11px; color: rgba(255,255,255,0.65); letter-spacing: 0.05em;
   }
 
-  .footer {
-    position: absolute;
-    bottom: 22px; left: 64px; right: 64px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-family: var(--body-font);
-    font-size: 10px;
-    color: rgba(255,255,255,0.65);
-    letter-spacing: 0.20em;
-    text-transform: uppercase;
-    font-weight: 500;
-    z-index: 5;
+  /* MAIN GRID */
+  .main-grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 14px;
   }
-  .footer .pg {
+
+  /* LEFT: KPI STACK */
+  .kpi-col {
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .kpi-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.28);
+    display: flex; flex-direction: column; gap: 4px;
+    position: relative; overflow: hidden;
+  }
+  .kpi-card .accent-bar {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    border-radius: 14px 14px 0 0;
+  }
+  .kpi-card .k-label {
+    font-family: var(--body-font);
+    font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: rgba(255,255,255,0.75); font-weight: 600;
+  }
+  .kpi-card .k-value {
+    font-family: var(--display-font);
+    font-size: 34px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+    color: #fff;
+  }
+  .kpi-card .k-value .unit {
+    font-size: 15px; font-weight: 500; color: rgba(255,255,255,0.7);
+    letter-spacing: 0; margin-left: 2px;
+  }
+  .kpi-card .k-delta {
+    font-family: var(--body-font);
+    font-size: 10px; color: var(--amber); letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+  .kpi-card .k-delta.neg { color: var(--teal); }
+  .kpi-card .k-sub {
+    font-family: var(--body-font);
+    font-size: 10px; color: rgba(255,255,255,0.6); line-height: 1.4;
+    margin-top: 2px;
+  }
+
+  /* RIGHT: REGION TABLE + BAR CHART */
+  .right-panel {
+    display: flex; flex-direction: column; gap: 12px;
+  }
+
+  /* Region performance table */
+  .region-panel {
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.22);
+    border-radius: 14px;
+    padding: 14px 16px;
+    flex: 1;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .panel-title {
+    font-family: var(--display-font);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--amber);
+  }
+
+  .region-table {
+    width: 100%; border-collapse: collapse;
+  }
+  .region-table th {
+    font-family: var(--body-font);
+    font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: rgba(255,255,255,0.55); font-weight: 600;
+    padding: 0 10px 7px 0; text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+  }
+  .region-table td {
+    font-family: var(--body-font);
+    font-size: 11px; color: #fff; line-height: 1.4;
+    padding: 6px 10px 6px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    vertical-align: middle;
+  }
+  .region-table td.mono {
+    font-family: var(--display-font);
+    font-size: 12px; font-weight: 700; letter-spacing: -0.015em;
+    color: #fff;
+  }
+  .region-table td.muted { color: rgba(255,255,255,0.60); font-size: 10.5px; }
+  .region-table td .pill {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 999px; font-size: 9px;
+    letter-spacing: 0.10em; text-transform: uppercase; font-weight: 700;
+    font-family: var(--body-font);
+  }
+  .pill-live { background: rgba(0,216,212,0.20); color: var(--teal); border: 1px solid rgba(0,216,212,0.35); }
+  .pill-grow { background: rgba(255,209,107,0.18); color: var(--amber); border: 1px solid rgba(255,209,107,0.35); }
+  .pill-soon { background: rgba(178,102,255,0.18); color: #c8a0ff; border: 1px solid rgba(178,102,255,0.35); }
+
+  /* bar */
+  .bar-wrap {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .bar-bg {
+    flex: 1; height: 5px; border-radius: 999px;
+    background: rgba(255,255,255,0.12);
+  }
+  .bar-fill {
+    height: 100%; border-radius: 999px;
+  }
+  .bar-pct {
+    font-size: 9.5px; font-weight: 700; color: rgba(255,255,255,0.75);
+    min-width: 28px; text-align: right;
     font-variant-numeric: tabular-nums;
   }
 
-  .marquee-line {
-    position: absolute;
-    bottom: 56px; left: 0; right: 0;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
-    z-index: 4;
+  /* BOTTOM: summary netline */
+  .netline {
+    padding: 8px 0 0;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    font-family: var(--display-font);
+    font-size: 11px; font-weight: 700; line-height: 1.4;
+    color: var(--amber);
   }
+  .netline .nk {
+    display: inline; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: rgba(255,255,255,0.60); font-weight: 600; margin-right: 6px;
+  }
+  .netline .ns { color: rgba(255,255,255,0.85); }
 
+  /* FOOTER */
+  .footer {
+    position: absolute; bottom: 14px; left: 52px; right: 52px;
+    display: flex; justify-content: space-between;
+    font-family: var(--body-font);
+    font-size: 9.5px; opacity: 0.50; letter-spacing: 0.10em; text-transform: uppercase;
+    color: #fff; z-index: 6;
+  }
 </style>
 </head>
 <body>
   <div class="glow-wash"></div>
-  <div class="grain"></div>
+  <div class="grid-overlay"></div>
 
-  <div class="glass-orb-large"><div class="specular"></div></div>
-  <div class="glass-orb-small"><div class="specular"></div></div>
-  <div class="glass-orb-tiny"></div>
-
-  <div class="stage">
-    <div class="top">
+  <div class="page">
+    <div class="topbar">
       <div class="logo">
         <div class="logo-mark"></div>
         Prism
       </div>
-      <div class="nav">
-        <span>Product</span>
-        <span class="dot"></span>
-        <span>Pricing</span>
-        <span class="dot"></span>
-        <span>Docs</span>
-        <span class="nav-pill">Sign in</span>
+      <div class="eyebrow">
+        <div class="eyebrow-dot"></div>
+        02 · Network Analytics
+      </div>
+      <div class="page-id">Sessions 2026 · Q2 Performance</div>
+    </div>
+    <hr class="rule">
+
+    <div class="head-row">
+      <div>
+        <h2>Global Payment <em>Flow Report</em></h2>
+        <p class="head-sub">Live telemetry across 47 active markets — volume, approval rate, and rail latency as of Q2 2026 cycle.</p>
       </div>
     </div>
 
-    <div class="badge-row">
-      <div class="pill-badge"><span class="pulse"></span>Sessions 2026 · Keynote</div>
-      <div class="badge-meta">May 10 · San Francisco</div>
-    </div>
+    <div class="main-grid">
+      <!-- Left: KPI stack -->
+      <div class="kpi-col">
 
-    <h1 class="headline">Payments,<br><em>reimagined.</em></h1>
+        <div class="kpi-card">
+          <div class="accent-bar" style="background: linear-gradient(90deg, var(--pink), var(--violet));"></div>
+          <div class="k-label">Total Volume Q2</div>
+          <div class="k-value">$618<span class="unit">B</span></div>
+          <div class="k-delta">▲ +38% vs Q1 2026</div>
+          <div class="k-sub">Prism network · 47 markets</div>
+        </div>
 
-    <p class="deck">A new programmable money stack for the internet economy — built for <em>creators</em>, scaled for <em>enterprises</em>, and tuned for the next billion transactions.</p>
+        <div class="kpi-card">
+          <div class="accent-bar" style="background: linear-gradient(90deg, var(--violet), var(--blue));"></div>
+          <div class="k-label">Approval Rate</div>
+          <div class="k-value">97.4<span class="unit">%</span></div>
+          <div class="k-delta">▲ +2.1 pp smart routing</div>
+          <div class="k-sub">7-day rolling · all rails</div>
+        </div>
 
-    <div class="cta-row">
-      <a class="btn-primary">Start now <span class="arrow">&rarr;</span></a>
-      <a class="btn-ghost"><span class="play">&#9654;</span>Watch the keynote</a>
+        <div class="kpi-card">
+          <div class="accent-bar" style="background: linear-gradient(90deg, var(--blue), var(--teal));"></div>
+          <div class="k-label">P99 Rail Latency</div>
+          <div class="k-value">38<span class="unit">ms</span></div>
+          <div class="k-delta neg">▼ −22 ms adaptive mesh</div>
+          <div class="k-sub">Avg across all local rails</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="accent-bar" style="background: linear-gradient(90deg, rgba(255,209,107,0.8), rgba(255,91,157,0.4));"></div>
+          <div class="k-label">Fraud Rate</div>
+          <div class="k-value">0.04<span class="unit">%</span></div>
+          <div class="k-delta neg">▼ −0.09 pp ML filter v4</div>
+          <div class="k-sub">Disputes · 30-day window</div>
+        </div>
+
+      </div>
+
+      <!-- Right: region table -->
+      <div class="right-panel">
+        <div class="region-panel">
+          <div class="panel-title">Regional Rails · Status Report</div>
+
+          <table class="region-table">
+            <thead>
+              <tr>
+                <th style="width:18%">Region</th>
+                <th style="width:22%">Rail</th>
+                <th style="width:13%">Volume</th>
+                <th style="width:12%">Approval</th>
+                <th style="width:10%">Status</th>
+                <th>Market share</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>North America</td>
+                <td class="muted">ACH + RTP + Cards</td>
+                <td class="mono">$218B</td>
+                <td class="mono">98.1%</td>
+                <td><span class="pill pill-live">LIVE</span></td>
+                <td>
+                  <div class="bar-wrap">
+                    <div class="bar-bg"><div class="bar-fill" style="width:82%;background:linear-gradient(90deg,var(--teal),var(--blue));"></div></div>
+                    <span class="bar-pct">82%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>Europe</td>
+                <td class="muted">SEPA Instant + SWIFT</td>
+                <td class="mono">$174B</td>
+                <td class="mono">97.8%</td>
+                <td><span class="pill pill-live">LIVE</span></td>
+                <td>
+                  <div class="bar-wrap">
+                    <div class="bar-bg"><div class="bar-fill" style="width:68%;background:linear-gradient(90deg,var(--violet),var(--pink));"></div></div>
+                    <span class="bar-pct">68%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>Asia Pacific</td>
+                <td class="muted">PayNow + UPI + Alipay</td>
+                <td class="mono">$142B</td>
+                <td class="mono">96.9%</td>
+                <td><span class="pill pill-grow">SCALE</span></td>
+                <td>
+                  <div class="bar-wrap">
+                    <div class="bar-bg"><div class="bar-fill" style="width:55%;background:linear-gradient(90deg,var(--amber),var(--pink));"></div></div>
+                    <span class="bar-pct">55%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>Latin America</td>
+                <td class="muted">PIX + SPEI + OXXO</td>
+                <td class="mono">$58B</td>
+                <td class="mono">95.4%</td>
+                <td><span class="pill pill-grow">SCALE</span></td>
+                <td>
+                  <div class="bar-wrap">
+                    <div class="bar-bg"><div class="bar-fill" style="width:39%;background:linear-gradient(90deg,var(--amber),var(--teal));"></div></div>
+                    <span class="bar-pct">39%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>MENA</td>
+                <td class="muted">SADAD + BENEFIT</td>
+                <td class="mono">$20B</td>
+                <td class="mono">94.1%</td>
+                <td><span class="pill pill-soon">EXPAND</span></td>
+                <td>
+                  <div class="bar-wrap">
+                    <div class="bar-bg"><div class="bar-fill" style="width:18%;background:linear-gradient(90deg,#c8a0ff,var(--violet));"></div></div>
+                    <span class="bar-pct">18%</span>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td>Africa</td>
+                <td class="muted">M-Pesa + NIBSS</td>
+                <td class="mono">$6B</td>
+                <td class="mono">92.5%</td>
+                <td><span class="pill pill-soon">EXPAND</span></td>
+                <td>
+                  <div class="bar-wrap">
+                    <div class="bar-bg"><div class="bar-fill" style="width:8%;background:linear-gradient(90deg,#c8a0ff,var(--blue));"></div></div>
+                    <span class="bar-pct">8%</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="netline">
+            <span class="nk">Recommendation</span>
+            <span class="ns">Accelerate APAC rail integrations — 55% penetration with 96.9% approval signals strong product fit; doubling dedicated rails in JP/KR/IN closes the 13 pp gap to NA performance by Q4.</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
-
-  <div class="stats">
-    <div class="stat">
-      <div class="stat-head"><span class="swatch" style="background:#ffd16b;"></span>Processed 2025</div>
-      <div class="num">$2.4<span class="unit">T</span></div>
-      <div class="lbl">Across the Prism network</div>
-    </div>
-    <div class="stat">
-      <div class="stat-head"><span class="swatch" style="background:#ff5b9d;"></span>YoY Growth</div>
-      <div class="num">+184<span class="unit">%</span></div>
-      <div class="lbl">Volume vs. fiscal 2024</div>
-    </div>
-    <div class="stat">
-      <div class="stat-head"><span class="swatch" style="background:#00d8d4;"></span>Countries Live</div>
-      <div class="num">47<span class="unit">/ 60</span></div>
-      <div class="lbl">Local rails in production</div>
-    </div>
-  </div>
-
-  <div class="marquee-line"></div>
 
   <div class="footer">
-    <span>Sessions 2026 &middot; Keynote &middot; Day 01</span>
-    <span class="pg">01 / 24 &middot; Prism</span>
+    <span>PRISM NETWORK · SESSIONS 2026</span>
+    <span>04 / 24 · CONFIDENTIAL</span>
   </div>
 </body>
 </html>

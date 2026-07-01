@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>bauhaus_block · Bauhaus Archive · Cover</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;700;800;900&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root {
+    --bg: #f4f0e8;
+    --ink: #1a1a1a;
+    --ink-soft: #5a5a5a;
+    --ink-mute: #8a8a85;
+    --red: #d62828;
+    --blue: #003049;
+    --yellow: #ffd60a;
+    --rule: #1a1a1a;
+    --display-font: 'Helvetica Neue', 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --body-font: 'Helvetica Neue', 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'calt', 'ss01', 'cv11';
+    font-variant-numeric: tabular-nums;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  /* Full-bleed geometric background shapes */
+  .geo-bg {
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* Large red circle — top-right quadrant */
+  .geo-circle-red {
+    top: -80px; right: -80px;
+    width: 380px; height: 380px;
+    border-radius: 50%;
+    background: var(--red);
+  }
+  /* Large blue square — bottom-left */
+  .geo-square-blue {
+    bottom: -60px; left: -60px;
+    width: 280px; height: 280px;
+    background: var(--blue);
+  }
+  /* Yellow accent strip — vertical divider right-third */
+  .geo-strip-yellow {
+    top: 0; bottom: 0;
+    left: 820px;
+    width: 8px;
+    background: var(--yellow);
+  }
+  /* Thin horizontal rule near mid */
+  .geo-hline {
+    top: 360px; left: 0; right: 0;
+    height: 1.5px;
+    background: var(--ink);
+    opacity: 0.12;
+  }
+
+  /* SVG overlay triangles sit in z-index 1 */
+  .geo-svg {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* STAGE (z-index: 5 — above geometry) */
+  .stage {
+    position: relative;
+    width: 1280px; height: 720px;
+    z-index: 5;
+  }
+
+  /* TOP BAR */
+  .top-bar {
+    position: absolute;
+    top: 32px; left: 80px; right: 80px;
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 12px;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .top-bar .left {
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--red);
+  }
+  .top-bar .right {
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  /* HERO */
+  .hero {
+    position: absolute;
+    top: 108px; left: 80px;
+    max-width: 640px;
+  }
+
+  .event-label {
+    display: inline-flex; align-items: center; gap: 14px;
+    margin-bottom: 28px;
+  }
+  .event-label .swatch {
+    width: 14px; height: 14px;
+    background: var(--red);
+    display: inline-block; flex-shrink: 0;
+  }
+  .event-label .text {
+    font-family: var(--body-font);
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--ink);
+  }
+  .event-label .text .acc { color: var(--red); }
+
+  h1 {
+    font-family: var(--display-font);
+    font-size: 112px;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    line-height: 0.88;
+    color: var(--ink);
+  }
+
+  .tagline {
+    margin-top: 30px;
+    font-family: var(--body-font);
+    font-size: 16px; font-weight: 400;
+    letter-spacing: -0.005em; line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 440px;
+  }
+  .tagline .em { color: var(--ink); font-weight: 600; }
+
+  /* IDENTITY BLOCK — right column */
+  .identity {
+    position: absolute;
+    top: 108px; right: 80px;
+    width: 280px;
+    display: flex; flex-direction: column; gap: 0;
+  }
+
+  /* Three primary-color shape badges */
+  .shape-badges {
+    display: flex; flex-direction: column; gap: 0;
+    margin-bottom: 32px;
+  }
+  .shape-row {
+    display: flex; align-items: center;
+    padding: 18px 20px;
+    border: 1.5px solid var(--ink);
+    border-bottom-width: 0;
+    gap: 16px;
+  }
+  .shape-row:last-child { border-bottom-width: 1.5px; }
+  .shape-row .shape-icon {
+    width: 32px; height: 32px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .shape-row .shape-name {
+    font-family: var(--display-font);
+    font-size: 13px; font-weight: 700;
+    letter-spacing: -0.01em; color: var(--ink);
+  }
+  .shape-row .shape-meta {
+    margin-left: auto;
+    font-family: var(--body-font);
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+
+  /* Meta table */
+  .meta-table {
+    border-top: 1.5px solid var(--ink);
+    padding-top: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .meta-cell {
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .meta-cell .k {
+    font-family: var(--body-font);
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--ink-mute);
+  }
+  .meta-cell .v {
+    font-family: var(--display-font);
+    font-size: 14px; font-weight: 800;
+    letter-spacing: -0.015em; color: var(--ink);
+  }
+  .meta-cell .v .accent-r { color: var(--red); }
+  .meta-cell .v .accent-b { color: var(--blue); }
+
+  /* BOTTOM RULE + FOOTER */
+  .bottom-rule {
+    position: absolute; left: 80px; right: 80px; bottom: 36px;
+    height: 1.5px; background: var(--ink);
+  }
+  .footer {
+    position: absolute; left: 80px; right: 80px; bottom: 18px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--ink);
+  }
+  .footer .right { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+  <!-- Geometric background shapes -->
+  <div class="geo-bg geo-circle-red"></div>
+  <div class="geo-bg geo-square-blue"></div>
+  <div class="geo-bg geo-strip-yellow"></div>
+  <div class="geo-bg geo-hline"></div>
+
+  <!-- SVG triangle overlays -->
+  <svg class="geo-svg" viewBox="0 0 1280 720">
+    <!-- Yellow triangle — center-right -->
+    <polygon points="900,520 980,520 900,640" fill="#ffd60a" opacity="0.9"/>
+    <!-- Small red quarter-circle fragment bottom-center -->
+    <path d="M580,720 A120,120 0 0,1 700,600 L700,720 Z" fill="#d62828" opacity="0.12"/>
+  </svg>
+
+  <div class="stage">
+    <!-- Top bar -->
+    <div class="top-bar">
+      <span class="left">FORM &nbsp;·&nbsp; FUNCTION &nbsp;·&nbsp; COLOR</span>
+      <span class="right">BAUHAUS ARCHIVE &nbsp;/ &nbsp;EST. 1919</span>
+    </div>
+
+    <!-- Main hero -->
+    <div class="hero">
+      <div class="event-label">
+        <span class="swatch"></span>
+        <span class="text">Exhibition <span class="acc">/ 03</span> — Opening</span>
+      </div>
+
+      <h1>Less<br>is<br>more.</h1>
+
+      <p class="tagline">A season of Bauhaus design — three rooms, <span class="em">three primary forms</span>, one principle. Spring 2026 at the Dessau Foundation.</p>
+    </div>
+
+    <!-- Identity column -->
+    <div class="identity">
+      <div class="shape-badges">
+        <div class="shape-row">
+          <div class="shape-icon">
+            <svg width="28" height="28" viewBox="0 0 28 28">
+              <circle cx="14" cy="14" r="13" fill="#d62828"/>
+            </svg>
+          </div>
+          <div class="shape-name">Circle</div>
+          <div class="shape-meta">RED</div>
+        </div>
+        <div class="shape-row">
+          <div class="shape-icon">
+            <svg width="26" height="26" viewBox="0 0 26 26">
+              <rect x="1" y="1" width="24" height="24" fill="#003049"/>
+            </svg>
+          </div>
+          <div class="shape-name">Square</div>
+          <div class="shape-meta">BLUE</div>
+        </div>
+        <div class="shape-row">
+          <div class="shape-icon">
+            <svg width="28" height="26" viewBox="0 0 28 26">
+              <polygon points="14,1 27,25 1,25" fill="#ffd60a"/>
+            </svg>
+          </div>
+          <div class="shape-name">Triangle</div>
+          <div class="shape-meta">YELLOW</div>
+        </div>
+      </div>
+
+      <div class="meta-table">
+        <div class="meta-cell">
+          <span class="k">Opening</span>
+          <span class="v">04 / 09</span>
+        </div>
+        <div class="meta-cell">
+          <span class="k">Closing</span>
+          <span class="v">06 / 21</span>
+        </div>
+        <div class="meta-cell">
+          <span class="k">Works</span>
+          <span class="v"><span class="accent-r">90</span></span>
+        </div>
+        <div class="meta-cell">
+          <span class="k">Rooms</span>
+          <span class="v"><span class="accent-b">03</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-rule"></div>
+    <div class="footer">
+      <span>EXHIBITION 03 — SPRING 2026</span>
+      <span class="right">01 / 12 &nbsp;·&nbsp; BAUHAUS 2026</span>
+    </div>
+  </div>
+</body>
+</html>

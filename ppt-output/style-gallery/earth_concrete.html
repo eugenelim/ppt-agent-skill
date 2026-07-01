@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>earth_concrete · 水泥工业 · World-Class Mock</title>
+<title>earth_concrete · Project Portfolio · Detail Slide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
   :root {
     --bg-from: #d4cfc4;
@@ -19,8 +19,8 @@
     --accent: #ff6b35;
     --accent-deep: #d8541f;
     --display-font: 'Inter Tight', 'Suisse Intl', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    --mono-font: 'JetBrains Mono', 'DM Mono', 'Courier New', monospace;
+    --body-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono-font: 'JetBrains Mono', 'DM Mono', monospace;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -30,9 +30,9 @@
     color: var(--ink);
     font-family: var(--body-font);
     font-feature-settings: "kern", "liga", "ss01", "cv11", "calt", "ccmp";
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
@@ -41,254 +41,136 @@
     background-image:
       radial-gradient(circle at 20% 30%, rgba(0,0,0,0.05) 1px, transparent 2px),
       radial-gradient(circle at 70% 60%, rgba(0,0,0,0.04) 1px, transparent 2px),
-      radial-gradient(circle at 40% 80%, rgba(0,0,0,0.05) 1px, transparent 2px),
-      radial-gradient(circle at 85% 18%, rgba(0,0,0,0.035) 1px, transparent 2px);
-    background-size: 30px 30px, 40px 40px, 50px 50px, 35px 35px;
-    pointer-events: none;
-    z-index: 0;
+      radial-gradient(circle at 40% 80%, rgba(0,0,0,0.05) 1px, transparent 2px);
+    background-size: 30px 30px, 40px 40px, 50px 50px;
+    pointer-events: none; z-index: 0;
   }
-
   .cement-stain {
     position: absolute; inset: 0;
     background:
       radial-gradient(ellipse 60% 40% at 18% 22%, rgba(255,255,255,0.18), transparent 65%),
       radial-gradient(ellipse 55% 45% at 88% 78%, rgba(0,0,0,0.07), transparent 60%);
-    pointer-events: none;
-    z-index: 0;
+    pointer-events: none; z-index: 0;
   }
-
   .grid {
     position: absolute; inset: 0;
     background-image:
       linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px),
       linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px);
     background-size: 60px 60px;
-    pointer-events: none;
-    z-index: 1;
+    pointer-events: none; z-index: 1;
   }
-
   .frame-top, .frame-bottom { position: absolute; left: 0; right: 0; height: 1px; background: rgba(26,26,26,0.18); z-index: 2; }
   .frame-top { top: 0; }
   .frame-bottom { bottom: 0; }
   .frame-left, .frame-right { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(26,26,26,0.18); z-index: 2; }
   .frame-left { left: 0; }
   .frame-right { right: 0; }
-
   .crop-tl { position: absolute; top: 26px; left: 26px; width: 14px; height: 14px; border-top: 1.5px solid var(--ink); border-left: 1.5px solid var(--ink); z-index: 3; }
-  .crop-tr { position: absolute; top: 26px; right: 26px; width: 14px; height: 14px; border-top: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); z-index: 3; }
-  .crop-bl { position: absolute; bottom: 26px; left: 26px; width: 14px; height: 14px; border-bottom: 1.5px solid var(--ink); border-left: 1.5px solid var(--ink); z-index: 3; }
   .crop-br { position: absolute; bottom: 26px; right: 26px; width: 14px; height: 14px; border-bottom: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); z-index: 3; }
 
   .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 56px 72px 48px 72px;
-    display: flex; flex-direction: column;
+    position: relative; width: 100%; height: 100%;
+    padding: 44px 72px 42px; display: flex; flex-direction: column;
     z-index: 4;
   }
 
-  .top {
+  .topbar {
     display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 6px;
   }
-  .logo {
-    display: flex; align-items: center; gap: 12px;
-    font-family: var(--display-font);
-    font-size: 14px; font-weight: 800; letter-spacing: 0.02em;
-    color: var(--ink); text-transform: uppercase;
+  .logo { display: flex; align-items: center; gap: 10px; font-family: var(--display-font); font-size: 13px; font-weight: 800; letter-spacing: 0.02em; color: var(--ink); text-transform: uppercase; }
+  .logo-mark { width: 18px; height: 18px; background: var(--ink); position: relative; display: inline-block; }
+  .logo-mark .notch { position: absolute; right: -1px; bottom: -1px; width: 7px; height: 7px; background: var(--accent); }
+  .page-meta { font-family: var(--mono-font); font-size: 10px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+
+  .label-row { display: inline-flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .label-row .bar { width: 44px; height: 2px; background: var(--accent); }
+  .label-row .txt { font-family: var(--display-font); font-size: 11px; font-weight: 700; letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent-deep); }
+
+  h2 { font-family: var(--display-font); font-size: 28px; font-weight: 800; letter-spacing: -0.035em; line-height: 1.05; color: var(--ink); margin-bottom: 4px; }
+
+  .sub-line { font-size: 12.5px; color: var(--ink-soft); letter-spacing: -0.003em; margin-bottom: 18px; }
+
+  /* Main grid */
+  .content-grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr auto;
+    gap: 12px;
   }
-  .logo-mark {
-    width: 22px; height: 22px;
-    background: var(--ink);
-    position: relative;
-    display: inline-block;
+
+  /* Project cards */
+  .project-card {
+    background: rgba(232,227,216,0.55);
+    border: 1px solid rgba(26,26,26,0.14);
+    padding: 16px 18px;
+    display: flex; flex-direction: column; gap: 8px;
+    position: relative; overflow: hidden;
   }
-  .logo-mark .notch {
-    position: absolute; right: -1px; bottom: -1px;
-    width: 9px; height: 9px;
+  .project-card .accent-strip {
+    position: absolute; top: 0; left: 0; bottom: 0; width: 3px;
     background: var(--accent);
   }
-  .nav {
+  .project-card .p-id {
     font-family: var(--mono-font);
-    font-size: 10.5px; font-weight: 500;
-    letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--ink-soft);
-    display: flex; gap: 22px; align-items: center;
+    font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--ink-mute); font-variant-numeric: tabular-nums;
   }
-  .nav .dot { width: 3px; height: 3px; background: var(--ink-faint); display: inline-block; }
-  .nav .now { color: var(--ink); font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
-  .nav .now-dot { width: 6px; height: 6px; background: var(--accent); display: inline-block; }
-
-  .meta-row {
-    display: flex; align-items: center; gap: 18px;
-    margin-top: 14px;
-    font-family: var(--mono-font);
-    font-size: 10.5px; font-weight: 500;
-    letter-spacing: 0.16em; text-transform: uppercase;
-    color: var(--ink-mute);
-    font-variant-numeric: tabular-nums;
-  }
-  .meta-row .sep { width: 14px; height: 1px; background: var(--ink-faint); }
-
-  .label-row {
-    display: inline-flex; align-items: center; gap: 14px;
-    margin-top: 56px;
-  }
-  .label-row .bar { width: 56px; height: 2px; background: var(--accent); display: inline-block; }
-  .label-row .txt {
+  .project-card .p-name {
     font-family: var(--display-font);
-    font-size: 11px; font-weight: 700;
-    letter-spacing: 0.32em; text-transform: uppercase;
-    color: var(--accent-deep);
-    font-variant-numeric: tabular-nums;
+    font-size: 16px; font-weight: 700; letter-spacing: -0.02em;
+    color: var(--ink); line-height: 1.15;
   }
-  .label-row .num {
+  .project-card .p-desc {
+    font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; letter-spacing: -0.003em;
+  }
+  .project-card .p-chips {
+    display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px;
+  }
+  .p-chip {
     font-family: var(--mono-font);
-    font-size: 10.5px; font-weight: 600;
-    color: var(--ink); letter-spacing: 0.16em;
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-soft); background: rgba(26,26,26,0.08);
+    border: 1px solid rgba(26,26,26,0.14); padding: 3px 8px;
     font-variant-numeric: tabular-nums;
   }
+  .p-chip.hot { background: rgba(255,107,53,0.12); border-color: rgba(255,107,53,0.35); color: var(--accent-deep); }
+  .project-card .p-bar-wrap { margin-top: 6px; height: 3px; background: rgba(26,26,26,0.12); }
+  .project-card .p-bar { height: 100%; background: var(--accent); }
 
-  .headline {
+  /* Bottom stat bar */
+  .stat-bar {
+    grid-column: 1 / 4;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    border-top: 2px solid var(--ink);
+    padding-top: 12px; gap: 0;
+  }
+  .stat-bar .s-item {
+    display: flex; flex-direction: column; gap: 4px;
+    padding-right: 16px;
+    border-right: 1px solid rgba(26,26,26,0.18);
+  }
+  .stat-bar .s-item:last-child { border-right: none; }
+  .stat-bar .s-val {
     font-family: var(--display-font);
-    font-size: 116px; font-weight: 800;
-    letter-spacing: -0.045em; line-height: 0.92;
-    color: var(--ink);
-    margin-top: 18px;
+    font-size: 26px; font-weight: 800; letter-spacing: -0.04em; line-height: 1;
+    color: var(--ink); font-variant-numeric: tabular-nums;
   }
-  .headline .punct { color: var(--accent); }
-
-  .lower {
-    display: flex; align-items: flex-end; justify-content: space-between;
-    margin-top: 30px; gap: 40px;
-  }
-
-  .deck-col { max-width: 520px; }
-  .deck {
-    font-family: var(--body-font);
-    font-size: 14px; line-height: 1.55;
-    color: var(--ink-soft);
-    letter-spacing: -0.005em;
-    font-variant-numeric: tabular-nums;
-  }
-  .deck .em {
-    font-family: var(--display-font);
-    font-weight: 700;
-    color: var(--ink);
-  }
-
-  .ribbon-wrap {
-    margin-top: 22px;
-    display: inline-flex; align-items: center; gap: 0;
-  }
-  .ribbon {
-    background: var(--accent); color: #fff;
-    padding: 8px 18px 8px 14px;
-    font-family: var(--display-font);
-    font-size: 11px; font-weight: 800;
-    letter-spacing: 0.22em; text-transform: uppercase;
-    clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
-    font-variant-numeric: tabular-nums;
-  }
-  .ribbon .tri { color: #fff; margin-right: 8px; font-size: 10px; }
-  .ribbon-tail {
-    background: var(--ink); color: #fff;
-    padding: 8px 14px 8px 18px;
+  .stat-bar .s-val .accent { color: var(--accent); }
+  .stat-bar .s-label {
     font-family: var(--mono-font);
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.18em; text-transform: uppercase;
-    clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%);
-    margin-left: -10px;
-    font-variant-numeric: tabular-nums;
+    font-size: 9.5px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-mute); font-variant-numeric: tabular-nums;
   }
-
-  .right-col {
-    display: flex; flex-direction: column; align-items: flex-end; gap: 14px;
-  }
-  .ref-block {
-    display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
-  }
-  .ref-num {
-    font-family: var(--display-font);
-    font-size: 78px; font-weight: 800;
-    letter-spacing: -0.05em; line-height: 0.85;
-    color: var(--ink);
-    font-variant-numeric: tabular-nums;
-  }
-  .ref-num .slash { color: var(--accent); }
-  .ref-cap {
-    font-family: var(--mono-font);
-    font-size: 10px; font-weight: 600;
-    letter-spacing: 0.22em; text-transform: uppercase;
-    color: var(--ink-mute);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .chips {
-    display: flex; flex-wrap: wrap; gap: 8px;
-    margin-top: 32px;
-    align-items: center;
-  }
-  .chip {
-    font-family: var(--mono-font);
-    font-size: 10.5px; font-weight: 600;
-    letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--ink);
-    background: rgba(255,255,255,0.4);
-    border: 1px solid rgba(26,26,26,0.18);
-    padding: 7px 12px;
-    font-variant-numeric: tabular-nums;
-    display: inline-flex; align-items: center; gap: 8px;
-  }
-  .chip.dark {
-    background: var(--ink); color: #fff; border-color: var(--ink);
-  }
-  .chip .k { color: var(--ink-mute); font-weight: 500; }
-  .chip.dark .k { color: rgba(255,255,255,0.55); }
-  .chip .dot { width: 5px; height: 5px; background: var(--accent); display: inline-block; }
 
   .footer {
-    position: absolute; bottom: 18px; left: 72px; right: 72px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-family: var(--mono-font);
-    font-size: 10px; font-weight: 500;
-    color: var(--ink-mute);
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
-    z-index: 5;
-  }
-  .footer .left, .footer .right { display: inline-flex; align-items: center; gap: 12px; }
-  .footer .pip { width: 4px; height: 4px; background: var(--accent); display: inline-block; }
-
-  .stamp {
-    position: absolute; right: 72px; top: 110px;
-    width: 78px; height: 78px;
-    border: 1.5px solid var(--ink);
-    border-radius: 50%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    transform: rotate(-8deg);
-    z-index: 5;
-    background: rgba(232,227,216,0.5);
-  }
-  .stamp .stamp-top {
-    font-family: var(--mono-font);
-    font-size: 8px; font-weight: 700;
-    letter-spacing: 0.22em; color: var(--ink);
-    text-transform: uppercase;
-  }
-  .stamp .stamp-mid {
-    font-family: var(--display-font);
-    font-size: 22px; font-weight: 800;
-    letter-spacing: -0.03em; color: var(--accent-deep);
-    line-height: 1;
-    margin: 4px 0;
-    font-variant-numeric: tabular-nums;
-  }
-  .stamp .stamp-bot {
-    font-family: var(--mono-font);
-    font-size: 7px; font-weight: 600;
-    letter-spacing: 0.18em; color: var(--ink-mute);
-    text-transform: uppercase;
+    position: absolute; bottom: 14px; left: 72px; right: 72px;
+    display: flex; justify-content: space-between;
+    font-family: var(--mono-font); font-size: 10px; font-weight: 500;
+    color: var(--ink-mute); letter-spacing: 0.18em; text-transform: uppercase;
+    font-variant-numeric: tabular-nums; z-index: 5;
   }
 </style>
 </head>
@@ -296,92 +178,97 @@
   <div class="cement-texture"></div>
   <div class="cement-stain"></div>
   <div class="grid"></div>
-
   <div class="frame-top"></div>
   <div class="frame-bottom"></div>
   <div class="frame-left"></div>
   <div class="frame-right"></div>
   <div class="crop-tl"></div>
-  <div class="crop-tr"></div>
-  <div class="crop-bl"></div>
   <div class="crop-br"></div>
 
   <div class="stage">
-    <div class="top">
+    <div class="topbar">
       <div class="logo">
         <span class="logo-mark"><span class="notch"></span></span>
         ATELIER &middot; LM
       </div>
-      <div class="nav">
-        <span>PROJECTS</span>
-        <span class="dot"></span>
-        <span>STUDIO</span>
-        <span class="dot"></span>
-        <span>JOURNAL</span>
-        <span class="dot"></span>
-        <span class="now"><span class="now-dot"></span>CONTACT</span>
+      <div class="page-meta">Project Portfolio &middot; Phase 03 Overview</div>
+    </div>
+
+    <div class="label-row"><span class="bar"></span><span class="txt">Active Projects</span></div>
+    <h2>Portfolio Status · Q2 2026</h2>
+    <p class="sub-line">Three concurrent commissions across mixed-use, cultural, and civic programmes — materials, phase, and critical-path delivery metrics.</p>
+
+    <div class="content-grid">
+
+      <div class="project-card">
+        <div class="accent-strip"></div>
+        <div class="p-id">PRJ 042 &middot; SHANGHAI XUHUI</div>
+        <div class="p-name">Xuhui Cultural Pavilion</div>
+        <p class="p-desc">1,200 m&sup2; public pavilion for 2026 Shanghai Biennale. Exposed concrete shell + cor-ten steel inserts. Phase 03 cladding milestone.</p>
+        <div class="p-chips">
+          <span class="p-chip hot">ON SITE</span>
+          <span class="p-chip">1,200 M&sup2;</span>
+          <span class="p-chip">CONCRETE + COR-TEN</span>
+        </div>
+        <div class="p-bar-wrap"><div class="p-bar" style="width:74%"></div></div>
       </div>
-    </div>
 
-    <div class="meta-row">
-      <span>N 31&deg;14&prime;</span>
-      <span class="sep"></span>
-      <span>E 121&deg;28&prime;</span>
-      <span class="sep"></span>
-      <span>SHANGHAI &middot; XUHUI</span>
-      <span class="sep"></span>
-      <span>EST. 2018</span>
-      <span class="sep"></span>
-      <span>FILE 042 / 12</span>
-    </div>
+      <div class="project-card">
+        <div class="accent-strip" style="background: var(--ink);"></div>
+        <div class="p-id">PRJ 038 &middot; BEIJING CHAOYANG</div>
+        <div class="p-name">Chaoyang Mixed-Use Tower</div>
+        <p class="p-desc">42-floor residential + retail hybrid. Prefabricated concrete panels — 6-week install window. Currently: structure complete, MEP rough-in.</p>
+        <div class="p-chips">
+          <span class="p-chip">STRUCTURE DONE</span>
+          <span class="p-chip">12,800 M&sup2;</span>
+          <span class="p-chip">PREFAB PANEL</span>
+        </div>
+        <div class="p-bar-wrap"><div class="p-bar" style="background: var(--ink); width:58%"></div></div>
+      </div>
 
-    <div class="label-row">
-      <span class="bar"></span>
-      <span class="txt">Architecture</span>
-      <span class="num">&middot; 042</span>
-    </div>
+      <div class="project-card">
+        <div class="accent-strip" style="background: rgba(26,26,26,0.4);"></div>
+        <div class="p-id">PRJ 035 &middot; TOKYO SHIBUYA</div>
+        <div class="p-name">Shibuya Civic Library</div>
+        <p class="p-desc">Reading hall with full-height clerestory. Minimalist pour-in-place concrete + natural light wells. Delivery 2027 Q1.</p>
+        <div class="p-chips">
+          <span class="p-chip">DESIGN COMPLETE</span>
+          <span class="p-chip">3,400 M&sup2;</span>
+          <span class="p-chip">IN-SITU CONCRETE</span>
+        </div>
+        <div class="p-bar-wrap"><div class="p-bar" style="background: rgba(26,26,26,0.3); width:32%"></div></div>
+      </div>
 
-    <h1 class="headline">构造城市<br>之肌理<span class="punct">.</span></h1>
-
-    <div class="lower">
-      <div class="deck-col">
-        <p class="deck">
-          ATELIER LM, EST. <span class="em">2018</span>. Twelve completed projects across <span class="em">Shanghai</span>, <span class="em">Beijing</span>, and <span class="em">Tokyo</span>&mdash;以混凝土、钢与昼光为材，重写城市内部的尺度与节奏。
-        </p>
-
-        <div class="ribbon-wrap">
-          <div class="ribbon"><span class="tri">&#9650;</span>2026 SHANGHAI BIENNALE</div>
-          <div class="ribbon-tail">PAVILION B / 03</div>
+      <!-- Stat bar -->
+      <div class="stat-bar">
+        <div class="s-item">
+          <div class="s-val">3<span class="accent">/</span>3</div>
+          <div class="s-label">Active Projects</div>
+        </div>
+        <div class="s-item">
+          <div class="s-val">17,400</div>
+          <div class="s-label">Total m² GFA</div>
+        </div>
+        <div class="s-item">
+          <div class="s-val">¥ 380<span style="font-size:14px"> M</span></div>
+          <div class="s-label">Construction Value</div>
+        </div>
+        <div class="s-item">
+          <div class="s-val">04<span style="font-size:14px">/26</span></div>
+          <div class="s-label">Avg. Phase Progress</div>
+        </div>
+        <div class="s-item">
+          <div class="s-val">0</div>
+          <div class="s-label">Critical Delays</div>
         </div>
       </div>
 
-      <div class="right-col">
-        <div class="ref-block">
-          <div class="ref-num">042<span class="slash">/</span>12</div>
-          <div class="ref-cap">PROJECT INDEX &middot; PHASE 03</div>
-        </div>
-      </div>
     </div>
-
-    <div class="chips">
-      <div class="chip"><span class="dot"></span><span class="k">PRJ</span>&nbsp;042</div>
-      <div class="chip"><span class="k">AREA</span>&nbsp;1,200 m&sup2;</div>
-      <div class="chip"><span class="k">MAT</span>&nbsp;STEEL &middot; CONCRETE</div>
-      <div class="chip"><span class="k">LOC</span>&nbsp;SHANGHAI &middot; 2026</div>
-      <div class="chip dark"><span class="k">PHASE</span>&nbsp;03 &middot; COMPLETED</div>
-      <div class="chip"><span class="k">CLIENT</span>&nbsp;XUHUI ARTS COUNCIL</div>
-    </div>
-  </div>
-
-  <div class="stamp">
-    <div class="stamp-top">SEAL</div>
-    <div class="stamp-mid">042</div>
-    <div class="stamp-bot">2026 / 05</div>
   </div>
 
   <div class="footer">
-    <span class="left"><span class="pip"></span>ATELIER LM &middot; ARCHITECTURE STUDIO</span>
-    <span class="right">F. 042 &middot; 03 / 12 &middot; SHANGHAI &mdash; 2026.05.10</span>
+    <span>ATELIER LM &middot; Q2 2026 PORTFOLIO REVIEW</span>
+    <span>F. PRT &middot; 04 / 12</span>
   </div>
 </body>
 </html>

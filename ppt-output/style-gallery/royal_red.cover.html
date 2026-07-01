@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>royal_red · 朱宫金阙 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap');
+
+  :root {
+    --bg-from: #6b0a0a;
+    --bg-mid: #4a0606;
+    --bg-to: #2d0303;
+    --gold: #c9a960;
+    --gold-soft: rgba(201, 169, 96, 0.55);
+    --gold-faint: rgba(201, 169, 96, 0.22);
+    --cream: #fff8e7;
+    --cream-soft: rgba(255, 248, 231, 0.7);
+    --cream-faint: rgba(255, 248, 231, 0.42);
+    --seal: #c0392b;
+    --display-font: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', SimSun, serif;
+    --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(ellipse 90% 75% at 50% 45%, var(--bg-from) 0%, var(--bg-mid) 45%, var(--bg-to) 100%);
+    color: var(--cream);
+    font-family: var(--body-font);
+    font-feature-settings: "kern", "liga", "ss01", "calt", "ccmp";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .vignette {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 45% at 50% 50%, transparent 0%, transparent 55%, rgba(0,0,0,0.45) 100%);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(circle, rgba(255, 248, 231, 0.025) 1px, transparent 1px);
+    background-size: 6px 6px;
+    opacity: 0.7;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .corner-tl { position: absolute; top: 24px; left: 24px; width: 50px; height: 50px; border-top: 1px solid var(--gold); border-left: 1px solid var(--gold); z-index: 4; }
+  .corner-tr { position: absolute; top: 24px; right: 24px; width: 50px; height: 50px; border-top: 1px solid var(--gold); border-right: 1px solid var(--gold); z-index: 4; }
+  .corner-bl { position: absolute; bottom: 24px; left: 24px; width: 50px; height: 50px; border-bottom: 1px solid var(--gold); border-left: 1px solid var(--gold); z-index: 4; }
+  .corner-br { position: absolute; bottom: 24px; right: 24px; width: 50px; height: 50px; border-bottom: 1px solid var(--gold); border-right: 1px solid var(--gold); z-index: 4; }
+
+  .frame-top { position: absolute; top: 48px; left: 50%; transform: translateX(-50%); width: 220px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-soft), transparent); z-index: 3; }
+  .frame-bottom { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); width: 220px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-soft), transparent); z-index: 3; }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 90px 80px;
+    z-index: 2;
+    text-align: center;
+  }
+
+  .overline {
+    font-family: var(--display-font);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.8em;
+    color: var(--gold);
+    text-indent: 0.8em;
+    margin-bottom: 44px;
+    display: inline-flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .overline .dot {
+    width: 5px; height: 5px;
+    background: var(--gold);
+    border-radius: 50%;
+    box-shadow: 0 0 8px rgba(201, 169, 96, 0.6);
+    transform: rotate(45deg);
+    border-radius: 0;
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-size: 96px;
+    font-weight: 500;
+    line-height: 1.18;
+    letter-spacing: 0.18em;
+    color: var(--cream);
+    text-indent: 0.18em;
+    margin: 0;
+  }
+  .headline .accent {
+    color: var(--gold);
+    font-weight: 600;
+  }
+
+  .gold-line {
+    width: 1px;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--gold), transparent);
+    margin: 36px auto 0;
+  }
+
+  .seal-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    margin-top: 28px;
+  }
+  .seal-side {
+    width: 64px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--gold-faint), var(--gold-soft));
+  }
+  .seal-side.right {
+    background: linear-gradient(90deg, var(--gold-soft), var(--gold-faint), transparent);
+  }
+  .seal {
+    display: inline-block;
+    padding: 14px 16px;
+    background: var(--seal);
+    color: var(--cream);
+    font-family: var(--display-font);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-indent: 0.1em;
+    border-radius: 2px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+    border: 2px solid rgba(255, 215, 0, 0.32);
+    line-height: 1;
+  }
+
+  .subtitle {
+    font-family: var(--body-font);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.5em;
+    text-indent: 0.5em;
+    color: var(--cream-faint);
+    margin-top: 32px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 64px;
+    left: 0; right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 96px;
+    font-family: var(--body-font);
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--cream-faint);
+    text-transform: uppercase;
+    z-index: 3;
+    font-variant-numeric: tabular-nums;
+  }
+  .footer .meta {
+    font-family: var(--display-font);
+    letter-spacing: 0.4em;
+    color: var(--gold-soft);
+  }
+</style>
+</head>
+<body>
+  <div class="vignette"></div>
+  <div class="grain"></div>
+
+  <div class="corner-tl"></div>
+  <div class="corner-tr"></div>
+  <div class="corner-bl"></div>
+  <div class="corner-br"></div>
+
+  <div class="frame-top"></div>
+  <div class="frame-bottom"></div>
+
+  <div class="stage">
+    <div class="overline">
+      <span>壹</span>
+      <span class="dot"></span>
+      <span>开　篇</span>
+    </div>
+
+    <h1 class="headline">
+      千　年　文　脉<br>
+      当　代　<span class="accent">新　生</span>
+    </h1>
+
+    <div class="gold-line"></div>
+
+    <div class="seal-row">
+      <span class="seal-side"></span>
+      <span class="seal">壹</span>
+      <span class="seal-side right"></span>
+    </div>
+
+    <div class="subtitle">VERMILION　·　COURT　·　MMXXVI</div>
+  </div>
+
+  <div class="footer">
+    <span>CHAPTER I  —  PROLOGUE</span>
+    <span class="meta">紫禁文创 · 大典开篇</span>
+    <span>01 / 24</span>
+  </div>
+</body>
+</html>

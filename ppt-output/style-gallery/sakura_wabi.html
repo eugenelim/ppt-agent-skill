@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>sakura_wabi · 日本侘寂 · World-Class Mock</title>
+<title>sakura_wabi · 茶道四季 · Detail Slide</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@300;400;500;600&family=Inter:wght@300;400;500&display=swap');
 
@@ -16,6 +16,7 @@
     --sakura-light: #ffb7c5;
     --sakura-deep: #d97a87;
     --hairline: rgba(44, 40, 38, 0.18);
+    --hairline-sakura: rgba(217, 122, 135, 0.22);
 
     --display-font: 'Source Han Serif SC', 'Noto Serif JP', 'Hiragino Mincho ProN', 'Songti SC', serif;
     --body-font: 'Source Han Serif SC', 'Noto Serif JP', 'Hiragino Mincho ProN', 'Songti SC', serif;
@@ -29,24 +30,27 @@
     color: var(--ink-primary);
     font-family: var(--body-font);
     font-feature-settings: 'kern', 'liga', 'palt';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
+  /* Washi grain texture */
   .washi-grain {
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 900px 600px at 18% 22%, rgba(217, 122, 135, 0.025) 0%, transparent 60%),
-      radial-gradient(ellipse 700px 500px at 82% 78%, rgba(44, 40, 38, 0.025) 0%, transparent 55%),
-      radial-gradient(circle at 30% 60%, rgba(201, 184, 150, 0.06) 0px, transparent 1px),
-      radial-gradient(circle at 70% 40%, rgba(201, 184, 150, 0.05) 0px, transparent 1px);
+      radial-gradient(ellipse 900px 600px at 18% 22%, rgba(217, 122, 135, 0.022) 0%, transparent 60%),
+      radial-gradient(ellipse 700px 500px at 82% 78%, rgba(44, 40, 38, 0.022) 0%, transparent 55%),
+      radial-gradient(circle at 30% 60%, rgba(201, 184, 150, 0.055) 0px, transparent 1px),
+      radial-gradient(circle at 70% 40%, rgba(201, 184, 150, 0.045) 0px, transparent 1px);
     background-size: 100% 100%, 100% 100%, 7px 7px, 11px 11px;
     pointer-events: none;
     z-index: 0;
   }
 
+  /* Structural hairlines */
   .top-hairline {
     position: absolute;
     top: 22px; left: 80px; right: 80px;
@@ -55,6 +59,15 @@
     z-index: 2;
   }
 
+  .bottom-hairline {
+    position: absolute;
+    bottom: 50px; left: 80px; right: 80px;
+    height: 1px;
+    background: var(--hairline);
+    z-index: 2;
+  }
+
+  /* Top meta bar */
   .top-meta {
     position: absolute;
     top: 38px; left: 80px;
@@ -65,6 +78,7 @@
     color: var(--ink-light);
     font-weight: 400;
     z-index: 2;
+    font-variant-numeric: tabular-nums;
   }
 
   .top-meta-right {
@@ -80,228 +94,381 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .vertical-title {
+  /* Main page layout */
+  .page {
     position: absolute;
-    top: 110px;
-    right: 150px;
-    writing-mode: vertical-rl;
-    -webkit-writing-mode: vertical-rl;
-    font-family: var(--display-font);
-    font-size: 64px;
-    font-weight: 400;
-    letter-spacing: 0.32em;
-    line-height: 1.1;
-    color: var(--ink-primary);
-    z-index: 3;
-  }
-
-  .vertical-sub {
-    position: absolute;
-    top: 138px;
-    right: 108px;
-    writing-mode: vertical-rl;
-    -webkit-writing-mode: vertical-rl;
-    font-family: var(--display-font);
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.55em;
-    color: var(--ink-light);
-    z-index: 3;
-  }
-
-  .vertical-author {
-    position: absolute;
-    top: 138px;
-    right: 245px;
-    writing-mode: vertical-rl;
-    -webkit-writing-mode: vertical-rl;
-    font-family: var(--display-font);
-    font-size: 12px;
-    font-weight: 400;
-    letter-spacing: 0.45em;
-    color: var(--ink-light);
-    z-index: 3;
-  }
-
-  .sakura-dot {
-    position: absolute;
-    bottom: 230px;
-    right: 320px;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 32%, #ffc4d0 0%, #ffb7c5 38%, #d97a87 100%);
-    opacity: 0.92;
-    box-shadow: 0 1px 6px rgba(217, 122, 135, 0.18);
-    z-index: 3;
-  }
-
-  .sakura-shadow {
-    position: absolute;
-    bottom: 222px;
-    right: 312px;
-    width: 38px;
-    height: 38px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 50% 50%, rgba(217, 122, 135, 0.12) 0%, transparent 65%);
-    z-index: 2;
-  }
-
-  .bottom-block {
-    position: absolute;
-    bottom: 88px;
-    left: 80px;
-    z-index: 3;
-    max-width: 360px;
-  }
-
-  .deck {
-    font-family: var(--body-font);
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 2.1;
-    color: var(--ink-soft);
-    letter-spacing: 0.08em;
-    margin-bottom: 38px;
-  }
-
-  .deck .accent {
-    color: var(--sakura-deep);
-  }
-
-  .label-row {
+    top: 68px; bottom: 70px;
+    left: 80px; right: 80px;
     display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 14px;
+    flex-direction: column;
+    z-index: 1;
   }
 
-  .label-mark {
-    width: 22px;
-    height: 1px;
-    background: var(--ink-primary);
+  /* Section heading */
+  .section-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 18px;
   }
 
-  .label-en {
+  .section-cn {
+    font-family: var(--display-font);
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: 0.32em;
+    text-indent: 0.32em;
+    color: var(--ink-primary);
+    line-height: 1.2;
+  }
+
+  .section-en {
     font-family: var(--label-font);
     font-size: 10px;
-    letter-spacing: 0.42em;
+    letter-spacing: 0.38em;
     text-transform: uppercase;
-    color: var(--ink-primary);
-    font-weight: 500;
+    color: var(--ink-light);
+    font-weight: 400;
     font-variant-numeric: tabular-nums;
   }
 
-  .label-cn {
-    font-family: var(--body-font);
-    font-size: 11px;
+  /* Thin sakura accent rule */
+  .sakura-rule {
+    height: 1px;
+    background: linear-gradient(90deg, var(--sakura-deep), rgba(217, 122, 135, 0.22), transparent);
+    margin-bottom: 18px;
+    border: 0;
+  }
+
+  /* 4-column seasonal ceremony cards */
+  .season-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .season-card {
+    border-top: 1px solid var(--hairline);
+    padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .season-card.sakura-accent {
+    border-top-color: var(--sakura-deep);
+  }
+
+  .season-name {
+    font-family: var(--display-font);
+    font-size: 13px;
+    font-weight: 500;
     letter-spacing: 0.35em;
+    text-indent: 0.35em;
+    color: var(--ink-primary);
+  }
+
+  .season-kanji {
+    font-family: var(--display-font);
+    font-size: 28px;
+    font-weight: 400;
+    letter-spacing: 0.15em;
+    color: var(--ink-soft);
+    line-height: 1;
+  }
+
+  .season-card.sakura-accent .season-kanji {
+    color: var(--sakura-deep);
+  }
+
+  .season-en {
+    font-family: var(--label-font);
+    font-size: 9px;
+    letter-spacing: 0.38em;
+    text-transform: uppercase;
     color: var(--ink-light);
     font-weight: 400;
   }
 
+  .season-items {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 4px;
+  }
+
+  .season-items li {
+    font-family: var(--body-font);
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.08em;
+    line-height: 1.5;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .item-dot {
+    flex-shrink: 0;
+    margin-top: 6px;
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--ink-faint);
+  }
+
+  .item-dot.pink {
+    background: var(--sakura-deep);
+  }
+
+  /* Ceremony sequence timeline */
+  .timeline-section {
+    flex: 1; min-height: 0;
+  }
+
+  .timeline-label {
+    font-family: var(--label-font);
+    font-size: 9px;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--ink-light);
+    font-weight: 500;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .timeline {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+  }
+
+  .tl-step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+    padding-right: 16px;
+  }
+
+  .tl-step:last-child {
+    padding-right: 0;
+  }
+
+  .tl-line {
+    height: 1px;
+    background: linear-gradient(90deg, var(--ink-faint), rgba(201, 184, 150, 0.25));
+    margin-bottom: 8px;
+    width: 100%;
+  }
+
+  .tl-step:last-child .tl-line {
+    background: rgba(201, 184, 150, 0.25);
+  }
+
+  .tl-num {
+    font-family: var(--label-font);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    font-weight: 400;
+  }
+
+  .tl-title {
+    font-family: var(--display-font);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-indent: 0.22em;
+    color: var(--ink-primary);
+    line-height: 1.3;
+  }
+
+  .tl-desc {
+    font-family: var(--body-font);
+    font-size: 10px;
+    color: var(--ink-light);
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+  }
+
+  /* Sakura dot accent */
+  .sakura-dot {
+    position: absolute;
+    top: 68px; right: 80px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #ffc4d0 0%, #ffb7c5 38%, #d97a87 100%);
+    opacity: 0.85;
+    z-index: 3;
+  }
+
+  /* Seal */
   .seal {
     position: absolute;
-    bottom: 88px;
-    right: 80px;
-    width: 44px;
-    height: 44px;
+    bottom: 62px; right: 80px;
+    width: 40px; height: 40px;
     border: 1px solid var(--sakura-deep);
     border-radius: 3px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex; align-items: center; justify-content: center;
     z-index: 3;
-    opacity: 0.85;
+    opacity: 0.75;
   }
 
   .seal-char {
     font-family: var(--display-font);
-    font-size: 16px;
+    font-size: 14px;
     color: var(--sakura-deep);
     font-weight: 500;
     letter-spacing: 0;
   }
 
-  .bottom-hairline {
-    position: absolute;
-    bottom: 50px; left: 80px; right: 80px;
-    height: 1px;
-    background: var(--hairline);
-    z-index: 2;
-  }
-
+  /* Footer */
   .footer-left {
-    position: absolute;
-    bottom: 26px;
-    left: 80px;
-    font-family: var(--label-font);
-    font-size: 9px;
-    letter-spacing: 0.4em;
-    text-transform: uppercase;
-    color: var(--ink-light);
-    font-weight: 400;
-    z-index: 3;
+    position: absolute; bottom: 26px; left: 80px;
+    font-family: var(--label-font); font-size: 9px;
+    letter-spacing: 0.4em; text-transform: uppercase;
+    color: var(--ink-light); font-weight: 400; z-index: 3;
     font-variant-numeric: tabular-nums;
   }
 
   .footer-right {
-    position: absolute;
-    bottom: 26px;
-    right: 80px;
-    font-family: var(--label-font);
-    font-size: 9px;
-    letter-spacing: 0.4em;
-    text-transform: uppercase;
-    color: var(--ink-light);
-    font-weight: 400;
-    z-index: 3;
+    position: absolute; bottom: 26px; right: 80px;
+    font-family: var(--label-font); font-size: 9px;
+    letter-spacing: 0.4em; text-transform: uppercase;
+    color: var(--ink-light); font-weight: 400; z-index: 3;
     font-variant-numeric: tabular-nums;
-  }
-
-  .corner-mark {
-    position: absolute;
-    top: 22px;
-    left: 80px;
-    width: 6px;
-    height: 6px;
-    z-index: 3;
   }
 </style>
 </head>
 <body>
   <div class="washi-grain"></div>
-
   <div class="top-hairline"></div>
-  <div class="top-meta">茶 · 道 · 二〇二六</div>
-  <div class="top-meta-right">VOL. 03 / KYOTO</div>
+  <div class="bottom-hairline"></div>
 
-  <div class="vertical-author">谷崎潤一郎  阴翳礼讃</div>
-  <div class="vertical-title">侘 寂</div>
-  <div class="vertical-sub">WABI · SABI</div>
+  <div class="top-meta">茶道 · 四季 · 二〇二六</div>
+  <div class="top-meta-right">CHAKAI · SEASONAL PROGRAMME</div>
 
-  <div class="sakura-shadow"></div>
   <div class="sakura-dot"></div>
 
-  <div class="bottom-block">
-    <div class="label-row">
-      <div class="label-mark"></div>
-      <div class="label-en">WABI · SABI · 二〇二六</div>
+  <div class="page">
+
+    <div class="section-row">
+      <div class="section-cn">四季茶道  ·  茶会行事历</div>
+      <div class="section-en">Annual Chaji · Seasonal Schedule</div>
     </div>
-    <div class="label-cn">不完整之美 · 京都記</div>
-    <p class="deck" style="margin-top:28px;">
-      不完整之美。<br>
-      残缺与时间，<br>
-      沉淀的<span class="accent">本真</span>。
-    </p>
+
+    <hr class="sakura-rule">
+
+    <!-- 4 seasonal ceremony cards -->
+    <div class="season-grid">
+
+      <div class="season-card sakura-accent">
+        <div class="season-name">春　の　茶</div>
+        <div class="season-kanji">春</div>
+        <div class="season-en">Haru · Spring</div>
+        <ul class="season-items">
+          <li><span class="item-dot pink"></span><span>樱花茶会（3月下旬）</span></li>
+          <li><span class="item-dot pink"></span><span>初釜 · 迎新稽古</span></li>
+          <li><span class="item-dot pink"></span><span>薄茶点前 · 棗薄茶</span></li>
+        </ul>
+      </div>
+
+      <div class="season-card">
+        <div class="season-name">夏　の　茶</div>
+        <div class="season-kanji">夏</div>
+        <div class="season-en">Natsu · Summer</div>
+        <ul class="season-items">
+          <li><span class="item-dot"></span><span>風炉開き（5月初）</span></li>
+          <li><span class="item-dot"></span><span>朝茶事 · 早晨茶会</span></li>
+          <li><span class="item-dot"></span><span>冷抹茶 · 夏点前</span></li>
+        </ul>
+      </div>
+
+      <div class="season-card">
+        <div class="season-name">秋　の　茶</div>
+        <div class="season-kanji">秋</div>
+        <div class="season-en">Aki · Autumn</div>
+        <ul class="season-items">
+          <li><span class="item-dot"></span><span>名残の茶（10月）</span></li>
+          <li><span class="item-dot"></span><span>口切茶事 · 新茶开封</span></li>
+          <li><span class="item-dot"></span><span>炉替え · 换炉仪式</span></li>
+        </ul>
+      </div>
+
+      <div class="season-card">
+        <div class="season-name">冬　の　茶</div>
+        <div class="season-kanji">冬</div>
+        <div class="season-en">Fuyu · Winter</div>
+        <ul class="season-items">
+          <li><span class="item-dot"></span><span>炉开き（11月初）</span></li>
+          <li><span class="item-dot"></span><span>大炉茶事 · 暖室茶会</span></li>
+          <li><span class="item-dot"></span><span>濃茶点前 · 正式礼仪</span></li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- Ceremony sequence timeline -->
+    <div class="timeline-section">
+      <div class="timeline-label">茶会流程  ·  Ceremony Sequence</div>
+      <div class="timeline">
+
+        <div class="tl-step">
+          <div class="tl-line"></div>
+          <div class="tl-num">01</div>
+          <div class="tl-title">待合</div>
+          <div class="tl-desc">宾客候于待合室，观庭院、饮汤茶，静候主人相迎。</div>
+        </div>
+
+        <div class="tl-step">
+          <div class="tl-line"></div>
+          <div class="tl-num">02</div>
+          <div class="tl-title">露地</div>
+          <div class="tl-desc">穿越茶庭石径，洗手盥口，心境渐入清寂之境。</div>
+        </div>
+
+        <div class="tl-step">
+          <div class="tl-line"></div>
+          <div class="tl-num">03</div>
+          <div class="tl-title">懐石</div>
+          <div class="tl-desc">季节怀石料理，一汁三菜，器皿随节气而换。</div>
+        </div>
+
+        <div class="tl-step">
+          <div class="tl-line"></div>
+          <div class="tl-num">04</div>
+          <div class="tl-title">濃茶</div>
+          <div class="tl-desc">正式浓茶点前，众客共饮一碗，礼仪庄重静默。</div>
+        </div>
+
+        <div class="tl-step">
+          <div class="tl-line"></div>
+          <div class="tl-num">05</div>
+          <div class="tl-title">薄茶</div>
+          <div class="tl-desc">轻松薄茶，各自一碗，欣赏茶道具、话四季风物。</div>
+        </div>
+
+        <div class="tl-step">
+          <div class="tl-line" style="background: rgba(201,184,150,0.22);"></div>
+          <div class="tl-num">06</div>
+          <div class="tl-title">退席</div>
+          <div class="tl-desc">主人送客至庭门，一期一会之情，默然相别。</div>
+        </div>
+
+      </div>
+    </div>
+
   </div>
 
   <div class="seal">
-    <span class="seal-char">寂</span>
+    <span class="seal-char">和</span>
   </div>
 
-  <div class="bottom-hairline"></div>
-  <div class="footer-left">CHAPTER 01 — 一期一会</div>
-  <div class="footer-right">01 / 12  ·  KYOTO STUDIO</div>
+  <div class="footer-left">CHAPTER 03 — 四季之茶</div>
+  <div class="footer-right">03 / 12 · KYOTO STUDIO</div>
 </body>
 </html>

@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>gov_authority · 党政严肃 · World-Class Mock</title>
+<title>gov_authority · 政务工作报告指标 · Detail Slide</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700;900&family=Noto+Sans+SC:wght@300;400;500;700&family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
 
   :root {
     --bg: #fffaf3;
@@ -18,6 +18,7 @@
     --ink-mute: #6a6a6a;
     --gold: #b8893a;
     --line: rgba(26,26,26,0.18);
+    --line-faint: rgba(26,26,26,0.08);
     --display-font: 'Source Han Serif SC', 'Noto Serif SC', 'STSong', SimSun, serif;
     --body-font: 'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     --label-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -29,7 +30,8 @@
     background: var(--bg);
     color: var(--ink);
     font-family: var(--body-font);
-    font-feature-settings: 'kern', 'liga', 'calt', 'palt';
+    font-feature-settings: 'kern', 'liga', 'palt', 'calt';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -39,326 +41,268 @@
   .paper-warmth {
     position: absolute; inset: 0;
     background:
-      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(196,30,58,0.04) 0%, transparent 60%),
-      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(26,58,110,0.05) 0%, transparent 60%);
-    pointer-events: none;
-    z-index: 0;
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(196,30,58,0.03) 0%, transparent 60%),
+      radial-gradient(ellipse 70% 50% at 50% 100%, rgba(26,58,110,0.04) 0%, transparent 60%);
+    pointer-events: none; z-index: 0;
   }
 
   .grain {
     position: absolute; inset: 0;
-    background-image:
-      radial-gradient(circle, rgba(26,26,26,0.025) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(26,26,26,0.022) 1px, transparent 1px);
     background-size: 4px 4px;
-    opacity: 0.55;
-    pointer-events: none;
-    z-index: 0;
+    opacity: 0.5; pointer-events: none; z-index: 0;
   }
 
-  .top-bar {
-    position: absolute; top: 0; left: 0; right: 0;
-    display: flex;
-    z-index: 5;
+  .top-bar { position: absolute; top: 0; left: 0; right: 0; display: flex; z-index: 5; }
+  .top-bar .red { flex: 1; height: 5px; background: var(--red); }
+  .top-bar .blue { flex: 1; height: 5px; background: var(--blue); }
+  .top-bar-thin { position: absolute; top: 5px; left: 0; right: 0; height: 1px; background: var(--ink); opacity: 0.80; z-index: 5; }
+
+  .bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; display: flex; z-index: 5; }
+  .bottom-bar .blue { flex: 1; height: 5px; background: var(--blue); }
+  .bottom-bar .red { flex: 1; height: 5px; background: var(--red); }
+  .bottom-bar-thin { position: absolute; bottom: 5px; left: 0; right: 0; height: 1px; background: var(--ink); opacity: 0.80; z-index: 5; }
+
+  .corner-tl { position: absolute; top: 22px; left: 40px; width: 20px; height: 20px; border-top: 1.5px solid var(--red); border-left: 1.5px solid var(--red); z-index: 4; }
+  .corner-tr { position: absolute; top: 22px; right: 40px; width: 20px; height: 20px; border-top: 1.5px solid var(--blue); border-right: 1.5px solid var(--blue); z-index: 4; }
+  .corner-bl { position: absolute; bottom: 22px; left: 40px; width: 20px; height: 20px; border-bottom: 1.5px solid var(--blue); border-left: 1.5px solid var(--blue); z-index: 4; }
+  .corner-br { position: absolute; bottom: 22px; right: 40px; width: 20px; height: 20px; border-bottom: 1.5px solid var(--red); border-right: 1.5px solid var(--red); z-index: 4; }
+
+  .doc-no {
+    position: absolute; top: 26px; right: 52px;
+    font-family: var(--label-font);
+    font-size: 9.5px; color: var(--ink-mute);
+    letter-spacing: 0.28em; font-variant-numeric: tabular-nums;
+    z-index: 6; text-transform: uppercase; font-weight: 500;
   }
-  .top-bar .red {
-    flex: 1; height: 6px; background: var(--red);
-  }
-  .top-bar .blue {
-    flex: 1; height: 6px; background: var(--blue);
+  .doc-no .red-mark { color: var(--red); font-weight: 700; margin-right: 6px; }
+
+  .side-tag-l {
+    position: absolute; top: 50%;
+    left: 8px;
+    transform: translateY(-50%) rotate(-90deg);
+    transform-origin: left center;
+    font-family: var(--label-font);
+    font-size: 7.5px; color: var(--ink-mute);
+    letter-spacing: 0.40em; text-transform: uppercase;
+    z-index: 4; font-weight: 500; white-space: nowrap;
+    opacity: 0.6;
   }
 
-  .top-bar-thin {
-    position: absolute; top: 6px; left: 0; right: 0;
-    height: 1px;
-    background: var(--ink);
-    opacity: 0.85;
-    z-index: 5;
-  }
-
-  .bottom-bar {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    display: flex;
-    z-index: 5;
-  }
-  .bottom-bar .blue {
-    flex: 1; height: 6px; background: var(--blue);
-  }
-  .bottom-bar .red {
-    flex: 1; height: 6px; background: var(--red);
-  }
-  .bottom-bar-thin {
-    position: absolute; bottom: 6px; left: 0; right: 0;
-    height: 1px;
-    background: var(--ink);
-    opacity: 0.85;
-    z-index: 5;
-  }
-
-  .corner-tl, .corner-tr, .corner-bl, .corner-br {
-    position: absolute;
-    width: 26px; height: 26px;
-    z-index: 4;
-  }
-  .corner-tl { top: 28px; left: 50px; border-top: 1.5px solid var(--red); border-left: 1.5px solid var(--red); }
-  .corner-tr { top: 28px; right: 50px; border-top: 1.5px solid var(--blue); border-right: 1.5px solid var(--blue); }
-  .corner-bl { bottom: 28px; left: 50px; border-bottom: 1.5px solid var(--blue); border-left: 1.5px solid var(--blue); }
-  .corner-br { bottom: 28px; right: 50px; border-bottom: 1.5px solid var(--red); border-right: 1.5px solid var(--red); }
-
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 60px 90px 50px 90px;
-    display: flex; flex-direction: column; align-items: center;
+  /* Page layout */
+  .page {
+    position: absolute; inset: 0;
+    padding: 28px 64px 22px 64px;
+    display: flex; flex-direction: column;
     z-index: 2;
   }
 
-  .header-row {
-    display: flex; align-items: center; justify-content: center;
-    gap: 22px;
-    margin-top: 8px;
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line);
+    margin-bottom: 16px;
   }
+  .header-left { display: flex; align-items: center; gap: 14px; }
   .emblem {
-    width: 56px; height: 56px;
-    border-radius: 50%;
-    border: 2px solid var(--red);
-    background: var(--bg);
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 1.5px solid var(--red);
     display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+  }
+  .header-title {
+    font-family: var(--display-font);
+    font-size: 18px; font-weight: 700;
+    color: var(--ink); letter-spacing: 0.22em; padding-left: 0.22em;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .header-title .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--red); }
+  .header-sub {
+    font-family: var(--body-font);
+    font-size: 12px; color: var(--ink-mute);
+    letter-spacing: 0.12em; margin-top: 3px;
+  }
+  .header-right {
+    font-family: var(--display-font);
+    font-size: 12px; color: var(--ink-mute);
+    letter-spacing: 0.28em; font-weight: 500; text-align: right;
+  }
+  .header-right .period { color: var(--red); font-weight: 700; }
+
+  /* Main: 3-column layout */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr 1px 1fr;
+    flex: 1; min-height: 0;
+  }
+  .divider-v { background: var(--line); margin: 0 18px; }
+
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .col-label {
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 700;
+    letter-spacing: 0.28em; color: var(--red-deep);
+    text-transform: uppercase;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .col-label .dash { display: inline-block; width: 16px; height: 1px; background: var(--red-deep); }
+
+  /* KPI cells */
+  .kpi-grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi {
+    background: rgba(255,255,255,0.65);
+    border: 1px solid var(--line-faint);
+    padding: 10px 12px 8px;
+    display: flex; flex-direction: column; gap: 3px;
     position: relative;
   }
-  .emblem .ring {
-    position: absolute; inset: 4px;
-    border-radius: 50%;
-    border: 1px solid var(--red);
-    opacity: 0.55;
-  }
-  .header-meta {
+  .kpi-top-bar { position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+  .kpi-red { background: var(--red); }
+  .kpi-blue { background: var(--blue); }
+  .kpi-val {
     font-family: var(--display-font);
-    font-size: 17px;
-    font-weight: 500;
+    font-size: 28px; font-weight: 700;
+    line-height: 1; letter-spacing: 0.10em;
     color: var(--ink);
-    letter-spacing: 0.32em;
-    padding-left: 0.32em;
-    display: flex; align-items: center; gap: 10px;
-  }
-
-  .double-line {
-    width: 100%;
-    margin-top: 30px;
-    display: flex; flex-direction: column; gap: 3px;
-    align-items: center;
-  }
-  .double-line .l1 {
-    width: 100%; height: 1.5px; background: var(--ink); opacity: 0.85;
-  }
-  .double-line .l2 {
-    width: 100%; height: 0.75px; background: var(--ink); opacity: 0.55;
-  }
-
-  .overline {
-    margin-top: 28px;
-    font-family: var(--label-font);
-    font-size: 11px;
-    color: var(--red-deep);
-    letter-spacing: 0.45em;
-    padding-left: 0.45em;
-    font-weight: 600;
-    text-transform: uppercase;
-    display: flex; align-items: center; gap: 14px;
-  }
-  .overline .dash {
-    display: inline-block; width: 28px; height: 1px; background: var(--red-deep);
-  }
-
-  .headline {
-    margin-top: 22px;
-    font-family: var(--display-font);
-    font-size: 64px;
-    font-weight: 700;
-    color: var(--ink);
-    letter-spacing: 0.22em;
-    padding-left: 0.22em;
-    line-height: 1.18;
-    text-align: center;
-    font-feature-settings: 'palt';
-  }
-
-  .star-row {
-    margin-top: 30px;
-    display: flex; align-items: center; justify-content: center;
-    gap: 18px;
-  }
-  .star-row .bar {
-    width: 90px; height: 1px; background: var(--red);
-    opacity: 0.7;
-  }
-
-  .subtitle {
-    margin-top: 22px;
-    font-family: var(--display-font);
-    font-size: 18px;
-    color: var(--ink-soft);
-    letter-spacing: 0.28em;
-    padding-left: 0.28em;
-    font-weight: 400;
-    text-align: center;
-  }
-
-  .seal-row {
-    margin-top: 32px;
-    display: flex; align-items: center; justify-content: center;
-    gap: 14px;
-  }
-  .seal-box {
-    display: inline-block;
-    padding: 9px 18px;
-    border: 1.8px solid var(--red);
-    color: var(--red);
-    font-family: var(--display-font);
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 0.5em;
-    padding-right: calc(18px + 0.5em);
-    background: rgba(196,30,58,0.04);
-  }
-  .seal-box.blue {
-    border-color: var(--blue);
-    color: var(--blue);
-    background: rgba(26,58,110,0.04);
-  }
-
-  .meta-strip {
-    position: absolute;
-    bottom: 78px; left: 0; right: 0;
-    display: flex; justify-content: center; align-items: stretch;
-    gap: 0;
-    z-index: 3;
-  }
-  .meta-cell {
-    padding: 0 38px;
-    text-align: center;
-    border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; gap: 6px; align-items: center;
-  }
-  .meta-cell:last-child { border-right: none; }
-  .meta-cell .num {
-    font-family: var(--display-font);
-    font-size: 32px;
-    font-weight: 700;
-    color: var(--ink);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
-    line-height: 1;
     display: flex; align-items: baseline; gap: 4px;
   }
-  .meta-cell .num .unit {
+  .kpi-val .unit {
     font-family: var(--body-font);
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--ink-mute);
-    letter-spacing: 0.1em;
+    font-size: 11px; font-weight: 400;
+    color: var(--ink-mute); letter-spacing: 0.08em;
   }
-  .meta-cell .num .accent {
+  .kpi-val .accent { color: var(--red); }
+  .kpi-val .accent-blue { color: var(--blue); }
+  .kpi-lbl {
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 400;
+    color: var(--ink-mute); letter-spacing: 0.10em;
+  }
+  .kpi-change {
+    font-family: var(--label-font);
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 0.14em; margin-top: 2px;
     color: var(--red);
   }
-  .meta-cell .lbl {
-    font-family: var(--body-font);
-    font-size: 11px;
-    color: var(--ink-mute);
-    letter-spacing: 0.32em;
-    padding-left: 0.32em;
-    font-weight: 400;
-  }
+  .kpi-change.blue { color: var(--blue); }
 
-  .footer {
-    position: absolute;
-    bottom: 22px; left: 0; right: 0;
-    display: flex; justify-content: center; align-items: center;
-    gap: 16px;
+  /* Data table */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table thead tr { border-bottom: 1.5px solid var(--ink); }
+  .data-table th {
     font-family: var(--display-font);
-    font-size: 13px;
+    font-size: 11px; font-weight: 700;
+    letter-spacing: 0.20em; color: var(--ink);
+    padding: 0 0 7px 0; text-align: left;
+    text-indent: 0.20em;
+  }
+  .data-table th:not(:first-child) { padding-left: 12px; }
+  .data-table th.right { text-align: right; }
+  .data-table tbody tr { border-bottom: 0.5px solid var(--line-faint); }
+  .data-table tbody tr:last-child { border-bottom: none; }
+  .data-table tbody tr:hover { background: rgba(196,30,58,0.02); }
+  .data-table td {
+    font-family: var(--body-font);
+    font-size: 11.5px; color: var(--ink-soft);
+    padding: 6.5px 0; vertical-align: middle;
+    letter-spacing: 0.06em;
+  }
+  .data-table td:not(:first-child) { padding-left: 12px; }
+  .data-table td.dept { font-weight: 600; color: var(--ink); }
+  .data-table td.num {
+    font-family: var(--label-font);
+    font-size: 11px; text-align: right; font-weight: 600;
     color: var(--ink);
-    letter-spacing: 0.42em;
-    padding-left: 0.42em;
-    font-weight: 500;
-    z-index: 6;
   }
-  .footer .dot {
-    display: inline-block;
-    width: 4px; height: 4px;
-    background: var(--red);
-    border-radius: 50%;
+  .data-table td.pct { font-family: var(--label-font); font-size: 10px; text-align: right; }
+  .pct-up { color: var(--red); font-weight: 700; }
+  .pct-stable { color: var(--ink-mute); }
+
+  .double-rule {
+    display: flex; flex-direction: column; gap: 3px;
+    margin: 6px 0;
   }
-  .footer .roman {
+  .double-rule .l1 { height: 1.5px; background: var(--ink); opacity: 0.80; }
+  .double-rule .l2 { height: 0.75px; background: var(--ink); opacity: 0.45; }
+
+  /* Progress indicators */
+  .progress-section { display: flex; flex-direction: column; gap: 9px; }
+  .prog-row { display: flex; flex-direction: column; gap: 4px; }
+  .prog-meta { display: flex; justify-content: space-between; align-items: center; }
+  .prog-name {
+    font-family: var(--body-font);
+    font-size: 11px; font-weight: 500;
+    color: var(--ink); letter-spacing: 0.08em;
+  }
+  .prog-val {
     font-family: var(--label-font);
-    font-size: 11px;
-    color: var(--ink-mute);
-    letter-spacing: 0.42em;
-    padding-left: 0.42em;
-    font-variant-numeric: tabular-nums;
-    font-weight: 500;
+    font-size: 10.5px; font-weight: 700;
+    color: var(--red);
+  }
+  .prog-track { height: 6px; background: var(--line-faint); position: relative; }
+  .prog-fill-red { height: 100%; background: var(--red); }
+  .prog-fill-blue { height: 100%; background: var(--blue); }
+
+  /* Seal box */
+  .seal-area {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.65);
+    margin-top: 8px;
+  }
+  .seal-inner {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .seal-box-small {
+    padding: 4px 10px;
+    border: 1.5px solid var(--red);
+    color: var(--red);
+    font-family: var(--display-font);
+    font-size: 11px; font-weight: 600;
+    letter-spacing: 0.35em; padding-right: calc(10px + 0.35em);
+    background: rgba(196,30,58,0.03);
+  }
+  .seal-box-small.blue-seal {
+    border-color: var(--blue); color: var(--blue);
+    background: rgba(26,58,110,0.03);
+  }
+  .seal-date {
+    font-family: var(--label-font);
+    font-size: 10px; font-weight: 500;
+    color: var(--ink-mute); letter-spacing: 0.24em;
   }
 
-  .side-tag-l, .side-tag-r {
-    position: absolute;
-    top: 50%;
-    transform: translateY(-50%) rotate(-90deg);
-    font-family: var(--label-font);
-    font-size: 9.5px;
-    color: var(--ink-mute);
-    letter-spacing: 0.55em;
-    padding-left: 0.55em;
-    text-transform: uppercase;
-    z-index: 4;
-    font-weight: 500;
+  /* Footer */
+  .footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: 10px; border-top: 1px solid var(--line);
+    margin-top: 12px;
   }
-  .side-tag-l { left: 18px; }
-  .side-tag-r { right: 18px; transform: translateY(-50%) rotate(90deg); }
-
-  .doc-no {
-    position: absolute;
-    top: 32px; right: 60px;
-    font-family: var(--label-font);
-    font-size: 10.5px;
-    color: var(--ink-mute);
-    letter-spacing: 0.32em;
-    padding-left: 0.32em;
-    font-variant-numeric: tabular-nums;
-    z-index: 6;
-    text-transform: uppercase;
-    font-weight: 500;
+  .footer-left {
+    font-family: var(--display-font);
+    font-size: 11px; color: var(--ink-mute);
+    letter-spacing: 0.28em; font-weight: 500;
+    display: flex; align-items: center; gap: 10px;
   }
-  .doc-no .red-mark { color: var(--red); font-weight: 700; margin-right: 8px; }
-
-  .date-mark {
-    position: absolute;
-    top: 32px; left: 60px;
+  .footer-right {
     font-family: var(--label-font);
-    font-size: 10.5px;
-    color: var(--ink-mute);
-    letter-spacing: 0.32em;
-    padding-left: 0.32em;
-    font-variant-numeric: tabular-nums;
-    z-index: 6;
-    text-transform: uppercase;
-    font-weight: 500;
+    font-size: 10px; color: var(--ink-mute);
+    letter-spacing: 0.26em; font-weight: 500;
+    display: flex; align-items: center; gap: 12px;
   }
-  .date-mark .blue-mark { color: var(--blue); font-weight: 700; margin-right: 8px; }
+  .footer-right .red-mark { color: var(--red); font-weight: 700; }
 </style>
 </head>
 <body>
   <div class="paper-warmth"></div>
   <div class="grain"></div>
 
-  <div class="top-bar">
-    <div class="red"></div>
-    <div class="blue"></div>
-  </div>
+  <div class="top-bar"><div class="red"></div><div class="blue"></div></div>
   <div class="top-bar-thin"></div>
-
-  <div class="bottom-bar">
-    <div class="blue"></div>
-    <div class="red"></div>
-  </div>
+  <div class="bottom-bar"><div class="blue"></div><div class="red"></div></div>
   <div class="bottom-bar-thin"></div>
 
   <div class="corner-tl"></div>
@@ -366,82 +310,289 @@
   <div class="corner-bl"></div>
   <div class="corner-br"></div>
 
-  <div class="date-mark"><span class="blue-mark">DOC</span>2026 · Q3 · 008</div>
-  <div class="doc-no"><span class="red-mark">CONFIDENTIAL</span>NO. 2026-0073</div>
+  <div class="doc-no"><span class="red-mark">内部</span>DOC 2026-Q3-008</div>
+  <div class="side-tag-l">仅供内部使用 · INTERNAL CIRCULATION ONLY</div>
 
-  <div class="side-tag-l">FOR INTERNAL CIRCULATION ONLY</div>
-  <div class="side-tag-r">PEOPLE'S REPUBLIC · MMXXVI</div>
+  <div class="page">
+    <div class="header">
+      <div class="header-left">
+        <div class="emblem">
+          <svg style="width:20px; height:20px;" viewBox="0 0 20 20">
+            <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
+          </svg>
+        </div>
+        <div>
+          <div class="header-title">
+            二〇二六年度政务工作报告
+            <span class="dot"></span>
+          </div>
+          <div class="header-sub">高质量发展核心指标面板 &nbsp;·&nbsp; 第三季度综合评估</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div>报告周期：<span class="period">2026.01 — 2026.09</span></div>
+        <div style="margin-top:4px;">评估等级：<span style="color:var(--red); font-weight:700;">A 类</span> &nbsp;·&nbsp; 文号：GZ-2026-0073</div>
+      </div>
+    </div>
 
-  <div class="stage">
-    <div class="header-row">
-      <div class="emblem">
-        <div class="ring"></div>
-        <svg style="width:30px; height:30px;" viewBox="0 0 20 20">
+    <div class="main">
+      <!-- Column 1: Core KPIs -->
+      <div class="col">
+        <div class="col-label"><span class="dash"></span>核心发展指标</div>
+        <div class="kpi-grid-4">
+          <div class="kpi">
+            <div class="kpi-top-bar kpi-red"></div>
+            <div class="kpi-val"><span class="accent">9.2</span><span class="unit">%</span></div>
+            <div class="kpi-lbl">GDP 同比增长率</div>
+            <div class="kpi-change">&#8593; 超过年度目标 0.7%</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-top-bar kpi-blue"></div>
+            <div class="kpi-val"><span class="accent-blue">156</span><span class="unit">项</span></div>
+            <div class="kpi-lbl">政策议程完成</div>
+            <div class="kpi-change blue">完成率 94.6%</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-top-bar kpi-red"></div>
+            <div class="kpi-val"><span class="accent">28</span><span class="unit">个</span></div>
+            <div class="kpi-lbl">参与单位数量</div>
+            <div class="kpi-change">全部按期完成</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-top-bar kpi-blue"></div>
+            <div class="kpi-val"><span class="accent-blue">4.8</span><span class="unit">万亿</span></div>
+            <div class="kpi-lbl">财政投入总额</div>
+            <div class="kpi-change blue">&#8593; +12.4% 同比</div>
+          </div>
+        </div>
+
+        <div class="double-rule"><div class="l1"></div><div class="l2"></div></div>
+
+        <div class="progress-section">
+          <div class="prog-row">
+            <div class="prog-meta">
+              <span class="prog-name">基础设施建设完成率</span>
+              <span class="prog-val">88%</span>
+            </div>
+            <div class="prog-track"><div class="prog-fill-red" style="width:88%"></div></div>
+          </div>
+          <div class="prog-row">
+            <div class="prog-meta">
+              <span class="prog-name">民生工程落实率</span>
+              <span class="prog-val" style="color:var(--blue);">94%</span>
+            </div>
+            <div class="prog-track"><div class="prog-fill-blue" style="width:94%"></div></div>
+          </div>
+          <div class="prog-row">
+            <div class="prog-meta">
+              <span class="prog-name">绿色发展指标达标率</span>
+              <span class="prog-val">76%</span>
+            </div>
+            <div class="prog-track"><div class="prog-fill-red" style="width:76%"></div></div>
+          </div>
+          <div class="prog-row">
+            <div class="prog-meta">
+              <span class="prog-name">数字政务覆盖率</span>
+              <span class="prog-val" style="color:var(--blue);">91%</span>
+            </div>
+            <div class="prog-track"><div class="prog-fill-blue" style="width:91%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- Column 2: Department table -->
+      <div class="col">
+        <div class="col-label"><span class="dash"></span>各部门执行情况汇总</div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>部门</th>
+              <th class="right">预算（亿）</th>
+              <th class="right">执行率</th>
+              <th class="right">同比</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="dept">发展改革委</td>
+              <td class="num">1,240</td>
+              <td class="num">96%</td>
+              <td class="pct"><span class="pct-up">&#8593;+8.4%</span></td>
+            </tr>
+            <tr>
+              <td class="dept">财政部</td>
+              <td class="num">8,320</td>
+              <td class="num">94%</td>
+              <td class="pct"><span class="pct-up">&#8593;+5.2%</span></td>
+            </tr>
+            <tr>
+              <td class="dept">工业和信息化部</td>
+              <td class="num">3,180</td>
+              <td class="num">91%</td>
+              <td class="pct"><span class="pct-up">&#8593;+12.1%</span></td>
+            </tr>
+            <tr>
+              <td class="dept">民政部</td>
+              <td class="num">2,640</td>
+              <td class="num">98%</td>
+              <td class="pct"><span class="pct-stable">&#8594;+1.8%</span></td>
+            </tr>
+            <tr>
+              <td class="dept">生态环境部</td>
+              <td class="num">1,820</td>
+              <td class="num">87%</td>
+              <td class="pct"><span class="pct-up">&#8593;+14.3%</span></td>
+            </tr>
+            <tr>
+              <td class="dept">科学技术部</td>
+              <td class="num">2,080</td>
+              <td class="num">93%</td>
+              <td class="pct"><span class="pct-up">&#8593;+9.7%</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="double-rule"><div class="l1"></div><div class="l2"></div></div>
+
+        <div style="display:flex; gap:0;">
+          <div style="flex:1; text-align:center; border-right:1px solid var(--line);">
+            <div style="font-family:var(--display-font); font-size:24px; font-weight:700; color:var(--ink); letter-spacing:0.15em;">19,280</div>
+            <div style="font-family:var(--body-font); font-size:10px; color:var(--ink-mute); letter-spacing:0.16em; margin-top:2px;">预算总额（亿元）</div>
+          </div>
+          <div style="flex:1; text-align:center;">
+            <div style="font-family:var(--display-font); font-size:24px; font-weight:700; color:var(--red); letter-spacing:0.15em;">93.2%</div>
+            <div style="font-family:var(--body-font); font-size:10px; color:var(--ink-mute); letter-spacing:0.16em; margin-top:2px;">综合执行率</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider-v"></div>
+
+      <!-- Column 3: Sector metrics + seal -->
+      <div class="col">
+        <div class="col-label"><span class="dash"></span>重点领域专项指标</div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>专项指标</th>
+              <th class="right">目标值</th>
+              <th class="right">完成值</th>
+              <th class="right">状态</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="dept">城镇就业率</td>
+              <td class="num">96%</td>
+              <td class="num">96.8%</td>
+              <td class="pct"><span class="pct-up">&#10003;达标</span></td>
+            </tr>
+            <tr>
+              <td class="dept">居民收入增长</td>
+              <td class="num">8.0%</td>
+              <td class="num">8.4%</td>
+              <td class="pct"><span class="pct-up">&#10003;超标</span></td>
+            </tr>
+            <tr>
+              <td class="dept">碳排放强度削减</td>
+              <td class="num">3.5%</td>
+              <td class="num">3.2%</td>
+              <td class="pct"><span class="pct-stable">&#8594;推进中</span></td>
+            </tr>
+            <tr>
+              <td class="dept">新增就业岗位</td>
+              <td class="num">1,200万</td>
+              <td class="num">1,348万</td>
+              <td class="pct"><span class="pct-up">&#10003;超标</span></td>
+            </tr>
+            <tr>
+              <td class="dept">研发投入强度</td>
+              <td class="num">2.65%</td>
+              <td class="num">2.71%</td>
+              <td class="pct"><span class="pct-up">&#10003;达标</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="double-rule"><div class="l1"></div><div class="l2"></div></div>
+
+        <div style="background:rgba(255,255,255,0.65); border:1px solid var(--line); padding:10px 14px;">
+          <div style="font-family:var(--body-font); font-size:10px; color:var(--ink-mute); letter-spacing:0.18em; margin-bottom:6px;">综合评价结论</div>
+          <div style="font-family:var(--display-font); font-size:13px; color:var(--ink); letter-spacing:0.14em; line-height:1.8;">
+            二〇二六年前三季度各项核心指标稳中有进，高质量发展态势持续巩固，民生保障工作成效显著，绿色转型任务稳步推进。
+          </div>
+        </div>
+
+        <div class="seal-area">
+          <div class="seal-inner">
+            <div class="seal-box-small">机 密 · 内 部</div>
+            <div class="seal-box-small blue-seal">部 委 联 印</div>
+          </div>
+          <div class="seal-date">2026年09月 · 第三季度</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quarterly trend strip -->
+    <div style="background:rgba(255,255,255,0.6); border:1px solid var(--line); padding:10px 16px; margin-bottom:10px; display:flex; align-items:center; gap:0;">
+      <div style="font-family:var(--body-font); font-size:10px; font-weight:700; color:var(--ink-mute); letter-spacing:0.20em; min-width:120px; border-right:1px solid var(--line); padding-right:16px; margin-right:20px;">季度增长趋势</div>
+      <div style="flex:1; display:flex; align-items:flex-end; gap:6px; height:44px;">
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;">
+          <div style="width:100%; background:rgba(196,30,58,0.25); height:20px;"></div>
+          <div style="font-family:var(--label-font); font-size:8px; color:var(--ink-mute); letter-spacing:0.18em;">2023</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;">
+          <div style="width:100%; background:rgba(196,30,58,0.40); height:28px;"></div>
+          <div style="font-family:var(--label-font); font-size:8px; color:var(--ink-mute); letter-spacing:0.18em;">2024</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;">
+          <div style="width:100%; background:rgba(196,30,58,0.65); height:34px;"></div>
+          <div style="font-family:var(--label-font); font-size:8px; color:var(--ink-mute); letter-spacing:0.18em;">2025</div>
+        </div>
+        <div style="flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;">
+          <div style="width:100%; background:var(--red); height:40px;"></div>
+          <div style="font-family:var(--label-font); font-size:8px; color:var(--red); font-weight:700; letter-spacing:0.18em;">2026&#x25B2;</div>
+        </div>
+      </div>
+      <div style="width:1px; background:var(--line); margin:0 20px; align-self:stretch;"></div>
+      <div style="display:flex; gap:28px; align-items:center;">
+        <div style="text-align:center;">
+          <div style="font-family:var(--display-font); font-size:20px; font-weight:700; color:var(--red); letter-spacing:0.12em;">Q1</div>
+          <div style="font-family:var(--body-font); font-size:10px; color:var(--ink-mute); letter-spacing:0.10em;">8.6% 增长</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:var(--display-font); font-size:20px; font-weight:700; color:var(--red); letter-spacing:0.12em;">Q2</div>
+          <div style="font-family:var(--body-font); font-size:10px; color:var(--ink-mute); letter-spacing:0.10em;">9.0% 增长</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-family:var(--display-font); font-size:20px; font-weight:700; color:var(--red); letter-spacing:0.12em;">Q3</div>
+          <div style="font-family:var(--body-font); font-size:10px; color:var(--ink-mute); letter-spacing:0.10em;">9.2% 增长</div>
+        </div>
+      </div>
+      <div style="width:1px; background:var(--line); margin:0 20px; align-self:stretch;"></div>
+      <div style="text-align:right; min-width:120px;">
+        <div style="font-family:var(--display-font); font-size:16px; font-weight:700; color:var(--ink); letter-spacing:0.18em; padding-left:0.18em;">全年预测</div>
+        <div style="font-family:var(--display-font); font-size:24px; font-weight:700; color:var(--red); letter-spacing:0.12em; padding-left:0.12em; margin-top:2px;">9.1%</div>
+        <div style="font-family:var(--body-font); font-size:9px; color:var(--ink-mute); letter-spacing:0.12em; margin-top:1px;">年度 GDP 增长率预测</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="footer-left">
+        <svg style="width:14px; height:14px;" viewBox="0 0 20 20">
           <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
         </svg>
+        中共部委员会
+        <span style="color:var(--ink-mute); font-size:11px;">·</span>
+        二〇二六年第三季度工作报告
       </div>
-      <div class="header-meta">二〇二六年度工作报告</div>
+      <div class="footer-right">
+        <span class="red-mark">GZ-2026-0073</span>
+        <span>第 06 页 / 共 14 页</span>
+      </div>
     </div>
-
-    <div class="double-line">
-      <div class="l1"></div>
-      <div class="l2"></div>
-    </div>
-
-    <div class="overline">
-      <span class="dash"></span>
-      <span>PART · 01 &nbsp;·&nbsp; KEYNOTE ADDRESS</span>
-      <span class="dash"></span>
-    </div>
-
-    <h1 class="headline">全 面 推 进<br>高 质 量 发 展</h1>
-
-    <div class="star-row">
-      <span class="bar"></span>
-      <svg style="width:22px; height:22px;" viewBox="0 0 20 20">
-        <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
-      </svg>
-      <span class="bar"></span>
-    </div>
-
-    <div class="subtitle">—— 二〇二六年第三季度部门联合工作会议 ——</div>
-
-    <div class="seal-row">
-      <div class="seal-box">机 密 · 内 部</div>
-      <div class="seal-box blue">部 委 联 印</div>
-    </div>
-  </div>
-
-  <div class="meta-strip">
-    <div class="meta-cell">
-      <div class="num">28<span class="unit">个</span></div>
-      <div class="lbl">参会单位</div>
-    </div>
-    <div class="meta-cell">
-      <div class="num"><span class="accent">156</span><span class="unit">项</span></div>
-      <div class="lbl">议程要目</div>
-    </div>
-    <div class="meta-cell">
-      <div class="num">9.2<span class="unit">%</span></div>
-      <div class="lbl">同比增长</div>
-    </div>
-    <div class="meta-cell">
-      <div class="num">2026.09</div>
-      <div class="lbl">召开月份</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <span>中 共</span>
-    <svg style="width:14px; height:14px;" viewBox="0 0 20 20">
-      <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#c41e3a"/>
-    </svg>
-    <svg style="width:14px; height:14px;" viewBox="0 0 20 20">
-      <polygon points="10,2 12.5,7.5 18.5,8 14,12 15.5,18 10,15 4.5,18 6,12 1.5,8 7.5,7.5" fill="#1a3a6e"/>
-    </svg>
-    <span>部 委 员 会</span>
-    <span class="dot"></span>
-    <span class="roman">MMXXVI</span>
   </div>
 </body>
 </html>

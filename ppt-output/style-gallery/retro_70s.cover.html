@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>retro_70s · 70 年代复古 · World-Class Mock</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Bowlby+One&family=Inter+Tight:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  :root {
+    --bg-cream: #f4e9d0;
+    --brown: #6b4423;
+    --orange: #e07a3e;
+    --mustard: #d4a82a;
+    --vermilion: #c14d3f;
+    --ink: #2a1810;
+    --ink-soft: rgba(42, 24, 16, 0.62);
+    --ink-faint: rgba(42, 24, 16, 0.38);
+
+    --display-font: 'Bagel Fat One', 'Bowlby One', 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
+    --body-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono-font: 'JetBrains Mono', 'DM Mono', 'Courier New', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; }
+  body {
+    background: var(--bg-cream);
+    color: var(--ink);
+    font-family: var(--body-font);
+    font-feature-settings: 'kern', 'liga', 'ss01', 'cv11', 'calt', 'ccmp';
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative;
+  }
+
+  .warm-wash {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 60% 45% at 18% 22%, rgba(212, 168, 42, 0.18) 0%, transparent 60%),
+      radial-gradient(ellipse 55% 40% at 86% 84%, rgba(224, 122, 62, 0.14) 0%, transparent 65%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .stripe-band {
+    position: absolute; left: 0; right: 0;
+    height: 14px;
+    background: repeating-linear-gradient(
+      90deg,
+      var(--brown) 0 36px,
+      var(--orange) 36px 72px,
+      var(--mustard) 72px 108px,
+      var(--vermilion) 108px 144px
+    );
+    opacity: 0.78;
+    z-index: 1;
+  }
+  .stripe-top { top: 0; }
+  .stripe-bottom { bottom: 0; }
+
+  .sun-orange {
+    position: absolute; right: 96px; top: 96px;
+    width: 148px; height: 148px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 32%, #ec946a 0%, var(--orange) 48%, #b75a23 100%);
+    box-shadow:
+      0 0 0 8px rgba(244, 233, 208, 1),
+      0 0 0 9px rgba(107, 68, 35, 0.55);
+    z-index: 2;
+  }
+  .sun-orange-ring {
+    position: absolute; right: 76px; top: 76px;
+    width: 188px; height: 188px;
+    border-radius: 50%;
+    border: 2px dashed rgba(107, 68, 35, 0.42);
+    z-index: 2;
+  }
+  .sun-mustard {
+    position: absolute; left: 78px; bottom: 110px;
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 38% 35%, #ecc35a 0%, var(--mustard) 55%, #9a7813 100%);
+    box-shadow: 0 0 0 6px rgba(244, 233, 208, 1), 0 0 0 7px rgba(107, 68, 35, 0.45);
+    z-index: 2;
+  }
+  .arc-half {
+    position: absolute; left: 60px; top: 290px;
+    width: 78px; height: 156px;
+    border-radius: 0 156px 156px 0;
+    background: var(--vermilion);
+    z-index: 2;
+  }
+
+  .stage {
+    position: relative;
+    width: 100%; height: 100%;
+    padding: 56px 80px 56px 80px;
+    display: flex; flex-direction: column;
+    z-index: 5;
+  }
+
+  .top {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 22px;
+  }
+  .logo {
+    font-family: var(--mono-font);
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.22em;
+    color: var(--brown);
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-mark {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--brown);
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .logo-mark-inner {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--bg-cream);
+  }
+  .nav {
+    font-family: var(--mono-font);
+    font-size: 11px;
+    color: var(--brown);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    font-weight: 500;
+    display: flex; gap: 22px;
+    opacity: 0.78;
+  }
+
+  .label-row {
+    display: inline-flex; align-items: center; gap: 12px;
+    margin-top: 30px;
+  }
+  .label-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--vermilion);
+    box-shadow: 0 0 0 3px rgba(193, 77, 63, 0.18);
+  }
+  .label-line {
+    width: 28px; height: 2px;
+    background: var(--brown);
+    border-radius: 2px;
+  }
+  .label {
+    font-family: var(--body-font);
+    font-size: 11.5px;
+    color: var(--brown);
+    letter-spacing: 0.4em;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .headline {
+    font-family: var(--display-font);
+    font-size: 116px;
+    font-weight: 400;
+    line-height: 0.92;
+    letter-spacing: -0.035em;
+    color: var(--brown);
+    margin-top: 18px;
+    text-shadow: 4px 4px 0 rgba(193, 77, 63, 0.18);
+  }
+  .headline .accent {
+    color: var(--vermilion);
+    display: inline-block;
+  }
+  .headline .dot {
+    color: var(--mustard);
+  }
+
+  .deck {
+    font-family: var(--body-font);
+    font-size: 16.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: 560px;
+    margin-top: 22px;
+    letter-spacing: -0.005em;
+    font-weight: 500;
+  }
+  .deck .bold { color: var(--brown); font-weight: 700; }
+
+  .cards {
+    display: flex; gap: 22px;
+    margin-top: 38px;
+  }
+  .card {
+    width: 168px; height: 132px;
+    border-radius: 10px;
+    padding: 18px 18px 16px 18px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    position: relative;
+    box-shadow: 4px 4px 0 rgba(42, 24, 16, 0.85);
+    border: 2px solid var(--ink);
+  }
+  .card-brown { background: var(--brown); color: var(--bg-cream); }
+  .card-orange { background: var(--orange); color: var(--ink); }
+  .card-mustard { background: var(--mustard); color: var(--ink); }
+
+  .card-num {
+    font-family: var(--display-font);
+    font-size: 44px;
+    font-weight: 400;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums proportional-nums;
+  }
+  .card-label {
+    font-family: var(--mono-font);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.86;
+  }
+  .card-corner {
+    position: absolute; top: 12px; right: 12px;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: currentColor;
+    opacity: 0.9;
+  }
+  .card-brown .card-corner { background: var(--mustard); opacity: 1; }
+  .card-orange .card-corner { background: var(--brown); opacity: 1; }
+  .card-mustard .card-corner { background: var(--vermilion); opacity: 1; }
+
+  .vinyl {
+    position: absolute;
+    right: 96px; bottom: 96px;
+    width: 168px; height: 168px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at center,
+        var(--vermilion) 0 18px,
+        var(--ink) 18px 22px,
+        #1d100a 22px 36px,
+        var(--ink) 36px 38px,
+        #1d100a 38px 56px,
+        var(--ink) 56px 58px,
+        #1d100a 58px 78px,
+        var(--ink) 78px 80px,
+        #1d100a 80px 84px);
+    box-shadow: 0 0 0 4px rgba(244, 233, 208, 1), 0 0 0 6px rgba(107, 68, 35, 0.55);
+    z-index: 4;
+  }
+  .vinyl-center-dot {
+    position: absolute;
+    right: 174px; bottom: 174px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--bg-cream);
+    z-index: 5;
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 26px; left: 80px; right: 80px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: var(--mono-font);
+    font-size: 10.5px;
+    color: var(--brown);
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    font-weight: 600;
+    opacity: 0.72;
+    z-index: 6;
+  }
+  .footer-page {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .grain {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    opacity: 0.08;
+    pointer-events: none;
+    z-index: 9;
+  }
+</style>
+</head>
+<body>
+  <div class="warm-wash"></div>
+  <div class="stripe-band stripe-top"></div>
+  <div class="stripe-band stripe-bottom"></div>
+
+  <div class="sun-orange-ring"></div>
+  <div class="sun-orange"></div>
+  <div class="sun-mustard"></div>
+  <div class="arc-half"></div>
+
+  <div class="stage">
+    <div class="top">
+      <div class="logo">
+        <span class="logo-mark"><span class="logo-mark-inner"></span></span>
+        VINYL &amp; BREW · EST. 1972
+      </div>
+      <div class="nav">
+        <span>SHOP</span>
+        <span>STORIES</span>
+        <span>VISIT</span>
+      </div>
+    </div>
+
+    <div class="label-row">
+      <span class="label-dot"></span>
+      <span class="label-line"></span>
+      <span class="label">VOL. 042 · GROOVE TIME</span>
+    </div>
+
+    <h1 class="headline">STAY<br>GROOVY<span class="dot">.</span></h1>
+
+    <p class="deck">Coffee &amp; vinyl since the seventies. Hand-roasted beans, hand-picked records, served slow. Now spinning in <span class="bold">twelve cities</span> across the United States.</p>
+
+    <div class="cards">
+      <div class="card card-brown">
+        <span class="card-corner"></span>
+        <div class="card-num">12</div>
+        <div class="card-label">CITIES SPUN</div>
+      </div>
+      <div class="card card-orange">
+        <span class="card-corner"></span>
+        <div class="card-num">48</div>
+        <div class="card-label">RECORDS / WK</div>
+      </div>
+      <div class="card card-mustard">
+        <span class="card-corner"></span>
+        <div class="card-num">1972</div>
+        <div class="card-label">EST. BROOKLYN</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="vinyl"></div>
+  <div class="vinyl-center-dot"></div>
+
+  <div class="footer">
+    <span>MMXXVI · ESTABLISHED IN BROOKLYN</span>
+    <span class="footer-page">SIDE A · 01 / 12</span>
+  </div>
+
+  <svg class="grain" preserveAspectRatio="none">
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2"/></filter>
+    <rect width="100%" height="100%" filter="url(#grain)" fill="#6b4423"/>
+  </svg>
+</body>
+</html>
