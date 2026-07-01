@@ -44,13 +44,13 @@
 
 ### T1 — Two opt-in styles + schema field  ·  verify: visual/manual QA
 `Tests:` `python3 scripts/gallery.py` exits 0 and prints `Total styles: 28`;
-`grep -l 'anthropic_paper\|schematic_blueprint' references/styles/light.md`.
+`grep -l 'editorial_paper\|schematic_blueprint' references/styles/light.md`.
 `Approach:` Read one existing light.md style for exact JSON shape + how gallery
-renders it. Append `anthropic_paper` and `schematic_blueprint` JSON blocks. Add
+renders it. Append `editorial_paper` and `schematic_blueprint` JSON blocks. Add
 `decorations.diagram_mode` (optional string) to the index.md §3 schema + field
 table; add both rows to the §1 table and decision matrix. `schematic_blueprint`
 sets `diagram_mode: "lineart"` and accent `["#A100FF","#7500C0"]` on warm paper;
-`anthropic_paper` omits `diagram_mode` (filled).
+`editorial_paper` omits `diagram_mode` (filled).
 
 ### T2 — Theme-gated line-art render mode  ·  verify: goal-based
 `Tests:` `python3 scripts/lint_diagram_recipes.py` exits 0; the added block
