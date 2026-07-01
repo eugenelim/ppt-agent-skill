@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """gallery.py -- 风格预览画廊生成器
 
-读取 references/styles/*.md 中的 28 风格定义，生成：
+读取 references/styles/*.md 中的 29 风格定义，生成：
 - ppt-output/style-gallery/index.html  统一卡片墙索引（按 5 板块分组）
 - 可选：调用 puppeteer 截图每个 mock 为 PNG（--screenshots 选项）
 
@@ -43,6 +43,18 @@ CATEGORY_ORDER = [
 ]
 
 
+def gallery_face(sid: str) -> str:
+    """风格在画廊里的『门面』文件名。
+
+    约定：若存在 `<id>.cover.html`（专门的封面/标题页），画廊卡片与 hero 缩略图
+    都用它，保证整墙缩略图统一为封面视角；否则回退到 `<id>.html`。
+    内容/详情 mock（`<id>.html`）始终保留——它是 spec 验收物 + smoke_test 夹具。
+    """
+    if (GALLERY_DIR / f"{sid}.cover.html").exists():
+        return f"{sid}.cover.html"
+    return f"{sid}.html"
+
+
 def extract_style_jsons(md_path: Path) -> list:
     """从 markdown 中提取所有 ```json ... ``` 中含 style_id 的对象。"""
     text = md_path.read_text(encoding="utf-8")
@@ -59,7 +71,7 @@ def extract_style_jsons(md_path: Path) -> list:
 
 
 def collect_all_styles() -> list:
-    """收集所有 28 风格。"""
+    """收集所有 29 风格。"""
     styles = []
     for md in sorted(STYLES_DIR.glob("*.md")):
         # index.md 与 README.md 只含 schema 示例块（非真实风格），跳过以免污染计数
@@ -118,10 +130,11 @@ def build_index_html(grouped: dict) -> str:
                 for c in swatches
             )
             kw_html = " · ".join(keywords[:3])
+            face = gallery_face(sid)
             cards.append(f"""
-        <a class="card" href="{sid}.html" target="_blank" rel="noopener">
+        <a class="card" href="{face}" target="_blank" rel="noopener">
           <div class="frame">
-            <iframe src="{sid}.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="{face}" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -160,7 +173,7 @@ def build_index_html(grouped: dict) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PPT Agent Skill · 28 风格预览画廊</title>
+<title>PPT Agent Skill · {total} 风格预览画廊</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -390,7 +403,7 @@ def take_screenshots(styles: list) -> bool:
                       capture_output=True, text=True, timeout=180, cwd=str(work_dir))
 
     script_path = work_dir / ".gallery_screenshot.cjs"
-    files = [{"id": s["style_id"], "html": str(GALLERY_DIR / f"{s['style_id']}.html"), "png": str(GALLERY_DIR / f"{s['style_id']}.png")} for s in styles]
+    files = [{"id": s["style_id"], "html": str(GALLERY_DIR / gallery_face(s["style_id"])), "png": str(GALLERY_DIR / f"{s['style_id']}.png")} for s in styles]
 
     js = """
 const puppeteer = require('puppeteer');
@@ -461,7 +474,7 @@ def main():
         cnt = len(grouped.get(cat, []))
         print(f"   · {cn} ({en}): {cnt}")
     print(f"\n📄 Output: {out_path}")
-    print(f"   Open in browser to preview all 28 styles")
+    print(f"   Open in browser to preview all {len(styles)} styles")
 
     if args.screenshots:
         print(f"\n📸 Taking screenshots...")

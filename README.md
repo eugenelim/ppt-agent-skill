@@ -132,8 +132,9 @@ pip install python-pptx lxml Pillow
 | `cyberpunk_neon` | Cyberpunk 2077 | 电竞 / 游戏 / Web3 |
 | `chrome_y2k` | Y2K / Vaporwave | Web3 / 千禧年复古 |
 | `noir_film` | Magnum / 黑白纪录片 | 纪录片 / 影像艺术 / 摄影 |
+| `graphite_gold` | 高端咨询战略简报 | 咨询 / 战略汇报 / 董事会简报 |
 
-### 浅色高级（8 风格 · `references/styles/light.md`）
+### 浅色高级（10 风格 · `references/styles/light.md`）
 
 <div align="center">
   <img src="assets/hero-light-premium.png" alt="浅色高级 10 风格" width="100%" />
@@ -151,6 +152,8 @@ pip install python-pptx lxml Pillow
 | `earth_concrete` | Suisse Int'l | 建筑 / 工业 / 咖啡品牌 |
 | `champagne_gold` | 婚礼请柬 | 婚庆 / 宴会 / 颁奖典礼 |
 | `liquid_glass` | iOS 26 / visionOS | XR / AR / 苹果生态发布 |
+| `editorial_paper` | 研究实验室出版物 / 温润学术手记 | 学术研究 / 出版 / 白皮书 |
+| `schematic_blueprint` | 工程交付 Runbook / 技术白皮书 | 工程交付 / 技术文档 / Runbook |
 
 ### 活力鲜明（4 风格 · `references/styles/vibrant.md`）
 

@@ -53,17 +53,6 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   helper. Unblocked by teaching `resource_exists` to resolve a `chart_type` against the
   grouped recipe files (e.g. an index), then dropping `chart_free`.
 
-## claude-design-absorption
-
-- **Follow-up: regenerate PNG thumbnails for the two new styles + refresh the hero composites.**
-  The existing styles ship committed `<style_id>.png` thumbnails and category `hero-*.png`
-  composites; the two new styles have HTML mocks only (gallery tiles render from the HTML
-  iframe, so the gallery index is correct), and `hero-all.png` / `hero-light-premium.png` still
-  render the old tile set (and their README alt-text still reads the old per-category counts).
-  Unblocked by `python3 scripts/gallery.py --screenshots` + `python3 scripts/build_hero.py`
-  where puppeteer is available. (Visual QA of the 5 new recipes + 2 mocks and the post-diff
-  adversarial review were completed in the authoring session — both clean.)
-
 ## reference-runbook-page-types
 
 - **Discovered (not an AC deferral): `smoke_skill.py` pre-existing fixture drift.**
