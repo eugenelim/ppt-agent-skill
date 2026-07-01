@@ -132,6 +132,8 @@
     "secondary": ["#FDE047", "#F59E0B"]
   },
 
+  "card_fills": false,
+
   "typography": {
     "display_font": "'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
     "body_font": "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
@@ -178,6 +180,7 @@
 | `card` | ✓ | 卡片定义 |
 | `text` | ✓ | 文字定义 |
 | `accent` | ✓ | 强调色（primary 2 色 + secondary 2 色）|
+| `card_fills` | ✗ | 是否允许用副色（`accent.secondary`）铺**卡片背景**（彩色卡片底）。**省略即 `false`** —— 单-accent 风格的安全默认：内容卡片一律用中性/白卡片底（`--card-bg-from/to`），副色只作**信号色**用在 ≤~200px² 的小元素上（见 [design-specs.md](../design-runtime/design-specs.md) C 节「副色 = 信号色」）。仅 `vibrant` 板块的多-accent 风格（`vibrant_rainbow` / `kindergarten_pop` / `bauhaus_block` / `candy_pastel`）置 `true`，让多色卡片底成为刻意身份。|
 | `typography` | ✓ | 字体栈 + 字距 + OpenType 特性 |
 | `decorations` | ✓ | 签名手法清单（boolean 开关） |
 | `decorations.diagram_mode` | ✗ | 图解渲染模式：`"filled"`（默认，可省略）或 `"lineart"`（线稿模式，见 [`blocks/diagram.md`](../blocks/diagram.md#线稿模式-line-art--主题门控)）。仅少数「线稿主题」置为 `"lineart"`；其余风格省略此键，图解按默认填充渲染，视觉零变化。 |

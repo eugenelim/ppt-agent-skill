@@ -153,6 +153,7 @@ body {
 - `decoration_dna.forbidden`：硬边界，违反即自动不达标
 - `decoration_dna.recommended_combos`：优先采用
 - `decoration_dna.signature_move`：跨页识别锚点，必须出现
+- `card_fills`：**省略或 `false`（单-accent 风格）时，内容卡片一律用中性/白卡片底（`.card.flat` 为默认形态），禁止用副色（`--accent-2/3/4`）铺卡片背景 —— 副色只作信号色（见 design-specs B/C 节）；彩色卡片底仅在 `card_fills:true`（vibrant 板块）或 planning 显式给出上色理由时才用。**
 - `density_contract.decoration_budget`：同时约束装饰层数量。默认上限建议为：`generous <= 6`、`medium <= 4`、`low <= 2`、`minimal <= 1`
 
 ---

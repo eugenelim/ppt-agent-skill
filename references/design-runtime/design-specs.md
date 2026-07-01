@@ -210,6 +210,15 @@
 - `elevated`：悬浮锚点，多层阴影
 - `filled`/`outline`/`glass`：自由搭配
 
+### 卡片底色默认中性（flat 是默认，彩色底是例外）
+
+> `filled` 卡片 = 中性卡片底，**不是**「按内容语义换一个彩色底」。彩色卡片底（`.card.<color>`）在单-accent 风格里是要显式授权的例外，不是内容分类的默认手段。
+
+- **默认（flat）**：所有内容卡片的底色默认取中性卡片底 `--card-bg-from/to`（浅色风格即白/近白）。这就是 `.card.flat` —— **它是生成时的默认形态**，适用于全部内容卡片。
+- **彩色底（`.card.<color>`）是例外**，只在满足其一时才用：(1) 它是本页唯一的 `accent` 强调卡（一页最多 1 个，且用**主 accent `--accent-1`**，不用副色）；(2) planning JSON 为该卡显式给出上色理由（如 `emphasis` / 对比页的推荐方案）。**没有明确理由一律 flat。**
+- **单-accent 风格禁止「彩虹卡」**：不要因为内容分成 3 类就给 3 张卡分别配绿 / 琥珀 / 紫底。类别差异用 eyebrow 标签、小圆点、描边色承载（见 C 节「副色 = 信号色」）。这与流程图节点的「中性底 + 连线载类别」纪律同源（见 [`blocks/diagram.md`](../blocks/diagram.md) 「节点色纪律」）。
+- **仅 `card_fills: true` 的风格例外**：`vibrant` 板块的多-accent 风格（`vibrant_rainbow` / `kindergarten_pop` / `bauhaus_block` / `candy_pastel`）在 style.json 里标了 `card_fills: true`，多色卡片底是它们刻意的身份，可自由使用 `.card.<color>`。其余风格（style.json 未标或标 `false`）一律遵守上面的 flat 默认纪律。
+
 ### 微细节武器库（避免同质化）
 
 如何让卡片显得精致而不是粗糙拼凑？
@@ -257,6 +266,18 @@
 
 - 同一页渐变方向保持和谐
 - 渐变色彩从 CSS 变量取值
+
+### 副色 = 信号色，不是填充色（单-accent 风格铁律）
+
+> 适用于所有 style.json 未标 `card_fills: true` 的风格（即 `vibrant` 板块之外的全部风格）。
+
+在单-accent 风格里，副色（`--accent-2` / `--accent-3` / `--accent-4`，对应 style.json `accent.secondary`：绿 / 琥珀 / 紫 / 青 等）**只能作信号色**出现，允许的落点是面积 **≤ ~200px²** 的小元素：
+
+- 圆点 / 脉冲锚点、边框 / 描边、箭头尖、eyebrow / overline 标签文字、标签胶囊（tag）、泳道 / 分区轮廓线。
+
+**任何宽于此的背景填充**（卡片底、色带、色块、面板底）只能用**主 accent（`--accent-1`）或白 / 中性卡片底（`--card-bg-from/to`）**。用副色去铺卡片背景、按内容类别给卡片上不同底色，在近白 deck 上要么刺眼要么不可见，还会瓦解单-accent 风格的克制身份 —— 与流程图节点的「中性底 + 连线载类别」纪律同源（见 [`blocks/diagram.md`](../blocks/diagram.md) 「节点色纪律」）。
+
+仅当 style.json 声明 `card_fills: true`（`vibrant` 板块的多-accent 风格，多色即其刻意身份）时，副色铺卡片背景才被允许。
 
 ### 色彩与可读性
 
