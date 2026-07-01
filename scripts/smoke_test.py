@@ -158,6 +158,29 @@ def check_html_pipeline_compat(html_path: Path) -> list:
     return errors
 
 
+def check_html_pseudo_decorations(html_path: Path) -> list:
+    """伪元素视觉装饰检查（警告级，不计 fail）。
+
+    pipeline-compat.md 把 `::before`/`::after` 视觉装饰列为"内容消失"风险，应改用真实
+    `<span>`/`<div>`；但 html2svg.py 对伪元素有（效果较差的）兜底，故为**警告**而非硬失败。
+    判据：选择器含 `::before`/`::after` 且规则块声明 `content` —— 装饰型伪元素必带 content。
+    通用 reset（如 `*,*::before,*::after{box-sizing:border-box}` 无 content）不触发。
+    """
+    warnings = []
+    if not html_path.exists():
+        return []
+    text = html_path.read_text(encoding="utf-8")
+    for sel, body in re.findall(r'([^{}]*)\{([^{}]*)\}', text):
+        if "::before" not in sel and "::after" not in sel:
+            continue
+        if re.search(r'(^|[;\s])content\s*:', body):
+            warnings.append(
+                f"pseudo-element decoration '{sel.strip()[:48]}' declares content: "
+                "-- prefer a real <span>/<div> (pipeline-compat; html2svg fallback is lossy)"
+            )
+    return warnings
+
+
 def check_html_typography(html_path: Path) -> list:
     """简单的排版铁律检查（启发式，只检查同一 CSS 规则块内的字距）。"""
     warnings = []
@@ -226,6 +249,7 @@ def phase1_tests(style_filter: str = None) -> dict:
         "style_validation": {},
         "html_compat": {},
         "html_typography": {},
+        "html_pseudo": {},
         "summary": {"pass": 0, "fail": 0, "warn": 0},
     }
 
@@ -267,6 +291,11 @@ def phase1_tests(style_filter: str = None) -> dict:
         typo_warnings = check_html_typography(html_path)
         results["html_typography"][sid] = typo_warnings
         results["summary"]["warn"] += len(typo_warnings)
+
+        # 伪元素装饰警告（不计 fail）
+        pseudo_warnings = check_html_pseudo_decorations(html_path)
+        results["html_pseudo"][sid] = pseudo_warnings
+        results["summary"]["warn"] += len(pseudo_warnings)
 
     # diagram-consistency-system：图解配方结构/管线 lint + QA 自检
     results["diagram_qa"] = {}
@@ -477,6 +506,17 @@ def generate_report(results: dict, out_dir: Path):
     if any(ht.values()):
         lines += ["## 排版警告（不阻塞，但应修复）", ""]
         for sid, warns in ht.items():
+            if warns:
+                lines.append(f"### ⚠️ {sid}")
+                for w in warns:
+                    lines.append(f"  - {w}")
+        lines.append("")
+
+    # Pseudo-element decoration warnings
+    hp = results.get("html_pseudo", {})
+    if any(hp.values()):
+        lines += ["## 伪元素装饰警告（不阻塞，建议改真实元素）", ""]
+        for sid, warns in hp.items():
             if warns:
                 lines.append(f"### ⚠️ {sid}")
                 for w in warns:

@@ -54,6 +54,37 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   where puppeteer is available. (Visual QA of the 5 new recipes + 2 mocks and the post-diff
   adversarial review were completed in the authoring session — both clean.)
 
+## schematic-blueprint-runbook-restyle
+
+Proposals discovered while restyling `schematic_blueprint` + extracting the runbook
+primitives (not AC deferrals — these cross the planning **public interface**, so
+they need the full-mode spec path rather than a light-mode ride-along). The
+narrative-archetype *guidance* shipped in this PR (`principles/narrative-arc.md`
+§参考型叙事 + outline-playbook pointer); making the **engine** honor it needs:
+
+- **Inline section-divider `page_type`.** Add a `section-marker` page_type (lightweight
+  §NN + kicker + rule) distinct from today's full-page `section`, so reference decks
+  can divide inline. Blocked on: `page_type` enum + `references/page-templates/` +
+  validators are contract-bound. Unblocked by a spec updating all three together.
+- **`reference_runbook` argumentation strategy + archetype-aware skeleton.** Add a
+  `reference_runbook` value to the outline `论证策略` enum and branch the mandatory
+  skeleton (the "every Part opens with a full-page section" + "no 3 consecutive high
+  density" rules) on archetype, so the density/rhythm override documented in
+  `narrative-arc.md` is actually enforced. Blocked on: outline-playbook枚举 is parsed
+  downstream. Unblocked by a spec touching the playbook + its parser/validators.
+- **`persistent_chrome` deck flag.** A deck-level flag that renders masthead + footer
+  on every content page (orientation for reference docs). Blocked on: new deck-level
+  field + page-html playbook support. Unblocked by a spec wiring the flag end-to-end.
+- **Back-matter reference page types.** First-class RACI / glossary / gates / escalation
+  reference sections (vs a CTA finale). Blocked on: same page_type enum contract as
+  the first item. Unblocked by the same spec.
+
+- **Gate gap (mechanical, low-risk): fold the pseudo-element warning into the diagram
+  recipe lint too.** This PR added a `::before`/`::after`-with-`content` **warning** to
+  `smoke_test.py` (gallery mocks); the same lossy-fallback risk applies to `blocks/*.md`
+  recipe HTML, which `lint_diagram_recipes.py` does not yet check. Unblocked by adding
+  the equivalent scan to the recipe lint.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

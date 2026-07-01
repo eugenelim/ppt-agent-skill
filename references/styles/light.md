@@ -19,7 +19,7 @@
 | 7 | `champagne_gold` | 高端婚礼请柬 | 米白渐变 + 金色 Playfair italic + 双线装饰 |
 | 8 | `liquid_glass` | iOS 26 / visionOS | 彩色渐变 + 模糊 blob + 多层液态玻璃 |
 | 9 | `editorial_paper` | 温润研究手记 | 米白纸感 + 陶土红 + serif/sans/mono 三体 + 大留白 |
-| 10 | `schematic_blueprint` | 工程蓝图线稿 | 暖白网格纸 + 电光紫强调 + 发丝细线 + mono 标注（线稿图解）|
+| 10 | `schematic_blueprint` | 工程交付 Runbook | 纯白纸面 + 粗黑规线 + 电光紫焦点 + Fraunces 斜体 + mono 标注（线稿图解 + 黑表头 worksheet）|
 
 ---
 
@@ -392,43 +392,63 @@ Mock: [`ppt-output/style-gallery/editorial_paper.html`](../../ppt-output/style-g
 
 ---
 
-## 10. schematic_blueprint — 工程蓝图线稿（线稿图解主题）
+## 10. schematic_blueprint — 工程蓝图线稿（交付 Runbook 编辑部风）
 
-> 本风格开启 `decorations.diagram_mode: "lineart"` —— 图解块按 [`blocks/diagram.md`](../blocks/diagram.md) 的**线稿模式**渲染（透明节点填充 + 发丝描边 + mono 标注 + 仅焦点用强调色）。其余 27 个既有风格不带此开关，图解仍按默认填充模式渲染，视觉零变化。
+> 视觉基准：工程交付 Runbook / 编辑部技术文档——纯白纸面 + 粗黑顶栏/表头 + Fraunces 衬线大标题（关键词斜体紫）+ JetBrains Mono 定位标注 + 单一电光紫焦点。
+>
+> 本风格开启 `decorations.diagram_mode: "lineart"` —— 图解块按 [`blocks/diagram.md`](../blocks/diagram.md) 的**线稿模式**渲染（透明节点填充 + 发丝描边 + mono 标注 + 仅焦点用强调色）。其成套的表格/工作表/日程原语见 [`blocks/worksheet.md`](../blocks/worksheet.md)（黑表头责任矩阵、填空工作表、发丝分隔日程表）。其余 27 个既有风格不带此开关，图解仍按默认填充模式渲染，视觉零变化。
 
 ```json
 {
   "style_id": "schematic_blueprint",
   "style_name": "工程蓝图线稿 (Schematic Blueprint)",
   "category": "light_premium",
-  "inspiration": "工程图纸 / 技术白皮书线稿 / 编辑部示意图",
-  "mood_keywords": ["暖白网格纸", "电光紫", "发丝细线", "mono 定位标注", "克制线稿"],
-  "design_soul": "一张摊开的工程蓝图，暖白纸上印着极淡的网格，所有结构都用发丝般的细线勾勒，只有真正关键的那一处用电光紫点亮，角落是一行等宽体的图号与坐标。",
-  "variation_strategy": "封面用 serif 大标题 + 四角定位角标 + 极淡网格，图解页用线稿图解（透明节点 + 发丝连线 + 单一紫色焦点），数据页用发丝分隔的极简卡片 + mono 脚注。",
+  "inspiration": "工程交付 Runbook / 技术白皮书 / 编辑部技术文档（Fraunces + JetBrains Mono + 电光紫）",
+  "mood_keywords": ["纯白纸面", "硬黑规线", "电光紫焦点", "mono 定位标注", "Fraunces 斜体强调"],
+  "design_soul": "一份摊在桌上、可签字讨论的工程交付手册：纯白纸面，粗黑的顶栏与表头像铅字压印，Fraunces 衬线大标题里只有一个词被电光紫的斜体点亮，页脚是一行等宽体的图号与坐标——克制、锐利、结构毕现。",
+  "variation_strategy": "封面用 mono 眉标 + Fraunces 大标题（关键词斜体紫）+ 粗黑 masthead 顶栏；讨论页用黑表头 worksheet 表格（责任矩阵 / 填空工作表）；排期页用发丝分隔的日程/节奏表；图解页保持线稿图解（透明节点 + 发丝连线 + 单一紫色焦点）。",
   "decoration_dna": {
-    "signature_move": "发丝细线（1px）+ 四角取景角标 + mono 图号/坐标标注 + 单一电光紫焦点 + 极淡网格纸底 + 零投影零大圆角",
-    "forbidden": ["投影 box-shadow", "渐变填充", "大圆角（rounded-2xl）", "多强调色", "霓虹辉光", "暗色背景", "标题下方装饰横线"],
-    "recommended_combos": ["线稿图解 + 单一紫色焦点 + mono 图号", "四角角标 + 发丝分隔 + 极淡网格"]
+    "signature_move": "粗黑顶栏/表头（实心 ink 底反白 mono）+ 硬黑边框（1/2/3px solid）+ Fraunces 斜体紫强调词 + mono 图号坐标 + 单一电光紫焦点 + 零投影零圆角",
+    "forbidden": ["投影 box-shadow", "渐变填充色块", "圆角（rounded）", "多强调色", "霓虹辉光", "暗色背景", "标题下方装饰横线"],
+    "recommended_combos": ["粗黑 masthead + Fraunces 斜体紫标题 + mono 眉标", "黑表头 worksheet 表格 + 发丝分隔行 + R/A/C/I 紫色信号", "线稿图解 + 单一紫色焦点 + mono 图号"]
   },
-  "background": { "primary": "#f6f5f1", "gradient_to": "#efede7", "texture": { "type": "grid_dot", "size": 32, "opacity": 0.03 } },
-  "card": { "gradient_from": "#ffffff", "gradient_to": "#fbfaf7", "border": "rgba(28,25,23,0.14)", "border_radius": 4, "backdrop_blur": 0 },
-  "text": { "primary": "#1c1917", "secondary": "#57534e", "title_size": 66, "body_size": 14, "card_title_size": 17 },
-  "accent": { "primary": ["#a100ff", "#7500c0"], "secondary": ["#4f5d75", "#3c4657"] },
+  "background": { "primary": "#ffffff", "gradient_to": "#fafafa", "texture": { "type": "grid_dot", "size": 40, "opacity": 0.02 } },
+  "card": { "gradient_from": "#ffffff", "gradient_to": "#fafafa", "border": "#000000", "border_radius": 0, "backdrop_blur": 0 },
+  "text": { "primary": "#000000", "secondary": "#555555", "title_size": 64, "body_size": 14, "card_title_size": 17 },
+  "accent": { "primary": ["#a100ff", "#6e00b0"], "secondary": ["#57534e", "#3c4657"] },
   "typography": {
-    "display_font": "'Instrument Serif', 'Fraunces', Georgia, serif",
-    "body_font": "'Geist', 'Inter', -apple-system, sans-serif",
-    "serif_italic_font": "'Instrument Serif', Georgia, serif",
-    "mono_font": "'Geist Mono', 'IBM Plex Mono', 'SF Mono', monospace",
-    "display_letter_spacing": "-0.01em",
-    "headline_letter_spacing": "-0.008em",
+    "display_font": "'Fraunces', 'Source Serif 4', Georgia, serif",
+    "body_font": "'Inter Tight', 'Inter', -apple-system, sans-serif",
+    "serif_italic_font": "'Fraunces', Georgia, serif",
+    "mono_font": "'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', monospace",
+    "display_letter_spacing": "-0.03em",
+    "headline_letter_spacing": "-0.015em",
     "body_letter_spacing": "0em",
-    "label_letter_spacing": "0.2em",
+    "label_letter_spacing": "0.16em",
     "feature_settings": "'kern', 'liga', 'calt', 'tnum'",
     "tabular_nums": true
   },
-  "decorations": { "label_anchor": "mono_tag", "title_serif_italic": true, "corner_lines": true, "vertical_divider": false, "drop_cap": false, "masthead": false, "diagram_mode": "lineart" },
-  "font_imports": ["https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"]
+  "decorations": { "label_anchor": "mono_tag", "title_serif_italic": true, "corner_lines": false, "vertical_divider": false, "drop_cap": false, "masthead": true, "diagram_mode": "lineart" },
+  "font_imports": ["https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"]
 }
 ```
 
-Mock: [`ppt-output/style-gallery/schematic_blueprint.html`](../../ppt-output/style-gallery/schematic_blueprint.html)
+**半语义信号色**（供 worksheet/gate/告警块用，非 accent —— 保持"单一电光紫焦点"纪律）：`--purple:#a100ff` · `--purple-deep:#6e00b0` · `--purple-soft:#f4e8ff` · `--purple-line:#e8d4ff` · `--ink:#000000` · `--paper-warm:#fafafa` · `--rule:#d8d8d8` · `--muted:#555555` · `--warn:#b35900` / `--warn-soft:#fef3e6` · `--ok:#1f7a3a` / `--ok-soft:#e9f5ed`。其中 `--warn`/`--ok` 由 [`blocks/worksheet.md`](../blocks/worksheet.md) 的 `status-block` 配方消费；它们与图表趋势色（`#22c55e`/`#ef4444`）同性质——语义恒定的信号色，是本风格**唯一允许硬编码的 hex**，且可被 deck `:root` 同名变量覆盖。
+
+### 样式细则（styling spec）—— 让生成页"像一份交付手册"
+
+> 风格 JSON 只给粗粒度的色/字/字距；下面这套细则才是让整页读起来锐利、克制、编辑部感的关键。HTML 生成阶段照此施工。
+
+1. **边框层级（硬黑规线 · 零投影零圆角）**：`3px solid ink` = 顶栏顶线 / 页脚顶线 / 大区分隔；`2px` = 工作表外框（template）/ 章节标记规线；`1px` = 卡片与表格发丝规线；`1px dashed` = 收尾行（"结束条件" / "补救 recovery"）。全站 `border-radius:0`、`box-shadow:none`——层次靠线与留白，绝不靠阴影。
+2. **黑底反白反转（signature move）**：表头 `thead` / 工作表页签 tag / 清单标题条 / 聚光标注 callout —— 一律 `background:ink; color:paper` + mono 全大写。这是制造"铅字压印"锐利感的核心手法。
+3. **斜体紫强调词**：每级标题（h1/h2/h3）里挑**一个**关键词包 `<em>` → `font-style:italic; color:var(--accent-1)`。Fraunces 斜体是全页唯一的"温度"来源，别滥用。
+4. **Fraunces 光学尺寸 + 字重映射**：display `font-variation-settings:"opsz" 144`；h1 weight 300 / line-height 0.94–0.98 / letter-spacing −0.03~−0.035em；h2 weight 500 / −0.02em；卡片小标题与字段值 weight 500。
+5. **mono 字距阶梯**：eyebrow `0.18em` > tag `0.16em` > masthead/label `0.14em` > 字段名/表头 `0.12em`；全大写；承载所有"技术/定位/参照"信息（图号、坐标、期号、角色、REV、版本）。
+6. **单一电光紫焦点纪律**：紫色只落在——眉标短横、masthead 方块+`>`、标题斜体 em、表格 `R`、highlight 左条、callout 4px 左条、页脚 h5。一页紫色出现点 ≤ ~6 处；副色（slate）与信号色（warn/ok）不计入 accent。
+7. **色彩角色**：`--purple`（焦点信号）· `--purple-deep`（浅底上的紫字）· `--purple-soft`（preflight 底）· `--purple-line`（紫分隔）· `--ink`（规线 / 反转底）· `--paper-warm`（斑马行 / 卡片副底）· `--rule`（发丝）· `--muted`（次要文字）。
+8. **数字全站 tabular**：`font-variant-numeric:tabular-nums` + `font-feature-settings:'kern','liga','calt','tnum'`——版号 / 坐标 / 期号 / 百分比逐列对齐。
+9. **间距节奏**：大区间 `margin:48–64px`；卡片 `padding:16–28px`；网格 `gap:12–18px`；正文 `line-height:1.55` + `max-width:~68ch`；导语 `p.lead` 用 16px 略大一档。
+10. **复选 / 清单字符**：`☐`（U+2610）走 `--purple`——纯文本字符，非伪元素、非图片，保证管线安全。
+11. **眉标 / masthead 装饰**：eyebrow 前置 `24×2px` 紫短横；masthead 左 `12×12px` 紫实心方块 + 紧跟紫 `>` glyph（均为真实 `<span>`，非 `::before`）。
+
+Mock: [`ppt-output/style-gallery/schematic_blueprint.html`](../../ppt-output/style-gallery/schematic_blueprint.html) · 组件原语 + 页面骨架: [`blocks/worksheet.md`](../blocks/worksheet.md)

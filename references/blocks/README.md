@@ -25,6 +25,7 @@
 | 团队/人物展示 | **people** | 面孔是建立信任最快的通道 |
 | 情感冲击/场景营造 | **image_hero** | 一张好图胜过千言万语 |
 | 2x2 战略定位分析 | **matrix_chart** | 象限图是商业决策最直觉的工具 |
+| 责任矩阵/填空工作表/逐日排期表 | **worksheet**（按需加载） | 桌面文档式表格——可在会上逐格签字讨论 |
 
 ## 灵动组合原则
 
@@ -45,3 +46,13 @@
 | `diagram-concept.md` | mind-map / matrix-quadrant / venn / pyramid / funnel / cycle / hub-spoke / onion / fishbone |
 
 **主题契约**：所有图解颜色/字体只绑定 deck 的 CSS 变量（经 `diagram.md` 的 `--node-*` 局部变量），换风格整图随 `:root` 改色。**管线安全**：箭头 SVG `<polygon>`、连线真实 `<div>`/SVG `<line>`、标注 HTML 叠加、禁 SVG `<text>`，由 `scripts/lint_diagram_recipes.py` 把关。
+
+## worksheet 原语（按需加载）
+
+`worksheet` 不是独立 `card_type`（不入 validator 枚举），而是与 diagram family 同机制的**按需注入配方**：在 `data` / `list` / `timeline` / `text` 卡上写 `resources.block_refs:["worksheet"]` 加载 [`blocks/worksheet.md`](worksheet.md) 的整套"编辑部技术文档"原语，分三组：
+
+- **A. 表格 & 工作表**：责任矩阵（RACI，黑表头 + R 单一强调）· 填空讨论工作表（浮起 mono 页签 + 字段名/内容两列）· 日程表（期号 + 任务复选 + 责任人）· 升级路径表（when → trigger → action，含 cadence 变体）。
+- **B. 清单 & 状态**：清单 checklist（黑条标题 + ☐ 行，含 preflight / TOC 变体）· 状态块 status-block（gate 绿 / failure 琥珀 + 虚线补救，消费信号色）。
+- **C. 页面骨架（本风格签名）**：masthead 顶栏 · cover-header 封面头（Fraunces 斜体紫 em + meta 网格）· section-marker 章节标记 · spotlight-callout 聚光标注 · footer 页脚。
+
+全部绑定 deck 契约变量（黑表头 = `var(--text-primary)`、发丝 = `var(--card-border)`、焦点 = `var(--accent-1)`），换风格随 `:root` 改色；与 `schematic_blueprint`（`diagram_mode:"lineart"`）最契合，其**样式细则**（边框层级 / 黑底反白反转 / 斜体紫 em / mono 字距阶梯 / 间距节奏）见 [`styles/light.md` §10](../styles/light.md)。**管线安全**：真实 `<table>`/`<div>`、禁 SVG `<text>`、禁 `mask-image`/`conic-gradient`/`background-image:url()`；仅 `status-block` 的 warn/ok 是语义信号 hex 碳out。
