@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>candy_pastel · 甜品糖果 · World-Class Mock</title>
+<title>candy_pastel · Maison Sucrée · Collection Analytics · Detail</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Fraunces:ital,wght@0,400;1,400&family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Fraunces:ital,wght@0,400;1,400&family=Inter:wght@400;500;600&display=swap');
 
   :root {
     --bg-from: #fff5f0;
@@ -28,292 +28,251 @@
   html, body { width: 1280px; height: 720px; overflow: hidden; }
   body {
     background:
-      radial-gradient(ellipse 90% 70% at 18% 12%, rgba(248, 187, 208, 0.28) 0%, transparent 55%),
-      radial-gradient(ellipse 80% 60% at 88% 88%, rgba(255, 245, 157, 0.22) 0%, transparent 55%),
+      radial-gradient(ellipse 90% 70% at 18% 12%, rgba(248, 187, 208, 0.22) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 60% at 88% 88%, rgba(255, 245, 157, 0.18) 0%, transparent 55%),
       linear-gradient(160deg, var(--bg-from) 0%, var(--bg-to) 100%);
     color: var(--text-primary);
     font-family: var(--body-font);
-    font-feature-settings: "kern", "liga", "ss01", "cv11", "calt";
+    font-feature-settings: "kern", "liga", "ss01", "cv11", "calt", "dlig";
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
+  /* Macaron dot decorations */
   .speck {
     position: absolute; border-radius: 50%;
-    pointer-events: none;
-    opacity: 0.55;
+    pointer-events: none; opacity: 0.48;
   }
-  .speck-1 { top: 70px; right: 240px; width: 14px; height: 14px; background: var(--macaron-yellow); }
-  .speck-2 { top: 180px; right: 110px; width: 8px; height: 8px; background: var(--macaron-purple); opacity: 0.7; }
-  .speck-3 { bottom: 280px; left: 70px; width: 10px; height: 10px; background: var(--macaron-blue); }
-  .speck-4 { top: 360px; left: 38%; width: 6px; height: 6px; background: var(--rose-deep); opacity: 0.6; }
-  .speck-5 { bottom: 120px; right: 320px; width: 12px; height: 12px; background: var(--macaron-green); opacity: 0.5; }
+  .speck-1 { top: 60px; right: 220px; width: 12px; height: 12px; background: var(--macaron-yellow); }
+  .speck-2 { top: 170px; right: 100px; width: 7px; height: 7px; background: var(--macaron-purple); opacity: 0.60; }
+  .speck-3 { bottom: 260px; left: 60px; width: 9px; height: 9px; background: var(--macaron-blue); }
+  .speck-4 { bottom: 100px; right: 300px; width: 10px; height: 10px; background: var(--macaron-green); opacity: 0.44; }
 
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 44px 80px 0 80px;
+  /* PAGE LAYOUT */
+  .page {
+    position: absolute; inset: 0;
+    padding: 26px 58px 38px;
     display: flex; flex-direction: column;
     z-index: 2;
   }
 
-  .top {
+  /* TOP BAR */
+  .topbar {
     display: flex; justify-content: space-between; align-items: center;
-    padding-bottom: 22px;
+    padding-bottom: 16px;
     border-bottom: 1px solid var(--hairline);
+    margin-bottom: 12px;
   }
   .logo {
     font-family: var(--body-font);
-    font-size: 11px; font-weight: 600;
-    letter-spacing: 0.42em;
-    color: var(--text-primary);
-    text-transform: uppercase;
-  }
-  .nav {
-    font-family: var(--body-font);
-    font-size: 10px; font-weight: 500;
-    color: var(--text-secondary);
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    display: flex; gap: 32px;
-  }
-
-  .label-row {
-    display: flex; align-items: center; gap: 12px;
-    margin-top: 38px;
-  }
-  .label-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--rose-deep);
-    box-shadow: 0 0 0 4px rgba(232, 155, 180, 0.18);
-  }
-  .label {
-    font-family: var(--body-font);
     font-size: 10px; font-weight: 600;
-    letter-spacing: 0.4em;
-    color: var(--rose-deep);
+    letter-spacing: 0.40em;
+    color: var(--text-primary);
     text-transform: uppercase;
-    font-variant-numeric: tabular-nums;
+  }
+  .eyebrow {
+    font-family: var(--body-font);
+    font-size: 10px; font-weight: 600; letter-spacing: 0.22em;
+    color: var(--rose-deep); text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .eyebrow-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--rose-deep);
+    box-shadow: 0 0 0 3px rgba(232,155,180,0.20);
+  }
+  .page-id {
+    font-family: var(--body-font);
+    font-size: 10px; color: var(--text-muted); letter-spacing: 0.22em; text-transform: uppercase;
+    font-weight: 500;
   }
 
-  .headline {
+  /* HEAD ROW */
+  .head-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .head-row h2 {
     font-family: var(--display-font);
     font-style: italic;
-    font-weight: 500;
-    font-size: 78px;
-    letter-spacing: -0.025em;
-    line-height: 0.96;
-    margin-top: 14px;
+    font-size: 22px; font-weight: 500; letter-spacing: -0.015em;
     color: var(--text-primary);
   }
-  .headline em {
-    font-style: italic;
-    font-weight: 500;
-    color: var(--rose-deep);
-  }
-
-  .deck {
+  .head-row h2 em { color: var(--rose-deep); }
+  .head-sub {
     font-family: var(--body-font);
-    font-size: 14px;
-    font-weight: 400;
-    line-height: 1.55;
-    color: var(--text-secondary);
-    margin-top: 20px;
-    max-width: 540px;
-    letter-spacing: -0.005em;
-  }
-  .deck .accent {
-    font-family: var(--display-font);
-    font-style: italic;
-    color: var(--rose-deep);
+    font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em;
   }
 
-  .macarons {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 22px;
-    margin-top: 34px;
-  }
-  .mac {
-    width: 58px; height: 58px;
-    border-radius: 50%;
-    box-shadow:
-      0 8px 18px rgba(74, 44, 42, 0.08),
-      inset 0 -6px 10px rgba(74, 44, 42, 0.06),
-      inset 0 4px 8px rgba(255, 255, 255, 0.6);
-    position: relative;
-  }
-  .mac::after {
-    content: '';
-    position: absolute;
-    left: 14%; top: 18%;
-    width: 26%; height: 18%;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.5);
-  }
-  .mac-1 { background: var(--macaron-pink); }
-  .mac-2 { background: var(--macaron-green); }
-  .mac-3 { background: var(--macaron-yellow); }
-  .mac-4 { background: var(--macaron-blue); }
-  .mac-5 { background: var(--macaron-purple); }
-
-  .cards {
+  /* MAIN GRID */
+  .main-grid {
+    flex: 1; min-height: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-    margin-top: 28px;
-    padding-right: 180px;
-  }
-  .card {
-    border-radius: 24px;
-    padding: 18px 20px 18px 20px;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.85);
-    box-shadow:
-      0 10px 26px rgba(232, 155, 180, 0.10),
-      0 1px 0 rgba(255, 255, 255, 0.9) inset;
-    display: flex;
-    align-items: center;
+    grid-template-columns: 264px 1fr;
     gap: 14px;
   }
-  .card-dot {
-    width: 38px; height: 38px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    box-shadow:
-      inset 0 -3px 6px rgba(74, 44, 42, 0.06),
-      inset 0 2px 4px rgba(255, 255, 255, 0.6);
+
+  /* LEFT: KPI CARDS */
+  .kpi-col {
+    display: flex; flex-direction: column; gap: 9px;
   }
-  .card-dot.pink { background: var(--macaron-pink); }
-  .card-dot.green { background: var(--macaron-green); }
-  .card-dot.yellow { background: var(--macaron-yellow); }
-  .card-body {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
+
+  .kpi-card {
+    background: rgba(255,255,255,0.60);
+    border: 1px solid rgba(255,255,255,0.88);
+    border-radius: 22px;
+    padding: 13px 16px;
+    box-shadow: 0 8px 20px rgba(232,155,180,0.08), 0 1px 0 rgba(255,255,255,0.9) inset;
+    display: flex; flex-direction: column; gap: 3px;
+    position: relative; overflow: hidden;
   }
-  .card-name {
+  .kpi-card .top-dot {
+    position: absolute; top: 14px; right: 14px;
+    width: 10px; height: 10px; border-radius: 50%;
+    opacity: 0.70;
+  }
+  .kpi-card .k-label {
+    font-family: var(--body-font);
+    font-size: 9px; letter-spacing: 0.26em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600;
+  }
+  .kpi-card .k-value {
     font-family: var(--display-font);
     font-style: italic;
-    font-weight: 500;
-    font-size: 18px;
-    letter-spacing: -0.012em;
+    font-size: 36px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.02;
     color: var(--text-primary);
-    line-height: 1.1;
   }
-  .card-meta {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
+  .kpi-card .k-value .unit {
+    font-size: 15px; font-weight: 400; color: var(--text-secondary);
+    letter-spacing: 0; margin-left: 2px;
   }
-  .card-tag {
+  .kpi-card .k-delta {
     font-family: var(--body-font);
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--text-muted);
-  }
-  .card-price {
-    font-family: var(--body-font);
-    font-size: 13px;
+    font-size: 10px; color: var(--rose-deep); letter-spacing: 0.04em;
     font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: 0.02em;
-    font-variant-numeric: tabular-nums;
-    margin-left: auto;
+  }
+  .kpi-card .k-sub {
+    font-family: var(--body-font);
+    font-size: 10px; color: var(--text-muted); line-height: 1.4;
   }
 
-  .product-circle {
-    position: absolute;
-    bottom: 96px;
-    right: 78px;
-    width: 188px;
-    height: 188px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.65) 0%, transparent 45%),
-      radial-gradient(circle at 70% 80%, rgba(232, 155, 180, 0.5) 0%, transparent 60%),
-      var(--macaron-pink);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    box-shadow:
-      0 18px 40px rgba(232, 155, 180, 0.32),
-      inset 0 -10px 20px rgba(74, 44, 42, 0.06),
-      inset 0 8px 16px rgba(255, 255, 255, 0.45);
-    z-index: 3;
+  /* RIGHT PANEL: collection table */
+  .collection-panel {
+    background: rgba(255,255,255,0.55);
+    border: 1px solid rgba(255,255,255,0.88);
+    border-radius: 22px;
+    padding: 14px 18px;
+    box-shadow: 0 8px 20px rgba(248,187,208,0.08), 0 1px 0 rgba(255,255,255,0.9) inset;
+    display: flex; flex-direction: column; gap: 10px;
   }
-  .product-circle .num {
+  .panel-title {
     font-family: var(--display-font);
     font-style: italic;
-    font-weight: 500;
-    font-size: 54px;
-    line-height: 1;
-    color: var(--text-primary);
-    letter-spacing: -0.03em;
-    font-variant-numeric: tabular-nums;
+    font-size: 14px; font-weight: 400; letter-spacing: -0.008em;
+    color: var(--rose-deep);
   }
-  .product-circle .lab {
+
+  .collection-table {
+    width: 100%; border-collapse: collapse;
+  }
+  .collection-table th {
+    font-family: var(--body-font);
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600;
+    padding: 0 10px 7px 0; text-align: left;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .collection-table td {
+    font-family: var(--body-font);
+    font-size: 11px; color: var(--text-primary); line-height: 1.4;
+    padding: 6.5px 10px 6.5px 0;
+    border-bottom: 1px solid rgba(74,44,42,0.05);
+    vertical-align: middle;
+    font-weight: 500;
+  }
+  .collection-table td.serif {
     font-family: var(--display-font);
     font-style: italic;
-    font-weight: 400;
-    font-size: 14px;
+    font-size: 13px; font-weight: 500; letter-spacing: -0.01em;
     color: var(--text-primary);
-    margin-top: 6px;
-    letter-spacing: 0.01em;
   }
-  .product-circle .sub {
+  .collection-table td.price {
     font-family: var(--body-font);
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.34em;
-    color: rgba(74, 44, 42, 0.6);
-    margin-top: 8px;
-    text-transform: uppercase;
-  }
-
-  .ribbon {
-    position: absolute;
-    bottom: 282px;
-    right: 162px;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: var(--macaron-yellow);
-    box-shadow:
-      0 6px 14px rgba(74, 44, 42, 0.08),
-      inset 0 -3px 5px rgba(74, 44, 42, 0.05),
-      inset 0 2px 4px rgba(255, 255, 255, 0.5);
-    z-index: 4;
-  }
-
-  .footer {
-    position: absolute;
-    bottom: 22px; left: 80px; right: 80px;
-    display: flex; justify-content: space-between; align-items: center;
-    font-family: var(--body-font);
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--text-muted);
-    letter-spacing: 0.26em;
-    text-transform: uppercase;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
-    z-index: 3;
   }
-  .footer .right {
-    display: flex; align-items: center; gap: 14px;
+  .collection-table td.muted { color: var(--text-muted); font-size: 10.5px; }
+
+  .mac-dot {
+    display: inline-block;
+    width: 10px; height: 10px; border-radius: 50%;
+    vertical-align: middle;
+    box-shadow: inset 0 -2px 4px rgba(74,44,42,0.06), inset 0 1px 3px rgba(255,255,255,0.5);
   }
-  .footer .swatch {
+
+  /* rating dots */
+  .rating {
+    display: flex; gap: 3px; align-items: center;
+  }
+  .r-dot {
     width: 7px; height: 7px; border-radius: 50%;
-    background: var(--rose-deep);
+    background: var(--macaron-pink);
+    box-shadow: inset 0 -1px 2px rgba(74,44,42,0.08);
   }
+  .r-dot.empty { background: rgba(74,44,42,0.08); box-shadow: none; }
+
+  /* stock bar */
+  .stock-wrap { display: flex; align-items: center; gap: 7px; }
+  .stock-bg {
+    flex: 1; height: 5px; border-radius: 999px;
+    background: rgba(74,44,42,0.07);
+  }
+  .stock-fill { height: 100%; border-radius: 999px; }
+  .stock-pct {
+    font-size: 9.5px; font-weight: 600; color: var(--text-muted);
+    min-width: 28px; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* tag */
+  .tag {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 8.5px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; font-family: var(--body-font);
+  }
+  .tag-best { background: var(--macaron-pink); color: #a05070; }
+  .tag-new { background: var(--macaron-yellow); color: #907020; }
+  .tag-ltd { background: var(--macaron-purple); color: #705090; }
+
+  /* SUMMARY */
+  .summary-strip {
+    padding: 7px 0 0;
+    border-top: 1px solid var(--hairline);
+    font-family: var(--display-font);
+    font-style: italic;
+    font-size: 12px; font-weight: 400; line-height: 1.5;
+    color: var(--text-secondary);
+  }
+  .summary-strip .sk { font-style: normal; font-family: var(--body-font); font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--rose-deep); font-weight: 600; margin-right: 6px; }
+  .summary-strip .sv { color: var(--text-primary); }
+
+  /* FOOTER */
+  .footer {
+    position: absolute; bottom: 14px; left: 58px; right: 58px;
+    display: flex; justify-content: space-between;
+    font-family: var(--body-font);
+    font-size: 9.5px; color: var(--text-muted);
+    letter-spacing: 0.22em; text-transform: uppercase;
+    font-weight: 500; z-index: 3;
+    font-variant-numeric: tabular-nums;
+  }
+  .footer .right { display: flex; align-items: center; gap: 10px; }
+  .footer .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--rose-deep); opacity: 0.6; }
 </style>
 </head>
 <body>
@@ -321,81 +280,200 @@
   <div class="speck speck-2"></div>
   <div class="speck speck-3"></div>
   <div class="speck speck-4"></div>
-  <div class="speck speck-5"></div>
 
-  <div class="stage">
-    <div class="top">
+  <div class="page">
+    <div class="topbar">
       <div class="logo">MAISON SUCRÉE &middot; EST. 2018</div>
-      <div class="nav">
-        <span>COLLECTION</span>
-        <span>ATELIER</span>
-        <span>BOUTIQUE</span>
+      <div class="eyebrow">
+        <div class="eyebrow-dot"></div>
+        Rapport de Collection
+      </div>
+      <div class="page-id">Printemps 2026 &middot; Semaine 08</div>
+    </div>
+
+    <div class="head-row">
+      <div>
+        <h2><em>Analyse des ventes</em> — Collection Printemps</h2>
+        <p class="head-sub">Performance des 12 nouvelles saveurs sur 8 semaines de boutique — volume, notation et stock disponible.</p>
       </div>
     </div>
 
-    <div class="label-row">
-      <div class="label-dot"></div>
-      <div class="label">NOUVELLE COLLECTION &middot; 042</div>
-    </div>
+    <div class="main-grid">
+      <!-- Left KPIs -->
+      <div class="kpi-col">
 
-    <h1 class="headline"><em>Douceur</em><br>de printemps.</h1>
+        <div class="kpi-card">
+          <div class="top-dot" style="background:var(--macaron-pink);"></div>
+          <div class="k-label">Chiffre d'affaires</div>
+          <div class="k-value">¥ 284<span class="unit">K</span></div>
+          <div class="k-delta">▲ +31% vs Hiver 2025</div>
+          <div class="k-sub">12 saveurs · 8 sem. boutique</div>
+        </div>
 
-    <p class="deck">12 saveurs nouvelles, hand-crafted en Provence — une collection <span class="accent">éphémère</span> qui célèbre les fleurs, les agrumes et la patience d'un atelier français.</p>
+        <div class="kpi-card">
+          <div class="top-dot" style="background:var(--macaron-green);"></div>
+          <div class="k-label">Boîtes vendues</div>
+          <div class="k-value">5 920<span class="unit">u.</span></div>
+          <div class="k-delta">▲ +18% commandes en ligne</div>
+          <div class="k-sub">Boutique + e-shop + traiteur</div>
+        </div>
 
-    <div class="macarons">
-      <div class="mac mac-1"></div>
-      <div class="mac mac-2"></div>
-      <div class="mac mac-3"></div>
-      <div class="mac mac-4"></div>
-      <div class="mac mac-5"></div>
-    </div>
+        <div class="kpi-card">
+          <div class="top-dot" style="background:var(--macaron-yellow);"></div>
+          <div class="k-label">Note moyenne</div>
+          <div class="k-value">4.7<span class="unit">/ 5</span></div>
+          <div class="k-delta">▲ +0.3 vs collection hiver</div>
+          <div class="k-sub">Agrégé · 1 840 avis clients</div>
+        </div>
 
-    <div class="cards">
-      <div class="card">
-        <div class="card-dot pink"></div>
-        <div class="card-body">
-          <div class="card-name">Rose Lychee</div>
-          <div class="card-meta">
-            <span class="card-tag">N° 01</span>
-            <span class="card-price">¥ 48</span>
-          </div>
+        <div class="kpi-card">
+          <div class="top-dot" style="background:var(--macaron-blue);"></div>
+          <div class="k-label">Taux de réachat</div>
+          <div class="k-value">64<span class="unit">%</span></div>
+          <div class="k-delta">▲ programme fidélité +9 pp</div>
+          <div class="k-sub">Clients récurrents · 90 j</div>
+        </div>
+
+      </div>
+
+      <!-- Right: collection table -->
+      <div class="collection-panel">
+        <div class="panel-title">Tableau des 12 saveurs — Performance &amp; Stock</div>
+
+        <table class="collection-table">
+          <thead>
+            <tr>
+              <th style="width:5%"></th>
+              <th style="width:22%">Saveur</th>
+              <th style="width:14%">Prix</th>
+              <th style="width:14%">Ventes</th>
+              <th style="width:18%">Notation</th>
+              <th>Stock restant</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mac-dot" style="background:var(--macaron-pink);"></span></td>
+              <td class="serif">Rose Lychee</td>
+              <td class="price">¥ 48</td>
+              <td class="price">924 u.</td>
+              <td>
+                <div class="rating">
+                  <span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span>
+                </div>
+              </td>
+              <td>
+                <div class="stock-wrap">
+                  <div class="stock-bg"><div class="stock-fill" style="width:12%;background:var(--macaron-pink);"></div></div>
+                  <span class="stock-pct">12%</span>
+                  <span class="tag tag-best">Best</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mac-dot" style="background:var(--macaron-green);"></span></td>
+              <td class="serif">Pistache Vanille</td>
+              <td class="price">¥ 48</td>
+              <td class="price">810 u.</td>
+              <td>
+                <div class="rating">
+                  <span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot empty"></span>
+                </div>
+              </td>
+              <td>
+                <div class="stock-wrap">
+                  <div class="stock-bg"><div class="stock-fill" style="width:24%;background:var(--macaron-green);"></div></div>
+                  <span class="stock-pct">24%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mac-dot" style="background:var(--macaron-yellow);"></span></td>
+              <td class="serif">Citron Yuzu</td>
+              <td class="price">¥ 52</td>
+              <td class="price">742 u.</td>
+              <td>
+                <div class="rating">
+                  <span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot empty"></span>
+                </div>
+              </td>
+              <td>
+                <div class="stock-wrap">
+                  <div class="stock-bg"><div class="stock-fill" style="width:38%;background:var(--macaron-yellow);"></div></div>
+                  <span class="stock-pct">38%</span>
+                  <span class="tag tag-new">Nouv.</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mac-dot" style="background:var(--macaron-blue);"></span></td>
+              <td class="serif">Lavande Miel</td>
+              <td class="price">¥ 52</td>
+              <td class="price">638 u.</td>
+              <td>
+                <div class="rating">
+                  <span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot empty"></span>
+                </div>
+              </td>
+              <td>
+                <div class="stock-wrap">
+                  <div class="stock-bg"><div class="stock-fill" style="width:45%;background:var(--macaron-blue);"></div></div>
+                  <span class="stock-pct">45%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mac-dot" style="background:var(--macaron-purple);"></span></td>
+              <td class="serif">Violette Framboise</td>
+              <td class="price">¥ 56</td>
+              <td class="price">480 u.</td>
+              <td>
+                <div class="rating">
+                  <span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot empty"></span><span class="r-dot empty"></span>
+                </div>
+              </td>
+              <td>
+                <div class="stock-wrap">
+                  <div class="stock-bg"><div class="stock-fill" style="width:62%;background:var(--macaron-purple);"></div></div>
+                  <span class="stock-pct">62%</span>
+                  <span class="tag tag-ltd">Limité</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><span class="mac-dot" style="background:#f4c2a1;"></span></td>
+              <td class="serif">Caramel Fleur de Sel</td>
+              <td class="price">¥ 52</td>
+              <td class="price">326 u.</td>
+              <td>
+                <div class="rating">
+                  <span class="r-dot"></span><span class="r-dot"></span><span class="r-dot"></span><span class="r-dot empty"></span><span class="r-dot empty"></span>
+                </div>
+              </td>
+              <td>
+                <div class="stock-wrap">
+                  <div class="stock-bg"><div class="stock-fill" style="width:78%;background:#f4c2a1;"></div></div>
+                  <span class="stock-pct">78%</span>
+                  <span class="tag tag-new">Nouv.</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="summary-strip">
+          <span class="sk">Recommandation</span>
+          <span class="sv">Rose Lychee et Pistache Vanille représentent 29% du CA total avec moins de 25% de stock restant — envisager une production supplémentaire de 400 unités avant la semaine 10 pour éviter la rupture en boutique.</span>
         </div>
       </div>
-      <div class="card">
-        <div class="card-dot green"></div>
-        <div class="card-body">
-          <div class="card-name">Pistache Vanille</div>
-          <div class="card-meta">
-            <span class="card-tag">N° 02</span>
-            <span class="card-price">¥ 48</span>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-dot yellow"></div>
-        <div class="card-body">
-          <div class="card-name">Citron Yuzu</div>
-          <div class="card-meta">
-            <span class="card-tag">N° 03</span>
-            <span class="card-price">¥ 52</span>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
-
-  <div class="ribbon"></div>
-  <div class="product-circle">
-    <div class="num">12</div>
-    <div class="lab">saveurs</div>
-    <div class="sub">PRINTEMPS · 2026</div>
   </div>
 
   <div class="footer">
-    <span>PART 042 — NOUVELLE COLLECTION DE PRINTEMPS</span>
+    <span>MAISON SUCRÉE · RAPPORT DE VENTES</span>
     <div class="right">
-      <span class="swatch"></span>
-      <span>03 / 12 &nbsp;·&nbsp; MAISON SUCRÉE</span>
+      <span class="dot"></span>
+      <span>04 / 12 · COLLECTION PRINTEMPS 2026</span>
     </div>
   </div>
 </body>

@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>kindergarten_pop · 儿童教育 · World-Class Mock</title>
+<title>kindergarten_pop · 学期成果报告 · Detail</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&display=swap');
 
   :root {
     --bg-from: #fff8e7;
@@ -18,6 +18,8 @@
     --green-soft: #d6f8ec;
     --yellow: #ffd166;
     --yellow-soft: #fff1c9;
+    --orange: #ffaa5c;
+    --purple: #c9b3f5;
     --ink: #2a2a3a;
     --ink-soft: #6a6a7a;
     --display-font: 'Quicksand', 'Nunito', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
@@ -31,354 +33,401 @@
     color: var(--ink);
     font-family: var(--body-font);
     font-feature-settings: 'kern', 'liga', 'calt', 'ss01';
+    font-variant-numeric: tabular-nums;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     position: relative;
   }
 
+  /* Decorative blobs (background) */
   .blob {
-    position: absolute;
-    border-radius: 50%;
-    z-index: 0;
-    opacity: 0.85;
+    position: absolute; border-radius: 50%; z-index: 0; pointer-events: none;
   }
-  .blob-pink-tr {
-    top: -40px; right: -30px;
-    width: 220px; height: 220px;
-    background: radial-gradient(circle at 35% 35%, #ffd0d8 0%, var(--pink) 70%);
-    opacity: 0.55;
-  }
-  .blob-blue-bl {
-    bottom: -50px; left: -40px;
-    width: 180px; height: 180px;
-    background: radial-gradient(circle at 35% 35%, #b8e5f5 0%, var(--blue) 75%);
-    opacity: 0.5;
-  }
-  .blob-green-mid {
-    top: 280px; right: 240px;
-    width: 70px; height: 70px;
-    background: radial-gradient(circle at 35% 35%, #6ce5c0 0%, var(--green) 80%);
-    opacity: 0.35;
-  }
-  .blob-yellow-side {
-    top: 180px; right: -28px;
-    width: 90px; height: 90px;
-    background: radial-gradient(circle at 35% 35%, #ffe6a0 0%, var(--yellow) 80%);
-    opacity: 0.6;
-  }
+  .blob-pink-tr { top: -30px; right: -20px; width: 170px; height: 170px; background: radial-gradient(circle at 35% 35%, #ffd0d8 0%, var(--pink) 70%); opacity: 0.40; }
+  .blob-blue-bl { bottom: -40px; left: -30px; width: 150px; height: 150px; background: radial-gradient(circle at 35% 35%, #b8e5f5 0%, var(--blue) 75%); opacity: 0.38; }
+  .blob-green-tr2 { top: 200px; right: -20px; width: 80px; height: 80px; background: radial-gradient(circle at 35% 35%, #9af8da 0%, var(--green) 80%); opacity: 0.30; }
 
-  .star {
-    position: absolute;
-    z-index: 1;
-    font-size: 22px;
-    line-height: 1;
-    transform: rotate(-8deg);
+  /* Star emoji decorations */
+  .deco-star {
+    position: absolute; z-index: 1; font-size: 18px; pointer-events: none;
   }
-  .star-1 { top: 96px; right: 320px; font-size: 18px; transform: rotate(12deg); opacity: 0.95; }
-  .star-2 { bottom: 110px; right: 90px; font-size: 26px; transform: rotate(-14deg); opacity: 0.9; }
+  .deco-star-1 { top: 72px; right: 280px; font-size: 14px; opacity: 0.85; transform: rotate(15deg); }
+  .deco-star-2 { bottom: 88px; right: 72px; font-size: 20px; opacity: 0.80; transform: rotate(-10deg); }
 
-  .stage {
-    position: relative;
-    width: 100%; height: 100%;
-    padding: 56px 72px 0 72px;
+  /* PAGE LAYOUT */
+  .page {
+    position: absolute; inset: 0;
+    padding: 24px 52px 36px;
     display: flex; flex-direction: column;
-    z-index: 2;
+    z-index: 3;
   }
 
-  .top {
+  /* TOP BAR */
+  .topbar {
     display: flex; justify-content: space-between; align-items: center;
-    margin-bottom: 36px;
+    margin-bottom: 12px;
   }
   .logo {
     font-family: var(--display-font);
-    font-size: 18px; font-weight: 700;
-    letter-spacing: 0.01em;
+    font-size: 16px; font-weight: 700; letter-spacing: 0.01em;
     color: var(--ink);
-    display: flex; align-items: center; gap: 12px;
+    display: flex; align-items: center; gap: 10px;
   }
   .logo-emoji {
-    width: 44px; height: 44px;
-    border-radius: 16px;
+    width: 36px; height: 36px; border-radius: 12px;
     background: var(--cream);
     display: flex; align-items: center; justify-content: center;
-    font-size: 22px;
-    box-shadow: 0 4px 14px rgba(255, 182, 193, 0.35), inset 0 0 0 2px rgba(255,255,255,0.6);
+    font-size: 18px;
+    box-shadow: 0 3px 10px rgba(255, 182, 193, 0.28), inset 0 0 0 1.5px rgba(255,255,255,0.6);
   }
-  .done-badge {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 10px 18px;
-    background: var(--green);
-    color: #fff;
-    border-radius: 999px;
+  .eyebrow {
     font-family: var(--display-font);
-    font-size: 13px; font-weight: 700;
-    letter-spacing: 0.02em;
-    box-shadow: 0 6px 18px rgba(6, 214, 160, 0.32);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.18em;
+    color: #ff7a92; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
   }
-  .done-badge .check {
-    display: inline-flex;
-    width: 18px; height: 18px;
-    border-radius: 50%;
-    background: #fff;
-    color: var(--green);
-    align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 900;
-  }
-
-  .label {
-    display: inline-flex; align-items: center; gap: 10px;
-    font-family: var(--display-font);
-    font-size: 12px; font-weight: 700;
-    letter-spacing: 0.18em;
-    color: #ff7a92;
-    text-transform: uppercase;
-  }
-  .label-dot {
-    width: 8px; height: 8px; border-radius: 50%;
+  .eyebrow-dot {
+    width: 6px; height: 6px; border-radius: 50%;
     background: #ff7a92;
-    box-shadow: 0 0 0 4px rgba(255, 122, 146, 0.18);
+    box-shadow: 0 0 0 3px rgba(255,122,146,0.18);
+  }
+  .page-id {
+    font-family: var(--body-font);
+    font-size: 10px; color: var(--ink-soft); letter-spacing: 0.10em; text-transform: uppercase;
+    font-weight: 600;
   }
 
-  .headline {
+  /* RULE */
+  .rule {
+    height: 2px; border: 0; border-radius: 999px;
+    background: linear-gradient(90deg, var(--yellow) 0%, var(--pink) 40%, var(--blue) 80%, transparent 100%);
+    opacity: 0.45;
+    margin: 0 0 12px;
+  }
+
+  /* HEAD ROW */
+  .head-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-bottom: 12px;
+  }
+  .head-row h2 {
     font-family: var(--display-font);
-    font-weight: 700;
-    font-size: 56px;
-    line-height: 1.08;
-    letter-spacing: -0.015em;
-    margin-top: 18px;
+    font-size: 22px; font-weight: 700; letter-spacing: -0.015em;
     color: var(--ink);
   }
-  .headline .accent {
-    color: #ff7a92;
-    font-weight: 700;
-  }
-  .headline .balloon {
-    display: inline-block;
-    transform: translateY(-2px);
-  }
-
-  .deck {
+  .head-row h2 .accent { color: #ff7a92; }
+  .head-sub {
     font-family: var(--body-font);
-    font-size: 17px; line-height: 1.6;
-    color: var(--ink-soft);
-    max-width: 640px;
-    margin-top: 16px;
-    font-weight: 500;
-    letter-spacing: -0.003em;
+    font-size: 11px; color: var(--ink-soft); letter-spacing: 0.04em; font-weight: 500;
   }
 
-  .cards {
+  /* MAIN GRID: left metric stack + right activities table */
+  .main-grid {
+    flex: 1; min-height: 0;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 22px;
-    margin-top: 42px;
-    max-width: 880px;
+    grid-template-columns: 258px 1fr;
+    gap: 14px;
   }
-  .card {
+
+  /* LEFT: METRIC CARDS */
+  .metric-col {
+    display: flex; flex-direction: column; gap: 9px;
+  }
+
+  .metric-card {
     background: var(--cream);
-    border-radius: 28px;
-    padding: 24px 24px 22px 24px;
-    box-shadow: 0 10px 30px rgba(255, 200, 130, 0.18), inset 0 0 0 1.5px rgba(255,255,255,0.9);
-    display: flex; flex-direction: column; gap: 14px;
-    position: relative;
-    overflow: hidden;
+    border-radius: 22px;
+    padding: 13px 16px;
+    box-shadow: 0 8px 22px rgba(255, 200, 130, 0.14), inset 0 0 0 1.5px rgba(255,255,255,0.88);
+    display: flex; flex-direction: column; gap: 3px;
+    position: relative; overflow: hidden;
   }
-  .card-icon {
-    width: 56px; height: 56px;
-    border-radius: 18px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 28px;
+  .metric-card .top-line {
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    border-radius: 22px 22px 0 0;
   }
-  .card-icon.green { background: var(--green-soft); }
-  .card-icon.pink { background: var(--pink-soft); }
-  .card-icon.blue { background: var(--blue-soft); }
-
-  .card-num {
+  .metric-card .m-label {
     font-family: var(--display-font);
-    font-size: 36px; font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.02em;
-    line-height: 1;
+    font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 700;
+  }
+  .metric-card .m-value {
+    font-family: var(--display-font);
+    font-size: 36px; font-weight: 700; letter-spacing: -0.02em; line-height: 1;
     color: var(--ink);
-    display: flex; align-items: baseline; gap: 6px;
   }
-  .card-num .unit {
+  .metric-card .m-value .unit {
+    font-size: 14px; font-weight: 600; color: var(--ink-soft);
+    letter-spacing: 0; margin-left: 3px;
+  }
+  .metric-card .m-trend {
     font-family: var(--body-font);
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--ink-soft);
-    letter-spacing: 0;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
   }
-  .card-label {
+  .metric-card .m-sub {
     font-family: var(--body-font);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ink-soft);
-    letter-spacing: 0.02em;
+    font-size: 10px; color: var(--ink-soft); line-height: 1.4;
   }
+  .trend-green { color: var(--green); }
+  .trend-pink { color: #ff7a92; }
+  .trend-yellow { color: #d4950a; }
 
-  .card-1 .accent-line { background: var(--green); }
-  .card-2 .accent-line { background: var(--pink); }
-  .card-3 .accent-line { background: var(--blue); }
-  .accent-line {
-    position: absolute;
-    left: 24px; bottom: 14px;
-    width: 28px; height: 4px;
-    border-radius: 999px;
-  }
-
-  .bottom-pill-row {
-    position: absolute;
-    bottom: 36px; left: 72px;
-    display: flex; align-items: center; gap: 12px;
-    z-index: 3;
-  }
-  .pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 10px 18px;
-    border-radius: 999px;
-    font-family: var(--display-font);
-    font-size: 13px; font-weight: 700;
-    letter-spacing: 0.02em;
-  }
-  .pill-yellow {
-    background: var(--yellow);
-    color: #6b4a00;
-    box-shadow: 0 6px 16px rgba(255, 209, 102, 0.4);
-  }
-  .pill-yellow .pill-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #6b4a00;
-  }
-  .pill-pink {
-    background: var(--pink-soft);
-    color: #b14a5e;
-  }
-  .pill-pink .pill-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: #ff7a92;
-  }
-
-  .progress-card {
-    position: absolute;
-    bottom: 36px; right: 72px;
+  /* RIGHT: ACTIVITY TABLE PANEL */
+  .activity-panel {
     background: var(--cream);
-    border-radius: 24px;
-    padding: 14px 20px 14px 14px;
-    display: flex; align-items: center; gap: 14px;
-    box-shadow: 0 10px 26px rgba(135, 206, 235, 0.28), inset 0 0 0 1.5px rgba(255,255,255,0.9);
-    z-index: 3;
+    border-radius: 22px;
+    padding: 14px 18px;
+    box-shadow: 0 8px 22px rgba(135, 206, 235, 0.14), inset 0 0 0 1.5px rgba(255,255,255,0.88);
+    display: flex; flex-direction: column; gap: 10px;
   }
-  .ring-wrap {
-    position: relative;
-    width: 56px; height: 56px;
-  }
-  .ring-text {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
+  .panel-title {
     font-family: var(--display-font);
-    font-size: 14px; font-weight: 700;
-    color: var(--ink);
-    font-variant-numeric: tabular-nums;
-    letter-spacing: -0.01em;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #ff7a92;
   }
-  .progress-meta { display: flex; flex-direction: column; gap: 2px; }
-  .progress-title {
+
+  .activity-table {
+    width: 100%; border-collapse: collapse;
+  }
+  .activity-table th {
     font-family: var(--display-font);
-    font-size: 14px; font-weight: 700;
-    color: var(--ink);
-    letter-spacing: 0.01em;
+    font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-soft); font-weight: 700;
+    padding: 0 10px 7px 0; text-align: left;
+    border-bottom: 2px solid rgba(255,182,193,0.25);
   }
-  .progress-sub {
+  .activity-table td {
     font-family: var(--body-font);
-    font-size: 11px; font-weight: 600;
+    font-size: 11.5px; color: var(--ink); line-height: 1.4;
+    padding: 6.5px 10px 6.5px 0;
+    border-bottom: 1px solid rgba(42,42,58,0.07);
+    vertical-align: middle;
+    font-weight: 500;
+  }
+  .activity-table td.bold {
+    font-family: var(--display-font);
+    font-weight: 700; font-size: 12px; letter-spacing: -0.01em;
+  }
+  .activity-table td.muted { color: var(--ink-soft); font-size: 10.5px; }
+  .activity-table td .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 999px; font-size: 9px;
+    letter-spacing: 0.10em; text-transform: uppercase; font-weight: 700;
+    font-family: var(--display-font);
+  }
+  .badge-done { background: var(--green-soft); color: #067a5a; }
+  .badge-progress { background: var(--yellow-soft); color: #8a5e00; }
+  .badge-start { background: var(--blue-soft); color: #3a78aa; }
+  .badge-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+  }
+  .dot-green { background: var(--green); }
+  .dot-yellow { background: var(--yellow); }
+  .dot-blue { background: var(--blue); }
+
+  /* progress mini-bar */
+  .prog-wrap { display: flex; align-items: center; gap: 7px; }
+  .prog-bg {
+    flex: 1; height: 6px; border-radius: 999px;
+    background: rgba(42,42,58,0.08);
+  }
+  .prog-fill { height: 100%; border-radius: 999px; }
+  .prog-pct {
+    font-size: 10px; font-weight: 700; color: var(--ink-soft);
+    min-width: 28px; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* SUMMARY STRIP */
+  .summary-strip {
+    padding: 7px 0 0;
+    border-top: 1.5px solid rgba(255,182,193,0.22);
+    font-family: var(--display-font);
+    font-size: 11px; font-weight: 700; line-height: 1.4;
     color: var(--ink-soft);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+  }
+  .summary-strip .lk { display: inline; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #ff7a92; font-weight: 700; margin-right: 6px; }
+  .summary-strip .ls { color: var(--ink); }
+
+  /* FOOTER */
+  .footer {
+    position: absolute; bottom: 14px; left: 52px; right: 52px;
+    display: flex; justify-content: space-between;
+    font-family: var(--display-font);
+    font-size: 9.5px; color: var(--ink-soft); opacity: 0.60;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 600; z-index: 6;
   }
 </style>
 </head>
 <body>
   <div class="blob blob-pink-tr"></div>
   <div class="blob blob-blue-bl"></div>
-  <div class="blob blob-green-mid"></div>
-  <div class="blob blob-yellow-side"></div>
-  <div class="star star-1">⭐</div>
-  <div class="star star-2">⭐</div>
+  <div class="blob blob-green-tr2"></div>
+  <div class="deco-star deco-star-1">⭐</div>
+  <div class="deco-star deco-star-2">⭐</div>
 
-  <div class="stage">
-    <div class="top">
+  <div class="page">
+    <div class="topbar">
       <div class="logo">
-        <div class="logo-emoji">🎈</div>
+        <div class="logo-emoji">🌈</div>
         Little Explorer
       </div>
-      <div class="done-badge">
-        <span class="check">✓</span>
-        今日完成
+      <div class="eyebrow">
+        <div class="eyebrow-dot"></div>
+        学期成果报告
+      </div>
+      <div class="page-id">Spring Term · Week 12 / 16</div>
+    </div>
+    <hr class="rule">
+
+    <div class="head-row">
+      <div>
+        <h2>本学期 <span class="accent">学习里程碑</span> 总览</h2>
+        <p class="head-sub">记录 26 位小探索家在自然、语言、数学和艺术四大板块的成长轨迹 — 数据来自每日观察档案。</p>
       </div>
     </div>
 
-    <div class="label">
-      <span class="label-dot"></span>
-      学习日记 · DAY 12
-    </div>
+    <div class="main-grid">
+      <!-- Left: metric cards -->
+      <div class="metric-col">
 
-    <h1 class="headline">
-      一起 <span class="balloon">🎈</span><br>
-      探索 <span class="accent">世界</span> 的奥秘
-    </h1>
+        <div class="metric-card">
+          <div class="top-line" style="background: var(--green);"></div>
+          <div class="m-label">班级完成率</div>
+          <div class="m-value">84<span class="unit">%</span></div>
+          <div class="m-trend trend-green">▲ +12% vs 秋学期</div>
+          <div class="m-sub">26 名学员 · 春季 16 周</div>
+        </div>
 
-    <p class="deck">今天我们在花园里发现了好多小秘密 — 软软的苔藓、忙碌的小蚂蚁、还有迎着阳光开放的小花朵 ❤️</p>
+        <div class="metric-card">
+          <div class="top-line" style="background: var(--pink);"></div>
+          <div class="m-label">累计活动天数</div>
+          <div class="m-value">58<span class="unit">天</span></div>
+          <div class="m-trend trend-pink">♥ 含 12 次户外探索</div>
+          <div class="m-sub">室内 + 花园 + 社区徒步</div>
+        </div>
 
-    <div class="cards">
-      <div class="card card-1">
-        <div class="card-icon green">🌿</div>
-        <div class="card-num">12<span class="unit">种</span></div>
-        <div class="card-label">认识的植物</div>
-        <div class="accent-line"></div>
+        <div class="metric-card">
+          <div class="top-line" style="background: var(--yellow);"></div>
+          <div class="m-label">学习新词汇量</div>
+          <div class="m-value">340<span class="unit">个</span></div>
+          <div class="m-trend trend-yellow">★ 平均 21 词 / 周</div>
+          <div class="m-sub">中英双语 · 主题词卡积累</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="top-line" style="background: var(--blue);"></div>
+          <div class="m-label">亲子作品集</div>
+          <div class="m-value">96<span class="unit">件</span></div>
+          <div class="m-trend" style="color:var(--blue);">▲ 人均 3.7 件完成</div>
+          <div class="m-sub">绘画 + 手工 + 科学记录</div>
+        </div>
+
       </div>
-      <div class="card card-2">
-        <div class="card-icon pink">🐛</div>
-        <div class="card-num">5<span class="unit">只</span></div>
-        <div class="card-label">观察的昆虫</div>
-        <div class="accent-line"></div>
-      </div>
-      <div class="card card-3">
-        <div class="card-icon blue">🌸</div>
-        <div class="card-num">3<span class="unit">朵</span></div>
-        <div class="card-label">采集的花朵</div>
-        <div class="accent-line"></div>
+
+      <!-- Right: activity table -->
+      <div class="activity-panel">
+        <div class="panel-title">四大板块 · 活动进度追踪</div>
+
+        <table class="activity-table">
+          <thead>
+            <tr>
+              <th style="width:22%">板块</th>
+              <th style="width:26%">主题活动</th>
+              <th style="width:12%">周次</th>
+              <th style="width:12%">状态</th>
+              <th>班级进度</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="bold">🌿 自然科学</td>
+              <td class="muted">植物生长观察 + 昆虫日记</td>
+              <td class="bold">W1–W6</td>
+              <td><span class="badge badge-done"><span class="badge-dot dot-green"></span>已完成</span></td>
+              <td>
+                <div class="prog-wrap">
+                  <div class="prog-bg"><div class="prog-fill" style="width:100%;background:linear-gradient(90deg,var(--green),#00c48a);"></div></div>
+                  <span class="prog-pct">100%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="bold">📖 语言认知</td>
+              <td class="muted">故事复述 + 中英词卡配对</td>
+              <td class="bold">W3–W10</td>
+              <td><span class="badge badge-done"><span class="badge-dot dot-green"></span>已完成</span></td>
+              <td>
+                <div class="prog-wrap">
+                  <div class="prog-bg"><div class="prog-fill" style="width:92%;background:linear-gradient(90deg,var(--green),#7debb0);"></div></div>
+                  <span class="prog-pct">92%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="bold">🔢 数学启蒙</td>
+              <td class="muted">数感游戏 + 图形分类</td>
+              <td class="bold">W5–W13</td>
+              <td><span class="badge badge-progress"><span class="badge-dot dot-yellow"></span>进行中</span></td>
+              <td>
+                <div class="prog-wrap">
+                  <div class="prog-bg"><div class="prog-fill" style="width:75%;background:linear-gradient(90deg,var(--yellow),#ffcc40);"></div></div>
+                  <span class="prog-pct">75%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="bold">🎨 艺术创作</td>
+              <td class="muted">色彩混合 + 黏土塑形</td>
+              <td class="bold">W7–W14</td>
+              <td><span class="badge badge-progress"><span class="badge-dot dot-yellow"></span>进行中</span></td>
+              <td>
+                <div class="prog-wrap">
+                  <div class="prog-bg"><div class="prog-fill" style="width:68%;background:linear-gradient(90deg,var(--pink),#ffd0d8);"></div></div>
+                  <span class="prog-pct">68%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="bold">🏃 体能运动</td>
+              <td class="muted">平衡感 + 协调游戏训练</td>
+              <td class="bold">W10–W16</td>
+              <td><span class="badge badge-start"><span class="badge-dot dot-blue"></span>即将开始</span></td>
+              <td>
+                <div class="prog-wrap">
+                  <div class="prog-bg"><div class="prog-fill" style="width:20%;background:linear-gradient(90deg,var(--blue),#a8daee);"></div></div>
+                  <span class="prog-pct">20%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="bold">🎵 音乐感知</td>
+              <td class="muted">节奏打击乐 + 童谣演唱</td>
+              <td class="bold">W12–W16</td>
+              <td><span class="badge badge-start"><span class="badge-dot dot-blue"></span>即将开始</span></td>
+              <td>
+                <div class="prog-wrap">
+                  <div class="prog-bg"><div class="prog-fill" style="width:8%;background:linear-gradient(90deg,var(--purple),#b8a0e8);"></div></div>
+                  <span class="prog-pct">8%</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="summary-strip">
+          <span class="lk">教师建议</span>
+          <span class="ls">数学启蒙的数感游戏环节建议增加操作材料种类，以照顾不同学习风格；艺术板块可提前至 W13 前收尾，为体能模块预留充足活动场地时间。</span>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="bottom-pill-row">
-    <div class="pill pill-yellow">
-      <span class="pill-dot"></span>
-      第 12 天 · 自然观察
-    </div>
-    <div class="pill pill-pink">
-      <span class="pill-dot"></span>
-      春季启蒙营
-    </div>
-  </div>
-
-  <div class="progress-card">
-    <div class="ring-wrap">
-      <svg viewBox="0 0 56 56" style="width:100%;height:100%;">
-        <circle cx="28" cy="28" r="22" fill="none" stroke="#fff1c9" stroke-width="6"/>
-        <circle cx="28" cy="28" r="22" fill="none" stroke="#ffd166" stroke-width="6"
-                stroke-dasharray="103 138" stroke-linecap="round"
-                transform="rotate(-90 28 28)"/>
-      </svg>
-      <div class="ring-text">75%</div>
-    </div>
-    <div class="progress-meta">
-      <div class="progress-title">本周进度</div>
-      <div class="progress-sub">Week 03 / 04</div>
-    </div>
+  <div class="footer">
+    <span>LITTLE EXPLORER · SPRING TERM REPORT</span>
+    <span>02 / 08 · CLASS LOG</span>
   </div>
 </body>
 </html>
