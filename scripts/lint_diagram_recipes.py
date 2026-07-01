@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""lint_diagram_recipes.py — structural + pipeline-safety lint for diagram recipes.
+"""lint_diagram_recipes.py — structural + pipeline-safety lint for block recipes.
 
-Checks the diagram recipe family files against the contract pinned in
-docs/specs/diagram-consistency-system/spec.md:
+Covers the diagram recipe family files, timeline.md, and worksheet.md. Checks
+the recipe contract pinned in docs/specs/diagram-consistency-system/spec.md:
 
   1. Each recipe (a `### <name> (<id>)` heading) carries the five bold-label
      markers in any order: 何时用 / 数据格式 / 模板(or HTML 模板) / 自检 / 管线安全.
@@ -32,7 +32,13 @@ RECIPE_HEADING = re.compile(r"^###\s+.*\(.+\)\s*$")
 FENCE = re.compile(r"```[a-zA-Z0-9]*\n(.*?)```", re.DOTALL)
 MARKERS = ["何时用", "数据格式", ("模板", "HTML 模板"), "自检", "管线安全"]
 
-COLOR_WHITELIST = {"#22c55e", "#ef4444"}
+# trend colors (#22c55e/#ef4444) + worksheet status-block semantic signal colors
+# (ok / warn, with their -soft tints) — both are semantic-constant carve-outs
+# documented in blocks/worksheet.md + styles/light.md §10, not theme colors.
+COLOR_WHITELIST = {
+    "#22c55e", "#ef4444",
+    "#1f7a3a", "#e9f5ed", "#b35900", "#fef3e6",
+}
 # 8-digit before 6-digit before 3-digit so #rrggbbaa is caught (not truncated to 6)
 HEX = re.compile(r"#[0-9a-fA-F]{8}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b")
 RGB = re.compile(r"\brgba?\(", re.IGNORECASE)
@@ -115,7 +121,10 @@ def main() -> int:
         print(f"ERROR: {blocks_dir} not found", file=sys.stderr)
         return 1
 
-    targets = sorted(blocks_dir.glob("diagram*.md")) + [blocks_dir / "timeline.md"]
+    targets = sorted(blocks_dir.glob("diagram*.md")) + [
+        blocks_dir / "timeline.md",
+        blocks_dir / "worksheet.md",
+    ]
     targets = [t for t in targets if t.exists()]
 
     all_findings: list[str] = []

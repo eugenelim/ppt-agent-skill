@@ -28,7 +28,7 @@
 | 14 | `champagne_gold` | 浅色高级 | 香槟金 | 婚庆 / 宴会 / 庆典 | [light.md](light.md) |
 | 15 | `liquid_glass` | 浅色高级 | iOS 26 / visionOS | XR / AR / 苹果生态 | [light.md](light.md) |
 | 16 | `editorial_paper` | 浅色高级 | 温润研究手记 | 研究/出版/白皮书/思考型汇报 | [light.md](light.md) |
-| 17 | `schematic_blueprint` | 浅色高级 | 工程蓝图线稿 | 架构/系统/建模/图解密集（线稿图解）| [light.md](light.md) |
+| 17 | `schematic_blueprint` | 浅色高级 | 工程交付 Runbook | 架构/系统/交付手册/责任矩阵/图解密集（线稿+黑表头 worksheet）| [light.md](light.md) |
 | 18 | `vibrant_rainbow` | 活力鲜明 | Stripe Sessions | 营销 / 创作者 | [vibrant.md](vibrant.md) |
 | 19 | `kindergarten_pop` | 活力鲜明 | Quicksand 童趣 | 儿童教育 / 启蒙 | [vibrant.md](vibrant.md) |
 | 20 | `bauhaus_block` | 活力鲜明 | Bauhaus / Swiss | 教育 / 创意品牌 | [vibrant.md](vibrant.md) |
@@ -56,7 +56,7 @@
 | 企业 / 培训 / 商务 / 金融 | 浅色高级 | `blue_white` |
 | 学术 / 研究 / 白皮书 / 法务 | 浅色高级 | `minimal_gray` 或 `mocha_editorial` |
 | 研究手记 / 思考型汇报 / 温润出版 | 浅色高级 | `editorial_paper` |
-| 架构 / 系统 / 建模 / 图解密集（想要线稿图解）| 浅色高级 | `schematic_blueprint` |
+| 架构 / 系统 / 交付手册 / 责任矩阵 / 图解密集（想要线稿+黑表头 worksheet）| 浅色高级 | `schematic_blueprint` |
 | 医疗 / 医药 / 健康 | 浅色高级 | `medical_pulse` |
 | 建筑 / 工业 / 制造 | 浅色高级 | `earth_concrete` |
 | 婚礼 / 庆典 / 颁奖 | 浅色高级 | `champagne_gold` |
@@ -191,7 +191,7 @@
 ## 4. 兼容性
 
 - 8 个原 `style_id`（`dark_tech` / `xiaomi_orange` / `blue_white` / `royal_red` / `fresh_green` / `luxury_purple` / `minimal_gray` / `vibrant_rainbow`）保留不变，但视觉按世界级标杆重做。
-- 18 个新风格使用诗意新名。
+- 20 个新风格使用诗意新名（含较晚加入的 `editorial_paper` / `schematic_blueprint`）。
 - 旧的 `references/style-system.md` 改为引导文件，redirect 到本目录。
 - Prompt #4 中所有原字段保持兼容；新字段（`mood_keywords` / `design_soul` / `decoration_dna` / `typography` / `decorations`）为可选注入。
 
