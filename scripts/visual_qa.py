@@ -440,6 +440,249 @@ def check_html_contracts(html_path: Path, planning_path: Path | None) -> list[di
     return results
 
 
+# ─────────────────── 视觉一致性检查（diagram-consistency-system） ───────────────────
+# 这些检查都是 WARN 级（绝不 FAIL），不会阻塞良好页面的 FINALIZE。
+# 阈值是命名常量、fixture 校准，留待后续微调。
+
+TREND_COLORS = {"#22c55e", "#ef4444"}
+# 8-digit before 6 before 3 so #rrggbbaa isn't truncated to a 6-digit match
+_HEX_RE = re.compile(r"#[0-9a-fA-F]{8}\b|#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b")
+_RGB_RE = re.compile(r"\brgba?\(", re.IGNORECASE)
+_ROOT_RE = re.compile(r":root\s*\{(.*?)\}", re.DOTALL)
+_FONT_SIZE_RE = re.compile(r"font-size\s*:\s*(\d+(?:\.\d+)?)px", re.IGNORECASE)
+_RADIUS_RE = re.compile(r"border-radius\s*:\s*(\d+(?:\.\d+)?)px", re.IGNORECASE)
+_SPACING_RE = re.compile(r"(?:gap|margin|padding)\s*:\s*(\d+(?:\.\d+)?)px", re.IGNORECASE)
+
+# 阈值常量
+PAL_OFFPALETTE_WARN = 0.15      # 离色像素占比 > 15% → WARN
+PAL_COLOR_DIST = 60             # RGB 距离 > 此值视为离色
+RAD_MAX_DISTINCT = 3            # 不同圆角值 > 3 种 → WARN
+ALIGN_OFFGRID_WARN = 0.40       # 不在 4px 栅格上的间距占比 > 40% → WARN
+
+
+def _hex_to_rgb(h: str) -> tuple[int, int, int]:
+    h = h.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+
+
+def parse_root_palette(html_text: str) -> list[tuple[int, int, int]]:
+    """从 HTML 的 :root 提取调色板（hex 颜色变量值）。"""
+    palette: list[tuple[int, int, int]] = []
+    for block in _ROOT_RE.findall(html_text):
+        for hx in _HEX_RE.findall(block):
+            try:
+                palette.append(_hex_to_rgb(hx))
+            except ValueError:
+                pass
+    return palette
+
+
+def _strip_root(html_text: str) -> str:
+    return _ROOT_RE.sub("", html_text)
+
+
+def check_hardcoded_colors(html_text: str) -> dict:
+    """HEX-01：HTML 正文（:root 之外）的硬编码颜色 = 脱离主题。"""
+    body = _strip_root(html_text)
+    hits = [h for h in _HEX_RE.findall(body) if h.lower() not in TREND_COLORS]
+    rgb_hits = len(re.findall(r"\brgba?\(", body, re.IGNORECASE))
+    total = len(hits) + rgb_hits
+    if total > 0:
+        sample = ", ".join(sorted(set(hits))[:4]) or "rgb()"
+        return {"id": "HEX-01", "status": "WARN",
+                "msg": f"检测到 {total} 处硬编码颜色（{sample}…），建议改用 CSS 变量绑定主题"}
+    return {"id": "HEX-01", "status": "PASS", "msg": "正文未见硬编码颜色（趋势色除外）"}
+
+
+def check_type_scale(html_text: str) -> dict:
+    """TYPE-01：是否存在可辨识的字号层级。"""
+    sizes = sorted({float(s) for s in _FONT_SIZE_RE.findall(html_text)})
+    if len(sizes) < 2:
+        return {"id": "TYPE-01", "status": "WARN",
+                "msg": f"仅 {len(sizes)} 种字号，缺乏字号层级（标题/正文/标注应拉开）"}
+    ratio = sizes[-1] / sizes[0] if sizes[0] else 0
+    return {"id": "TYPE-01", "status": "PASS",
+            "msg": f"字号层级 {len(sizes)} 级，最大/最小 = {ratio:.1f}×"}
+
+
+def check_corner_radius(html_text: str) -> dict:
+    """RAD-01：圆角值是否过于杂乱（呼应既有 P2-1）。"""
+    radii = {float(r) for r in _RADIUS_RE.findall(html_text)}
+    if len(radii) > RAD_MAX_DISTINCT:
+        return {"id": "RAD-01", "status": "WARN",
+                "msg": f"{len(radii)} 种不同圆角 {sorted(radii)}，建议统一为 var(--card-radius)（参见 P2-1）"}
+    return {"id": "RAD-01", "status": "PASS", "msg": f"圆角值 {sorted(radii) or '—'} 一致"}
+
+
+def check_alignment_rhythm(html_text: str) -> dict:
+    """ALIGN-01：间距是否落在 4px 栅格上（间距韵律）。"""
+    vals = [float(v) for v in _SPACING_RE.findall(html_text)]
+    if not vals:
+        return {"id": "ALIGN-01", "status": "PASS", "msg": "未检测到显式间距"}
+    off = [v for v in vals if v % 4 != 0]
+    ratio = len(off) / len(vals)
+    if ratio > ALIGN_OFFGRID_WARN:
+        return {"id": "ALIGN-01", "status": "WARN",
+                "msg": f"{ratio:.0%} 的间距不在 4px 栅格上（如 {sorted(set(off))[:5]}），节奏零碎"}
+    return {"id": "ALIGN-01", "status": "PASS", "msg": f"间距基本落在 4px 栅格（off={ratio:.0%}）"}
+
+
+def _card_region(html_text: str, card_id: str) -> str:
+    """取某张卡片 data-card-id 起、到下一张 data-card-id（或文末）的 HTML 片段。"""
+    anchors = [f'data-card-id="{card_id}"', f"data-card-id='{card_id}'"]
+    start = -1
+    for a in anchors:
+        start = html_text.find(a)
+        if start != -1:
+            break
+    if start == -1:
+        return ""
+    nxt = re.search(r"data-card-id\s*=", html_text[start + 20:])
+    end = (start + 20 + nxt.start()) if nxt else len(html_text)
+    return html_text[start:end]
+
+
+def check_diagram_theme_binding(html_text: str, planning_path: Path | None) -> dict | None:
+    """DTHEME-01：diagram 卡自身区域内是否有硬编码颜色（未绑定主题）。"""
+    page = load_planning_page(planning_path) if planning_path else None
+    if not isinstance(page, dict):
+        return None
+    diagram_ids = [
+        str(c.get("card_id")).strip()
+        for c in page.get("cards", [])
+        if isinstance(c, dict) and str(c.get("card_type", "")).strip() == "diagram" and c.get("card_id")
+    ]
+    if not diagram_ids:
+        return None
+    offenders: list[str] = []
+    scanned = 0
+    for cid in diagram_ids:
+        region = _card_region(html_text, cid)
+        if not region:
+            continue
+        scanned += 1
+        hard = [h for h in _HEX_RE.findall(region) if h.lower() not in TREND_COLORS]
+        if hard or _RGB_RE.search(region):
+            offenders.append(cid)
+    if not scanned:
+        return {"id": "DTHEME-01", "status": "WARN",
+                "msg": f"planning 有 diagram 卡 {diagram_ids} 但 HTML 中找不到对应 data-card-id 区域"}
+    if offenders:
+        return {"id": "DTHEME-01", "status": "WARN",
+                "msg": f"diagram 卡 {offenders} 区域内含硬编码颜色，未绑定主题契约变量"}
+    return {"id": "DTHEME-01", "status": "PASS", "msg": f"{scanned} 张 diagram 卡均绑定主题变量"}
+
+
+def check_palette_adherence(img: Image.Image, palette: list[tuple[int, int, int]]) -> dict:
+    """PAL-01：离色像素占比（相对 :root 调色板）。无调色板来源则 WARN 提示。"""
+    if not palette:
+        return {"id": "PAL-01", "status": "WARN", "msg": "无法从 :root 读取调色板，跳过离色检测"}
+    small = img.resize((96, 54), Image.LANCZOS)
+    pixels = list(small.getdata())
+    off = 0
+    counted = 0
+    for p in pixels:
+        r, g, b = p[:3]
+        bright = (r + g + b) / 3
+        if bright < 24 or bright > 232:  # 跳过近黑/近白中性
+            continue
+        counted += 1
+        nearest = min((abs(r - cr) + abs(g - cg) + abs(b - cb)) for cr, cg, cb in palette)
+        if nearest > PAL_COLOR_DIST:
+            off += 1
+    if counted == 0:
+        return {"id": "PAL-01", "status": "PASS", "msg": "页面以中性色为主，无离色"}
+    ratio = off / counted
+    if ratio > PAL_OFFPALETTE_WARN:
+        return {"id": "PAL-01", "status": "WARN",
+                "msg": f"{ratio:.0%} 的着色像素偏离 :root 调色板，疑似脱离主题"}
+    return {"id": "PAL-01", "status": "PASS", "msg": f"着色像素 {1 - ratio:.0%} 贴合调色板"}
+
+
+# ─────────────────── 全 deck 跨页一致性聚合（DECK-*） ───────────────────
+# 仅在批量模式（多页）运行，输出 deck 级别裁定。阈值为 fixture 校准的暂定常量。
+
+DECK_PAL_JACCARD = 0.5     # 调色板 Jaccard 相似度 < 0.5 → 与 deck 主调不一致
+DECK_BG_DIST = 48          # 主背景色与 deck 众数 RGB 距离 > 48 → 背景漂移
+DECK_TYPE_DELTA = 2        # 顶部字号集合与 deck 众数相差 > 2 → 字号阶梯漂移
+
+
+def deck_signal(png: Path, html_path: Path | None) -> dict:
+    """采集单页的 deck 级信号：主背景色 + 调色板 + 顶部字号集合。"""
+    sig: dict = {"name": png.name, "bg": None, "palette": frozenset(), "sizes": frozenset()}
+    try:
+        img = Image.open(png).convert("RGB")
+        small = img.resize((64, 36), Image.LANCZOS)
+        counts: dict[tuple, int] = {}
+        for p in small.getdata():
+            q = (p[0] // 16 * 16, p[1] // 16 * 16, p[2] // 16 * 16)
+            counts[q] = counts.get(q, 0) + 1
+        sig["bg"] = max(counts, key=counts.get)
+    except Exception:
+        pass
+    if html_path and Path(html_path).exists():
+        text = Path(html_path).read_text(encoding="utf-8")
+        sig["palette"] = frozenset(h.lower() for h in _HEX_RE.findall("".join(_ROOT_RE.findall(text))))
+        sizes = sorted({float(s) for s in _FONT_SIZE_RE.findall(text)}, reverse=True)
+        sig["sizes"] = frozenset(sizes[:4])
+    return sig
+
+
+def _mode(items: list):
+    """返回出现最频繁的元素（众数）。"""
+    freq: dict = {}
+    for it in items:
+        freq[it] = freq.get(it, 0) + 1
+    return max(freq, key=freq.get) if freq else None
+
+
+def check_deck_consistency(signals: list[dict]) -> list[dict]:
+    """跨页一致性聚合。返回 DECK-* 结果列表（含每个漂移页 + 总裁定）。"""
+    results: list[dict] = []
+    if len(signals) < 2:
+        return results
+
+    # DECK-PAL-01：调色板一致性（同一 style.json 应产生相同 :root）
+    palettes = [s["palette"] for s in signals if s["palette"]]
+    if palettes:
+        modal = _mode(palettes)
+        drift = []
+        for s in signals:
+            if not s["palette"]:
+                continue
+            inter = len(s["palette"] & modal)
+            union = len(s["palette"] | modal) or 1
+            if inter / union < DECK_PAL_JACCARD:
+                drift.append(s["name"])
+        results.append({"id": "DECK-PAL-01",
+                        "status": "WARN" if drift else "PASS",
+                        "msg": f"调色板漂移页: {drift}" if drift else f"全 {len(palettes)} 页调色板一致"})
+
+    # DECK-BG-01：主背景色一致性
+    bgs = [s["bg"] for s in signals if s["bg"]]
+    if bgs:
+        modal_bg = _mode(bgs)
+        drift = [s["name"] for s in signals if s["bg"] and
+                 sum(abs(a - b) for a, b in zip(s["bg"], modal_bg)) > DECK_BG_DIST]
+        results.append({"id": "DECK-BG-01",
+                        "status": "WARN" if drift else "PASS",
+                        "msg": f"背景色漂移页: {drift}（deck 众数 RGB{modal_bg}）" if drift
+                               else f"全 deck 主背景色一致 RGB{modal_bg}"})
+
+    # DECK-TYPE-01：字号阶梯一致性
+    sizesets = [s["sizes"] for s in signals if s["sizes"]]
+    if sizesets:
+        modal_sizes = _mode(sizesets)
+        drift = [s["name"] for s in signals if s["sizes"] and
+                 len(s["sizes"] ^ modal_sizes) > DECK_TYPE_DELTA]
+        results.append({"id": "DECK-TYPE-01",
+                        "status": "WARN" if drift else "PASS",
+                        "msg": f"字号阶梯漂移页: {drift}" if drift else "全 deck 字号阶梯一致"})
+    return results
+
+
 # ─────────────────────── 主逻辑 ───────────────────────
 
 def run_checks(
@@ -474,6 +717,18 @@ def run_checks(
 
     if html_path:
         results.extend(check_html_contracts(html_path, planning_path))
+
+    # 视觉一致性检查（WARN 级；HTML 可用时基于 HTML，调色板取自 :root）
+    if html_path and Path(html_path).exists():
+        html_text = Path(html_path).read_text(encoding="utf-8")
+        results.append(check_palette_adherence(img, parse_root_palette(html_text)))
+        results.append(check_hardcoded_colors(html_text))
+        results.append(check_type_scale(html_text))
+        results.append(check_corner_radius(html_text))
+        results.append(check_alignment_rhythm(html_text))
+        dtheme = check_diagram_theme_binding(html_text, planning_path)
+        if dtheme is not None:
+            results.append(dtheme)
 
     return results
 
@@ -572,6 +827,7 @@ def main():
     total_fails = 0
     total_warns = 0
     report_lines: list[str] = []
+    deck_signals: list[dict] = []
 
     for png in pngs:
         # 自动推断 planning 路径
@@ -593,6 +849,17 @@ def main():
         print("\n".join(lines))
         total_fails += f
         total_warns += w
+        deck_signals.append(deck_signal(png, hh))
+
+    # 全 deck 跨页一致性聚合（仅多页时）
+    if len(pngs) > 1:
+        deck_results = check_deck_consistency(deck_signals)
+        if deck_results:
+            dlines, df, dw = build_report_lines("DECK · 跨页一致性聚合", deck_results)
+            report_lines.extend(dlines)
+            print("\n".join(dlines))
+            total_fails += df
+            total_warns += dw
 
     summary_lines = [
         f"\n{'=' * 60}",

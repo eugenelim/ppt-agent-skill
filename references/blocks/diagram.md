@@ -1,32 +1,100 @@
 # diagram（图解块）-- 结构的星图
 
-> 适用数据类型：hierarchies / architecture_diagram / cycle_flow / decision_tree / pyramid_layers / stakeholder_map。
-> 结构：nodes[]节点 + edges[]连线，支持 layered/radial/tree/flowchart 四种布局模式。
-> 实现方式不限：CSS Grid嵌套盒子、内联SVG节点连线、Flexbox+伪元素连接线。
-> 推荐 card_style：transparent（自带视觉骨架，方块包裹会干扰）。推荐布局：single-focus / t-shape。
+> 适用数据类型：hierarchies / architecture_diagram / cycle_flow / decision_tree / pyramid_layers / stakeholder_map / process / project_plan。
+> 本文件是**选择器 + 主题契约 + 共享基元**，永远随 `card_type:diagram` 注入。具体的每类图解配方在按需加载的 family 文件里（见下表），由 planning 的 `block_refs` 选取，避免一次灌入全部配方。
+> 推荐 card_style：transparent（图解自带视觉骨架，方块包裹是画蛇添足）。推荐布局：single-focus / t-shape。
+> **管线铁律**：本块所有配方走 HTML→SVG→PPTX，必须遵守 [pipeline-compat.md](../pipeline-compat.md)。箭头用内联 SVG `<polygon>`，连线用真实 `<div>` 或 SVG `<line>`/`<path>`，文字标注一律 HTML 叠加（禁 SVG `<text>`）。
 
-## JSON 结构
-```json
-{
-  "card_type": "diagram",
-  "diagram_type": "pyramid | flowchart | hub-spoke | layers | cycle",
-  "nodes": [
-    {"id": "1", "label": "节点名", "description": "描述（20字内）", "level": 1, "connects_to": ["2","3"]}
-  ]
+## 配方选择器（diagram_type → family 文件 → block_ref）
+
+按 `diagram_type` 在 planning 的 `resources.block_refs` 里加上对应 family 文件名，HTML 阶段只会注入用到的那一族。
+
+| diagram_type | 何时用 | family 文件 / block_ref |
+|--------------|--------|------------------------|
+| `flowchart` `swimlane` `sequence` `state-machine` `data-flow` | 步骤/决策逻辑、谁做哪步、时序消息、状态机、数据流 | `diagram-process-flow` |
+| `architecture-component` `architecture-deployment` `er-data-model` `layers` | 组件/分层架构、部署/云/网络拓扑、数据模型、技术栈分层 | `diagram-architecture` |
+| `gantt` `dependency-network` `org-tree` `kanban` | 排期/路线图/里程碑、依赖网络/PERT、组织树/WBS、看板 | `diagram-project` |
+| `mind-map` `matrix-quadrant` `venn` `pyramid` `funnel` `cycle` `hub-spoke` `onion` `fishbone` | 思维导图、矩阵/象限(含 SWOT/RACI/风险)、韦恩、金字塔、漏斗、循环/飞轮、中心辐射、同心圆、鱼骨 | `diagram-concept` |
+
+> 兼容旧枚举：`pyramid` / `flowchart` / `hub-spoke` / `cycle` / `layers` 仍各自有同名配方（`layers` 为分层栈，归在 architecture family），不改名、不别名。
+
+## 主题契约（强制 -- 这是图解"有主题"的根）
+
+图解不得自带调色板。每个图解根容器先把**局部语义变量**绑定到 deck 的 CSS 变量，所有节点/连线/文字只引用这些局部变量；换风格时整张图随 `:root` 自动改色，节点内部零硬编码颜色。
+
+```css
+.diagram {
+  --node-bg-from: var(--card-bg-from);   /* 节点底色（渐变起） */
+  --node-bg-to:   var(--card-bg-to);     /* 节点底色（渐变止） */
+  --node-border:  var(--card-border);    /* 节点描边 */
+  --node-radius:  var(--card-radius, 8px);
+  --node-fg:      var(--text-primary);   /* 节点主文字 */
+  --node-fg-dim:  var(--text-secondary); /* 节点次文字/标注 */
+  --edge:         var(--card-border);    /* 普通连线 */
+  --edge-strong:  var(--accent-1);       /* 强调连线/关键路径 */
+  --node-accent:  var(--accent-1);       /* 焦点/高亮节点 */
+  --node-accent-2:var(--accent-2);       /* 第二强调（分组/对比） */
+  --label-font:   var(--font-primary);
+  font-family: var(--label-font);
 }
 ```
 
-## 子类型的灵动设计思维
+内联 SVG 直接引用这些变量：`stroke="var(--edge)"`、`fill="var(--node-accent)"`（CSS 变量会被继承进内联 SVG）。**禁止**在节点/连线里写 `#xxxxxx`、`rgb(...)`；唯一例外是趋势绿 `#22c55e` / 红 `#ef4444`。
 
-| diagram_type | 视觉灵魂 | 灵动手法 |
-|-------------|---------|---------|
-| pyramid | 权力/重要性的阶层感 | 让底层宽厚扎实、顶层锐利紧凑，层与层之间可以有微妙的光影渐变暗示"越往上越珍贵" |
-| flowchart | 因果链的推动力 | 节点之间的连线不必死板横平竖直，可以用曲线暗示"流动"；箭头的大小可以随重要性变化 |
-| hub-spoke | 中心辐射的控制力 | 中心大圆是不可动摇的核心，周围小圆是它的触角。可以让某些辐射臂更粗更显眼（代表更重要的分支） |
-| layers | 技术栈/抽象层级的纵深 | 从上到下颜色渐深或渐浅，制造"地层沉积"的纵深感。层与层之间允许微妙的交错线暗示"层间通信" |
-| cycle | 循环往复的韵律 | 节点沿轨迹排列，弧线连接暗示"永不停歇的循环"。可以让某个节点特别突出表示"当前阶段" |
+## 共享基元（所有 family 配方复用，均为管线安全写法）
 
-## 实现指引
-- 节点间关系用内联 SVG 连线、CSS border、伪元素等均可，选择最佳视觉效果
-- 文字标注可用 HTML 元素或 SVG `<text>`，按场景灵活选择
-- 推荐 `transparent` card_style -- 图解自带节点连线的视觉骨架
+### 1. 节点盒（themed node）
+```html
+<div style="
+  display:flex; flex-direction:column; gap:4px; justify-content:center;
+  min-width:120px; min-height:56px; padding:12px 16px; box-sizing:border-box;
+  background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
+  border:1px solid var(--node-border); border-radius:var(--node-radius);
+  color:var(--node-fg); font-size:14px; line-height:1.4;
+">
+  <span style="font-weight:700;">节点标题</span>
+  <span style="font-size:12px; color:var(--node-fg-dim);">描述（可选）</span>
+</div>
+```
+焦点节点：`border-color:var(--node-accent); box-shadow:0 0 0 1px var(--node-accent);` 或 `background:var(--node-accent); color:var(--card-bg-from);`。
+
+### 2. 连线（connector）-- 真实元素，禁伪元素
+```html
+<!-- 直线：真实 div（水平） -->
+<div style="height:2px; background:var(--edge); align-self:center; flex:1;"></div>
+<!-- 折线 / 曲线 / 斜线：内联 SVG path/line，overflow 可溢出格子 -->
+<svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:40px;overflow:visible;display:block;">
+  <path d="M0 20 H50 V4 H100" fill="none" stroke="var(--edge)" stroke-width="2"/>
+</svg>
+```
+
+### 3. 箭头（arrowhead）-- 内联 SVG `<polygon>`，禁 CSS border 三角形
+```html
+<svg viewBox="0 0 120 16" preserveAspectRatio="none" style="width:100%;height:16px;overflow:visible;display:block;">
+  <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="2"/>
+  <polygon points="104,2 118,8 104,14" fill="var(--edge-strong)"/>
+</svg>
+```
+（需要随路径旋转时，手动给 polygon 算好顶点坐标；不依赖 `<marker orient>`，下游渲染器对其支持不稳。）
+
+### 4. 文字标注 -- HTML 绝对定位叠加，禁 SVG `<text>`
+```html
+<div style="position:relative;">
+  <svg viewBox="0 0 200 100" style="width:100%;height:100%;"><!-- 只画图形 --></svg>
+  <span style="position:absolute; left:30%; top:40%; font-size:12px; color:var(--node-fg-dim);">标注</span>
+</div>
+```
+
+### 5. 8px 栅格纪律（让图"工整如工程图"）
+- 节点放置用 CSS Grid（`display:grid; gap:16px` 等 8 的倍数）或 Flex；同层节点等宽等高。
+- 所有 padding/gap/偏移取 4/8/16/24/32px。
+- `align-items:center; justify-items:center` 让节点在格内光学居中。
+- 连线 SVG 用 `overflow:visible` 以越出所在格连到相邻节点。
+
+## 管线安全自检（每个 family 配方都要过）
+- [ ] 颜色/字体全部来自主题契约的局部变量（无硬编码，趋势绿红除外）
+- [ ] 内联 SVG 内**无 `<text>`**；标注全是 HTML 叠加
+- [ ] 箭头是 SVG `<polygon>`；无 CSS border 三角形（`width:0` 技巧）
+- [ ] 连线是真实 `<div>` 或 SVG `<line>`/`<path>`；无 `::before`/`::after` 装饰内容
+- [ ] 无 `mask-image` / `conic-gradient` / `background-clip:text` / `mix-blend-mode`
+- [ ] 节点撑开用 `min-width`/`min-height`，`box-sizing:border-box`，防坍缩

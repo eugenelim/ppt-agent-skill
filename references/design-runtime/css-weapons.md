@@ -32,6 +32,7 @@
 ```
 **适用**：对比页中推荐方案的卡片、章节封面的装饰色块、accent 色带。
 **ADAPT**：斜切角度 / 裁切方向（底/左/右/对角） / 裁切比例 80%-95%
+**管线安全**：`clip-path:polygon()` 转换基本稳定，但严格管线下偶有精度损失；**必须保形的图解形状**（金字塔/漏斗/菱形决策框）改用内联 SVG `<polygon>`（见 pipeline-compat.md）。装饰色块用 clip-path 可接受。
 
 ---
 
@@ -46,6 +47,7 @@
 ```
 **适用**：封面/结束页的聚光灯效果，数据页的焦点穿孔。
 **ADAPT**：椭圆尺寸 200-500px / 焦点位置 / 方向（径向/线性消融）
+**管线安全**：`mask-image` 在 HTML→SVG→PPTX 中**图片会整张消失**（pipeline-compat.md §1）。导出 PPTX 时改用 `<div>` 遮罩层（`linear-gradient`/`radial-gradient` 背景）或 `overflow:hidden`+渐隐 div；mask 仅限纯 HTML 预览。
 
 ---
 
@@ -61,6 +63,7 @@
 ```
 **适用**：data 卡片中的百分比可视化、评分指示器。
 **ADAPT**：环宽（mask circle 半径） / 填充百分比 / 颜色
+**管线安全**：`conic-gradient` 与此处的 `mask` **在 PPTX 导出中不渲染**。环形进度改用内联 SVG `<circle>` + `stroke-dasharray="弧长 圆周"` 两值格式（禁 `stroke-dashoffset`），见 pipeline-compat.md §4 与 charts/basic.md 环形图。
 
 ---
 
@@ -90,6 +93,7 @@
 ```
 **适用**：让水印/装饰元素与背景产生"化学反应"而非简单叠加。
 **ADAPT**：blend 模式（overlay/soft-light/screen/multiply） / opacity 0.03-0.10
+**管线安全**：`mix-blend-mode` 在 PPTX 导出中**不支持**（pipeline-compat.md §1）。导出场景改用半透明 `opacity` 叠加或预先调好的半透明背景色近似同样的"化学反应"。
 
 ---
 
@@ -146,6 +150,7 @@
 ```
 **适用**：角标标记、引用装饰、精致分隔线、装饰性几何形状。
 **ADAPT**：伪元素用途（角标/引号/分隔线/形状） / 位置 / 颜色 / 透明度
+**管线安全**：`::before`/`::after` 携带的**视觉内容在 PPTX 导出中会消失**（pipeline-compat.md §1，html2svg 有效果较差的兜底）。承载信息的角标/引号/形状改用**真实 `<span>`/`<div>`**；图解块（diagram）一律禁用伪元素做连线/箭头/节点。
 
 ---
 

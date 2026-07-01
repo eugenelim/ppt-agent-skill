@@ -9,7 +9,9 @@ package.json
 ppt-output/*
 !ppt-output/style-gallery/
 
-# 测试结果（保留最近的 report.md，运行时图片不入库）
+# 测试结果：新运行目录为临时产物，不入库（已提交的历史里程碑报告仍保留 —
+# .gitignore 只影响未跟踪文件）。运行时图片同样不入库。
+tests/smoke-results/
 tests/smoke-results/*/screenshots/
 
 # Puppeteer 运行时产物

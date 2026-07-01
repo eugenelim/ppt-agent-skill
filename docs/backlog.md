@@ -30,7 +30,18 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
-<!-- no deferred items yet -->
+## diagram-consistency-system
+
+- **Discovered (not an AC deferral): style-gallery mock HTML variable-naming drift.**
+  The mock decks under `ppt-output/style-gallery/*.html` use an ad-hoc CSS-variable
+  vocabulary (`--accent`, `--bg-base`, `--line-soft`, `--display-font`) instead of
+  the canonical set the real pipeline injects from `style.json`
+  (`--accent-1..4`, `--card-bg-from/to`, `--font-primary`; see
+  `page-html-playbook.md` Phase 6). Diagram recipes correctly target the canonical
+  set, so they theme correctly under the real pipeline but render low-contrast if
+  fed a gallery mock's `:root`. Out of scope for this spec (diagrams + QA + §E
+  contradiction). Unblocked by a follow-up that regenerates the gallery mocks
+  against the canonical variable set, or documents the mocks as non-canonical.
 
 <!-- Add one section per spec with open work, e.g.:
 

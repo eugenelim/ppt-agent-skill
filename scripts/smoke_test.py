@@ -268,6 +268,20 @@ def phase1_tests(style_filter: str = None) -> dict:
         results["html_typography"][sid] = typo_warnings
         results["summary"]["warn"] += len(typo_warnings)
 
+    # diagram-consistency-system：图解配方结构/管线 lint + QA 自检
+    results["diagram_qa"] = {}
+    for label, cmd in [
+        ("recipe_lint", [sys.executable, str(ROOT / "scripts" / "lint_diagram_recipes.py"), "--refs-dir", str(ROOT / "references")]),
+        ("qa_selftest", [sys.executable, str(ROOT / "scripts" / "test_diagram_qa.py")]),
+    ]:
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        ok = proc.returncode == 0
+        results["diagram_qa"][label] = {"ok": ok, "tail": (proc.stdout or proc.stderr).strip().splitlines()[-1:] }
+        if ok:
+            results["summary"]["pass"] += 1
+        else:
+            results["summary"]["fail"] += 1
+
     return results
 
 
