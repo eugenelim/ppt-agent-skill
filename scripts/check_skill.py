@@ -333,6 +333,7 @@ def check_step0_interview_contract(result: CheckResult) -> None:
             "target_action",
             "must_avoid",
             "material_strategy",
+            "grounding_mode",
         ],
         ROOT_DIR / "references/prompts/tpl-interview-structured-ui.md": [
             "{{TOPIC}}",
@@ -357,6 +358,7 @@ def check_step0_interview_contract(result: CheckResult) -> None:
             "全部按默认，用 research",
             "## 归纳后的问答落点",
             "material_strategy: research",
+            "grounding_mode: researched",
         ],
     }
 

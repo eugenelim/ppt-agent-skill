@@ -26,6 +26,7 @@
 - `expected_pages`: 5-10 页 / 10-20 页 / 20-30 页宽幅 / 自由发挥
 - `page_density`: 少而精 / 适中 / 容量极大（注意：这是整套 deck 的整体倾向，不是要求每一页完全同密）
 - `material_strategy`: `research`（全网扩写）或 `local_only`（仅限当前提供资料）
+- `grounding_mode`（**来源接地契约 · 必问**，决定这份 deck 代表谁的事实）: `represent_user_work`（G1 代表用户工作，回溯用户资料）/ `researched`（G2 基于调研，每条带来源）/ `illustrative`（G3 模型常识示意稿，**须用户同意**且成品标"示意·未经核实"）。用户点名了资料就默认 G1；资料取不到必须 STOP 回问，**绝不用模型知识脑补**。详见 SKILL.md「来源接地契约」。
 - `must_include` / `must_avoid`: 可要求用户补充唯一核心主张与绝对禁区
 
 ### C. 视觉审美与资产策略
@@ -67,6 +68,7 @@
 | `language_mode` | `language` |
 | `imagery_strategy` | `imagery` |
 | `material_strategy` | `material_strategy` |
+| `grounding_mode` | `grounding_mode` |
 | `subagent_model_strategy` | `subagent_model_strategy` |
 | `subagent_thinking_effort` | `subagent_thinking_effort` |
 | `manual_audit_mode` | `manual_audit_mode` |
@@ -78,9 +80,9 @@
 所有问卷结果必须映射到以下两份产物，作为后续子代理的真源输入。
 
 1. `interview-qa.txt`
-   保留用户原意。为通过 `contract_validator.py` 强校验，结尾必须附加 canonical 锚点段。基础 12 个锚点缺一不可，同时默认追加模型与人工审计锚点：
-   `scenario`, `audience`, `target_action`, `expected_pages`, `page_density`, `style`, `brand`, `must_include`, `must_avoid`, `language`, `imagery`, `material_strategy`, `subagent_model_strategy`, `subagent_thinking_effort`, `manual_audit_mode`, `manual_audit_scope`, `manual_audit_assets`
+   保留用户原意。为通过 `contract_validator.py` 强校验，结尾必须附加 canonical 锚点段。基础 13 个锚点缺一不可，同时默认追加模型与人工审计锚点：
+   `scenario`, `audience`, `target_action`, `expected_pages`, `page_density`, `style`, `brand`, `must_include`, `must_avoid`, `language`, `imagery`, `material_strategy`, `grounding_mode`, `subagent_model_strategy`, `subagent_thinking_effort`, `manual_audit_mode`, `manual_audit_scope`, `manual_audit_assets`
 
 2. `requirements-interview.txt`
-   脱水的纯净参数组，同样必须包含上方基础 12 个锚点，以及模型 / 人工审计锚点，并带上丰富化后的明确取值，供 validator、Style、Outline、PageAgent 与后续人工返工节点直接消费。
+   脱水的纯净参数组，同样必须包含上方基础 13 个锚点，以及模型 / 人工审计锚点，并带上丰富化后的明确取值，供 validator、Style、Outline、PageAgent 与后续人工返工节点直接消费。
    若主 agent 已完成归一化，可额外补充 `density_bias: relaxed/balanced/ultra_dense` 作为内部派生字段；未补充时，下游必须根据 `page_density` 自行推导，不得报错。
