@@ -13,6 +13,10 @@ the recipe contract pinned in docs/specs/diagram-consistency-system/spec.md:
   3. No hardcoded hex/rgb() colors in code blocks except the trend
      whitelist (#22c55e / #ef4444).
   4. The selector file blocks/diagram.md carries the theming contract.
+  5. persistent_chrome sample-literal sync: the design-specs §A "持久化页框例外"
+     forbidden-literal list stays in sync (both directions) with the worksheet
+     group-C masthead/footer recipe sample copy, so the prohibition can't go
+     stale on a recipe edit (docs/specs/persistent-chrome-flag).
 
 Usage:
     python3 scripts/lint_diagram_recipes.py [--refs-dir references]
@@ -112,11 +116,83 @@ def lint_file(path: Path) -> list[str]:
     return findings
 
 
+# ── persistent_chrome sample-literal sync (design-specs §A ↔ worksheet group C) ──
+# The §A "持久化页框例外" forbids leaking worksheet group-C masthead/footer sample
+# copy (docs/specs/persistent-chrome-flag). That prohibition list is hand-copied
+# from the recipe, so it can silently go stale when a recipe literal is renamed
+# (→ §A entry no longer real) or added (→ §A misses it). This check keeps the two
+# in sync in both directions. Structural column headings the recipe carries but §A
+# does not forbid (they are relabelled per-page, not leaked brand copy) are allowlisted.
+CHROME_LABEL_ALLOWLIST = {"Sections", "Rev", "Section", "Page"}
+_TAG_RE = re.compile(r"<[^>]+>")
+_ENTITIES = {"&gt;": ">", "&lt;": "<", "&amp;": "&", "&mdash;": "—", "&nbsp;": " "}
+
+
+def _visible_text_literals(element_html: str) -> list[str]:
+    """Tag-strip an HTML element to its human-visible text nodes (decoded, trimmed),
+    dropping empties and symbol-only fragments (chevrons, glyphs)."""
+    text = _TAG_RE.sub("\n", element_html)
+    for ent, ch in _ENTITIES.items():
+        text = text.replace(ent, ch)
+    out: list[str] = []
+    for raw in text.split("\n"):
+        node = raw.strip()
+        if len(node) >= 2 and any(c.isalnum() for c in node):
+            out.append(node)
+    return out
+
+
+def check_persistent_chrome_literals(refs_dir: Path) -> list[str]:
+    findings: list[str] = []
+    specs = refs_dir / "design-runtime" / "design-specs.md"
+    worksheet = refs_dir / "blocks" / "worksheet.md"
+    if not specs.exists() or not worksheet.exists():
+        return findings  # feature not present in this refs tree — nothing to sync
+    spec_text = specs.read_text(encoding="utf-8")
+    ws_text = worksheet.read_text(encoding="utf-8")
+
+    m = re.search(r"绝不沿用配方里的示例文案[^（(]*[（(](.+?)[）)]", spec_text, re.S)
+    if not m:
+        findings.append("design-specs.md §A: persistent_chrome forbidden-literal list not found "
+                        "(expected '绝不沿用配方里的示例文案（…）')")
+        return findings
+    forbidden = re.findall(r"`([^`]+)`", m.group(1))
+    if not forbidden:
+        findings.append("design-specs.md §A: persistent_chrome forbidden-literal list is empty")
+
+    # recipe side: masthead <div class="masthead">…</div> + footer <footer>…</footer>
+    recipe_literals: list[str] = []
+    mh = re.search(r'<div class="masthead".*?</div>', ws_text, re.S)
+    ft = re.search(r"<footer.*?</footer>", ws_text, re.S)
+    if not mh or not ft:
+        findings.append("blocks/worksheet.md: group-C masthead/footer recipe not found "
+                        "(persistent_chrome literal sync cannot run)")
+        return findings
+    for element in (mh.group(0), ft.group(0)):
+        recipe_literals.extend(_visible_text_literals(element))
+
+    # direction B — every recipe sample literal must be forbidden by §A (catches added/renamed)
+    for lit in recipe_literals:
+        if lit in CHROME_LABEL_ALLOWLIST:
+            continue
+        if lit not in forbidden:
+            findings.append(f"blocks/worksheet.md group C shows sample literal {lit!r} that "
+                            f"design-specs.md §A does not forbid — add it to the §A 禁用清单")
+    # direction A — every §A entry must still exist in the recipe (catches renamed/removed)
+    joined = mh.group(0) + "\n" + ft.group(0)
+    for lit in forbidden:
+        if lit not in joined:
+            findings.append(f"design-specs.md §A forbids {lit!r} but it no longer appears in the "
+                            f"blocks/worksheet.md group-C masthead/footer recipe — the list is stale")
+    return findings
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--refs-dir", default="references")
     args = ap.parse_args()
-    blocks_dir = Path(args.refs_dir) / "blocks"
+    refs_dir = Path(args.refs_dir)
+    blocks_dir = refs_dir / "blocks"
     if not blocks_dir.is_dir():
         print(f"ERROR: {blocks_dir} not found", file=sys.stderr)
         return 1
@@ -132,6 +208,8 @@ def main() -> int:
     for t in targets:
         all_findings.extend(lint_file(t))
         recipe_count += sum(1 for ln in t.read_text(encoding="utf-8").splitlines() if RECIPE_HEADING.match(ln))
+
+    all_findings.extend(check_persistent_chrome_literals(refs_dir))
 
     if all_findings:
         print(f"lint_diagram_recipes: {len(all_findings)} violation(s) across {len(targets)} file(s):")

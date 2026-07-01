@@ -93,20 +93,6 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   code sites to one. Out of scope for `reference-runbook-page-types` (which added
   both values to every site in lockstep as the spec's *Always do* demanded).
 
-## persistent-chrome-flag
-
-- **Follow-up (not an AC deferral): mechanical list-completeness check for the persistent_chrome excluded-literal set.**
-  `design-runtime/design-specs.md` §A hand-copies the 6 group-C sample literals it forbids
-  (`SCHEMATIC · DELIVERY RUNBOOK` … `2.4 · 2026`) from `blocks/worksheet.md` group C. If a
-  future edit adds/renames a masthead/footer literal in the recipe, that list silently goes
-  stale. Today the leak is prevented structurally — the §A copy-slot mapping fills *every*
-  masthead (3) + footer (3-col) slot from `deck_chrome` + per-page fields, so the pasted
-  literals are always overwritten — making the prohibition list belt-and-suspenders. Unblocked
-  by a small goal-based check (extract the quoted literals from worksheet.md group-C
-  masthead+footer, assert each appears in the §A 禁用清单) added to `lint_diagram_recipes.py`
-  or a standalone one-liner. Raised by the quality-engineer diff pass (2026-07-01); deferred as
-  polish, not a shipping bug in an off-by-default flag.
-
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

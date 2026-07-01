@@ -281,6 +281,19 @@ band positions/heights + reduced usable-height, and `smoke_test.py` +
   copy-slot→`deck_chrome` mapping so per-page agents don't guess and the reserved
   bands aren't empty (Concerns 4–5), reworded the vertical-budget risk (Nit 6),
   flipped spec/plan Status + checked ACs (Blockers 1–2).
+- 2026-07-01: rebased onto `main` (sibling reference-runbook specs had shipped);
+  resolved conflicts in `tpl-page-planning.md` (kept both the `narrative_archetype`
+  read and the `persistent_chrome` deck-level read) and `docs/specs/README.md`
+  (all three Shipped rows); removed the now-closed `schematic-blueprint-runbook-restyle`
+  backlog section (its last open item was this flag).
+- 2026-07-01: **implemented the deferred mechanical check** (was Concern 2 / a
+  backlog follow-up). `scripts/lint_diagram_recipes.py` now bidirectionally syncs the
+  design-specs §A excluded-literal list with the worksheet group-C masthead/footer
+  recipe: every recipe sample literal must be forbidden by §A (catches added/renamed),
+  and every §A entry must still exist in the recipe (catches renamed/removed);
+  structural column headings are allowlisted. The check immediately surfaced a real
+  gap — §A was missing the footer description literal `— the operating manual for a
+  fixed-length delivery project.` — now added. Backlog follow-up closed.
 - 2026-07-01: **AC1 default-off read-through — run and passed.** Verified across
   all five edited stage files: (1) the flag handle `persistent_chrome` is spelled
   identically in every file; (2) every masthead/footer emission instruction sits
