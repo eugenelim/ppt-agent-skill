@@ -67,7 +67,7 @@
   | diagram_type | block_refs 追加 |
   |--------------|-----------------|
   | `flowchart` `swimlane` `sequence` `state-machine` `data-flow` | `diagram-process-flow` |
-  | `architecture-component` `architecture-deployment` `er-data-model` `layers` | `diagram-architecture` |
+  | `architecture-component` `architecture-deployment` `er-data-model` `layers` `architecture-canvas` | `diagram-architecture` |
   | `gantt` `dependency-network` `org-tree` `kanban` | `diagram-project` |
   | `mind-map` `matrix-quadrant` `venn` `pyramid` `funnel` `cycle` `hub-spoke` `onion` `fishbone` | `diagram-concept` |
 

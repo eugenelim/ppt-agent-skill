@@ -4,8 +4,9 @@
 # Harvested authoring pattern (see references/playbooks/print-combiner-playbook.md).
 # A deck laid out as: index.html (nav shell) + slide-NN.html (one page each) +
 # css/styles.css (single style source). This regenerates <deck>/index-print.html —
-# all pages concatenated into one scrollable document with landscape print CSS, so
-# the browser's Print -> Save as PDF exports the whole deck.
+# all pages concatenated into one scrollable document with landscape print CSS.
+# For the PDF, prefer the deterministic pixel-1:1 exporter over the browser's
+# manual Print -> Save as PDF:  python3 scripts/build_pdf.py --deck <deck-dir>
 #
 # Run after adding/removing/reordering slides.
 # Usage: ./scripts/build-print.sh <deck-dir>
@@ -104,3 +105,5 @@ ${ALL_SLIDES}
 ENDOFPRINT
 
 echo "Built ${DECK_DIR%/}/index-print.html from $TOTAL page(s)"
+echo "For a deterministic, pixel-1:1 PDF (no manual browser print):"
+echo "  python3 scripts/build_pdf.py --deck ${DECK_DIR%/}"

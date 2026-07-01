@@ -27,6 +27,13 @@
 
 脚本按 `index.html` → `slide-*.html`（sort）收集页序，用 Python 正则抽出各页 `#slide-container` 内容拼接，注入统一的打印外框，写出 `<deck-dir>/index-print.html`。**改动/增删/重排页面后重跑**。
 
+导出 PDF 时**不要**靠浏览器手动 `Print → Save as PDF`（不确定、非 1:1）。用确定性的
+[`scripts/build_pdf.py`](../../scripts/build_pdf.py)——Puppeteer 截图（与 HTML 渲染 1:1）+ 现有 Pillow 封装成 PDF，禁用 WeasyPrint / `pdf2svg` / `img2pdf` / `page.pdf()` 打印导出：
+
+```
+python3 scripts/build_pdf.py --deck <deck-dir>    # 各页截图 → 一份多页 PDF（像素级 1:1）
+```
+
 ## 为什么值得单列
 
 - **单一样式真源**：所有页共享一个 `css/styles.css`，风格改一处全体生效——比每页内联样式好维护。

@@ -41,7 +41,7 @@
 
 | family 文件 | 覆盖的 diagram_type |
 |------------|---------------------|
-| `diagram-architecture.md` | architecture-component / architecture-deployment / er-data-model / layers |
+| `diagram-architecture.md` | architecture-component / architecture-deployment / er-data-model / layers / architecture-canvas |
 | `diagram-process-flow.md` | flowchart / swimlane / sequence / state-machine / data-flow |
 | `diagram-project.md` | gantt / dependency-network / org-tree / kanban |
 | `diagram-concept.md` | mind-map / matrix-quadrant / venn / pyramid / funnel / cycle / hub-spoke / onion / fishbone |

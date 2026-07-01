@@ -1,0 +1,339 @@
+{
+  "version": 1,
+  "note": "Searchable SVG icon library. Icons are idea-level re-drawings (never traced copies), drawn monoline against currentColor so they inherit each deck's theme. Compose into mocks by pasting the <svg> inline, verbatim. See references/icons.md. Search/validate: scripts/icon_search.py.",
+  "categories": [
+    "generic",
+    "infrastructure",
+    "data",
+    "ai",
+    "interface",
+    "security",
+    "people",
+    "process"
+  ],
+  "icons": [
+    {
+      "id": "arrow-right",
+      "name": "Arrow Right",
+      "category": "generic",
+      "tags": [
+        "direction",
+        "flow",
+        "next",
+        "connector"
+      ],
+      "keywords": [
+        "forward",
+        "proceed",
+        "then",
+        "sequence"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "arrow-right.svg",
+      "provenance": "foundational (library seed)"
+    },
+    {
+      "id": "node",
+      "name": "Node",
+      "category": "generic",
+      "tags": [
+        "box",
+        "block",
+        "component",
+        "container"
+      ],
+      "keywords": [
+        "module",
+        "unit",
+        "card",
+        "rect"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "node.svg",
+      "provenance": "foundational (library seed)"
+    },
+    {
+      "id": "database",
+      "name": "Database",
+      "category": "data",
+      "tags": [
+        "datastore",
+        "storage",
+        "db",
+        "data lake",
+        "lake"
+      ],
+      "keywords": [
+        "persistence",
+        "sql",
+        "warehouse",
+        "repository"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "database.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "knowledge-graph",
+      "name": "Knowledge Graph",
+      "category": "data",
+      "tags": [
+        "graph",
+        "ontology",
+        "semantic",
+        "knowledge",
+        "network"
+      ],
+      "keywords": [
+        "nodes",
+        "edges",
+        "relationships",
+        "triples"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "knowledge-graph.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "data-product",
+      "name": "Data Product",
+      "category": "data",
+      "tags": [
+        "product",
+        "package",
+        "cube",
+        "dataset",
+        "asset"
+      ],
+      "keywords": [
+        "bundle",
+        "deliverable",
+        "shipped data"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "data-product.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "vector-store",
+      "name": "Vector Store",
+      "category": "data",
+      "tags": [
+        "vector",
+        "embeddings",
+        "index",
+        "grid",
+        "store"
+      ],
+      "keywords": [
+        "rag",
+        "similarity",
+        "retrieval"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "vector-store.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "pipeline",
+      "name": "Pipeline",
+      "category": "process",
+      "tags": [
+        "pipeline",
+        "flow",
+        "etl",
+        "stages",
+        "ingest"
+      ],
+      "keywords": [
+        "curate",
+        "transform",
+        "stream",
+        "process"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "pipeline.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "agent",
+      "name": "Agent",
+      "category": "ai",
+      "tags": [
+        "agent",
+        "bot",
+        "assistant",
+        "autonomous",
+        "copilot"
+      ],
+      "keywords": [
+        "ai agent",
+        "llm",
+        "reasoning"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "agent.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "model",
+      "name": "Model",
+      "category": "ai",
+      "tags": [
+        "model",
+        "neural",
+        "ml",
+        "inference",
+        "network"
+      ],
+      "keywords": [
+        "weights",
+        "prediction",
+        "training"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "model.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "cloud",
+      "name": "Cloud",
+      "category": "infrastructure",
+      "tags": [
+        "cloud",
+        "hosted",
+        "saas",
+        "platform",
+        "data cloud"
+      ],
+      "keywords": [
+        "managed",
+        "paas"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "cloud.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "connector",
+      "name": "Connector",
+      "category": "infrastructure",
+      "tags": [
+        "connector",
+        "link",
+        "integration",
+        "plug",
+        "bridge"
+      ],
+      "keywords": [
+        "enterprise connector",
+        "source"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "connector.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "api",
+      "name": "API",
+      "category": "infrastructure",
+      "tags": [
+        "api",
+        "endpoint",
+        "service",
+        "interface",
+        "gateway"
+      ],
+      "keywords": [
+        "rest",
+        "knowledge api",
+        "contract"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "api.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "dashboard",
+      "name": "Dashboard",
+      "category": "interface",
+      "tags": [
+        "dashboard",
+        "chart",
+        "insights",
+        "analytics",
+        "report"
+      ],
+      "keywords": [
+        "kpi",
+        "metrics",
+        "panel",
+        "bi"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "dashboard.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "users",
+      "name": "Users",
+      "category": "people",
+      "tags": [
+        "users",
+        "people",
+        "accounts",
+        "customers",
+        "team"
+      ],
+      "keywords": [
+        "persona",
+        "audience",
+        "stakeholders"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "users.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "document",
+      "name": "Document",
+      "category": "process",
+      "tags": [
+        "document",
+        "file",
+        "report",
+        "doc",
+        "record"
+      ],
+      "keywords": [
+        "paper",
+        "filing",
+        "statement",
+        "records"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "document.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "sync",
+      "name": "Sync",
+      "category": "process",
+      "tags": [
+        "sync",
+        "refresh",
+        "update",
+        "cycle",
+        "loop"
+      ],
+      "keywords": [
+        "reconcile",
+        "continuous",
+        "live"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "sync.svg",
+      "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    }
+  ]
+}

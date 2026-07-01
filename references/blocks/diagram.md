@@ -12,7 +12,7 @@
 | diagram_type | 何时用 | family 文件 / block_ref |
 |--------------|--------|------------------------|
 | `flowchart` `swimlane` `sequence` `state-machine` `data-flow` | 步骤/决策逻辑、谁做哪步、时序消息、状态机、数据流 | `diagram-process-flow` |
-| `architecture-component` `architecture-deployment` `er-data-model` `layers` | 组件/分层架构、部署/云/网络拓扑、数据模型、技术栈分层 | `diagram-architecture` |
+| `architecture-component` `architecture-deployment` `er-data-model` `layers` `architecture-canvas` | 组件/分层架构、部署/云/网络拓扑、数据模型、技术栈分层、图标节点分层画布 | `diagram-architecture` |
 | `gantt` `dependency-network` `org-tree` `kanban` | 排期/路线图/里程碑、依赖网络/PERT、组织树/WBS、看板 | `diagram-project` |
 | `mind-map` `matrix-quadrant` `venn` `pyramid` `funnel` `cycle` `hub-spoke` `onion` `fishbone` `spectrum-marker` `iceberg` `force-field` `before-after` `causal-loop` `consultant-2x2` `quadrant-trajectory` | 思维导图、矩阵/象限(含 SWOT/RACI/风险)、韦恩、金字塔、漏斗、循环/飞轮、中心辐射、同心圆、鱼骨、光谱定位、冰山、力场分析、前后/差距、因果回路；`consultant-2x2` / `quadrant-trajectory` 为 `matrix-quadrant` 变体（同族路由） | `diagram-concept` |
 
