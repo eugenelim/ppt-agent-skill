@@ -79,12 +79,6 @@ narrative-archetype *guidance* shipped in this PR (`principles/narrative-arc.md`
   reference sections (vs a CTA finale). Blocked on: same page_type enum contract as
   the first item. Unblocked by the same spec.
 
-- **Gate gap (mechanical, low-risk): fold the pseudo-element warning into the diagram
-  recipe lint too.** This PR added a `::before`/`::after`-with-`content` **warning** to
-  `smoke_test.py` (gallery mocks); the same lossy-fallback risk applies to `blocks/*.md`
-  recipe HTML, which `lint_diagram_recipes.py` does not yet check. Unblocked by adding
-  the equivalent scan to the recipe lint.
-
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

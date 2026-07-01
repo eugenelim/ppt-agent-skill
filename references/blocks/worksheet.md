@@ -156,8 +156,9 @@
   --rule:var(--card-border); --fg:var(--text-primary); --fg-dim:var(--text-secondary);
   --focus:var(--accent-1); --mono:var(--font-mono); border:1px solid var(--fg);
   font-family:var(--font-primary);">
+  <!-- 非 highlight 行：无左条，padding-left 补偿 3px 与 highlight 行内容对齐 -->
   <div style="display:grid; grid-template-columns:110px 1fr 96px; gap:18px; align-items:start;
-    padding:16px 20px; border-left:3px solid transparent;">
+    padding:16px 20px 16px 23px;">
     <span style="font-family:var(--mono); font-size:11px; font-weight:700; text-transform:uppercase;
       letter-spacing:0.12em; color:var(--focus); padding-top:2px;">DAY 1</span>
     <div>
@@ -189,7 +190,7 @@
 </div>
 ```
 
-**自检**：三列 `110px 1fr 96px`；期号/责任人走 mono；标题走 serif；任务用 `☐` 复选文本；可选 `note` 用 `1px dashed var(--focus)` 斜体脚注行渲染；highlight 行左侧 `--focus` 竖条、其余 transparent；发丝分隔行；颜色全走契约变量。
+**自检**：三列 `110px 1fr 96px`；期号/责任人走 mono；标题走 serif；任务用 `☐` 复选文本；可选 `note` 用 `1px dashed var(--focus)` 斜体脚注行渲染；highlight 行左侧 `--focus` 竖条、其余无左条（`padding-left` 补偿对齐）；发丝分隔行；颜色全走契约变量。
 
 **管线安全**：真实 `<div>` grid；`☐` 是文本字符非伪元素；无 SVG `<text>`；无 `mask-image`/`conic-gradient`/`background-image:url()`。
 
