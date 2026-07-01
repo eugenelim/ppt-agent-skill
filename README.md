@@ -90,7 +90,7 @@ Agent 提问调研需求（等你回复 7 题）
   ↓
 自动后处理：HTML → SVG → PPTX
   ↓
-全部产物保存到 ppt-output/
+全部产物保存到 ppt-output/<deck 名>/（每个 PPT 一个目录）
 ```
 
 **触发示例**：
@@ -277,8 +277,8 @@ ppt-agent-skill/
 │   ├── gallery.py                # 生成 28 风格预览画廊 + 截图
 │   ├── build_hero.py             # 生成 README hero 拼图
 │   └── smoke_test.py             # 端到端测试 + pipeline-compat 扫描
-├── ppt-output/
-│   └── style-gallery/            # 28 个 1280×720 mock + 28 PNG + index.html
+├── ppt-output/                   # 运行时：每个 PPT 一个 <deck 名>/ 目录（gitignore）
+│   └── style-gallery/            # 28 个 1280×720 mock + 28 PNG + index.html（工具产物，与 deck 平级）
 ├── docs/superpowers/specs/       # 设计文档归档
 └── tests/smoke-results/          # 测试报告归档
 ```

@@ -305,11 +305,22 @@ def validate_card(
 
     has_headline = isinstance(card.get("headline"), str) and card.get("headline").strip()
     has_body = bool([item for item in as_list(card.get("body")) if isinstance(item, str) and item.strip()])
+    has_items = bool([item for item in as_list(card.get("items")) if (item.strip() if isinstance(item, str) else item)])
     has_data = bool([item for item in as_list(card.get("data_points")) if isinstance(item, dict)])
     chart = card.get("chart") if isinstance(card.get("chart"), dict) else {}
     has_chart = bool(chart.get("chart_type"))
-    if not any([has_headline, has_body, has_data, has_chart]):
-        result.error(f"{card_label}: empty card payload")
+    image_contract = card.get("image") if isinstance(card.get("image"), dict) else {}
+    has_image_content = bool(image_contract.get("needed"))
+    # 真正的内容信号：正文 / 列表项 / 数据点 / 图表 / 所需配图，其一即可。
+    # headline 不算内容——只有 headline 就是骨架卡（skeleton），须拦下。
+    has_content = has_body or has_items or has_data or has_chart or has_image_content
+    if not has_content:
+        if has_headline:
+            result.error(
+                f"{card_label}: skeleton card — only a headline, no body/items/data/chart/image content"
+            )
+        else:
+            result.error(f"{card_label}: empty card payload")
 
     if has_chart and chart.get("chart_type") not in VALID_CHART_TYPES:
         result.error(f"{card_label}: invalid chart_type '{chart.get('chart_type')}'")

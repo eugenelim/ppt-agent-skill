@@ -33,7 +33,7 @@ PPTX). It is **not** a deployed service — it is a set of Markdown instructions
 │   ├── pipeline-compat.md # CSS prohibition list that keeps HTML safely convertible to SVG
 │   └── *.md              # typography, bento-grid, style-system, method, cli-cheatsheet
 ├── assets/               # logo, hero images, architecture diagram
-├── ppt-output/           # runtime output dir (gitignored except style-gallery/)
+├── ppt-output/           # runtime output: one <deck-slug>/ per deck + tooling siblings (gitignored except style-gallery/)
 ├── tests/                # smoke-results/ (gitignored run artifacts)
 ├── docs/
 │   ├── CHARTER.md        # mission, scope, principles
@@ -80,10 +80,14 @@ Full index in [`scripts/README.md`](../../scripts/README.md). The recurring kind
 
 ## Runtime output (`ppt-output/`)
 
-A pipeline run materializes its deliverables here (per the cwd): `outline.json`,
-`planning.json`, `style.json`, `slides/` (per-page HTML), `svg/`, `preview.html`,
-and the final `.pptx`. Everything under `ppt-output/` is gitignored **except**
-`style-gallery/` (the committed 26-style preview used by the README).
+`ppt-output/` is the shared parent (`OUTPUT_ROOT`). Each generated deck gets its
+own folder — `ppt-output/<deck-slug>/` (`OUTPUT_DIR`, one per PowerPoint; the
+slug is a kebab-case derivation of the topic) — and a pipeline run materializes
+its deliverables there: `slides/` (per-page HTML, nested), `svg/`, `images/`,
+`runtime/`, the JSON snapshots, `preview.html`, and the final `.pptx`. Tooling
+dirs (`style-gallery/`, `diagram-gallery/`, `e2e-test/`) sit as siblings under
+`ppt-output/`, not as decks. Everything under `ppt-output/` is gitignored
+**except** `style-gallery/` (the committed 28-style preview used by the README).
 
 ## Where to start
 

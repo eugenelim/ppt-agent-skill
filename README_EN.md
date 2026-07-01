@@ -90,7 +90,7 @@ Auto-research → outline → planning draft → per-page HTML design
   ↓
 Auto post-processing: HTML → SVG → PPTX
   ↓
-All artifacts saved to ppt-output/
+All artifacts saved to ppt-output/<deck-name>/ (one folder per deck)
 ```
 
 **Trigger examples**:
@@ -269,8 +269,8 @@ ppt-agent-skill/
 │   ├── gallery.py                # Generate 28-style preview gallery + screenshots
 │   ├── build_hero.py             # Generate README hero composites
 │   └── smoke_test.py             # E2E test + pipeline-compat scan
-├── ppt-output/
-│   └── style-gallery/            # 28 mocks + 28 PNGs + index.html
+├── ppt-output/                   # runtime: one <deck-name>/ folder per deck (gitignored)
+│   └── style-gallery/            # 28 mocks + 28 PNGs + index.html (tooling sibling, not a deck)
 ├── docs/superpowers/specs/       # Design docs
 └── tests/smoke-results/          # Test reports
 ```

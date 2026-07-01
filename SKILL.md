@@ -34,14 +34,21 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 ## 路径约定
 
-整个流程中反复用到以下路径，在 Step 1 完成后立即确定：
+整个流程中反复用到以下路径。`SKILL_DIR` 触发时即知；`OUTPUT_DIR` 在主题确定后（Step 0/1 采访之前）立即解析，并在整个 run 内复用：
 
 | 变量 | 含义 | 获取方式 |
 |------|------|---------|
 | `SKILL_DIR` | 本 SKILL.md 所在目录的绝对路径 | 即触发 Skill 时读取 SKILL.md 的目录 |
-| `OUTPUT_DIR` | 产物输出根目录 | 用户当前工作目录下的 `ppt-output/`（首次使用时 `mkdir -p` 创建） |
+| `OUTPUT_ROOT` | 所有 deck 的共享父目录 | 用户当前工作目录下的 `ppt-output/`（首次使用时 `mkdir -p` 创建） |
+| `OUTPUT_DIR` | 本次 deck 的产物目录（每个 PPT 一个） | `OUTPUT_ROOT/<deck-slug>/`（见下方 slug 规则；用原子 `mkdir` 抢占，见下） |
 
-后续所有路径均基于这两个变量，不再重复说明。
+**`<deck-slug>` 规则**：由主题生成的简短 kebab-case 目录名。
+- CJK 主题先转写/翻译成简洁英文短语，再 kebab 化：转小写、把每段非 `[a-z0-9]` 字符替换为单个 `-`、去掉首尾 `-`。字符集 `[a-z0-9-]`，≤40 字符。
+- **解析一次**：主题确定后（采访之前）就定下 `OUTPUT_DIR`，整个 run 复用同一目录。
+- **原子抢占（防并发撞车）**：新建 deck 时用**不带 `-p` 的 `mkdir`** 抢占 `OUTPUT_DIR`（目录已存在则失败）；失败就依次试 `<slug>-2`/`<slug>-3`…，同样用原子 `mkdir`；第一个成功的 `mkdir` 即占位。这样同一 cwd 下两个同主题 run 同时起也不会选到同一目录（`mkdir -p` 不报错、无法当抢占用）。后缀最多试到 `<slug>-99`，仍抢不到就停下来报错求助，不要无限循环。
+- **续跑**：续跑或跨对话恢复进行中的 deck 时**复用已有目录（匹配，不重新抢占）**——先扫描 `OUTPUT_ROOT/<slug>*`，复用其中产物与本 run 吻合的那个（首个 run 可能已被去重成 `<slug>-2`），别盲目按 slug 重新解析。重新抢占会把续跑产物散落到空的兄弟目录里。续跑假定**单写者**（一个 deck 同一时刻只有一个 run 在续），并发续同一 deck 不在保护范围内。
+
+后续所有路径均基于 `SKILL_DIR` 与 `OUTPUT_DIR`，不再重复说明。工具类产物（`style-gallery/` 等）挂在 `OUTPUT_ROOT` 下、与各 deck 目录平级，不属于任何 deck。
 
 ---
 
@@ -145,7 +152,9 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 向用户展示策划稿概览，建议等用户确认后再进入 Step 5。
 
-**产物**：每页策划卡 JSON 数组 -> 保存为 `OUTPUT_DIR/planning.json`
+**产物**：每页策划卡 JSON -> 逐页保存为 `OUTPUT_DIR/planning/planningN.json`（校验闸门与 cli-cheatsheet 均按此每页路径运行 `planning_validator.py`）
+
+> **策划必须过闸门。** 无论用 PageAgent 流程还是手动产出，策划都必须能通过 `planning_validator.py` 且每张卡有真实内容（body/items/data/chart/image 之一），才能进入 Step 5c 生成 HTML（见 5c 的强制策划闸门）。不要用离线/自建脚本产出绕过校验的骨架策划。
 
 ---
 
@@ -230,7 +239,7 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 **执行**：使用 `references/prompts.md` Prompt #4 + `references/bento-grid.md`
 
-> **禁止跳过策划稿直接生成。** 每页必须先有 Step 4 的结构 JSON。
+> **强制策划闸门（不可绕过）。** 生成任何一页 slide HTML 之前，该页策划必须先**通过 `planning_validator.py`（零 ERROR）**——`skeleton card`（只有 headline、无 body/items/data/chart/image 内容）或 `empty card payload` 都直接拦下、禁止进入 HTML。**禁止**跳过策划稿直接生成，也**禁止**用自建脚本/离线流程绕过本闸门。骨架策划是 P0 缺陷，不是交付物。
 
 **每页 Prompt 组装公式**：
 ```
@@ -310,16 +319,23 @@ pip install python-pptx lxml Pillow 2>/dev/null
 
 ## 输出目录结构
 
+每个 PPT 一个 `<deck-slug>/` 目录，编号 HTML 页面嵌套在其下的 `slides/`。产物文件名以 `references/cli-cheatsheet.md` 为准（下方仅为示意）。**本 run 写出的一切——含临时目录与构建脚手架——都必须落在本 `<deck-slug>/` 内，不得散到 `OUTPUT_ROOT` 根或项目根**（这样并发 run 各占一个 deck 目录即可互不干扰）：
+
 ```
-ppt-output/
-  slides/              # 每页 HTML
-  svg/                 # 矢量 SVG（可导入 PPT 编辑）
-  images/              # AI 配图
-  preview.html         # 可翻页预览
-  presentation.pptx    # 可编辑 PPTX（右键"转换为形状"）
-  outline.json         # 大纲
-  planning.json        # 策划稿
-  style.json           # 风格定义
+ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
+  <deck-slug>/                 # OUTPUT_DIR：每个 PPT 一个目录
+    slides/            # 每页 HTML（编号），嵌套在本 deck 目录下
+    svg/               # 矢量 SVG（可导入 PPT 编辑）
+    png/               # 高清 PNG（供 PPT/图审）
+    images/            # AI 配图
+    runtime/           # 阶段 prompt / 中间快照（会话 scratch）
+    pptx-work/         # 可选：走原生 PPTX 构建路径时的脚手架（含自带 node_modules），也必须留在 deck 内
+    preview.html       # 可翻页预览
+    presentation.pptx  # 可编辑 PPTX（右键"转换为形状"）
+    outline.json       # 大纲
+    planning/          # 每页策划稿 planningN.json（planning_validator 校验闸门对象）
+    style.json         # 风格定义
+  style-gallery/               # 28 风格预览（工具产物，与 deck 目录平级，非 deck）
 ```
 
 ---
