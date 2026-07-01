@@ -37,13 +37,13 @@
   <!-- SVG 连线层（只画路径，无 <text>） -->
   <svg viewBox="0 0 640 480" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
     <!-- 上方：技术升级 -->
-    <path d="M320 240 C320 200 200 160 160 140" fill="none" stroke="var(--node-accent)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M320 240 C320 200 200 160 160 140" fill="none" stroke="var(--node-accent)" stroke-width="1.5" stroke-linecap="round"/>
     <!-- 右上：流程再造 -->
-    <path d="M320 240 C340 200 440 160 480 140" fill="none" stroke="var(--node-accent-2)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M320 240 C340 200 440 160 480 140" fill="none" stroke="var(--node-accent-2)" stroke-width="1.5" stroke-linecap="round"/>
     <!-- 下方：数据驱动 -->
-    <path d="M320 240 C320 280 200 320 160 340" fill="none" stroke="var(--node-accent)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M320 240 C320 280 200 320 160 340" fill="none" stroke="var(--node-accent)" stroke-width="1.5" stroke-linecap="round"/>
     <!-- 右下：组织变革 -->
-    <path d="M320 240 C340 280 440 320 480 340" fill="none" stroke="var(--node-accent-2)" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M320 240 C340 280 440 320 480 340" fill="none" stroke="var(--node-accent-2)" stroke-width="1.5" stroke-linecap="round"/>
     <!-- 二级：技术升级子项 -->
     <path d="M160 140 C120 130 96 110 80 100" fill="none" stroke="var(--edge)" stroke-width="1.5" stroke-linecap="round"/>
     <path d="M160 140 C120 148 96 156 80 164" fill="none" stroke="var(--edge)" stroke-width="1.5" stroke-linecap="round"/>
@@ -258,7 +258,7 @@
 ```html
 <!-- 轨迹：现状(空心) → 目标(实心 accent)，叠加在基础散点层之上 -->
 <svg viewBox="0 0 560 480" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
-  <line x1="200" y1="300" x2="410" y2="130" stroke="var(--edge-strong)" stroke-width="2" stroke-dasharray="5 4"/>
+  <line x1="200" y1="300" x2="410" y2="130" stroke="var(--edge-strong)" stroke-width="1.5" stroke-dasharray="5 4"/>
   <polygon points="420,120 408,144 400,133" fill="var(--edge-strong)"/>
   <circle cx="200" cy="300" r="9" fill="transparent" stroke="var(--node-fg-dim)" stroke-width="1.5"/>
   <circle cx="410" cy="130" r="9" fill="var(--node-accent)"/>
@@ -642,12 +642,12 @@
   <!-- 角度 0°,60°,120°,180°,240°,300°（从正上方-90°开始）→ -90,-30,30,90,150,210° -->
   <!-- cos/sin: -90:(0,-1), -30:(0.866,-0.5), 30:(0.866,0.5), 90:(0,1), 150:(-0.866,0.5), 210:(-0.866,-0.5) -->
   <svg viewBox="0 0 560 560" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;">
-    <line x1="280" y1="280" x2="280" y2="80"   stroke="var(--edge-strong)" stroke-width="2"/>
-    <line x1="280" y1="280" x2="453" y2="180"  stroke="var(--edge)" stroke-width="2"/>
-    <line x1="280" y1="280" x2="453" y2="380"  stroke="var(--edge)" stroke-width="2"/>
-    <line x1="280" y1="280" x2="280" y2="480"  stroke="var(--edge)" stroke-width="2"/>
-    <line x1="280" y1="280" x2="107" y2="380"  stroke="var(--edge)" stroke-width="2"/>
-    <line x1="280" y1="280" x2="107" y2="180"  stroke="var(--edge)" stroke-width="2"/>
+    <line x1="280" y1="280" x2="280" y2="80"   stroke="var(--edge-strong)" stroke-width="1.5"/>
+    <line x1="280" y1="280" x2="453" y2="180"  stroke="var(--edge)" stroke-width="1.5"/>
+    <line x1="280" y1="280" x2="453" y2="380"  stroke="var(--edge)" stroke-width="1.5"/>
+    <line x1="280" y1="280" x2="280" y2="480"  stroke="var(--edge)" stroke-width="1.5"/>
+    <line x1="280" y1="280" x2="107" y2="380"  stroke="var(--edge)" stroke-width="1.5"/>
+    <line x1="280" y1="280" x2="107" y2="180"  stroke="var(--edge)" stroke-width="1.5"/>
   </svg>
 
   <!-- 中心节点 -->
@@ -842,15 +842,15 @@
 
     <!-- 上方大骨（斜上 45°方向指向主骨）-->
     <!-- 大骨1（人员）：从 (160, 80) 向右下到 (220, 200) -->
-    <line x1="160" y1="80" x2="220" y2="200" stroke="var(--node-accent)" stroke-width="2"/>
+    <line x1="160" y1="80" x2="220" y2="200" stroke="var(--node-accent)" stroke-width="1.5"/>
     <!-- 大骨2（设备）：从 (380, 80) 向右下到 (400, 200) -->
-    <line x1="360" y1="80" x2="400" y2="200" stroke="var(--node-accent)" stroke-width="2"/>
+    <line x1="360" y1="80" x2="400" y2="200" stroke="var(--node-accent)" stroke-width="1.5"/>
 
     <!-- 下方大骨（斜下 45°方向指向主骨）-->
     <!-- 大骨3（材料）：从 (160, 320) 向右上到 (220, 200) -->
-    <line x1="160" y1="320" x2="220" y2="200" stroke="var(--node-accent)" stroke-width="2"/>
+    <line x1="160" y1="320" x2="220" y2="200" stroke="var(--node-accent)" stroke-width="1.5"/>
     <!-- 大骨4（方法）：从 (380, 320) 向右上到 (400, 200) -->
-    <line x1="360" y1="320" x2="400" y2="200" stroke="var(--node-accent)" stroke-width="2"/>
+    <line x1="360" y1="320" x2="400" y2="200" stroke="var(--node-accent)" stroke-width="1.5"/>
 
     <!-- 小骨刺（上方人员类别）-->
     <line x1="128" y1="104" x2="148" y2="128" stroke="var(--edge)" stroke-width="1.5"/>
@@ -953,9 +953,9 @@
   <!-- 轴 + 端帽 + 刻度 + 标记（无 <text>） -->
   <!-- pos→x：60 + pos*520 -->
   <svg viewBox="0 0 640 170" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
-    <line x1="60" y1="96" x2="580" y2="96" stroke="var(--edge)" stroke-width="2"/>
-    <line x1="60" y1="86" x2="60" y2="106" stroke="var(--edge)" stroke-width="2"/>
-    <line x1="580" y1="86" x2="580" y2="106" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="60" y1="96" x2="580" y2="96" stroke="var(--edge)" stroke-width="1.5"/>
+    <line x1="60" y1="86" x2="60" y2="106" stroke="var(--edge)" stroke-width="1.5"/>
+    <line x1="580" y1="86" x2="580" y2="106" stroke="var(--edge)" stroke-width="1.5"/>
     <!-- 刻度：190 / 320 / 450 -->
     <line x1="190" y1="90" x2="190" y2="102" stroke="var(--edge)" stroke-width="1"/>
     <line x1="320" y1="90" x2="320" y2="102" stroke="var(--edge)" stroke-width="1"/>
@@ -1069,15 +1069,15 @@
 
   <svg viewBox="0 0 640 400" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
     <!-- 中央变革轴 -->
-    <line x1="320" y1="70" x2="320" y2="360" stroke="var(--node-accent)" stroke-width="2"/>
+    <line x1="320" y1="70" x2="320" y2="360" stroke="var(--node-accent)" stroke-width="1.5"/>
     <!-- 驱动力（左→中，长度=强度）箭头指右 -->
-    <line x1="150" y1="130" x2="302" y2="130" stroke="var(--edge)" stroke-width="2"/><polygon points="302,124 314,130 302,136" fill="var(--edge)"/>
-    <line x1="190" y1="200" x2="302" y2="200" stroke="var(--edge)" stroke-width="2"/><polygon points="302,194 314,200 302,206" fill="var(--edge)"/>
-    <line x1="150" y1="270" x2="302" y2="270" stroke="var(--edge)" stroke-width="2"/><polygon points="302,264 314,270 302,276" fill="var(--edge)"/>
+    <line x1="150" y1="130" x2="302" y2="130" stroke="var(--edge)" stroke-width="1.5"/><polygon points="302,124 314,130 302,136" fill="var(--edge)"/>
+    <line x1="190" y1="200" x2="302" y2="200" stroke="var(--edge)" stroke-width="1.5"/><polygon points="302,194 314,200 302,206" fill="var(--edge)"/>
+    <line x1="150" y1="270" x2="302" y2="270" stroke="var(--edge)" stroke-width="1.5"/><polygon points="302,264 314,270 302,276" fill="var(--edge)"/>
     <!-- 阻力（右→中，长度=强度）箭头指左，用 accent 提示"待削弱" -->
-    <line x1="490" y1="130" x2="338" y2="130" stroke="var(--node-accent)" stroke-width="2"/><polygon points="338,124 326,130 338,136" fill="var(--node-accent)"/>
-    <line x1="450" y1="200" x2="338" y2="200" stroke="var(--node-accent)" stroke-width="2"/><polygon points="338,194 326,200 338,206" fill="var(--node-accent)"/>
-    <line x1="450" y1="270" x2="338" y2="270" stroke="var(--node-accent)" stroke-width="2"/><polygon points="338,264 326,270 338,276" fill="var(--node-accent)"/>
+    <line x1="490" y1="130" x2="338" y2="130" stroke="var(--node-accent)" stroke-width="1.5"/><polygon points="338,124 326,130 338,136" fill="var(--node-accent)"/>
+    <line x1="450" y1="200" x2="338" y2="200" stroke="var(--node-accent)" stroke-width="1.5"/><polygon points="338,194 326,200 338,206" fill="var(--node-accent)"/>
+    <line x1="450" y1="270" x2="338" y2="270" stroke="var(--node-accent)" stroke-width="1.5"/><polygon points="338,264 326,270 338,276" fill="var(--node-accent)"/>
   </svg>
 
   <!-- 中央变革标签 -->
@@ -1138,7 +1138,7 @@
 
   <!-- 中间桥接：箭头 + 干预项 -->
   <svg viewBox="0 0 680 340" style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;display:block;">
-    <line x1="222" y1="180" x2="454" y2="180" stroke="var(--edge-strong)" stroke-width="2.5"/>
+    <line x1="222" y1="180" x2="454" y2="180" stroke="var(--edge-strong)" stroke-width="1.5"/>
     <polygon points="454,171 470,180 454,189" fill="var(--edge-strong)"/>
   </svg>
   <div style="position:absolute; left:250px; top:96px; width:180px; text-align:center;">

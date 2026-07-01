@@ -41,6 +41,33 @@
 
 内联 SVG 直接引用这些变量：`stroke="var(--edge)"`、`fill="var(--node-accent)"`（CSS 变量会被继承进内联 SVG）。**禁止**在节点/连线里写 `#xxxxxx`、`rgb(...)`；唯一例外是趋势绿 `#22c55e` / 红 `#ef4444`。
 
+### 节点色纪律（流程/连接类图解的铁律）
+
+图解里"类别/分组"信号由**连线与箭头的颜色**承载（`--edge-strong` / `--node-accent` / `--node-accent-2`），**不是**由节点底色或节点描边承载。连线已经带着类别信号，再给节点上色是重复、还会在浅底翻车。
+
+- **禁止 `.node.<color>` 变体改写节点的 `background` 或 `border`。** 给节点套 `linear-gradient(var(--x-soft),var(--x-end))` 之类的浅色类别底，在浅底 deck（近白背景）上几乎不可见，等于没有信号。**带色底区分内容类别是 bento 卡片布局的手法**（见 `card-styles` / `comparison`），不属于流程图。
+- 流程图节点一律中性：白/卡片底 + 中性描边（`--node-border`）+ `--node-fg` 文字。类别差异交给它们之间的箭头颜色。
+- **确需给单个节点做「每节点类别」标记**（无连线的类别清单/图例等边缘场景）时，用**实心 accent 左边条**（`border-left:2px solid var(--node-accent)`）配中性底 —— 绝不用浅色渐变填充。
+- **焦点强调**（单点高亮，1–2 个）仍走既有写法：`border-color:var(--node-accent)` + `box-shadow:0 0 0 1px var(--node-accent)`。这是"强调"不是"类别"，与上面的类别纪律不冲突。
+
+### 节点标题恒为 --node-fg
+
+流程/连接类图解的节点盒标题 / `<h3>` 的颜色**永远是 `--node-fg`（即 `--ink`），绝不改成 accent 色**——包括焦点/关键路径节点：它们的强调已由 accent 描边 + `box-shadow` 发光承载，标题再上色是重复、还会在部分调色板下降低对比。不要写 `.node.<color> h3 { color:var(--accent) }`。强调色只落在连线、箭头、焦点节点描边上，不落在节点文字上。
+
+> 例外（非「流程节点标题」）：分析型图解里的单点强调标题（如 2×2 焦点格、before-after 目标卡）与点标记标注（里程碑名、光谱「建议」、回路 R/B）可保留 accent —— 它们不是连接图里的节点盒标题。
+
+### 线宽平衡（连线 vs 节点描边）
+
+连线/箭头的 `stroke-width` 要与节点描边**同量级**，不能一粗一细失衡：
+
+- 节点描边 1px 时，连线/箭头 `stroke-width ≤ 1.5`。
+- 若确需更粗的连线（关键路径），把节点描边也提到 1.5–2px 一起加重，让两者匹配。
+- 线稿模式（lineart）已统一收到 1（关键路径 1.2），本规则主要约束 filled 模式。
+
+### 实心填充只留给「强调/交互」，不留给「类别/标签」
+
+实心色块（`background:var(--node-accent)` 满填）比它想标注的节点还重，会造成权重倒挂。**浮动的"标签类"元素（泳道角色标签、分区标签、图例）一律用描边款**：`background:transparent; border:1.5px solid var(--node-accent); color:var(--node-accent)`。实心满填只保留给：焦点/终端强调（1–2 处）、结构性表头色带（如 ER 实体表头）、按钮类交互 UI。
+
 ## 线稿模式 (line-art) — 主题门控
 
 > 默认关闭，仅特定主题（`schematic_blueprint` 等）开启。
@@ -99,22 +126,22 @@
   <span style="font-size:12px; color:var(--node-fg-dim);">描述（可选）</span>
 </div>
 ```
-焦点节点：`border-color:var(--node-accent); box-shadow:0 0 0 1px var(--node-accent);` 或 `background:var(--node-accent); color:var(--card-bg-from);`。
+焦点节点（**仅 1–2 个，强调而非类别**）：首选 `border-color:var(--node-accent); box-shadow:0 0 0 1px var(--node-accent);`；满填款 `background:var(--node-accent); color:var(--card-bg-from);` 只留给终端节点（开始/结束）这类语义强调，不得用来表类别。普通节点保持中性底 + `--node-fg` 文字（见上文「节点色纪律」）。
 
 ### 2. 连线（connector）-- 真实元素，禁伪元素
 ```html
-<!-- 直线：真实 div（水平） -->
-<div style="height:2px; background:var(--edge); align-self:center; flex:1;"></div>
+<!-- 直线：真实 div（水平）——线宽与 1px 节点描边同量级 -->
+<div style="height:1.5px; background:var(--edge); align-self:center; flex:1;"></div>
 <!-- 折线 / 曲线 / 斜线：内联 SVG path/line，overflow 可溢出格子 -->
 <svg viewBox="0 0 100 40" preserveAspectRatio="none" style="width:100%;height:40px;overflow:visible;display:block;">
-  <path d="M0 20 H50 V4 H100" fill="none" stroke="var(--edge)" stroke-width="2"/>
+  <path d="M0 20 H50 V4 H100" fill="none" stroke="var(--edge)" stroke-width="1.5"/>
 </svg>
 ```
 
 ### 3. 箭头（arrowhead）-- 内联 SVG `<polygon>`，禁 CSS border 三角形
 ```html
 <svg viewBox="0 0 120 16" preserveAspectRatio="none" style="width:100%;height:16px;overflow:visible;display:block;">
-  <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="2"/>
+  <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="1.5"/>
   <polygon points="104,2 118,8 104,14" fill="var(--edge-strong)"/>
 </svg>
 ```
@@ -141,3 +168,9 @@
 - [ ] 连线是真实 `<div>` 或 SVG `<line>`/`<path>`；无 `::before`/`::after` 装饰内容
 - [ ] 无 `mask-image` / `conic-gradient` / `background-clip:text` / `mix-blend-mode`
 - [ ] 节点撑开用 `min-width`/`min-height`，`box-sizing:border-box`，防坍缩
+
+## 主题一致性自检（避免在浅底 deck 翻车）
+- [ ] **节点不靠底色/描边表类别**：无 `.node.<color>` 改写 `background`/`border`；类别信号在连线/箭头颜色上（浅色渐变类别底 = 浅底不可见，禁用）
+- [ ] **节点标题恒为 `--node-fg`**，未改成 accent 色
+- [ ] **连线/箭头 `stroke-width` 与节点描边同量级**（1px 描边 → 连线 ≤1.5px），不失衡
+- [ ] **标签类元素（泳道角色/分区/图例）用描边款**（`transparent` 底 + accent 描边 + accent 文字），实心满填只留给焦点/终端强调与交互 UI

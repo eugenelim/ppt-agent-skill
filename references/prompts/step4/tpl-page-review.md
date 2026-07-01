@@ -119,7 +119,7 @@ cp {{PNG_OUTPUT}} {{REVIEW_RUNTIME_PNG_PATH}}
 
 ```bash
 python3 {{SKILL_DIR}}/scripts/subagent_logger.py run --log {{SUBAGENT_LOG_PATH}} --label review-visual-qa -- \
-  python3 {{SKILL_DIR}}/scripts/visual_qa.py {{PNG_OUTPUT}} --planning {{PLANNING_OUTPUT}} --html {{SLIDE_OUTPUT}} --output {{VISUAL_QA_REPORT_PATH}}
+  python3 {{SKILL_DIR}}/scripts/visual_qa.py {{PNG_OUTPUT}} --planning {{PLANNING_OUTPUT}} --html {{SLIDE_OUTPUT}} --style {{STYLE_PATH}} --output {{VISUAL_QA_REPORT_PATH}}
 ```
 
 - 退出码 0 → 可以 FINALIZE
