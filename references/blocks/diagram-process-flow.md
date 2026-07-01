@@ -56,7 +56,7 @@
   <!-- 箭头：下 -->
   <div style="display:flex; justify-content:center; height:24px;">
     <svg viewBox="0 0 20 24" style="width:20px; height:24px; overflow:visible; display:block;">
-      <line x1="10" y1="0" x2="10" y2="16" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="10" y1="0" x2="10" y2="16" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="4,14 10,24 16,14" fill="var(--edge)"/>
     </svg>
   </div>
@@ -74,7 +74,7 @@
   <!-- 箭头：下 -->
   <div style="display:flex; justify-content:center; height:24px;">
     <svg viewBox="0 0 20 24" style="width:20px; height:24px; overflow:visible; display:block;">
-      <line x1="10" y1="0" x2="10" y2="16" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="10" y1="0" x2="10" y2="16" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="4,14 10,24 16,14" fill="var(--edge)"/>
     </svg>
   </div>
@@ -96,11 +96,11 @@
     <!-- 中线向左折 → 拒绝节点；中线向下 → 是 -->
     <svg viewBox="0 0 640 80" style="width:640px; height:80px; overflow:visible; display:block; position:absolute; left:0; top:0;">
       <!-- 是：向下 -->
-      <line x1="320" y1="0" x2="320" y2="60" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="320" y1="0" x2="320" y2="60" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="314,58 320,68 326,58" fill="var(--edge)"/>
       <!-- 否：右侧折线到拒绝节点 -->
-      <line x1="320" y1="12" x2="520" y2="12" stroke="var(--edge)" stroke-width="2"/>
-      <line x1="520" y1="12" x2="520" y2="60" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="320" y1="12" x2="520" y2="12" stroke="var(--edge)" stroke-width="1.5"/>
+      <line x1="520" y1="12" x2="520" y2="60" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="514,58 520,68 526,58" fill="var(--edge)"/>
     </svg>
     <!-- 分支标注：HTML 叠加 -->
@@ -136,10 +136,10 @@
   <div style="position:relative; height:48px; width:100%;">
     <svg viewBox="0 0 640 48" style="width:640px; height:48px; overflow:visible; display:block; position:absolute; left:0; top:0;">
       <!-- 左支：处理业务 → 下 -->
-      <line x1="320" y1="0" x2="320" y2="32" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="320" y1="0" x2="320" y2="32" stroke="var(--edge)" stroke-width="1.5"/>
       <!-- 右支：返回401 折回中心 -->
-      <line x1="520" y1="0" x2="520" y2="20" stroke="var(--edge)" stroke-width="2"/>
-      <line x1="520" y1="20" x2="320" y2="20" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="520" y1="0" x2="520" y2="20" stroke="var(--edge)" stroke-width="1.5"/>
+      <line x1="520" y1="20" x2="320" y2="20" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="314,30 320,40 326,30" fill="var(--edge)"/>
     </svg>
   </div>
@@ -268,10 +268,10 @@
   <div style="position:relative; height:0; overflow:visible;">
     <svg viewBox="0 0 700 216" style="position:absolute; top:-216px; left:0; width:700px; height:216px; overflow:visible; pointer-events:none; display:block;">
       <!-- 用户-提交申请 → 系统-验证数据（向下跨行） -->
-      <line x1="314" y1="80" x2="314" y2="120" stroke="var(--edge-strong)" stroke-width="2"/>
+      <line x1="314" y1="80" x2="314" y2="120" stroke="var(--edge-strong)" stroke-width="1.5"/>
       <polygon points="308,118 314,128 320,118" fill="var(--edge-strong)"/>
       <!-- 系统-验证数据 → 审批人-审核（向下跨行） -->
-      <line x1="314" y1="152" x2="314" y2="168" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="314" y1="152" x2="314" y2="168" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="308,166 314,176 320,166" fill="var(--edge)"/>
       <!-- 审批人-生成记录标注 → 用户-收到通知（跨行向上，折线） -->
       <line x1="530" y1="176" x2="530" y2="60" stroke="var(--edge)" stroke-width="1.5" stroke-dasharray="4 3"/>
@@ -281,8 +281,10 @@
 </div>
 ```
 > 复制规律：每条泳道一行 grid（角色标签 + N 个节点格），用 `grid-template-columns` 对齐各列；跨泳道箭头用 `position:relative; height:0; overflow:visible` 覆盖层的 SVG 连线+polygon 箭头，标注是 HTML span。
+>
+> **角色/泳道标签用「描边款」，不做实心色块**：角色名保持中性文字（`color:var(--node-fg)`）即可；若要加胶囊/chip 强调，必须 `background:transparent; border:1.5px solid var(--node-accent); color:var(--node-accent)`（描边），**绝不用 `background:var(--node-accent)` 满填**——满填的标签比它要标注的节点还重，权重倒挂（见 `diagram.md`「实心填充只留给强调/交互」）。
 
-**自检**：泳道行用 CSS grid 对齐，角色名是真实 span；跨泳道连线用 SVG；focus 节点 accent 描边；所有颜色来自契约变量。
+**自检**：泳道行用 CSS grid 对齐，角色名是真实 span；**角色/泳道标签为中性文字或描边胶囊，非实心色块**；跨泳道连线用 SVG；focus 节点 accent 描边（非实心底、标题仍为 `--node-fg`）；所有颜色来自契约变量。
 
 **管线安全**：无 SVG `<text>`；无伪元素装饰；箭头 `<polygon>`；连线 SVG `<line>`；无 `mask-image`/`conic-gradient`。
 
@@ -376,15 +378,15 @@
         fill="var(--node-bg-from)" stroke="var(--node-accent)" stroke-width="1.5"/>
 
       <!-- 消息1：Client→API GW，y=40（同步，实线） -->
-      <line x1="85" y1="40" x2="249" y2="40" stroke="var(--edge-strong)" stroke-width="2"/>
+      <line x1="85" y1="40" x2="249" y2="40" stroke="var(--edge-strong)" stroke-width="1.5"/>
       <polygon points="241,34 255,40 241,46" fill="var(--edge-strong)"/>
 
       <!-- 消息2：API GW→Auth Svc，y=80 -->
-      <line x1="261" y1="80" x2="421" y2="80" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="261" y1="80" x2="421" y2="80" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="413,74 425,80 413,86" fill="var(--edge)"/>
 
       <!-- 消息3：Auth Svc→DB，y=120 -->
-      <line x1="425" y1="120" x2="591" y2="120" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="425" y1="120" x2="591" y2="120" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="583,114 595,120 583,126" fill="var(--edge)"/>
 
       <!-- 消息4：DB→Auth Svc，return y=160（虚线） -->
@@ -465,7 +467,7 @@
 
     <!-- 初态→空闲 箭头 -->
     <svg viewBox="0 0 56 16" style="width:56px; height:16px; overflow:visible; display:block;">
-      <line x1="0" y1="8" x2="40" y2="8" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="0" y1="8" x2="40" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="38,2 52,8 38,14" fill="var(--edge)"/>
     </svg>
 
@@ -480,7 +482,7 @@
     <!-- 空闲→处理中 箭头+标注 -->
     <div style="position:relative; width:120px; height:16px; display:flex; align-items:center;">
       <svg viewBox="0 0 120 16" style="width:120px; height:16px; overflow:visible; display:block;">
-        <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="2"/>
+        <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="1.5"/>
         <polygon points="102,2 116,8 102,14" fill="var(--edge-strong)"/>
       </svg>
       <span style="position:absolute; left:20px; top:-14px; font-size:11px; font-weight:600; color:var(--node-fg-dim); white-space:nowrap;">submit</span>
@@ -501,12 +503,12 @@
     <svg viewBox="0 0 640 80" style="width:640px; height:80px; overflow:visible; display:block; position:absolute; left:0; top:0;">
       <!-- 中心 x 约在 490（处理中节点中心） -->
       <!-- 向右到已完成 -->
-      <line x1="490" y1="8" x2="600" y2="8" stroke="var(--edge)" stroke-width="2"/>
-      <line x1="600" y1="8" x2="600" y2="64" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="490" y1="8" x2="600" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
+      <line x1="600" y1="8" x2="600" y2="64" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="594,62 600,72 606,62" fill="var(--edge)"/>
       <!-- 向左到出错 -->
-      <line x1="434" y1="8" x2="230" y2="8" stroke="var(--edge)" stroke-width="2"/>
-      <line x1="230" y1="8" x2="230" y2="64" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="434" y1="8" x2="230" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
+      <line x1="230" y1="8" x2="230" y2="64" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="224,62 230,72 236,62" fill="var(--edge)"/>
     </svg>
     <!-- guard 标注 -->
@@ -543,14 +545,14 @@
 
     <!-- 已完成→终态 箭头 -->
     <svg viewBox="0 0 64 16" style="width:64px; height:16px; overflow:visible; display:block;">
-      <line x1="0" y1="8" x2="48" y2="8" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="0" y1="8" x2="48" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="46,2 60,8 46,14" fill="var(--edge)"/>
     </svg>
 
     <!-- 终态：靶心圆（外圈+实心内圆） -->
     <div style="display:flex; align-items:center; justify-content:center; width:32px; height:32px;">
       <svg viewBox="0 0 32 32" style="width:32px; height:32px; display:block;">
-        <circle cx="16" cy="16" r="12" fill="none" stroke="var(--node-fg)" stroke-width="2"/>
+        <circle cx="16" cy="16" r="12" fill="none" stroke="var(--node-fg)" stroke-width="1.5"/>
         <circle cx="16" cy="16" r="7" fill="var(--node-fg)"/>
       </svg>
     </div>
@@ -615,7 +617,7 @@
     <!-- 凭据流箭头 -->
     <div style="position:relative; width:120px; height:16px; display:flex; align-items:center;">
       <svg viewBox="0 0 120 16" style="width:120px; height:16px; overflow:visible; display:block;">
-        <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="2"/>
+        <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge-strong)" stroke-width="1.5"/>
         <polygon points="102,2 116,8 102,14" fill="var(--edge-strong)"/>
       </svg>
       <span style="position:absolute; left:16px; top:-14px; font-size:11px; font-weight:600; color:var(--node-fg-dim);">凭据</span>
@@ -625,7 +627,7 @@
     <div style="position:relative; width:96px; height:96px; display:flex; align-items:center; justify-content:center;">
       <svg viewBox="0 0 96 96" style="width:96px; height:96px; overflow:visible; display:block; position:absolute; top:0; left:0;">
         <circle cx="48" cy="48" r="44" fill="var(--node-bg-from)"
-          stroke="var(--node-accent)" stroke-width="2"/>
+          stroke="var(--node-accent)" stroke-width="1.5"/>
       </svg>
       <span style="position:relative; z-index:1; font-size:12px; font-weight:700; color:var(--node-fg); text-align:center; line-height:1.3;">鉴权<br>服务</span>
     </div>
@@ -633,7 +635,7 @@
     <!-- Token 流箭头 -->
     <div style="position:relative; width:120px; height:16px; display:flex; align-items:center;">
       <svg viewBox="0 0 120 16" style="width:120px; height:16px; overflow:visible; display:block;">
-        <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="0" y1="8" x2="104" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
         <polygon points="102,2 116,8 102,14" fill="var(--edge)"/>
       </svg>
       <span style="position:absolute; left:20px; top:-14px; font-size:11px; font-weight:600; color:var(--node-fg-dim);">Token</span>
@@ -643,7 +645,7 @@
     <div style="position:relative; width:96px; height:96px; display:flex; align-items:center; justify-content:center;">
       <svg viewBox="0 0 96 96" style="width:96px; height:96px; overflow:visible; display:block; position:absolute; top:0; left:0;">
         <circle cx="48" cy="48" r="44" fill="var(--node-bg-from)"
-          stroke="var(--node-border)" stroke-width="2"/>
+          stroke="var(--node-border)" stroke-width="1.5"/>
       </svg>
       <span style="position:relative; z-index:1; font-size:12px; font-weight:700; color:var(--node-fg); text-align:center; line-height:1.3;">业务<br>API</span>
     </div>
@@ -654,14 +656,14 @@
     <svg viewBox="0 0 680 56" style="width:680px; height:56px; overflow:visible; display:block; position:absolute; left:0; top:0;">
       <!-- 鉴权服务中心 x≈288; 会话存储在下方 x≈288 -->
       <!-- 写入 -->
-      <line x1="304" y1="0" x2="304" y2="40" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="304" y1="0" x2="304" y2="40" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="298,38 304,48 310,38" fill="var(--edge)"/>
       <!-- 读取（略偏左）-->
       <line x1="272" y1="40" x2="272" y2="0" stroke="var(--edge)" stroke-width="1.5" stroke-dasharray="4 3"/>
       <polygon points="266,10 272,0 278,10" fill="var(--edge)"/>
 
       <!-- 业务 API 中心 x≈584; 数据库在下方 -->
-      <line x1="600" y1="0" x2="600" y2="40" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="600" y1="0" x2="600" y2="40" stroke="var(--edge)" stroke-width="1.5"/>
       <polygon points="594,38 600,48 606,38" fill="var(--edge)"/>
       <line x1="568" y1="40" x2="568" y2="0" stroke="var(--edge)" stroke-width="1.5" stroke-dasharray="4 3"/>
       <polygon points="562,10 568,0 574,10" fill="var(--edge)"/>
@@ -679,8 +681,8 @@
       <div style="position:relative; min-width:160px; min-height:48px; box-sizing:border-box; padding:10px 16px;
         display:flex; align-items:center; justify-content:center;">
         <svg viewBox="0 0 160 48" style="position:absolute; top:0; left:0; width:160px; height:48px; display:block;">
-          <line x1="0" y1="2"  x2="160" y2="2"  stroke="var(--node-border)" stroke-width="2"/>
-          <line x1="0" y1="46" x2="160" y2="46" stroke="var(--node-border)" stroke-width="2"/>
+          <line x1="0" y1="2"  x2="160" y2="2"  stroke="var(--node-border)" stroke-width="1.5"/>
+          <line x1="0" y1="46" x2="160" y2="46" stroke="var(--node-border)" stroke-width="1.5"/>
         </svg>
         <span style="position:relative; z-index:1; font-size:13px; font-weight:700; color:var(--node-fg);">会话存储</span>
       </div>
@@ -693,8 +695,8 @@
       <div style="position:relative; min-width:160px; min-height:48px; box-sizing:border-box; padding:10px 16px;
         display:flex; align-items:center; justify-content:center;">
         <svg viewBox="0 0 160 48" style="position:absolute; top:0; left:0; width:160px; height:48px; display:block;">
-          <line x1="0" y1="2"  x2="160" y2="2"  stroke="var(--node-border)" stroke-width="2"/>
-          <line x1="0" y1="46" x2="160" y2="46" stroke="var(--node-border)" stroke-width="2"/>
+          <line x1="0" y1="2"  x2="160" y2="2"  stroke="var(--node-border)" stroke-width="1.5"/>
+          <line x1="0" y1="46" x2="160" y2="46" stroke="var(--node-border)" stroke-width="1.5"/>
         </svg>
         <span style="position:relative; z-index:1; font-size:13px; font-weight:700; color:var(--node-fg);">业务数据库</span>
       </div>

@@ -52,7 +52,7 @@
 
   <!-- 层间依赖箭头：SVG polygon，向下 -->
   <svg viewBox="0 0 760 24" preserveAspectRatio="none" style="width:100%; height:24px; overflow:visible; display:block;">
-    <line x1="380" y1="0" x2="380" y2="16" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="380" y1="0" x2="380" y2="16" stroke="var(--edge)" stroke-width="1.5"/>
     <polygon points="374,14 380,24 386,14" fill="var(--edge)"/>
   </svg>
 
@@ -117,7 +117,7 @@
         border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg); font-weight:700; font-size:14px;">ALB</div>
 
       <svg viewBox="0 0 80 16" preserveAspectRatio="none" style="width:80px; height:16px; overflow:visible; display:block;">
-        <line x1="0" y1="8" x2="64" y2="8" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="0" y1="8" x2="64" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
         <polygon points="64,2 78,8 64,14" fill="var(--edge)"/>
       </svg>
 
@@ -129,7 +129,7 @@
       </div>
 
       <svg viewBox="0 0 80 16" preserveAspectRatio="none" style="width:80px; height:16px; overflow:visible; display:block;">
-        <line x1="0" y1="8" x2="64" y2="8" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="0" y1="8" x2="64" y2="8" stroke="var(--edge)" stroke-width="1.5"/>
         <polygon points="64,2 78,8 64,14" fill="var(--edge)"/>
       </svg>
 
@@ -183,7 +183,7 @@
 
   <div style="position:relative; flex:1; height:52px;">
     <svg viewBox="0 0 180 52" preserveAspectRatio="none" style="width:100%; height:100%; overflow:visible; display:block;">
-      <line x1="0" y1="26" x2="180" y2="26" stroke="var(--edge)" stroke-width="2"/>
+      <line x1="0" y1="26" x2="180" y2="26" stroke="var(--edge)" stroke-width="1.5"/>
     </svg>
     <span style="position:absolute; left:50%; top:2px; transform:translateX(-50%); font-size:11px;
       font-weight:700; color:var(--node-fg-dim);">1 : N</span>

@@ -90,7 +90,7 @@
           border:1px solid var(--node-accent); border-radius:var(--node-radius);
           box-sizing:border-box; display:flex; align-items:center; padding:0 8px;
           box-shadow:0 0 0 1px var(--node-accent);">
-          <span style="font-size:11px; color:var(--node-accent); font-weight:700;">设计</span>
+          <span style="font-size:11px; color:var(--node-fg); font-weight:700;">设计</span>
         </div>
       </div>
     </div>
@@ -220,7 +220,7 @@
     background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
     border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg);
     box-shadow:0 0 0 1px var(--node-accent);">
-    <span style="font-weight:700; font-size:13px; color:var(--node-accent);">设计</span>
+    <span style="font-weight:700; font-size:13px; color:var(--node-fg);">设计</span>
     <span style="font-size:11px; color:var(--node-fg-dim);">3d</span>
   </div>
 
@@ -241,7 +241,7 @@
     background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
     border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg);
     box-shadow:0 0 0 1px var(--node-accent);">
-    <span style="font-weight:700; font-size:13px; color:var(--node-accent);">API</span>
+    <span style="font-weight:700; font-size:13px; color:var(--node-fg);">API</span>
     <span style="font-size:11px; color:var(--node-fg-dim);">4d</span>
   </div>
 
@@ -252,7 +252,7 @@
     background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
     border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg);
     box-shadow:0 0 0 1px var(--node-accent);">
-    <span style="font-weight:700; font-size:13px; color:var(--node-accent);">前端</span>
+    <span style="font-weight:700; font-size:13px; color:var(--node-fg);">前端</span>
     <span style="font-size:11px; color:var(--node-fg-dim);">5d</span>
   </div>
 
@@ -263,7 +263,7 @@
     background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
     border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg);
     box-shadow:0 0 0 1px var(--node-accent);">
-    <span style="font-weight:700; font-size:13px; color:var(--node-accent);">发布</span>
+    <span style="font-weight:700; font-size:13px; color:var(--node-fg);">发布</span>
     <span style="font-size:11px; color:var(--node-fg-dim);">1d</span>
   </div>
 
@@ -272,27 +272,27 @@
        viewBox="0 0 700 280" preserveAspectRatio="none">
 
     <!-- 需求 → 设计（关键，edge-strong） -->
-    <line x1="88"  y1="128" x2="154" y2="72"  stroke="var(--edge-strong)" stroke-width="2"/>
+    <line x1="88"  y1="128" x2="154" y2="72"  stroke="var(--edge-strong)" stroke-width="1.5"/>
     <polygon points="148,64 160,74 152,82" fill="var(--edge-strong)"/>
 
     <!-- 需求 → 测试（普通） -->
-    <line x1="88"  y1="128" x2="154" y2="196" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="88"  y1="128" x2="154" y2="196" stroke="var(--edge)" stroke-width="1.5"/>
     <polygon points="148,188 160,198 152,206" fill="var(--edge)"/>
 
     <!-- 设计 → API（关键） -->
-    <line x1="248" y1="72"  x2="314" y2="72"  stroke="var(--edge-strong)" stroke-width="2"/>
+    <line x1="248" y1="72"  x2="314" y2="72"  stroke="var(--edge-strong)" stroke-width="1.5"/>
     <polygon points="308,66 320,72 308,78" fill="var(--edge-strong)"/>
 
     <!-- API → 前端（关键） -->
-    <line x1="408" y1="72"  x2="474" y2="72"  stroke="var(--edge-strong)" stroke-width="2"/>
+    <line x1="408" y1="72"  x2="474" y2="72"  stroke="var(--edge-strong)" stroke-width="1.5"/>
     <polygon points="468,66 480,72 468,78" fill="var(--edge-strong)"/>
 
     <!-- 前端 → 发布（关键） -->
-    <line x1="568" y1="72"  x2="604" y2="124" stroke="var(--edge-strong)" stroke-width="2"/>
+    <line x1="568" y1="72"  x2="604" y2="124" stroke="var(--edge-strong)" stroke-width="1.5"/>
     <polygon points="596,116 606,128 614,120" fill="var(--edge-strong)"/>
 
     <!-- 测试 → 发布（普通） -->
-    <line x1="248" y1="196" x2="604" y2="132" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="248" y1="196" x2="604" y2="132" stroke="var(--edge)" stroke-width="1.5"/>
     <polygon points="596,124 608,134 600,142" fill="var(--edge)"/>
 
   </svg>
@@ -358,13 +358,13 @@
   <svg viewBox="0 0 400 32" preserveAspectRatio="none"
        style="width:400px; height:32px; overflow:visible; display:block;">
     <!-- 竖线：根节点中心向下 -->
-    <line x1="200" y1="0" x2="200" y2="16" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="200" y1="0" x2="200" y2="16" stroke="var(--edge)" stroke-width="1.5"/>
     <!-- 水平横线：跨越两个子节点中心 -->
-    <line x1="100" y1="16" x2="300" y2="16" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="100" y1="16" x2="300" y2="16" stroke="var(--edge)" stroke-width="1.5"/>
     <!-- CTO 侧向下 -->
-    <line x1="100" y1="16" x2="100" y2="32" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="100" y1="16" x2="100" y2="32" stroke="var(--edge)" stroke-width="1.5"/>
     <!-- CMO 侧向下 -->
-    <line x1="300" y1="16" x2="300" y2="32" stroke="var(--edge)" stroke-width="2"/>
+    <line x1="300" y1="16" x2="300" y2="32" stroke="var(--edge)" stroke-width="1.5"/>
   </svg>
 
   <!-- 二级节点行 -->
@@ -377,17 +377,17 @@
         background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
         border:1px solid var(--node-accent); border-radius:var(--node-radius); color:var(--node-fg);
         box-shadow:0 0 0 1px var(--node-accent); text-align:center;">
-        <span style="font-weight:700; font-size:13px; color:var(--node-accent);">CTO</span>
+        <span style="font-weight:700; font-size:13px; color:var(--node-fg);">CTO</span>
         <span style="font-size:11px; color:var(--node-fg-dim);">李四</span>
       </div>
 
       <!-- CTO → 三级连线 -->
       <svg viewBox="0 0 200 28" preserveAspectRatio="none"
            style="width:200px; height:28px; overflow:visible; display:block;">
-        <line x1="100" y1="0"  x2="100" y2="14" stroke="var(--edge)" stroke-width="2"/>
-        <line x1="50"  y1="14" x2="150" y2="14" stroke="var(--edge)" stroke-width="2"/>
-        <line x1="50"  y1="14" x2="50"  y2="28" stroke="var(--edge)" stroke-width="2"/>
-        <line x1="150" y1="14" x2="150" y2="28" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="100" y1="0"  x2="100" y2="14" stroke="var(--edge)" stroke-width="1.5"/>
+        <line x1="50"  y1="14" x2="150" y2="14" stroke="var(--edge)" stroke-width="1.5"/>
+        <line x1="50"  y1="14" x2="50"  y2="28" stroke="var(--edge)" stroke-width="1.5"/>
+        <line x1="150" y1="14" x2="150" y2="28" stroke="var(--edge)" stroke-width="1.5"/>
       </svg>
 
       <!-- 三级节点 -->
@@ -425,10 +425,10 @@
       <!-- CMO → 三级连线 -->
       <svg viewBox="0 0 200 28" preserveAspectRatio="none"
            style="width:200px; height:28px; overflow:visible; display:block;">
-        <line x1="100" y1="0"  x2="100" y2="14" stroke="var(--edge)" stroke-width="2"/>
-        <line x1="50"  y1="14" x2="150" y2="14" stroke="var(--edge)" stroke-width="2"/>
-        <line x1="50"  y1="14" x2="50"  y2="28" stroke="var(--edge)" stroke-width="2"/>
-        <line x1="150" y1="14" x2="150" y2="28" stroke="var(--edge)" stroke-width="2"/>
+        <line x1="100" y1="0"  x2="100" y2="14" stroke="var(--edge)" stroke-width="1.5"/>
+        <line x1="50"  y1="14" x2="150" y2="14" stroke="var(--edge)" stroke-width="1.5"/>
+        <line x1="50"  y1="14" x2="50"  y2="28" stroke="var(--edge)" stroke-width="1.5"/>
+        <line x1="150" y1="14" x2="150" y2="28" stroke="var(--edge)" stroke-width="1.5"/>
       </svg>
 
       <!-- 三级节点 -->
