@@ -1,6 +1,6 @@
 # Plan: gallery title/detail two-tier + toggle
 
-- **Status:** Executing
+- **Status:** Done
 - **Constrained by:** the `gallery_face()` contract from PR #14 (cover =
   `<id>.cover.html` if present, else `<id>.html`).
 

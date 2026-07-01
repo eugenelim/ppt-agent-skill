@@ -2,7 +2,7 @@
 
 Mode: full (risk trigger: multi-feature / dependent tasks)
 
-- **Status:** Implementing
+- **Status:** Shipped
 - **Constrained by:** the `gallery_face()` contract merged in PR #14 (a style's
   gallery face = `<id>.cover.html` if present, else `<id>.html`; `gallery.py`
   screenshots the face → `<id>.png`, `build_hero.py` tiles the PNGs).
@@ -52,15 +52,15 @@ Per style, normalization depends on what the existing `<id>.html` is:
 - [x] A recorded **classification** of all 29 existing `<id>.html` as
   cover-primary or detail-primary (task-zero), committed to the spec folder as
   `classification.md`, so the per-tier authoring split is grounded not guessed.
-- [ ] Every one of the 29 styles has **both** `<id>.cover.html` (cover) and
+- [x] Every one of the 29 styles has **both** `<id>.cover.html` (cover) and
   `<id>.html` (detail) with the canonical roles above; each 1280×720 and
   pipeline-safe (0 compat failures — no `mask-image`/`-webkit-mask-image`/
   `conic-gradient`/`mix-blend-mode`/`background-image:url()`) and 0 net-new
   typography *failures*. Typography *warns* are advisory and budgeted in the
-  Testing Strategy, not a pass bar. (deferred: gallery-tier-authoring)
-- [ ] Cover and detail for a style are genuinely distinct: the cover is
+  Testing Strategy, not a pass bar.
+- [x] Cover and detail for a style are genuinely distinct: the cover is
   title/identity only and carries **none** of the stat/card/table/chart content
-  blocks its detail slide uses (checked against the screenshot). (deferred: gallery-tier-authoring)
+  blocks its detail slide uses (checked against the screenshot).
 - [x] `smoke_test.py` phase 1 validates compat + typography for **both** tiers
   (`<id>.cover.html` and `<id>.html`) of **every** style — i.e. both are
   fixtures — with zero net-new *failures* vs. baseline and net-new *warns* within
@@ -77,17 +77,17 @@ Per style, normalization depends on what the existing `<id>.html` is:
   construction check driving `build_index_html` with a synthetic one-tier style.
 - [x] Category sections show enriched headers: cn/en label, a one-line
   "what it's for", benchmark brands, and per-category counts.
-- [ ] Hero composites stay cover-based (`gallery_face` → `<id>.cover.html` for
+- [x] Hero composites stay cover-based (`gallery_face` → `<id>.cover.html` for
   all 29) and regenerate cleanly. (After normalization, the hero content is
-  unchanged from PR #14 for cover-primary styles — the same cover, relocated.)
-  (deferred: gallery-tier-finalize)
-- [ ] For every **cover-primary** style relocated, its `references/styles/*.md`
+  unchanged from PR #14 for cover-primary styles — the same cover, relocated;
+  the 3 detail-primary styles now show their net-new covers.)
+- [x] For every **cover-primary** style relocated, its `references/styles/*.md`
   entry names **both** tiers — the mock link/prose is updated so the cover link
   points at `<id>.cover.html` and a detail link points at `<id>.html`, and the
   surrounding description matches what each URL now renders (no prose that
   describes the cover left sitting next to a link that now resolves to the
-  detail). No intra-repo `<id>.html` reference dangles. (deferred: gallery-tier-authoring)
-- [ ] `README.md` and `references/style-system.md` describe the two-tier model. (deferred: gallery-tier-finalize)
+  detail). No intra-repo `<id>.html` reference dangles.
+- [x] `README.md` and `references/style-system.md` describe the two-tier model.
 - [x] **Two tiers are the forward standard for new/absorbed styles.**
   `references/style-system.md` mandates that every style ship **both**
   `<id>.cover.html` (cover) and `<id>.html` (detail) as `smoke_test` fixtures,

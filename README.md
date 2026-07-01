@@ -73,7 +73,7 @@
 | **智能配图** | AI 生成配图 + 5 种视觉融入技法（渐隐融合/色调蒙版/氛围底图等）|
 | **失败模式目录** | 8 种 failure modes（underfill / decorative_substitution 等）+ 修复顺序铁律 |
 | **跨页叙事** | 密度交替节奏 / 章节色彩递进 / 封面-结尾呼应 / 渐进揭示 |
-| **风格预览画廊** | `gallery.py` 一键生成 29 风格卡片墙索引页 |
+| **风格预览画廊** | `gallery.py` 一键生成 29 风格卡片墙索引页，每风格封面 + 详情双版可切换 |
 | **Smoke 测试** | `smoke_test.py` 校验风格 JSON / pipeline 兼容 / 排版铁律 / 端到端管线 |
 | **PPTX 兼容** | HTML → SVG → PPTX 管线，PPT 365 中右键"转换为形状"全部可编辑 |
 
@@ -113,7 +113,10 @@ pip install python-pptx lxml Pillow
 
 ## 🎨 29 风格预览画廊
 
-5 个板块，覆盖所有典型商业场景。每个 mock 都是真实 1280×720 设计稿：
+5 个板块，覆盖所有典型商业场景。每个风格都附**两版**真实 1280×720 设计稿 ——
+**封面**（`<id>.cover.html`，标题/身份页）+ **详情**（`<id>.html`，内容/数据页）；
+画廊索引页每张卡片有 **Cover / Detail** 切换，顶部还有全局「Show: Covers / Details」开关，
+hero 拼图统一取封面：
 
 ### 暗色专业（8 风格 · `references/styles/dark.md`）
 
