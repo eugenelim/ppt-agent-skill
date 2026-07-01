@@ -17,6 +17,9 @@ tests/smoke-results/*/screenshots/
 # Puppeteer 运行时产物
 *.bundle.js
 
+# html2svg 每次转换的唯一临时目录（正常运行会自清理，此处兜底残留）
+.h2svg-*/
+
 # ── agent-ready-repo (core pack) ──────────────────────────────
 # Local install-time scratch — written by `agentbundle install`.
 .adapt-install-marker.toml

@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -446,7 +447,7 @@ window.__domToSvg = { documentToSVG, elementToSVG, inlineResources };
 """
 
 
-def ensure_deps(work_dir: Path) -> tuple:
+def ensure_deps(work_dir: Path, run_tmp: Path) -> tuple:
     """安装依赖，返回 (方案名, bundle路径)"""
     # puppeteer
     r = subprocess.run(
@@ -480,7 +481,7 @@ def ensure_deps(work_dir: Path) -> tuple:
     bundle_path = work_dir / "dom-to-svg.bundle.js"
     if not bundle_path.exists():
         print("Building dom-to-svg browser bundle...")
-        entry_path = work_dir / ".bundle_entry.js"
+        entry_path = run_tmp / "bundle_entry.js"
         entry_path.write_text(BUNDLE_ENTRY)
         r = subprocess.run(
             ["npx", "-y", "esbuild", str(entry_path),
@@ -497,7 +498,18 @@ def ensure_deps(work_dir: Path) -> tuple:
     return ("dom-to-svg", str(bundle_path))
 
 
-def convert_dom_to_svg(html_files, output_dir, work_dir, bundle_path):
+def make_run_tmp(work_dir: Path) -> Path:
+    """本次 convert() 的唯一临时目录，作为 work_dir 的直接子目录。
+
+    并发的多个 run 各拿一个唯一目录，同名临时脚本/PDF 便不再互相覆盖。
+    必须是 work_dir 的直接子目录——node 解析 require() 时从脚本所在目录逐级
+    上溯找 node_modules，放在这里才能命中共享的 work_dir/node_modules。
+    调用方负责用完删除（见 convert() 的 finally）。
+    """
+    return Path(tempfile.mkdtemp(dir=str(work_dir), prefix=".h2svg-"))
+
+
+def convert_dom_to_svg(html_files, output_dir, work_dir, bundle_path, run_tmp):
     """用 dom-to-svg 方案转换"""
     config = {
         "bundlePath": bundle_path,
@@ -507,7 +519,7 @@ def convert_dom_to_svg(html_files, output_dir, work_dir, bundle_path):
         ]
     }
 
-    script_path = work_dir / ".dom2svg_tmp.js"
+    script_path = run_tmp / "dom2svg_tmp.js"
     script_path.write_text(CONVERT_SCRIPT)
 
     try:
@@ -531,13 +543,13 @@ def convert_dom_to_svg(html_files, output_dir, work_dir, bundle_path):
             script_path.unlink()
 
 
-def convert_pdf2svg(html_files, output_dir, work_dir):
+def convert_pdf2svg(html_files, output_dir, work_dir, run_tmp):
     """降级方案：Puppeteer PDF + pdf2svg"""
     if not shutil.which("pdf2svg"):
         print("pdf2svg not found. Install: sudo apt install pdf2svg", file=sys.stderr)
         return False
 
-    pdf_tmp = work_dir / ".pdf_tmp"
+    pdf_tmp = run_tmp / "pdf_tmp"
     pdf_tmp.mkdir(exist_ok=True)
 
     config = {
@@ -547,7 +559,7 @@ def convert_pdf2svg(html_files, output_dir, work_dir):
         ]
     }
 
-    script_path = work_dir / ".fallback_tmp.js"
+    script_path = run_tmp / "fallback_tmp.js"
     script_path.write_text(FALLBACK_SCRIPT)
 
     try:
@@ -596,16 +608,23 @@ def convert(html_dir: Path, output_dir: Path) -> bool:
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    method, bundle_path = ensure_deps(work_dir)
+    # 每次 convert() 独占一个临时目录，并发 run 之间不再共享固定名临时文件
+    run_tmp = make_run_tmp(work_dir)
+    try:
+        method, bundle_path = ensure_deps(work_dir, run_tmp)
 
-    if method == "dom-to-svg" and bundle_path:
-        ok = convert_dom_to_svg(html_files, output_dir, work_dir, bundle_path)
-        if ok:
-            print(f"\nDone! {len(html_files)} SVGs -> {output_dir}")
-            return True
-        print("dom-to-svg failed, falling back to pdf2svg...")
+        if method == "dom-to-svg" and bundle_path:
+            ok = convert_dom_to_svg(html_files, output_dir, work_dir, bundle_path, run_tmp)
+            if ok:
+                print(f"\nDone! {len(html_files)} SVGs -> {output_dir}")
+                return True
+            print("dom-to-svg failed, falling back to pdf2svg...")
 
-    return convert_pdf2svg(html_files, output_dir, work_dir)
+        return convert_pdf2svg(html_files, output_dir, work_dir, run_tmp)
+    finally:
+        # 权威清理点：无论走哪条分支/是否异常，都删掉整个临时目录。
+        # 内层函数各自的 unlink/rmtree 只是早清理（crash-locality），此处兜底。
+        shutil.rmtree(run_tmp, ignore_errors=True)
 
 
 def main():

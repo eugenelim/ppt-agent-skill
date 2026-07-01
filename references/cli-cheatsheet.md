@@ -1,6 +1,7 @@
 # CLI 速查表
 
 > 按步骤组织的完整命令手册。执行时用实际路径替换 `SKILL_DIR` / `OUTPUT_DIR` 等变量。
+> `OUTPUT_DIR = ppt-output/<deck-slug>/`（每个 PPT 一个目录；slug 规则见 SKILL.md 路径约定）——下面所有命令都相对 `OUTPUT_DIR`，分目录后无需改动。
 > 主 agent 进入 Step 0 前必须读取此文件建立接口认知。禁止对任何脚本跑 `--help`。
 
 ---
@@ -537,6 +538,8 @@ python3 SKILL_DIR/scripts/prompt_harness.py \
 ---
 
 ### 4.4 回收 FINALIZE — 主 agent 整页终检
+
+> **强制闸门（每条路径都适用）**：`planning_validator.py` 必须零 ERROR 才能进入 HTML；`skeleton card` / `empty card payload` 直接拦下。不得用离线/自建脚本绕过本校验产出骨架策划。
 
 **第 1 步：产物存在性 + 合同校验**
 
