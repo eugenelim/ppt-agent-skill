@@ -311,7 +311,7 @@ pip install python-pptx lxml Pillow 2>/dev/null
    ```bash
    python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides/ -o OUTPUT_DIR/preview.html --title "本演示文稿标题"
    ```
-   `--title` 传演示文稿的真实标题（大纲主标题），它会成为浏览器标签页标题，多个 deck 同时打开时便于区分。省略时自动从首页封面或 deck 目录名推断。
+   `--title` 传演示文稿的真实标题（大纲主标题），它会成为浏览器标签页标题，多个 deck 同时打开时便于区分。省略时自动推断：优先读 `outline.json/outline.txt` 的 `cover.title`，其次剥离首页 `<title>` 的 `Slide N -` 前缀，再退到首页 `<h1>`，最后回退 deck 目录名（占位符与未替换模板变量会被跳过）。
 
 2. **SVG 转换** -- 运行 `html2svg.py`（DOM 直接转 SVG，保留 `<text>` 可编辑）
    > **重要**：HTML 设计稿必须遵守 `references/pipeline-compat.md` 中的管线兼容性规则，否则转换后会出现元素丢失、位置错位等问题。
