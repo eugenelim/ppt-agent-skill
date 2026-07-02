@@ -16,13 +16,15 @@ screenshots (same provisioning as gallery.py); **Pillow** wraps PNG→PDF
 Modes:
   * mocks   — each 1280×720 slide HTML → a single-page PDF (or one multi-page
               PDF with --out).
-  * --deck  — a deck dir's slide HTMLs (all *.html except index-print.html) →
-              one multi-page PDF, in filename order.
+  * --deck  — a deck dir's slide HTMLs (all *.html except the combined
+              index-print.html / *preview.html views) → one multi-page PDF, in
+              filename order. Without --out the PDF is named after the deck dir
+              (the <deck-slug>), so it carries the topic: <deck-slug>.pdf.
 
 Usage:
     python3 scripts/build_pdf.py <a.html> [<b.html> ...] [--out deck.pdf]
     python3 scripts/build_pdf.py ppt-output/style-gallery/            # each *.html → .pdf
-    python3 scripts/build_pdf.py --deck ppt-output/<deck-dir> [--out deck.pdf]
+    python3 scripts/build_pdf.py --deck ppt-output/<deck-slug>        # → <deck-slug>.pdf
     python3 scripts/build_pdf.py <a.html> --width 1280 --height 720 --scale 2
 """
 from __future__ import annotations
@@ -69,10 +71,17 @@ def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> li
     is one PDF and its ordered list of absolute source HTML pages."""
     if deck:
         d = Path(deck)
-        slides = sorted(h for h in d.glob("*.html") if h.name != "index-print.html")
+        # Exclude the combined views that live alongside the slides: the print
+        # shell (index-print.html) and the packaged preview (<deck-slug>-preview.html),
+        # so neither is rendered as a stray page.
+        slides = sorted(
+            h for h in d.glob("*.html")
+            if h.name != "index-print.html" and not h.name.endswith("preview.html")
+        )
         if not slides:
             ip = d / "index-print.html"
             slides = [ip] if ip.exists() else []
+        # Default name carries the deck-slug (dir name) → <deck-slug>.pdf.
         pdf = Path(out).resolve() if out else (d / f"{d.name}.pdf").resolve()
         return [{"pdf": str(pdf), "pages": [str(s.resolve()) for s in slides]}]
 

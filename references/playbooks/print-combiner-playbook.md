@@ -34,6 +34,8 @@
 python3 scripts/build_pdf.py --deck <deck-dir>    # 各页截图 → 一份多页 PDF（像素级 1:1）
 ```
 
+不带 `--out` 时，PDF 以 deck 目录名（即 `<deck-slug>`）命名 → `<deck-dir>/<deck-slug>.pdf`，和 `<deck-slug>-preview.html` / `.pptx` 一样带主题名，单独下载也认得出。合并视图（`index-print.html` / `<deck-slug>-preview.html`）不会被当成正文页塞进 PDF。
+
 ## 为什么值得单列
 
 - **单一样式真源**：所有页共享一个 `css/styles.css`，风格改一处全体生效——比每页内联样式好维护。
