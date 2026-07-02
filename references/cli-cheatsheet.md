@@ -616,8 +616,8 @@ python3 -c "import os, glob; [os.remove(p) for p in ['OUTPUT_DIR/planning/planni
 执行管线：
 
 ```bash
-# 1. 预览
-python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides -o OUTPUT_DIR/preview.html
+# 1. 预览（--title 设为演示文稿真实标题，作为浏览器标签页标题；省略则自动推断）
+python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides -o OUTPUT_DIR/preview.html --title "本演示文稿标题"
 
 # 2. PNG 管线（与 SVG 并行）
 # --scale 3 → 输出 3840x2160 高清 PNG 供 PPT 使用（图审用 0.75 是为省 token，两者目的不同）
