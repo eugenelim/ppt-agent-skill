@@ -93,6 +93,13 @@ class Checker:
         if not path.is_dir():
             self.fail(f"missing dir: {path}")
 
+    def must_glob(self, pattern: str, label: str) -> None:
+        # Deliverable filenames may carry a <deck-slug> prefix (e.g.
+        # my-topic-preview.html); match by suffix pattern so both the bare
+        # and slug-prefixed names satisfy the gate.
+        if not any(p.is_file() for p in self.output_dir.glob(pattern)):
+            self.fail(f"missing {label}: no file matching {pattern} in {self.output_dir}")
+
     def run_cmd(self, cmd: list[str], title: str) -> None:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode == 0:
@@ -299,7 +306,7 @@ class Checker:
 
     def check_preview(self) -> None:
         self.echo("== Preview ==")
-        self.must_file(self.output_dir / "preview.html")
+        self.must_glob("*preview.html", "preview.html")
         self.echo("[OK] preview")
 
     def check_step5(self) -> None:
@@ -309,11 +316,11 @@ class Checker:
         svg_dir = self.output_dir / "svg"
         manifest = self.output_dir / "delivery-manifest.json"
 
-        self.must_file(self.output_dir / "preview.html")
+        self.must_glob("*preview.html", "preview.html")
         self.must_dir(png_dir)
         self.must_dir(svg_dir)
-        self.must_file(self.output_dir / "presentation-png.pptx")
-        self.must_file(self.output_dir / "presentation-svg.pptx")
+        self.must_glob("*png.pptx", "png pptx")
+        self.must_glob("*svg.pptx", "svg pptx")
         self.must_file(manifest)
 
         pngs = sorted(png_dir.glob("slide-*.png"), key=natural_sort_key)

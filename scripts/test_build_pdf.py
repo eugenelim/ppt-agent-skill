@@ -39,13 +39,17 @@ d = B.resolve_documents(["a.html", "b.html"], None, None)
 check(len(d) == 2, "no --out → one PDF per input")
 
 with tempfile.TemporaryDirectory() as t:
-    dd = Path(t)
-    for n in ("01.html", "02.html", "index-print.html"):
+    dd = Path(t) / "my-topic"
+    dd.mkdir()
+    for n in ("01.html", "02.html", "index-print.html", "my-topic-preview.html"):
         (dd / n).write_text("<html></html>")
     d = B.resolve_documents([], None, str(dd))
     check(len(d) == 1, "--deck → single document")
     names = [Path(p).name for p in d[0]["pages"]]
-    check(names == ["01.html", "02.html"], "--deck orders slides and EXCLUDES index-print.html")
+    check(names == ["01.html", "02.html"],
+          "--deck orders slides and EXCLUDES index-print.html + *preview.html")
+    check(Path(d[0]["pdf"]).name == "my-topic.pdf",
+          "--deck without --out → <deck-slug>.pdf (topic-named)")
 
 # --- node script: screenshot path, not print/page.pdf, no banned tools ---
 with tempfile.TemporaryDirectory() as t:

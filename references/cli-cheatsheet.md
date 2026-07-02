@@ -615,18 +615,20 @@ python3 -c "import os, glob; [os.remove(p) for p in ['OUTPUT_DIR/planning/planni
 
 执行管线：
 
+> **交付物文件名带主题（`<deck-slug>` = `OUTPUT_DIR` 的目录名，即 SKILL.md 里定下的那个 slug）**：三个终产物统一以 `<deck-slug>-` 前缀命名，这样用户单独下载/转发某个文件时也能一眼看出主题。中间目录（`png/`、`svg/`）与单页文件名不变。
+
 ```bash
 # 1. 预览（--title 设为演示文稿真实标题，作为浏览器标签页标题；省略则自动推断）
-python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides -o OUTPUT_DIR/preview.html --title "本演示文稿标题"
+python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides -o OUTPUT_DIR/<deck-slug>-preview.html --title "本演示文稿标题"
 
 # 2. PNG 管线（与 SVG 并行）
 # --scale 3 → 输出 3840x2160 高清 PNG 供 PPT 使用（图审用 0.75 是为省 token，两者目的不同）
 python3 SKILL_DIR/scripts/html2png.py OUTPUT_DIR/slides -o OUTPUT_DIR/png --scale 3
-python3 SKILL_DIR/scripts/png2pptx.py OUTPUT_DIR/png -o OUTPUT_DIR/presentation-png.pptx
+python3 SKILL_DIR/scripts/png2pptx.py OUTPUT_DIR/png -o OUTPUT_DIR/<deck-slug>-png.pptx
 
 # 3. SVG 管线（与 PNG 并行）
 python3 SKILL_DIR/scripts/html2svg.py OUTPUT_DIR/slides -o OUTPUT_DIR/svg
-python3 SKILL_DIR/scripts/svg2pptx.py OUTPUT_DIR/svg -o OUTPUT_DIR/presentation-svg.pptx --html-dir OUTPUT_DIR/slides
+python3 SKILL_DIR/scripts/svg2pptx.py OUTPUT_DIR/svg -o OUTPUT_DIR/<deck-slug>-svg.pptx --html-dir OUTPUT_DIR/slides
 
 # 4. 交付清单
 # 主 agent 按以下 schema 写入 delivery-manifest.json
@@ -642,9 +644,9 @@ python3 SKILL_DIR/scripts/svg2pptx.py OUTPUT_DIR/svg -o OUTPUT_DIR/presentation-
     "total_pages": 页数（正整数）
   },
   "artifacts": {
-    "preview_html": "preview.html（相对于 OUTPUT_DIR 的路径）",
-    "presentation_png_pptx": "presentation-png.pptx",
-    "presentation_svg_pptx": "presentation-svg.pptx"
+    "preview_html": "<deck-slug>-preview.html（相对于 OUTPUT_DIR 的路径）",
+    "presentation_png_pptx": "<deck-slug>-png.pptx",
+    "presentation_svg_pptx": "<deck-slug>-svg.pptx"
   },
   "pages": [
     { "page": 1, "planning": "planning/planning1.json", "html": "slides/slide-1.html", "png": "png/slide-1.png" }

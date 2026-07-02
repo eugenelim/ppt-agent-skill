@@ -296,8 +296,10 @@ Prompt #4 模板
 
 > **禁止跳过。** HTML 生成完后必须自动执行以下四步，不要停在 preview.html 就结束。
 
+> 三个终产物统一带 `<deck-slug>-` 前缀（`<deck-slug>` = `OUTPUT_DIR` 目录名），单独下载也能看出主题；中间目录（`svg/`、`png/`）与单页文件名不变。产物文件名以 `references/cli-cheatsheet.md` 为准。
+
 ```
-slides/*.html --> preview.html --> svg/*.svg --> presentation.pptx
+slides/*.html --> <deck-slug>-preview.html --> svg/*.svg --> <deck-slug>-svg.pptx
 ```
 
 **依赖检查**（首次运行自动执行）：
@@ -309,7 +311,7 @@ pip install python-pptx lxml Pillow 2>/dev/null
 
 1. **合并预览** -- 运行 `html_packager.py`
    ```bash
-   python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides/ -o OUTPUT_DIR/preview.html --title "本演示文稿标题"
+   python3 SKILL_DIR/scripts/html_packager.py OUTPUT_DIR/slides/ -o OUTPUT_DIR/<deck-slug>-preview.html --title "本演示文稿标题"
    ```
    `--title` 传演示文稿的真实标题（大纲主标题），它会成为浏览器标签页标题，多个 deck 同时打开时便于区分。省略时自动推断：优先读 `outline.json/outline.txt` 的 `cover.title`，其次剥离首页 `<title>` 的 `Slide N -` 前缀，再退到首页 `<h1>`，最后回退 deck 目录名（占位符与未替换模板变量会被跳过）。
 
@@ -323,17 +325,17 @@ pip install python-pptx lxml Pillow 2>/dev/null
 
 3. **PPTX 生成** -- 运行 `svg2pptx.py`（OOXML 原生 SVG 嵌入，PPT 365 可编辑）
    ```bash
-   python3 SKILL_DIR/scripts/svg2pptx.py OUTPUT_DIR/svg/ -o OUTPUT_DIR/presentation.pptx --html-dir OUTPUT_DIR/slides/
+   python3 SKILL_DIR/scripts/svg2pptx.py OUTPUT_DIR/svg/ -o OUTPUT_DIR/<deck-slug>-svg.pptx --html-dir OUTPUT_DIR/slides/
    ```
    PPT 365 中右键图片 -> "转换为形状" 即可编辑文字和形状。
 
 4. **通知用户** -- 告知产物位置和使用方式：
-   - `preview.html` -- 浏览器打开即可翻页预览
-   - `presentation.pptx` -- PPTX（右键 -> "转换为形状" 可编辑）
+   - `<deck-slug>-preview.html` -- 浏览器打开即可翻页预览
+   - `<deck-slug>-svg.pptx` -- PPTX（右键 -> "转换为形状" 可编辑）
    - `svg/` -- 每个 SVG 也可单独拖入 PPT
    - **如果步骤 2-3 被降级跳过**，说明原因并告知用户手动安装 Node.js 后可重新运行
 
-**产物**：preview.html + svg/*.svg + presentation.pptx
+**产物**：`<deck-slug>-preview.html` + svg/*.svg + `<deck-slug>-svg.pptx`
 
 ---
 
@@ -350,8 +352,8 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
     images/            # AI 配图
     runtime/           # 阶段 prompt / 中间快照（会话 scratch）
     pptx-work/         # 可选：走原生 PPTX 构建路径时的脚手架（含自带 node_modules），也必须留在 deck 内
-    preview.html       # 可翻页预览
-    presentation.pptx  # 可编辑 PPTX（右键"转换为形状"）
+    <deck-slug>-preview.html   # 可翻页预览
+    <deck-slug>-svg.pptx       # 可编辑 PPTX（右键"转换为形状"）
     outline.json       # 大纲
     planning/          # 每页策划稿 planningN.json（planning_validator 校验闸门对象）
     style.json         # 风格定义

@@ -288,7 +288,11 @@ def main():
         print(f"Error: No HTML files in {slides_dir}", file=sys.stderr)
         sys.exit(1)
 
-    output_path = args.output or str(slides_dir.parent / "preview.html")
+    # Default output carries the deck-slug (parent dir name) so a file
+    # downloaded on its own still reads as "<topic>-preview.html".
+    deck_slug = slides_dir.parent.name
+    default_name = f"{deck_slug}-preview.html" if deck_slug else "preview.html"
+    output_path = args.output or str(slides_dir.parent / default_name)
 
     title = args.title or derive_title(html_files, slides_dir)
 
