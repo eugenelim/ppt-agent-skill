@@ -24,7 +24,7 @@ CATEGORIES = {
     "dark_professional": {
         "cn": "暗色专业",
         "en": "Dark Professional",
-        "ids": ["dark_tech", "xiaomi_orange", "luxury_purple", "nocturne_violet", "cyberpunk_neon", "chrome_y2k", "noir_film", "graphite_gold"],
+        "ids": ["dark_tech", "xiaomi_orange", "luxury_purple", "nocturne_violet", "cyberpunk_neon", "chrome_y2k", "noir_film", "graphite_gold", "graphite_violet"],
     },
     "light_premium": {
         "cn": "浅色高级",
