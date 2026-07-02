@@ -49,14 +49,74 @@ def inline_images(html_content: str, html_dir: Path) -> str:
     return html_content
 
 
-def derive_title(slide_files: list, slides_dir: Path) -> str:
-    """从首页封面推断标题，失败则回退到 deck 目录名。
+# 通用占位符 / 无信息量的标题，出现即跳过继续回退
+_PLACEHOLDER_TITLES = {
+    "document", "ppt preview", "pptx preview", "preview",
+    "title", "标题", "页面标题", "主标题", "封面", "cover", "untitled",
+}
 
-    优先级：首页 <title> -> 首页最大标题(<h1>) -> deck 目录名(slug 美化)。
-    这样每个 deck 的 preview.html 标签页都能自我区分。
+
+def _clean_title(raw: str) -> str:
+    """归一化候选标题：去标签、去 `Slide NN -` 前缀、判空/占位符。
+
+    返回可用标题，或空串（表示应继续回退）。
     """
-    def strip_tags(s: str) -> str:
-        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", s)).strip()
+    t = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", raw)).strip()
+    # 剥掉每页骨架的 `Slide {NN} - ` 前缀（design-specs.md 的 <title> 模板）
+    t = re.sub(r"^slide\s*\d+\s*[-–—:]\s*", "", t, flags=re.I).strip()
+    if not t:
+        return ""
+    if t.lower() in _PLACEHOLDER_TITLES:
+        return ""
+    # 未被替换的模板变量，如 {TITLE} / {{page_title}}
+    if "{" in t and "}" in t:
+        return ""
+    return t
+
+
+def _title_from_outline(slides_dir: Path) -> str:
+    """从 deck 的大纲文件读取权威主标题（cover.title）。
+
+    兼容 outline.json（纯 JSON）与 outline.txt（可能带 [PPT_OUTLINE] 包裹）。
+    读取或解析失败一律静默回退。
+    """
+    import json
+    deck_dir = slides_dir.parent
+    for name in ("outline.json", "outline.txt"):
+        p = deck_dir / name
+        if not p.is_file():
+            continue
+        try:
+            raw = p.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        m = re.search(r"\[PPT_OUTLINE\](.*?)\[/PPT_OUTLINE\]", raw, re.S)
+        if m:
+            raw = m.group(1)
+        try:
+            data = json.loads(raw.strip())
+        except (ValueError, json.JSONDecodeError):
+            continue
+        node = data.get("ppt_outline", data) if isinstance(data, dict) else {}
+        cover = node.get("cover") if isinstance(node, dict) else None
+        cand = cover.get("title") if isinstance(cover, dict) else None
+        if isinstance(cand, str):
+            cleaned = _clean_title(cand)
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def derive_title(slide_files: list, slides_dir: Path) -> str:
+    """推断 deck 标题，作为 preview.html 的浏览器标签页标题。
+
+    优先级：outline 主标题 -> 首页 <title>（剥离 `Slide N -` 前缀）
+    -> 首页最大标题(<h1>) -> deck 目录名(slug 美化)。
+    每一级都跳过占位符/未替换模板变量，确保多个 deck 的标签页可区分。
+    """
+    outline_title = _title_from_outline(slides_dir)
+    if outline_title:
+        return outline_title
 
     if slide_files:
         try:
@@ -65,12 +125,12 @@ def derive_title(slide_files: list, slides_dir: Path) -> str:
             first = ""
         m = re.search(r"<title[^>]*>(.*?)</title>", first, re.I | re.S)
         if m:
-            t = strip_tags(m.group(1))
-            if t and t.lower() not in ("document", "ppt preview", "pptx preview"):
+            t = _clean_title(m.group(1))
+            if t:
                 return t
         m = re.search(r"<h1[^>]*>(.*?)</h1>", first, re.I | re.S)
         if m:
-            t = strip_tags(m.group(1))
+            t = _clean_title(m.group(1))
             if t:
                 return t
 
