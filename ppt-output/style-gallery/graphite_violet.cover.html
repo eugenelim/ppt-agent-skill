@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>graphite_violet — 封面 / cover</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a; --bg2:#0f0f14; --card:#0d0d0d; --card2:#111115;
+    --ink:#EDEDF0; --muted:#8B8C9B; --line:#1e1e28;
+    --violet:#7B54F5; --violet-hi:#A37EFB;
+    --emerald:#3FC882; --amber:#E8924A; --sky:#4DB8EC; --rose:#E85476;
+    --foot:#3a3a4a;
+    --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --head:'Inter Tight','Inter',-apple-system,sans-serif;
+    --mono:'JetBrains Mono','DM Mono','SF Mono',monospace;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;position:relative;
+    background:linear-gradient(135deg,var(--bg) 0%,var(--bg2) 100%);
+    color:var(--ink);font-family:var(--sans);
+    font-feature-settings:'kern','liga','calt','tnum';font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;}
+  .grid{position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,0.015) 1px,transparent 1px);
+    background-size:80px 80px;}
+  .glow{position:absolute;top:-110px;right:80px;width:580px;height:580px;border-radius:50%;
+    background:radial-gradient(circle,rgba(123,84,245,0.18) 0%,rgba(123,84,245,0) 70%);pointer-events:none;}
+  .page{position:absolute;inset:0;padding:58px 64px 56px;display:flex;flex-direction:column;}
+
+  .topbar{display:flex;align-items:flex-start;justify-content:space-between;}
+  .eyebrow{font-family:var(--head);font-size:12px;letter-spacing:0.24em;text-transform:uppercase;
+    color:var(--violet-hi);font-weight:600;}
+  .brand{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:0.04em;color:var(--muted);}
+  .brand b{color:var(--ink);}
+
+  .hero{margin-top:auto;margin-bottom:auto;}
+  h1{font-family:var(--head);font-size:76px;font-weight:800;line-height:1.04;letter-spacing:-0.035em;
+    max-width:20ch;}
+  h1 em{font-style:italic;font-weight:700;color:var(--violet-hi);}
+  .rule{height:2px;width:244px;background:linear-gradient(90deg,var(--violet),transparent);margin:26px 0 22px;border:0;}
+  .lede{font-size:17px;color:#C2C3CF;line-height:1.5;max-width:64ch;}
+  .lede b{color:var(--ink);}
+
+  .signals{display:flex;gap:26px;margin-top:36px;}
+  .sig{display:flex;align-items:center;gap:8px;font-family:var(--head);font-size:10px;
+    letter-spacing:0.14em;text-transform:uppercase;font-weight:700;color:var(--muted);}
+  .sig .d{width:8px;height:8px;border-radius:50%;}
+
+  .pagefoot{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:space-between;
+    padding:0 64px;font-family:var(--head);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--foot);}
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="glow"></div>
+  <div class="page">
+
+    <div class="topbar">
+      <div class="eyebrow">Engineering Delivery · Phase-Gate Program</div>
+      <div class="brand"><b>Apex</b> Platform</div>
+    </div>
+
+    <div class="hero">
+      <h1>Ship <em>faster</em> by building the right foundation first.</h1>
+      <hr class="rule">
+      <p class="lede">Why scattered tooling adoption stalls — and how a <b>three-phase program</b> with hard outcome gates compounds velocity over time.</p>
+    </div>
+
+    <div class="signals">
+      <span class="sig"><span class="d" style="background:var(--emerald)"></span>Foundation</span>
+      <span class="sig"><span class="d" style="background:var(--amber)"></span>Acceleration</span>
+      <span class="sig"><span class="d" style="background:var(--violet-hi)"></span>Compounding</span>
+      <span class="sig"><span class="d" style="background:var(--sky)"></span>Platform</span>
+      <span class="sig"><span class="d" style="background:var(--rose)"></span>Gate</span>
+    </div>
+
+    <div class="pagefoot"><span>graphite_violet · near-black + violet · engineering delivery</span><span>01 / 06</span></div>
+
+  </div>
+</body>
+</html>

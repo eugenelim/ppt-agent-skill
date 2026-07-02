@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>graphite_violet — 工程交付演讲（深夜作战室）</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0a0a; --bg2:#0f0f14; --card:#0d0d0d; --card2:#111115;
+    --ink:#EDEDF0; --muted:#8B8C9B; --line:#1e1e28;
+    --violet:#7B54F5; --violet-hi:#A37EFB;
+    --emerald:#3FC882; --amber:#E8924A; --sky:#4DB8EC; --rose:#E85476;
+    --foot:#3a3a4a;
+    --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+    --head:'Inter Tight','Inter',-apple-system,sans-serif;
+    --mono:'JetBrains Mono','DM Mono','SF Mono',monospace;
+  }
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  body{width:1280px;height:720px;overflow:hidden;position:relative;
+    background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-feature-settings:'kern','liga','calt','tnum';font-variant-numeric:tabular-nums;
+    -webkit-font-smoothing:antialiased;}
+  .grid{position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(rgba(255,255,255,0.015) 1px,transparent 1px);
+    background-size:80px 80px;}
+  .glow-r{position:absolute;top:-80px;right:60px;width:420px;height:420px;border-radius:50%;
+    background:radial-gradient(circle,rgba(123,84,245,0.12) 0%,rgba(123,84,245,0) 70%);pointer-events:none;}
+  .page{position:absolute;inset:0;padding:38px 64px 52px;display:flex;flex-direction:column;}
+
+  /* topbar */
+  .topbar{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:6px;}
+  .eyebrow{font-family:var(--head);font-size:12px;letter-spacing:0.22em;text-transform:uppercase;
+    color:var(--violet-hi);font-weight:600;margin-bottom:5px;}
+  h2{font-family:var(--head);font-size:30px;font-weight:700;line-height:1.12;letter-spacing:-0.01em;}
+  .brand{font-family:var(--head);font-weight:700;font-size:13px;letter-spacing:0.04em;color:var(--muted);}
+  .brand b{color:var(--ink);}
+  .rule{height:2px;background:linear-gradient(90deg,var(--violet),transparent);margin:9px 0 13px;border:0;}
+  .lede{font-size:14px;color:#B0B1C0;line-height:1.5;max-width:100%;margin-bottom:14px;}
+  .lede b{color:var(--ink);}
+
+  /* phase bands */
+  .phase-stack{display:flex;flex-direction:column;gap:0;flex:1;min-height:0;}
+
+  .phase-band{
+    background:var(--card2);border:1px solid var(--line);border-radius:10px;
+    padding:13px 20px 13px 16px;
+    display:grid;grid-template-columns:172px 1fr;gap:16px;align-items:start;
+  }
+  .phase-band.ph1{border-left:4px solid var(--emerald);}
+  .phase-band.ph2{border-left:4px solid var(--amber);}
+  .phase-band.ph3{border-left:4px solid var(--violet);}
+
+  .ph-meta{display:flex;flex-direction:column;gap:5px;padding-top:1px;}
+  .ph-num{font-family:var(--mono);font-size:10px;letter-spacing:0.14em;color:var(--muted);}
+  .ph-name{font-family:var(--head);font-size:15px;font-weight:700;letter-spacing:-0.01em;}
+  .ph-name.ph1{color:var(--emerald);}
+  .ph-name.ph2{color:var(--amber);}
+  .ph-name.ph3{color:var(--violet-hi);}
+  .ph-dur{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px;}
+
+  .ph-milestones{display:flex;flex-direction:column;gap:7px;}
+  .milestone{display:flex;align-items:flex-start;gap:9px;}
+  .m-dot{flex:0 0 5px;height:5px;border-radius:50%;margin-top:5px;}
+  .ph1 .m-dot{background:var(--emerald);}
+  .ph2 .m-dot{background:var(--amber);}
+  .ph3 .m-dot{background:var(--violet-hi);}
+  .m-text{font-size:12.5px;line-height:1.4;color:#D0D1DC;}
+  .m-text b{color:var(--ink);}
+
+  /* diamond gate separator */
+  .gate-sep{display:flex;align-items:center;gap:10px;padding:5px 20px 5px 16px;margin:4px 0;}
+  .gate-line{flex:1;height:1px;background:var(--line);}
+  .gate-svg{flex:0 0 20px;color:var(--muted);}
+  .gate-label{font-family:var(--mono);font-size:10px;letter-spacing:0.13em;text-transform:uppercase;
+    color:var(--muted);flex:0 0 auto;}
+
+  .pagefoot{position:absolute;left:0;right:0;bottom:14px;display:flex;justify-content:space-between;
+    padding:0 64px;font-family:var(--head);font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:var(--foot);}
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="glow-r"></div>
+  <div class="page">
+
+    <div class="topbar">
+      <div>
+        <div class="eyebrow">02 · The roadmap</div>
+        <h2>Three-Phase Delivery Program</h2>
+      </div>
+      <div class="brand"><b>Apex</b> Platform</div>
+    </div>
+    <hr class="rule">
+    <p class="lede">Each phase has a hard outcome gate. <b>Phase 1</b> installs the platform. <b>Phase 2</b> wires it into the developer workflow. <b>Phase 3</b> closes the autonomous loop — velocity compounds from here.</p>
+
+    <div class="phase-stack">
+
+      <!-- Phase 1: Foundation -->
+      <div class="phase-band ph1">
+        <div class="ph-meta">
+          <span class="ph-num">Phase 01</span>
+          <span class="ph-name ph1">Foundation</span>
+          <span class="ph-dur">Weeks 0 – 8</span>
+        </div>
+        <div class="ph-milestones">
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Platform skeleton</b> — shared dev environment, CI/CD baseline, and secrets management in place.</span></div>
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Knowledge layer seeded</b> — code patterns, domain rules, and decision log ingested and queryable.</span></div>
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Quality gates wired</b> — automated lint, test-coverage floor, and static analysis on every PR.</span></div>
+        </div>
+      </div>
+
+      <!-- Gate 1 -->
+      <div class="gate-sep">
+        <div class="gate-line"></div>
+        <svg class="gate-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="10,2 18,10 10,18 2,10"/>
+          <polyline points="7,10 9,12 13,8"/>
+        </svg>
+        <span class="gate-label">Gate 1 · Platform Ready</span>
+        <div class="gate-line"></div>
+      </div>
+
+      <!-- Phase 2: Acceleration -->
+      <div class="phase-band ph2">
+        <div class="ph-meta">
+          <span class="ph-num">Phase 02</span>
+          <span class="ph-name ph2">Acceleration</span>
+          <span class="ph-dur">Weeks 8 – 16</span>
+        </div>
+        <div class="ph-milestones">
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>IDE + pipeline integration</b> — AI-assisted code review and test generation active on the main branch.</span></div>
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Incident triage automated</b> — known failure patterns routed and resolved without human triage.</span></div>
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Observability closed</b> — traces, structured logs, and dashboards covering every production service.</span></div>
+        </div>
+      </div>
+
+      <!-- Gate 2 -->
+      <div class="gate-sep">
+        <div class="gate-line"></div>
+        <svg class="gate-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="10,2 18,10 10,18 2,10"/>
+          <polyline points="7,10 9,12 13,8"/>
+        </svg>
+        <span class="gate-label">Gate 2 · Developer Workflow Live</span>
+        <div class="gate-line"></div>
+      </div>
+
+      <!-- Phase 3: Compounding -->
+      <div class="phase-band ph3">
+        <div class="ph-meta">
+          <span class="ph-num">Phase 03</span>
+          <span class="ph-name ph3">Compounding</span>
+          <span class="ph-dur">Weeks 16 – 24</span>
+        </div>
+        <div class="ph-milestones">
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Autonomous delivery loop</b> — agents generate, validate, and ship routine changes end-to-end.</span></div>
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Predictive bottleneck removal</b> — cycle-time analysis surfaces blockers before they slow the team.</span></div>
+          <div class="milestone"><span class="m-dot"></span><span class="m-text"><b>Self-improving knowledge layer</b> — every merged PR enriches the pattern store; quality floor rises automatically.</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="pagefoot"><span>graphite_violet · near-black + violet · phase-band roadmap</span><span>02 / 06</span></div>
+
+  </div>
+</body>
+</html>

@@ -364,3 +364,136 @@
 **自检**：图标全部内联 `<svg currentColor>`（禁 `<img>`/`url()`）；zone 名/节点名/描述均为 HTML 文本；主脊用 `--node-accent` 左边条 + focus 节点描边拉主次；节点卡 `box-sizing:border-box` + `min-height:52px` 防坍缩；颜色字体只用契约局部变量。
 
 **管线安全**：连接线箭头 `<polygon>`、连线 SVG `<line>`；图标内联 `<svg>`（`<circle>`/`<rect>`/`<ellipse>`/`<path>`/`<polygon>`）；无 SVG `<text>`（标注是 HTML `<span>`）；无 `mask-image`/`conic-gradient`/`background-image:url()`/`background-clip:text`/伪元素装饰。
+
+---
+
+### 技术层矩阵（tech-layer-matrix）
+
+**何时用**：按平台层级（工具层/智能层/基础设施层）展示技术工具全景，每行一个层，每格一个工具芯片。适用于平台架构概览、工具选型矩阵、技术生态梳理。`graphite_violet` 首推原语；也可用于 `dark_tech` / `schematic_blueprint`。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "tech-layer-matrix",
+  "layers": [
+    {
+      "label": "AI Tools",
+      "cdot": "var(--violet)",
+      "tools": ["Code Generation", "Test Generation", "PR Review", "Doc Synthesis", "Architecture Assist"]
+    },
+    {
+      "label": "Dev Platform",
+      "cdot": "var(--sky)",
+      "tools": ["IDE Integration", "CI/CD Pipeline", "Quality Gates", "Observability", "Secrets Mgmt"]
+    },
+    {
+      "label": "Knowledge",
+      "cdot": "var(--emerald)",
+      "tools": ["Code Patterns", "Domain Rules", "Decision Log", "Test Corpus", "Context Store"]
+    },
+    {
+      "label": "Cloud Infra",
+      "cdot": "var(--amber)",
+      "tools": ["Compute", "Managed Runtimes", "Storage", "Networking", "Security & IAM"]
+    }
+  ]
+}
+```
+
+**HTML 模板**：
+```html
+<div class="tech-layer-matrix" style="
+  --violet: var(--accent-1);
+  --sky: var(--accent-2);
+  --emerald: var(--accent-3);
+  --amber: var(--accent-4);
+  --line: var(--card-border);
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --card-bg: var(--card-bg-from);
+  --mono: var(--mono-font);
+  font-family: var(--body-font, sans-serif);
+  display: flex; flex-direction: column; gap: 10px; width: 100%;">
+
+  <!-- Layer 1: AI Tools -->
+  <div class="layer-row" style="
+    display: flex; align-items: flex-start;
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--violet);
+    border-radius: 10px; padding: 12px 16px; gap: 16px;">
+    <div style="
+      flex: 0 0 110px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--violet); padding-top: 3px; line-height: 1.3;">AI Tools</div>
+    <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 6px;">
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Code Gen</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Test Gen</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">PR Review</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Doc Synthesis</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Arch Assist</div>
+    </div>
+  </div>
+
+  <!-- Layer 2: Dev Platform -->
+  <div class="layer-row" style="
+    display: flex; align-items: flex-start;
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--sky);
+    border-radius: 10px; padding: 12px 16px; gap: 16px;">
+    <div style="
+      flex: 0 0 110px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--sky); padding-top: 3px; line-height: 1.3;">Dev Platform</div>
+    <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 6px;">
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">IDE Integration</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">CI/CD Pipeline</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Quality Gates</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Observability</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Secrets Mgmt</div>
+    </div>
+  </div>
+
+  <!-- Layer 3: Knowledge -->
+  <div class="layer-row" style="
+    display: flex; align-items: flex-start;
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--emerald);
+    border-radius: 10px; padding: 12px 16px; gap: 16px;">
+    <div style="
+      flex: 0 0 110px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--emerald); padding-top: 3px; line-height: 1.3;">Knowledge</div>
+    <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 6px;">
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Code Patterns</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Domain Rules</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Decision Log</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Test Corpus</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Context Store</div>
+    </div>
+  </div>
+
+  <!-- Layer 4: Cloud Infra -->
+  <div class="layer-row" style="
+    display: flex; align-items: flex-start;
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--amber);
+    border-radius: 10px; padding: 12px 16px; gap: 16px;">
+    <div style="
+      flex: 0 0 110px; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--amber); padding-top: 3px; line-height: 1.3;">Cloud Infra</div>
+    <div style="flex: 1; display: flex; flex-wrap: wrap; gap: 6px;">
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Compute</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Managed Runtimes</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Storage</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Networking</div>
+      <div class="tool-chip" style="padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); font-family: var(--mono); font-size: 12px; color: var(--ink); background: var(--card-bg);">Security &amp; IAM</div>
+    </div>
+  </div>
+
+</div>
+```
+
+**自检**：行标题 `flex:0 0 110px`（固定宽）+ 工具格区 `flex:1`；行 `border-left:4px solid var(--cdot-color)` 各绑层信号色；工具芯片 `font-family:var(--mono)` + `font-size:12px`；芯片背景 `var(--card-bg)`（纯 CSS 变量，lint 干净）；无 `<text>` 节点；各行 `display:flex; align-items:flex-start; gap:16px`（单一 gap 声明，无死 gap:0）。
+
+**管线安全**：无 SVG 元素（纯 HTML div/span）；无 `mask-image`/`conic-gradient`/`background-clip:text`/`mix-blend-mode`/伪元素装饰内容；`&amp;` 实体正确编码。

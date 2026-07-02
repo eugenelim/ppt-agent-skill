@@ -709,3 +709,205 @@
 **自检**：三种节点形状（方块/圆/开口矩形）颜色字体全用契约变量；数据流标注是 HTML span；处理圆文字是 HTML 叠加；`min-width`/`min-height`+`box-sizing`。
 
 **管线安全**：无 SVG `<text>`（处理圆、数据存储标签均 HTML 叠加）；箭头 `<polygon>`；无伪元素；无 `mask-image`/`conic-gradient`/`background-clip:text`。
+
+---
+
+### 三相位 Roadmap（phase-band-roadmap）
+
+**何时用**：展示三阶段推进计划（基础期→加速期→复利期），每阶段含目标、里程碑点列表，阶段间插入"结果门"（菱形决策点）。适用于工程交付简报、技术转型 deck、组织变革路径图。`graphite_violet` 首推原语；也可用于任何暗色或浅色风格。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "phase-band-roadmap",
+  "phases": [
+    {
+      "badge": "Phase 1", "name": "Pathfinder", "duration": "Months 1–3",
+      "cdot": "var(--emerald)",
+      "summary": "One team. Prove the model end-to-end.",
+      "scope": "1 team · 1 product · end-to-end",
+      "milestones_label": "Prove",
+      "milestones": ["Baseline established", "Knowledge base seeded", "Target: 2× team output"]
+    },
+    {
+      "badge": "Phase 2", "name": "Acceleration", "duration": "Months 4–9",
+      "cdot": "var(--amber)",
+      "summary": "Extend to 3–5 teams. Quality gates live.",
+      "scope": "3–5 teams · portfolio-level",
+      "milestones_label": "Expand",
+      "milestones": ["CoE seeded (3–5 people)", "Scoring engine live", "Two domains operational"]
+    },
+    {
+      "badge": "Phase 3", "name": "Compounding", "duration": "Months 10–12+",
+      "cdot": "var(--violet)",
+      "summary": "Enterprise-wide. System gets smarter daily.",
+      "scope": "Enterprise-wide · self-sustaining",
+      "milestones_label": "Own",
+      "milestones": ["80%+ adoption", "Self-sustaining ops", "Team runs it independently"]
+    }
+  ],
+  "gates": [
+    { "label": "Outcome Gate 1" },
+    { "label": "The Inflection Point" }
+  ]
+}
+```
+
+**HTML 模板**：
+```html
+<div class="phase-roadmap" style="
+  --emerald: var(--accent-3);
+  --amber: var(--accent-4);
+  --violet: var(--accent-1);
+  --line: var(--card-border);
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --card-bg: var(--card-bg-from);
+  --mono: var(--mono-font);
+  font-family: var(--body-font, sans-serif);
+  display: flex; flex-direction: column; gap: 0; width: 100%;">
+
+  <!-- Phase 1: Foundation -->
+  <div class="phase-band" style="
+    --cdot: var(--emerald);
+    border-left: 4px solid var(--cdot);
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--cdot);
+    border-radius: 10px; padding: 14px 18px; display: flex; gap: 20px;">
+    <div style="flex: 0 0 140px;">
+      <div class="phase-badge" style="
+        display: inline-flex; align-items: center; padding: 3px 10px;
+        border-radius: 999px; border: 1px solid var(--cdot); background: var(--card-bg);
+        color: var(--cdot); font-size: 11px; font-weight: 700;
+        letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px;">Phase 1</div>
+      <div style="font-size: 15px; font-weight: 700; color: var(--cdot); line-height: 1.2; margin-bottom: 3px;">Pathfinder</div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--muted);">Months 1–3</div>
+    </div>
+    <div style="flex: 1; border-left: 1px solid var(--line); padding-left: 18px;">
+      <p style="font-size: 13px; color: var(--ink); line-height: 1.5; margin-bottom: 8px;">One team. Prove the model end-to-end.</p>
+      <div style="
+        display: inline-block; padding: 2px 8px; border-radius: 4px;
+        border: 1px solid var(--line); font-size: 11px; color: var(--muted);
+        font-family: var(--mono); margin-bottom: 10px;">1 team · 1 product · end-to-end</div>
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cdot); margin-bottom: 6px;">Prove</div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Baseline established
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Knowledge base seeded
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Target: 2× team output
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gate 1 -->
+  <div style="display: flex; align-items: center; gap: 10px; padding: 8px 18px;">
+    <div style="flex: 1; height: 1px; background: var(--line);"></div>
+    <svg viewBox="0 0 16 16" style="width: 16px; height: 16px; flex-shrink: 0; display: block;">
+      <polygon points="8,1 15,8 8,15 1,8" fill="var(--violet)" opacity="0.55"/>
+    </svg>
+    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap;">Outcome Gate 1</div>
+    <div style="flex: 1; height: 1px; background: var(--line);"></div>
+  </div>
+
+  <!-- Phase 2: Acceleration -->
+  <div class="phase-band" style="
+    --cdot: var(--amber);
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--cdot);
+    border-radius: 10px; padding: 14px 18px; display: flex; gap: 20px;">
+    <div style="flex: 0 0 140px;">
+      <div class="phase-badge" style="
+        display: inline-flex; align-items: center; padding: 3px 10px;
+        border-radius: 999px; border: 1px solid var(--cdot); background: var(--card-bg);
+        color: var(--cdot); font-size: 11px; font-weight: 700;
+        letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px;">Phase 2</div>
+      <div style="font-size: 15px; font-weight: 700; color: var(--cdot); line-height: 1.2; margin-bottom: 3px;">Acceleration</div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--muted);">Months 4–9</div>
+    </div>
+    <div style="flex: 1; border-left: 1px solid var(--line); padding-left: 18px;">
+      <p style="font-size: 13px; color: var(--ink); line-height: 1.5; margin-bottom: 8px;">Extend to 3–5 teams. Quality gates live.</p>
+      <div style="
+        display: inline-block; padding: 2px 8px; border-radius: 4px;
+        border: 1px solid var(--line); font-size: 11px; color: var(--muted);
+        font-family: var(--mono); margin-bottom: 10px;">3–5 teams · portfolio-level</div>
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cdot); margin-bottom: 6px;">Expand</div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          CoE seeded (3–5 people)
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Scoring engine live
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Two domains operational
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gate 2 -->
+  <div style="display: flex; align-items: center; gap: 10px; padding: 8px 18px;">
+    <div style="flex: 1; height: 1px; background: var(--line);"></div>
+    <svg viewBox="0 0 16 16" style="width: 16px; height: 16px; flex-shrink: 0; display: block;">
+      <polygon points="8,1 15,8 8,15 1,8" fill="var(--violet)" opacity="0.55"/>
+    </svg>
+    <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); white-space: nowrap;">The Inflection Point</div>
+    <div style="flex: 1; height: 1px; background: var(--line);"></div>
+  </div>
+
+  <!-- Phase 3: Compounding -->
+  <div class="phase-band" style="
+    --cdot: var(--violet);
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-left: 4px solid var(--cdot);
+    border-radius: 10px; padding: 14px 18px; display: flex; gap: 20px;">
+    <div style="flex: 0 0 140px;">
+      <div class="phase-badge" style="
+        display: inline-flex; align-items: center; padding: 3px 10px;
+        border-radius: 999px; border: 1px solid var(--cdot); background: var(--card-bg);
+        color: var(--cdot); font-size: 11px; font-weight: 700;
+        letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px;">Phase 3</div>
+      <div style="font-size: 15px; font-weight: 700; color: var(--cdot); line-height: 1.2; margin-bottom: 3px;">Compounding</div>
+      <div style="font-family: var(--mono); font-size: 11px; color: var(--muted);">Months 10–12+</div>
+    </div>
+    <div style="flex: 1; border-left: 1px solid var(--line); padding-left: 18px;">
+      <p style="font-size: 13px; color: var(--ink); line-height: 1.5; margin-bottom: 8px;">Enterprise-wide. System gets smarter daily.</p>
+      <div style="
+        display: inline-block; padding: 2px 8px; border-radius: 4px;
+        border: 1px solid var(--line); font-size: 11px; color: var(--muted);
+        font-family: var(--mono); margin-bottom: 10px;">Enterprise-wide · self-sustaining</div>
+      <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cdot); margin-bottom: 6px;">Own</div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          80%+ adoption
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Self-sustaining ops
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink);">
+          <div style="width: 6px; height: 6px; border-radius: 50%; background: var(--cdot); flex-shrink: 0;"></div>
+          Team runs it independently
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+```
+
+**自检**：三相位带 `border-left:4px solid var(--cdot)` 各取相位色；菱形门 `<polygon>` 用 `var(--violet)` 非硬码；徽章 `border:1px solid var(--cdot)` + `background:var(--card-bg)` 纯 CSS 变量（无 rgba）；里程碑点 6px 圆 `background: var(--cdot)`；CSS 自定义属性声明无十六进制回退值；无 `<text>` 节点。
+
+**管线安全**：菱形门 SVG `<polygon>`（无 `<text>`，无 `<marker>`）；无 `mask-image`/`conic-gradient`/`background-clip:text`/`mix-blend-mode`/伪元素装饰内容；所有文字均为 HTML 元素。
