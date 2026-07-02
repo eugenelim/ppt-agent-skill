@@ -1,4 +1,4 @@
-# 暗色专业板块（8 风格）
+# 暗色专业板块（9 风格）
 
 > 板块定位：深色背景 + 高对比 + 精密科技/奢华情绪。适用于产品发布会、SaaS 平台、技术文档、奢侈品、电竞、Web3 等场景。
 >
@@ -18,6 +18,7 @@
 | 6 | `chrome_y2k` | Y2K / Vaporwave | 千禧年银色铬感 + 网格透视 |
 | 7 | `noir_film` | 黑白电影 | 高反差黑白 + 胶片颗粒，纪录片质感 |
 | 8 | `graphite_gold` | 高端顾问简报（黄昏会议室） | 石墨炭底 + 香槟金焦点 + 尘调五信号，克制的战略简报 |
+| 9 | `graphite_violet` | 工程交付演讲（深夜作战室） | 近纯黑底 + 石墨紫焦点 + 技术四色相位，开发者交付简报 |
 
 ---
 
@@ -481,3 +482,67 @@ Detail: [`ppt-output/style-gallery/noir_film.html`](../../ppt-output/style-galle
 11. **诚实横幅（persuasion-integrity）**：任何用"来自可比案例、非本客户"的估算数字的页面，顶部必挂 `.illbanner`（陶红边 + 红色大写 `先读这个` kicker），一句话讲清"这是形状不是承诺"。见 [`principles/narrative-arc.md`](../principles/narrative-arc.md) 的 so-what / 诚实横幅约定。
 
 Mock: [`ppt-output/style-gallery/graphite_gold.html`](../../ppt-output/style-gallery/graphite_gold.html) · 组件原语: [`blocks/advisory-brief.md`](../blocks/advisory-brief.md)
+
+---
+
+## 9. graphite_violet — 石墨紫（工程交付简报 · 深夜作战室）
+
+> 视觉基准：工程/技术交付演讲的**内部推进 deck**——近纯黑底 + 石墨紫焦点 + 一整套**技术四色相位信号**（翠绿 / 琥珀 / 天蓝 / 玫红）。去掉金色温度，换成冷静的紫色聚焦；相位编码替代顾问论证信号；JetBrains Mono 贯穿数字与代码。
+>
+> 与 `graphite_gold` 的关系：同属 graphite 家族（grid-dot 底纹、3px 顶栏彩条、页框 chrome），但 graphite_gold 是"顾问黄昏暖金"，graphite_violet 是"工程深夜冷紫"。相位信号取代金色焦点；三相位 roadmap / 三柱骨架 / 技术层矩阵是本风格的原语套件（原语分布于 [`diagram-process-flow.md`](../blocks/diagram-process-flow.md)、[`diagram-concept.md`](../blocks/diagram-concept.md)、[`diagram-architecture.md`](../blocks/diagram-architecture.md)）。
+
+```json
+{
+  "style_id": "graphite_violet",
+  "style_name": "石墨紫 (Graphite Violet)",
+  "category": "dark_professional",
+  "inspiration": "工程交付演讲 · 近纯黑底 + 石墨紫焦点 + 三相位技术四色",
+  "mood_keywords": ["深夜作战室", "石墨紫焦点", "三相位编码", "开发者克制", "相位门控"],
+  "design_soul": "深夜的工程作战室：近纯黑的屏幕上只有一条石墨紫的光线精准落在下一个里程碑上。三相位的颜色带——翠绿启动、琥珀加速、紫色复利——像进度条一样无声地告知距离目标还有多远。不华丽，但每一个数字都有位置，每一个里程碑都有颜色。",
+  "variation_strategy": "封面用紫色渐变规线 + 三相位信号圆点预告；三柱骨架页用等宽三列 + 信号色标题 + 图标圆圈；相位 roadmap 页用水平相位带 + 菱形门 + 里程碑点列表；技术层矩阵页用行标题 + 工具格列；数据页用相位面积图 + 紫色聚焦数字。",
+  "decoration_dna": {
+    "signature_move": "3px 相位顶栏彩条（--cdot 驱动翠绿/琥珀/天蓝/玫红/紫）+ 菱形相位门（SVG polygon）+ 里程碑点列表 + 紫色渐变规线 + JetBrains Mono 数字",
+    "forbidden": ["香槟金/暖金 accent（那是 graphite_gold 的领地）", "高饱和/霓虹主色（用柔化后的石墨紫）", "冷青扫描光（与 dark_tech 区分）", "渐变色块背景", "浅色/白纸背景", "圆角 > 16px"],
+    "recommended_combos": ["三相位带 + 菱形门 + 里程碑点", "三柱骨架 + 信号色标题 + currentColor 图标", "技术层矩阵 + 相位徽章 + 紫色聚焦列"]
+  },
+  "background": { "primary": "#0a0a0a", "gradient_to": "#0f0f14", "texture": { "type": "grid_dot", "size": 80, "opacity": 0.018 }, "glow": [{ "x": "78%", "y": "18%", "color": "#7B54F5", "opacity": 0.18, "blur": 80 }] },
+  "card": { "gradient_from": "#0d0d0d", "gradient_to": "#111115", "border": "#1e1e28", "border_radius": 12, "backdrop_blur": 0 },
+  "text": { "primary": "#EDEDF0", "secondary": "#8B8C9B", "title_size": 48, "body_size": 14, "card_title_size": 17 },
+  "accent": { "primary": ["#7B54F5", "#A37EFB"], "secondary": ["#3FC882", "#E8924A"] },
+  "typography": {
+    "display_font": "'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+    "body_font": "'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif",
+    "serif_italic_font": "'Instrument Serif', 'Fraunces', Georgia, serif",
+    "mono_font": "'JetBrains Mono', 'DM Mono', 'SF Mono', monospace",
+    "display_letter_spacing": "-0.03em",
+    "headline_letter_spacing": "-0.015em",
+    "body_letter_spacing": "0em",
+    "label_letter_spacing": "0.20em",
+    "feature_settings": "'kern', 'liga', 'calt', 'tnum', 'ss01'",
+    "tabular_nums": true
+  },
+  "decorations": { "label_anchor": "horizontal_line", "title_serif_italic": false, "corner_lines": false, "vertical_divider": false, "drop_cap": false, "masthead": false, "accent_topline": true, "phase_diamond_gate": true },
+  "font_imports": ["https://fonts.googleapis.com/css2?family=Inter+Tight:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"]
+}
+```
+
+**技术四色相位信号**（三相位 + 附加信号，暗底上作 per-card 单点信号）：`--violet:#7B54F5`（焦点 / 主信号 / 复利相位）· `--violet-hi:#A37EFB`（浅紫高亮）· `--emerald:#3FC882`（翠绿：基础相位 / 成功）· `--amber:#E8924A`（琥珀：加速相位 / 警示）· `--sky:#4DB8EC`（天蓝：知识 / 信息）· `--rose:#E85476`（玫红：风险 / 阻断）· `--ink:#EDEDF0`（主文字）· `--muted:#8B8C9B`（次要 / 页脚）· `--line:#1e1e28`（发丝边 / 分隔）· `--card:#0d0d0d`（卡底）。相位各有恒定语义：翠绿=基础期、琥珀=加速期、紫=复利期；卡片通过 `--cdot` 选色驱动顶栏彩条 + 里程碑点。
+
+### 样式细则（styling spec）—— 让生成页"像一份工程交付简报"
+
+> graphite_violet 与 graphite_gold 共享 graphite 家族骨架（grid-dot、3px 顶栏彩条、页框 chrome、tabular-nums），但以工程感替换顾问感：紫替金、相位带替论证卡、JetBrains Mono 替 DM Sans 数字。
+
+1. **3px 相位顶栏彩条（signature move）**：内容卡 `border-radius:12px` + `1px var(--line)` 边，卡顶贴 `3px` 彩条（`.topline`，圆角 `3px 3px 0 0`，满卡宽）。彩条颜色 = 该卡 `--cdot`（翠绿/琥珀/天蓝/玫红/紫）。一页多卡时每卡取一色，彩条 + 卡内里程碑点同色，形成相位编码。
+2. **紫色渐变规线（signature move）**：页眉下压 `height:2px; background:linear-gradient(90deg, var(--violet), transparent); border:0`——从紫到透明，是本风格的签名分隔（对应 graphite_gold 的金渐变规线）。
+3. **菱形相位门**：相位带之间插入 SVG `<polygon>` 菱形（12×12，fill=var(--violet)，opacity 0.6）+ 两侧水平线 + `.gate-label` 文字（10px，letter-spacing:.14em，大写，--muted 色）。见 [`diagram-process-flow.md`](../blocks/diagram-process-flow.md) 的 phase-band-roadmap 模板。
+4. **三相位带布局**：每相位 `.phase-band` 用 `4px border-left` in `--cdot` 色 + `.phase-badge`（相位徽章小胶囊：padding 4px 10px，border-radius 999px，背景 rgba(--cdot, 0.12)，字色 --cdot）+ `.phase-name`（Inter Tight 14px 600）+ 里程碑点列表（`.m-dot` 6px 圆，颜色 = `--cdot`）。
+5. **三柱骨架**：三列 `flex-1`，每列顶部 `64×64` 图标圆（`stroke-only SVG`，viewBox 0 0 48 48，外环 `circle r=22` rgba(--cdot, 0.10) fill + rgba(--cdot, 0.25) stroke）+ 信号色 `<h3>`（color=--cdot）+ 收益点列表。图标 `currentColor` 继承列容器的 `color`。
+6. **单一紫色焦点纪律**：`--violet` 只落在——眉标、紫色规线、标题 `<strong>` 强调词、相位复利带顶栏、callout 边、页脚品牌。相位副信号（翠绿/琥珀/天蓝/玫红）只在 per-card 编码与图表里出现；一页紫色出现点 ≤ ~6 处。
+7. **技术层矩阵**：`display:grid; grid-template-columns: 120px 1fr` 的行布局，每行 `.layer-row`（行标题 Inter Tight 11px letter-spacing:.18em 大写 + 工具格 flex-wrap）。工具格 `.tool-chip`（6px 8px padding，border-radius 6px，1px --line 边，13px mono 字）。见 [`diagram-architecture.md`](../blocks/diagram-architecture.md) 的 tech-layer-matrix 模板。
+8. **JetBrains Mono 作数字/代码**：所有指标数字（百分比、天数、版本号）用 `--mono` 字体 + tabular-nums；代码段、命令行、工具名优先 mono。
+9. **页眉/页脚 chrome**（同 graphite_gold 结构）：页眉 `.topbar` 左侧眉标（紫色 `--violet` 大写 `.20em` 字距）+ H2 标题；右侧 `.brand`（灰 + `<b>` 反白品牌名）；页脚 `.pagefoot` 贴底两端 mono 感大写点码（11px letter-spacing:.18em，暗灰 `--muted`）。
+10. **间距节奏**：整页 `padding:40px 60px 52px`；卡片 `padding:16px 18px`；网格 `gap:16px`；正文 `line-height:1.48`。
+11. **诚实横幅（persuasion-integrity）**：基准数字来自公开参考案例（非当前客户）时，顶部挂 `.illbanner`（玫红 `--rose` 边 + 大写 kicker）。
+
+Cover mock: [`ppt-output/style-gallery/graphite_violet.cover.html`](../../ppt-output/style-gallery/graphite_violet.cover.html)
+Detail mock: [`ppt-output/style-gallery/graphite_violet.html`](../../ppt-output/style-gallery/graphite_violet.html) · 组件原语: [`diagram-process-flow.md`](../blocks/diagram-process-flow.md) / [`diagram-concept.md`](../blocks/diagram-concept.md) / [`diagram-architecture.md`](../blocks/diagram-architecture.md)

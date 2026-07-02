@@ -1232,3 +1232,184 @@
 **自检**：连线是 SVG `<path>`、箭头 `<polygon>`；极性/节点/回路标记全 HTML；回路标 R/B；焦点用 `--node-accent`；颜色全用契约变量。
 
 **管线安全**：无 SVG `<text>`；无伪元素连线；箭头 `<polygon>`（不依赖 `<marker orient>`）；无 `mask-image`/`conic-gradient`/`stroke-dashoffset`。
+
+---
+
+### 三柱骨架（three-pillar-layout）
+
+**何时用**：展示三个等权的支柱/维度/原则，每个有独立图标、信号色标题、和收益点列表。适用于工程交付简报的"三支柱"、方案对比的"三路径"、产品介绍的"三核心"。`graphite_violet` 首推原语；横向三列等宽布局。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "three-pillar-layout",
+  "pillars": [
+    {
+      "cdot": "var(--emerald)",
+      "title": "Tools and Platform",
+      "icon_viewbox": "0 0 48 48",
+      "icon_paths": "<!-- inline SVG paths here, currentColor -->",
+      "benefits": [
+        "The right AI tools and infrastructure for your delivery cycle",
+        "Governed access — teams act without friction or security risk",
+        "Fastest to deploy and measure: where every org starts"
+      ]
+    },
+    {
+      "cdot": "var(--sky)",
+      "title": "Knowledge and Context",
+      "icon_viewbox": "0 0 48 48",
+      "icon_paths": "<!-- inline SVG paths here, currentColor -->",
+      "benefits": [
+        "Structured knowledge AI draws on: patterns, rules, past decisions",
+        "AI never starts from scratch — it knows your delivery context",
+        "Each project compounds the last: institutional memory that grows"
+      ]
+    },
+    {
+      "cdot": "var(--rose)",
+      "title": "People and Processes",
+      "icon_viewbox": "0 0 48 48",
+      "icon_paths": "<!-- inline SVG paths here, currentColor -->",
+      "benefits": [
+        "Roles shift from doers to orchestrators across all functions",
+        "Intent flows cleanly from business to AI — no bottleneck",
+        "Cadence built for continuous learning, not ported from legacy"
+      ]
+    }
+  ]
+}
+```
+
+**HTML 模板**：
+```html
+<div class="three-pillar" style="
+  --emerald: var(--accent-3);
+  --sky: var(--accent-2);
+  --rose: var(--accent-4);
+  --line: var(--card-border);
+  --ink: var(--text-primary);
+  --muted: var(--text-secondary);
+  --card-bg: var(--card-bg-from);
+  font-family: var(--body-font, sans-serif);
+  display: flex; gap: 16px; width: 100%;">
+
+  <!-- Pillar 1 — use --cdot for this column's signal color -->
+  <div class="pillar-col" style="
+    flex: 1; color: var(--emerald);
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-top: 3px solid var(--emerald);
+    border-radius: 12px; padding: 20px 18px; display: flex; flex-direction: column; gap: 14px;">
+    <!-- Icon circle (64×64 container, 48×48 viewBox SVG) -->
+    <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+      <svg viewBox="0 0 48 48" width="64" height="64" fill="none"
+           xmlns="http://www.w3.org/2000/svg" style="display:block;">
+        <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+        <!-- Layered-stack icon (tools/platform concept) -->
+        <ellipse cx="24" cy="16" rx="10" ry="3.5" stroke="currentColor" stroke-width="2" fill="none"/>
+        <line x1="14" y1="16" x2="14" y2="24" stroke="currentColor" stroke-width="2" opacity="0.65"/>
+        <line x1="34" y1="16" x2="34" y2="24" stroke="currentColor" stroke-width="2" opacity="0.65"/>
+        <ellipse cx="24" cy="24" rx="10" ry="3.5" stroke="currentColor" stroke-width="2" fill="none" opacity="0.75"/>
+        <line x1="14" y1="24" x2="14" y2="32" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+        <line x1="34" y1="24" x2="34" y2="32" stroke="currentColor" stroke-width="2" opacity="0.4"/>
+        <ellipse cx="24" cy="32" rx="10" ry="3.5" stroke="currentColor" stroke-width="2" fill="none" opacity="0.45"/>
+      </svg>
+    </div>
+    <!-- Title -->
+    <div style="font-size: 16px; font-weight: 700; color: var(--emerald); line-height: 1.25;">Tools and<br>Platform</div>
+    <!-- Benefit list -->
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: auto;">
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--emerald); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        The right AI tools and infrastructure for your delivery cycle
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--emerald); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Governed access — teams act without friction or security risk
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--emerald); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Where every organization starts: fastest to deploy and measure
+      </div>
+    </div>
+  </div>
+
+  <!-- Pillar 2 -->
+  <div class="pillar-col" style="
+    flex: 1; color: var(--sky);
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-top: 3px solid var(--sky);
+    border-radius: 12px; padding: 20px 18px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+      <svg viewBox="0 0 48 48" width="64" height="64" fill="none"
+           xmlns="http://www.w3.org/2000/svg" style="display:block;">
+        <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+        <!-- Open-book / knowledge concept -->
+        <path d="M24 13C18 13 13 17 13 22C13 26 15 29 18 31C18 33 19.5 35 22 35L24 35"
+              stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M24 13C30 13 35 17 35 22C35 26 33 29 30 31C30 33 28.5 35 26 35L24 35"
+              stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="24" y1="13" x2="24" y2="35" stroke="currentColor" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.55"/>
+        <path d="M15 21C17 19 19 21 17 23" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <path d="M33 21C31 19 29 21 31 23" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div style="font-size: 16px; font-weight: 700; color: var(--sky); line-height: 1.25;">Knowledge and<br>Context</div>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: auto;">
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--sky); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Structured knowledge AI draws on: patterns, rules, past decisions
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--sky); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        AI never starts from scratch — it knows your delivery context
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--sky); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Each project compounds the last: institutional memory that grows
+      </div>
+    </div>
+  </div>
+
+  <!-- Pillar 3 -->
+  <div class="pillar-col" style="
+    flex: 1; color: var(--rose);
+    background: var(--card-bg); border: 1px solid var(--line);
+    border-top: 3px solid var(--rose);
+    border-radius: 12px; padding: 20px 18px; display: flex; flex-direction: column; gap: 14px;">
+    <div style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+      <svg viewBox="0 0 48 48" width="64" height="64" fill="none"
+           xmlns="http://www.w3.org/2000/svg" style="display:block;">
+        <circle cx="24" cy="24" r="22" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+        <!-- People network concept -->
+        <circle cx="24" cy="13" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+        <circle cx="13" cy="31" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+        <circle cx="35" cy="31" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+        <line x1="24" y1="17" x2="18" y2="27" stroke="currentColor" stroke-width="1.8" opacity="0.7"/>
+        <line x1="24" y1="17" x2="30" y2="27" stroke="currentColor" stroke-width="1.8" opacity="0.7"/>
+        <line x1="17" y1="31" x2="31" y2="31" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2" opacity="0.5"/>
+      </svg>
+    </div>
+    <div style="font-size: 16px; font-weight: 700; color: var(--rose); line-height: 1.25;">People and<br>Processes</div>
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: auto;">
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--rose); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Roles shift from doers to orchestrators across all functions
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--rose); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Intent flows cleanly from business to execution — no bottleneck
+      </div>
+      <div style="display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--ink); line-height: 1.45;">
+        <span style="color: var(--rose); flex-shrink: 0; font-size: 14px; margin-top: 1px;">→</span>
+        Cadence built for continuous learning, not ported from legacy
+      </div>
+    </div>
+  </div>
+
+</div>
+```
+
+**自检**：三列各绑 `--cdot` 信号色；图标圆圈外环 `stroke="currentColor" opacity="0.3"` 继承列色（无硬码）；图标内部路径均 `stroke="currentColor"`；`border-top:3px solid var(--color)` 遵守契约；benefit 箭头用 HTML `<span>` 非 SVG `<text>`；CSS 自定义属性声明无十六进制回退值；所有尺寸 `box-sizing:border-box`（继承父容器）。
+
+**管线安全**：图标 SVG 无 `<text>`、无 `<marker>`；所有文字 HTML 元素；无 `mask-image`/`conic-gradient`/`background-clip:text`/`mix-blend-mode`/伪元素可视内容；SVG 路径用 `<ellipse>`/`<circle>`/`<line>`/`<path>`。

@@ -334,6 +334,138 @@
       "viewBox": "0 0 24 24",
       "file": "sync.svg",
       "provenance": "assimilated: engineering/data session deck (idea-level redraw)"
+    },
+    {
+      "id": "rocket",
+      "name": "Rocket",
+      "category": "process",
+      "tags": [
+        "rocket",
+        "launch",
+        "start",
+        "deploy",
+        "go-faster"
+      ],
+      "keywords": [
+        "kickoff",
+        "velocity",
+        "ship",
+        "initiative",
+        "accelerate"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "rocket.svg",
+      "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
+    },
+    {
+      "id": "terminal",
+      "name": "Terminal",
+      "category": "infrastructure",
+      "tags": [
+        "terminal",
+        "cli",
+        "code",
+        "console",
+        "ide"
+      ],
+      "keywords": [
+        "command line",
+        "developer tool",
+        "shell",
+        "devtools",
+        "workbench"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "terminal.svg",
+      "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
+    },
+    {
+      "id": "code-branch",
+      "name": "Code Branch",
+      "category": "process",
+      "tags": [
+        "branch",
+        "git",
+        "version-control",
+        "fork",
+        "merge"
+      ],
+      "keywords": [
+        "repository",
+        "commit",
+        "pr",
+        "workflow",
+        "scm"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "code-branch.svg",
+      "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
+    },
+    {
+      "id": "shield-check",
+      "name": "Shield Check",
+      "category": "security",
+      "tags": [
+        "security",
+        "shield",
+        "compliance",
+        "quality-gate",
+        "safe"
+      ],
+      "keywords": [
+        "audit",
+        "verified",
+        "approved",
+        "defense",
+        "hardened"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "shield-check.svg",
+      "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
+    },
+    {
+      "id": "bolt",
+      "name": "Bolt",
+      "category": "generic",
+      "tags": [
+        "bolt",
+        "lightning",
+        "acceleration",
+        "fast",
+        "velocity"
+      ],
+      "keywords": [
+        "speed",
+        "power",
+        "energy",
+        "phase-2",
+        "turbo"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "bolt.svg",
+      "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
+    },
+    {
+      "id": "gate-diamond",
+      "name": "Gate Diamond",
+      "category": "process",
+      "tags": [
+        "gate",
+        "diamond",
+        "milestone",
+        "decision",
+        "checkpoint"
+      ],
+      "keywords": [
+        "outcome gate",
+        "phase boundary",
+        "criteria",
+        "review point",
+        "go-no-go"
+      ],
+      "viewBox": "0 0 24 24",
+      "file": "gate-diamond.svg",
+      "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
     }
   ]
 }
