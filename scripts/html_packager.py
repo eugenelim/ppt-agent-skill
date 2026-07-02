@@ -49,6 +49,36 @@ def inline_images(html_content: str, html_dir: Path) -> str:
     return html_content
 
 
+def derive_title(slide_files: list, slides_dir: Path) -> str:
+    """从首页封面推断标题，失败则回退到 deck 目录名。
+
+    优先级：首页 <title> -> 首页最大标题(<h1>) -> deck 目录名(slug 美化)。
+    这样每个 deck 的 preview.html 标签页都能自我区分。
+    """
+    def strip_tags(s: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", s)).strip()
+
+    if slide_files:
+        try:
+            first = Path(slide_files[0]).read_text(encoding="utf-8")
+        except OSError:
+            first = ""
+        m = re.search(r"<title[^>]*>(.*?)</title>", first, re.I | re.S)
+        if m:
+            t = strip_tags(m.group(1))
+            if t and t.lower() not in ("document", "ppt preview", "pptx preview"):
+                return t
+        m = re.search(r"<h1[^>]*>(.*?)</h1>", first, re.I | re.S)
+        if m:
+            t = strip_tags(m.group(1))
+            if t:
+                return t
+
+    # 回退：deck 目录名（slides/ 的父目录）
+    slug = slides_dir.parent.name or slides_dir.name
+    return slug.replace("-", " ").replace("_", " ").strip() or "PPT Preview"
+
+
 def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     """构建可翻页的预览 HTML，每页用独立 iframe 实现 CSS 隔离。"""
     slides_srcdoc = []
@@ -112,6 +142,11 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
   .toolbar button:hover {{ background: rgba(255,255,255,0.2); }}
   .toolbar button:disabled {{ opacity: 0.3; cursor: not-allowed; }}
   .page-info {{ font-size: 14px; color: rgba(255,255,255,0.7); min-width: 80px; text-align: center; }}
+  .deck-title {{
+    position: absolute; left: 16px; max-width: 40vw;
+    font-size: 14px; color: rgba(255,255,255,0.55);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }}
   .stage {{
     margin-top: 60px; width: 90vw; max-width: 1280px;
     aspect-ratio: 16/9; overflow: hidden;
@@ -132,6 +167,7 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
 </head>
 <body>
 <div class="toolbar">
+  <span class="deck-title" title="{escaped_title}">{escaped_title}</span>
   <button id="btn-prev" onclick="nav(-1)">Prev</button>
   <span class="page-info" id="page-info">1 / {total}</span>
   <button id="btn-next" onclick="nav(1)">Next</button>
@@ -178,7 +214,8 @@ def main():
     parser = argparse.ArgumentParser(description="HTML Packager for PPT Agent")
     parser.add_argument("path", help="Directory containing slide HTML files")
     parser.add_argument("-o", "--output", default=None, help="Output HTML file")
-    parser.add_argument("--title", default="PPT Preview", help="Title")
+    parser.add_argument("--title", default=None,
+                        help="浏览器标签页标题；省略则自动从首页封面/deck 目录名推断")
     args = parser.parse_args()
 
     slides_dir = Path(args.path)
@@ -193,7 +230,9 @@ def main():
 
     output_path = args.output or str(slides_dir.parent / "preview.html")
 
-    result = build_preview(html_files, title=args.title)
+    title = args.title or derive_title(html_files, slides_dir)
+
+    result = build_preview(html_files, title=title)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(result)
