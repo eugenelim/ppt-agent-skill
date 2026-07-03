@@ -7,6 +7,7 @@
 | 脚本 | 用途 | 调用方 |
 |------|------|--------|
 | `prompt_harness.py` | 模板变量填充，生成 subagent prompt | 主 agent |
+| `resolve_output_dir.py` | 主题定后原子抢占 `OUTPUT_DIR`（kebab 归一化 + `<slug>`/`<slug>-N` 抢占；仅新建、不猜续跑） | 主 agent |
 | `resource_loader.py` | 资源路由器（menu 菜单 / resolve 按需加载 / images 图片清单） | 主 agent + subagent |
 | `subagent_logger.py` | 记录 subagent 阶段命令的 stdout/stderr 与阶段注记到 runtime 日志 | subagent |
 

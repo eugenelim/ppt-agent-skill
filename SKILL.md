@@ -59,8 +59,8 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 **`<deck-slug>` 规则**：由主题生成的简短 kebab-case 目录名。
 - CJK 主题先转写/翻译成简洁英文短语，再 kebab 化：转小写、把每段非 `[a-z0-9]` 字符替换为单个 `-`、去掉首尾 `-`。字符集 `[a-z0-9-]`，≤40 字符。
 - **解析一次**：主题确定后（采访之前）就定下 `OUTPUT_DIR`，整个 run 复用同一目录。
-- **原子抢占（防并发撞车）**：新建 deck 时用**不带 `-p` 的 `mkdir`** 抢占 `OUTPUT_DIR`（目录已存在则失败）；失败就依次试 `<slug>-2`/`<slug>-3`…，同样用原子 `mkdir`；第一个成功的 `mkdir` 即占位。这样同一 cwd 下两个同主题 run 同时起也不会选到同一目录（`mkdir -p` 不报错、无法当抢占用）。后缀最多试到 `<slug>-99`，仍抢不到就停下来报错求助，不要无限循环。
-- **续跑**：续跑或跨对话恢复进行中的 deck 时**复用已有目录（匹配，不重新抢占）**——先扫描 `OUTPUT_ROOT/<slug>*`，复用其中产物与本 run 吻合的那个（首个 run 可能已被去重成 `<slug>-2`），别盲目按 slug 重新解析。重新抢占会把续跑产物散落到空的兄弟目录里。续跑假定**单写者**（一个 deck 同一时刻只有一个 run 在续），并发续同一 deck 不在保护范围内。
+- **原子抢占（防并发撞车）**：新建 deck 时优先运行 `python3 SKILL_DIR/scripts/resolve_output_dir.py --root OUTPUT_ROOT --slug "<英文短语>"`——它做 kebab 归一化，再用原子 `mkdir` 抢占 `<slug>`（已被占用则自动依次试 `<slug>-2`…`<slug>-99`），把抢到的绝对路径打到 stdout；全被占用则报错求助。CJK→英文转写仍由主 agent 在传入 `--slug` 前完成（脚本只吃 `[a-z0-9]`）。**无 Python 时的降级**：手工用**不带 `-p` 的 `mkdir`** 抢占（目录已存在则失败），失败依次试 `<slug>-2`/`<slug>-3`…；第一个成功的 `mkdir` 即占位（`mkdir -p` 不报错、无法当抢占用），最多试到 `<slug>-99` 仍抢不到就停下报错。两条路径都保证同一 cwd 下两个同主题 run 不会选到同一目录。
+- **续跑**：续跑或跨对话恢复进行中的 deck 时**复用已有目录（匹配，不重新抢占）**——先扫描 `OUTPUT_ROOT/<slug>*`，复用其中产物与本 run 吻合的那个（首个 run 可能已被去重成 `<slug>-2`），别盲目按 slug 重新解析。**续跑不走上面的抢占脚本**：哪个目录算"本 run"需要判断，由主 agent 扫描匹配后直接复用（`resolve_output_dir.py` 只做新建抢占、不猜续跑目录）。重新抢占会把续跑产物散落到空的兄弟目录里。续跑假定**单写者**（一个 deck 同一时刻只有一个 run 在续），并发续同一 deck 不在保护范围内。
 
 后续所有路径均基于 `SKILL_DIR` 与 `OUTPUT_DIR`，不再重复说明。工具类产物（`style-gallery/` 等）挂在 `OUTPUT_ROOT` 下、与各 deck 目录平级，不属于任何 deck。
 
@@ -135,9 +135,7 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 2. 用所有可用的信息获取工具并行搜索
 3. 每组结果摘要总结
 
-> **来源获取闸门（不可静默降级）。** 进入 Step 3 之前，先核对本次 deck 的接地模式（见「来源接地契约」）拿到了它要求的来源：
-> - **G1**：用户指名的每个资料路径都要**实际读到内容**。有任何一个**找不到/为空/解析失败**——**STOP**，明确告诉用户"哪个文件没读到"，等用户补齐或改路径，**绝不**跳过它、也**绝不**用模型知识替补那部分内容。
-> - **G2**：搜索/URL/知识库要**确有可用结果**。若工具缺失或**零结果/结果为空壳**——**STOP**，如实报告，让用户选择（提供资料 / 换查询 / 显式转 G3 示意稿）。
+> **来源获取闸门（不可静默降级）。** 进入 Step 3 之前，按本次 deck 的接地模式核对来源已到位——**G1** 指名的每个资料路径都要实际读到内容，**G2** 搜索/URL/知识库要确有可用结果；任一前提不满足即 **STOP**（各模式的处置细则见上方「来源接地契约」表「前提不满足时」列）。
 > - 任何情况下都**不允许**因为"没搜到/没读到"就凭主题记忆把内容补满当成事实——那是最严重的内容事故。转 G3 示意稿必须经用户明确同意，且成品通篇标注"示意稿·未经核实"。
 
 **产物**：搜索结果集合 JSON
@@ -209,48 +207,9 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 在生成每页 HTML **之前**，先为该页生成配图。每页至少 1 张（封面页、章节封面必须有），生成后保存到 `OUTPUT_DIR/images/`。
 
-##### generate_image 提示词构造公式
+##### 提示词构造
 
-提示词必须同时满足 **4 个维度**，按以下公式组装：
-
-```
-[内容主题] + [视觉风格] + [画面构图] + [技术约束]
-```
-
-| 维度 | 说明 | 示例 |
-|------|------|------|
-| 内容主题 | 从该页策划稿 JSON 的核心概念提炼，具体到场景/对象 | "DMSO molecular purification process, crystallization flask with clear liquid" |
-| 视觉风格 | 与 style.json 的配色方案和情感基调对齐 | 暗黑科技 -> "deep blue dark tech background, subtle cyan glow, futuristic" |
-| 画面构图 | 根据图片在页面中的放置方式决定 | 右侧半透明 -> "clean composition, main subject on left, fade to transparent on right" |
-| 技术约束 | 固定后缀，确保输出质量 | "no text, no watermark, high quality, professional illustration" |
-
-##### 风格与配图关键词对应
-
-| PPT 风格 | 配图风格关键词 |
-|---------|--------------|
-| 暗黑科技 | dark tech background, neon glow, futuristic, digital, cyber |
-| 小米橙 | minimal dark background, warm orange accent, clean product shot, modern |
-| 蓝白商务 | clean professional, light blue, corporate, minimal, bright |
-| 朱红宫墙 | traditional Chinese, elegant red gold, ink painting, cultural |
-| 清新自然 | fresh green, organic, nature, soft light, watercolor |
-| 紫金奢华 | luxury, purple gold, premium, elegant, metallic |
-| 极简灰白 | minimal, grayscale, clean, geometric, academic |
-| 活力彩虹 | colorful, vibrant, energetic, playful, gradient, pop art |
-
-##### 按页面类型调整
-
-| 页面类型 | 图片特征 | Prompt 额外关键词 |
-|---------|---------|-----------------|
-| 封面页 | 主题概览，视觉冲击 | "hero image, wide composition, dramatic lighting" |
-| 章节封面 | 该章主题的象征性视觉 | "symbolic, conceptual, centered composition" |
-| 内容页 | 辅助说明，不喧宾夺主 | "supporting illustration, subtle, background-suitable" |
-| 数据页 | 抽象数据可视化氛围 | "abstract data visualization, flowing lines, tech" |
-
-##### 禁止事项
-- 禁止图片中出现文字（AI 生成的文字质量差）
-- 禁止与页面配色冲突的颜色（暗色主题配暗色图，亮色主题配亮色图）
-- 禁止与内容无关的装饰图（每张图必须与该页内容有语义关联）
-- 禁止重复使用相同 prompt（每页图片必须独特）
+`generate_image` 提示词的四维构造公式（`[内容主题] + [视觉风格] + [画面构图] + [技术约束]`）、各 PPT 风格的配图关键词、按页面类型的调整、以及禁止事项 —— 详见 [`references/image-generation.md`](references/image-generation.md)，按该文件组装每页 prompt。
 
 **产物**：`OUTPUT_DIR/images/` 下的配图文件
 
@@ -357,7 +316,7 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
     outline.json       # 大纲
     planning/          # 每页策划稿 planningN.json（planning_validator 校验闸门对象）
     style.json         # 风格定义
-  style-gallery/               # 28 风格预览（工具产物，与 deck 目录平级，非 deck）
+  style-gallery/               # 29 风格预览（工具产物，与 deck 目录平级，非 deck）
 ```
 
 ---
@@ -383,7 +342,7 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 | `layout_hint` | asymmetric / hero-top / l-shape / mixed-grid / primary-secondary / single-focus / symmetric / t-shape / three-column / waterfall | `references/layouts/<name>.md` | 主次结合 → `references/layouts/primary-secondary.md` |
 | `page_type` | cover / toc / section / section-marker / reference / end | `references/page-templates/<name>.md` | 封面 → `references/page-templates/cover.md` |
 | `card_type` | text / data / list / quote / timeline / comparison / diagram / image-hero / matrix-chart / people | `references/blocks/<name>.md` | 数据卡 → `references/blocks/card-styles.md` |
-| `chart_type` | progress-bar / ring / sparkline / radar / funnel / kpi / metric-row / waffle / rating / timeline / treemap / comparison-bar / stacked-bar | `references/charts/<name>.md` | 雷达 → `references/charts/radar.md` |
+| `chart_type` | progress-bar / ring / sparkline / radar / funnel / kpi / metric-row / waffle / rating / timeline / treemap / comparison-bar / stacked-bar | `references/charts/index.md`（按类别取 basic/advanced/complex） | 雷达 → `references/charts/advanced.md` |
 
 ## Step 0/1 采访模板规则
 
@@ -399,20 +358,20 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 
 | 文件 | 何时阅读 | 关键内容 |
 |------|---------|---------|
-| `references/prompts.md` | 每步生成前（合并版）| 5 套 Prompt 模板（调研/大纲/策划/设计/备注）|
-| `references/prompts/*.md` | 模块化版本（23 文件）| 按 step + module + tpl 拆分的 Prompt 模板 |
+| `references/prompts.md` | **内联单 agent 流程**（Step 1-5 直接引用 Prompt #1-#5）| 5 套合并 Prompt 模板（调研/大纲/策划/设计/备注）|
+| `references/prompts/*.md` | **子 agent 编排管线**（按 phase 拆分、含 STAGE COMPLETE 交接锚点，23 文件：tpl-* 21 + module-* 2）| 与 prompts.md 是两条并行执行路径、非彼此副本；prompts.md 服务内联流程，prompts/ 服务 PageAgent/分阶段编排 |
 | `references/playbooks/*.md` | 每步执行手册（11 文件）| outline / research / source / style / step4 各 phase 的执行 playbook |
 | `references/styles/index.md` | **Step 5a** | 29 种预置风格索引 + 决策矩阵 + JSON Schema |
 | `references/styles/{dark,light,vibrant,cultural,natural}.md` | Step 5a 选定风格后 | 该板块所有风格的完整 JSON + CSS 变量 + Mock 链接 |
 | `references/typography.md` | **Step 5c** | 排版铁律 14 条（字距/tabular-nums/OpenType/serif italic 混排/字体栈降级）|
 | `references/charts/index.md` | **Step 5c 涉及数据可视化时** | 18 种图表索引 + 决策矩阵 |
-| `references/charts/{basic,advanced,complex}.md` | 选定图表后 | 完整 HTML 模板（基础 8 种 / 进阶 6 种 / ECharts 级 4 种）|
-| `references/charts/<chart_type>.md` | 单一图表精细规格 | sunbigfly 风格的单文件图表（13 个）|
+| `references/charts/{basic,advanced,complex}.md` | 选定图表后 | 完整 HTML 模板（基础 8 种 / 进阶 6 种 / ECharts 级 4 种）；单一图表精细规格按类别在此三文件内查 |
 | `references/layouts/*.md` | Step 5c layout_hint 路由 | 10 个 layout 各成文件（asymmetric / hero-top / l-shape 等）|
 | `references/blocks/*.md` | Step 5c card_type 路由 | 9 个可复用卡片原型（card-styles / comparison / diagram / quote 等）|
 | `references/page-templates/*.md` | Step 5c page_type 路由 | 6 个页面模板（cover / end / reference / section / section-marker / toc）|
 | `references/principles/*.md` | **Step 4-5 自检与原则** | 8 设计原则 + failure-modes + **taste-gate（反 AI 感自审 / 出片前品味闸门）**（cognitive-load / color-psychology / composition / data-visualization / narrative-arc / runtime-failure-modes / visual-hierarchy / taste-gate）|
 | `references/design-runtime/*.md` | Step 5c 设计运行时 | css-weapons / data-type-decoration-mapping / data-type-visual-mapping / design-specs / director-command-rules-examples |
+| `references/image-generation.md` | **Step 5b 配图时** | generate_image 四维构造公式 + 风格配图关键词 + 按页面类型调整 + 禁止事项 |
 | `references/bento-grid.md` | Step 5c | 7 种布局精确坐标 + 5 种卡片类型 + 决策矩阵 |
 | `references/method.md` | 初次了解 | 核心理念与方法论 |
 | `references/pipeline-compat.md` | **Step 5c 设计稿生成时** | CSS 禁止清单 + 图片路径 + 字号混排 + SVG text + 环形图 + svg2pptx 注意事项 |

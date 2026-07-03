@@ -6,6 +6,21 @@
 
 ---
 
+## Step 0 之前：解析 OUTPUT_DIR
+
+主题确定后（采访之前）立即抢占本 deck 的产物目录，整个 run 复用：
+
+```bash
+# 主 agent 先把主题转写成英文短语，再交给脚本做 kebab 归一化 + 原子抢占
+python3 SKILL_DIR/scripts/resolve_output_dir.py --root ppt-output --slug "<英文短语>"
+# stdout = 抢到的 OUTPUT_DIR 绝对路径（<slug> 被占用会自动退到 <slug>-2…<slug>-99）
+```
+
+- **降级（无 Python）**：手工用不带 `-p` 的 `mkdir` 抢占 `ppt-output/<slug>`，失败依次试 `<slug>-2`/`<slug>-3`…（`mkdir -p` 无法当抢占用），最多试到 `<slug>-99`。
+- **续跑**：不跑抢占脚本；扫描 `ppt-output/<slug>*`，由主 agent 判断哪个目录属于本 run 并直接复用（脚本只做新建抢占、不猜续跑目录）。slug 规则见 SKILL.md 路径约定。
+
+---
+
 ## Step 0 采访
 
 Prompt 生成（按能力二选一）：
