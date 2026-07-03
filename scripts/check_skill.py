@@ -442,6 +442,29 @@ def check_visual_qa_contract(result: CheckResult) -> None:
                 result.error(f"{path_label}: missing decoration contract token `{token}`")
 
 
+def check_step45_review_gate(result: CheckResult) -> None:
+    """Step 4.5 review gate must carry the hard-STOP pattern (like Step 1 / Step 6),
+    not a soft or optional token. A soft gate lets the model glide Step 4 -> Step 5
+    and skip the slide-intent review entirely."""
+    skill = read_text(ROOT_DIR / "SKILL.md")
+    header_match = re.search(r"^### Step 4\.5:.*$", skill, re.M)
+    if not header_match:
+        result.error("SKILL.md: missing `### Step 4.5:` review-gate section")
+    else:
+        if "[STOP" not in header_match.group(0):
+            result.error("SKILL.md: Step 4.5 header must use the hard `[STOP ...]` marker (a soft token skips the gate)")
+        start = header_match.end()
+        nxt = re.search(r"^### ", skill[start:], re.M)
+        section = skill[start: start + (nxt.start() if nxt else len(skill) - start)]
+        if "禁止跳过" not in section:
+            result.error("SKILL.md: Step 4.5 section must contain `禁止跳过` (matching Step 1 / Step 6)")
+
+    cli = read_text(ROOT_DIR / "references/cli-cheatsheet.md")
+    for line in cli.splitlines():
+        if line.startswith("## Step 4.5") and "可选" in line:
+            result.error("references/cli-cheatsheet.md: Step 4.5 must not be marked `可选` (an optional gate gets skipped)")
+
+
 def run_all_checks() -> CheckResult:
     result = CheckResult()
     check_prompt_harness_coverage(result)
@@ -452,6 +475,7 @@ def run_all_checks() -> CheckResult:
     check_resource_route_docs(result)
     check_referenced_files_exist(result)
     check_step0_interview_contract(result)
+    check_step45_review_gate(result)
     check_visual_qa_contract(result)
     return result
 

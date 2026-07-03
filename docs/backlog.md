@@ -83,6 +83,26 @@ current `charts/` and `styles/` file set (or restores the missing files).
   code sites to one. Out of scope for `reference-runbook-page-types` (which added
   both values to every site in lockstep as the spec's *Always do* demanded).
 
+## slide-intent-review
+
+- **Discovered (not an AC deferral): the review gate (and the whole Step-4 planning
+  chain) is honor-system, not mechanically enforced.** The soft-token defect that let
+  the model skip Step 4.5 is fixed in wording (matched Step 1's `[STOP]` pattern +
+  de-optionalized the cheatsheet; `check_step45_review_gate` pins it). But wording is
+  still adherence-based: real runs (Agentic-RAG, OSS onboarding) skipped straight from
+  interview to slide HTML, so `planning/*.json` was never persisted and Step 4.5 had no
+  artifact to run on. A hook is **not portable** — it lives in the consumer's
+  `settings.json`, not the installed skill. Unblocked by a follow-up that bakes the gate
+  into the skill's *own* export scripts (`html_packager.py` / `html2svg.py` /
+  `svg2pptx.py` refuse to produce the deliverable unless `planning/*.json` exists,
+  passes `planning_validator`, and a `runtime/.review-consent` marker is present) — the
+  one mechanical enforcement that travels with the skill. Out of scope for the
+  soft-token bug-fix.
+- **Discovered (not an AC deferral): Step 4 planning-persistence is skippable.** Step 4's
+  PageAgent flow + `planning_validator` "强制闸门" are documented but not enforced; the
+  model can plan in-context and emit `slides/*.html` directly. Same root cause and same
+  fix as the item above (export-script gate); tracked together.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>
