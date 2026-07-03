@@ -626,6 +626,21 @@ python3 -c "import os, glob; [os.remove(p) for p in ['OUTPUT_DIR/planning/planni
 
 ---
 
+## Step 4.5 策划意图评审门（proof worksheet · 可选，Review vs Render 之前）
+
+确定性、零 LLM 的低保真评审工作表；渲染 `planning/*.json`（+ `outline.json`）为只读脚手架。同意闸门选 A（先评审）时运行；改内容改 `planning.json` 后重跑即可。
+
+```bash
+python3 SKILL_DIR/scripts/proof_worksheet.py OUTPUT_DIR [--as-of YYYY-MM-DD]
+# 产物：OUTPUT_DIR/runtime/proof/<deck-slug>-intent.html（gitignore 脚手架，浏览器打开）
+```
+
+- `--as-of` 为显式日期参数（不传则不显示日期；渲染绝不读系统时钟）。
+- 只读工作表：单一真源是 `planning.json`；切勿手改工作表。
+- 只写 `runtime/proof/`；不动 `references/styles/`、风格计数或版本号。
+
+---
+
 ## Step 5 导出
 
 执行管线：
