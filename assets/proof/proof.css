@@ -1,0 +1,89 @@
+/* proof.css — owned low-fidelity review chrome for the slide-intent worksheet.
+ *
+ * A color-MUTED derivative of the schematic_blueprint look: white paper, hard
+ * black hairlines, mono field labels, black header bars, Fraunces italic accent,
+ * zero shadow / zero radius. The decorative electric-purple accent is dropped so
+ * the artifact reads as a DRAFT SPEC, not a finished deck; the semantic signal
+ * colors (amber / green) are kept for the source-status column.
+ *
+ * This is NOT a deck style and lives outside references/styles/, so gallery.py
+ * (which enumerates styles only from that directory) never sees it. It is inlined
+ * into the worksheet HTML at render time; do not treat it as a deliverable style.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400;0,9..144,400;0,9..144,600&family=JetBrains+Mono:wght@400;600&family=Inter+Tight:wght@400;600;700&display=swap');
+
+:root {
+  --ink: #000000;
+  --paper: #ffffff;
+  --paper-warm: #fafafa;
+  --rule: #d8d8d8;
+  --muted: #555555;
+  --ok: #1f7a3a;
+  --ok-soft: #e9f5ed;
+  --warn: #b35900;
+  --warn-soft: #fef3e6;
+  --mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  --serif: 'Fraunces', Georgia, serif;
+  --sans: 'Inter Tight', 'Inter', -apple-system, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 32px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+a { color: inherit; text-decoration: none; }
+
+.deck-header { border-bottom: 3px solid var(--ink); padding-bottom: 12px; margin-bottom: 20px; }
+.deck-title { margin: 0; font-family: var(--serif); font-style: italic; font-size: 30px; }
+.deck-meta { margin-top: 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* deck-overview index */
+.index { border: 1px solid var(--rule); margin-bottom: 28px; }
+.index-row { display: grid; grid-template-columns: 46px 1fr 96px 92px; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 12px; }
+.index-row:last-child { border-bottom: 0; }
+.index-row .no { color: var(--muted); }
+.index-row .flags { text-align: right; }
+
+/* per-slide worksheet card */
+.slide-card { border: 2px solid var(--ink); margin-bottom: 22px; }
+.card-head { display: flex; justify-content: space-between; gap: 12px; background: var(--ink); color: var(--paper); font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; padding: 6px 12px; }
+.slide-title { margin: 10px 12px 2px; font-family: var(--serif); font-size: 20px; }
+.takeaway { margin: 0 12px 8px; color: var(--muted); }
+.meta { display: flex; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 5px 12px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--muted); }
+.warn { color: var(--warn); background: var(--warn-soft); padding: 0 4px; font-weight: 600; }
+
+/* cards table */
+.cards { width: 100%; border-collapse: collapse; }
+.cards th { background: var(--paper-warm); text-align: left; padding: 4px 12px; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.cards td { padding: 6px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.cards tr:last-child td { border-bottom: 0; }
+.role { font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.role.anchor { font-weight: 700; }
+.kind { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+.content .headline { font-weight: 600; }
+.content ul { margin: 4px 0 0; padding-left: 18px; }
+.data { font-family: var(--mono); font-size: 12px; }
+.src { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.status { width: 1.4em; text-align: center; font-size: 15px; }
+.status.st-ok { color: var(--ok); }
+.status.st-none { color: var(--warn); }
+
+.sg { padding: 6px 12px; border-top: 1px solid var(--rule); font-size: 12px; color: var(--muted); }
+.sg b { color: var(--ink); }
+
+details.aux { padding: 6px 12px; border-top: 1px dashed var(--rule); }
+details.aux summary { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); cursor: pointer; }
+details.aux pre { margin: 8px 0 0; white-space: pre-wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+@media print {
+  body { padding: 12px; }
+  .slide-card { break-inside: avoid; }
+  .index { break-after: page; }
+}

@@ -175,6 +175,30 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 ---
 
+### Step 4.5: 策划意图评审门 [同意闸门 — Review vs Render]
+
+> **目的**：在昂贵的逐页 HTML 渲染（Step 5c）之前，用一张**确定性、零 LLM** 的低保真"策划意图工作表"快速核对内容——过时事实、缺来源、结构/密度问题往往只有逐页看才暴露，而重跑渲染既慢又费 token。工作表渲染的是**策划（plan）**、不是幻灯片仿版，因此完全确定性、可反复重跑。
+
+**同意闸门（优先结构化采访 UI，回退纯文本）**：Step 4 策划完成后，向用户二选一：
+- **A — 先评审策划意图**（*清理内容时推荐*）：渲染工作表 → 核对 → 改 `planning.json` → 重渲染 → 确认。便宜、无 token。
+- **B — 直接出图**：跳到 Step 5c 完整渲染。附警示：
+
+> ⚠️ Rendering now locks in the shape before the facts are checked — later fixes cost a re-render and can drift `planning.json` out of sync. Still reviewable after, just more LLM- and time-intensive.
+
+**推荐默认由已有信号推导**（不新增采访字段、不动 Step-0 采访锚点合同）：`grounding_mode` 为 G1/G2 或页数较多 → 默认 A；G3 示意 / 小 deck → B 可接受。**每个 deck 只问一次**。
+
+**评审循环（渲染工作表）**：
+
+```bash
+python3 SKILL_DIR/scripts/proof_worksheet.py OUTPUT_DIR [--as-of YYYY-MM-DD]
+```
+
+产物：`OUTPUT_DIR/runtime/proof/<deck-slug>-intent.html`（**只读脚手架**，浏览器打开）。每卡显示角色/类型/内容/数据 + **来源状态 ●有源 / ○无源**（仅呈现有无，不判新旧）；顶部 meta 显示 `layout_hint`、密度（到预算上限时标 ⚠）与页级 `source_guidance`；美术/导演类字段折叠；置顶总览索引给全局叙事节奏。**单一真源是 `planning.json`——改就改 JSON，工作表重生成；切勿手改工作表**（会造成双真源漂移）。循环到用户 **confirm** 才进入 Step 5。`--as-of` 为显式参数（渲染绝不读系统时钟，保证确定性）。
+
+**不在范围内（刻意如此）**：工作表**不是**画廊/交付风格（其 `proof.css` 在 `assets/proof/`，不入 `references/styles/`，gallery 风格枚举与计数不变）；**不**自动判定内容过时或伪造来源日期；两栏 contact sheet 已评估后决定不做；把意图行复用到 HTML 幻灯片标题留待独立 spec。
+
+---
+
 ### Step 5: 风格决策 + 设计稿生成
 
 分三个子步骤，**顺序不可颠倒**：
