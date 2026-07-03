@@ -285,6 +285,55 @@ def check_resource_route_docs(result: CheckResult) -> None:
                 result.error(f"{format_rel(path)}: missing documented resource route pattern `{pattern}`")
 
 
+# A references/…md path token. The char class excludes whitespace, backtick and
+# pipe on purpose, so each backtick-span / table-cell path is its own token — a
+# real dead path co-located with a `<placeholder>` path on the same table row is
+# still isolated and checked, instead of being swallowed by a greedy line match.
+SKILL_REF_PATTERN = re.compile(r"references/[A-Za-z0-9_./{}<>*,-]+\.md")
+
+
+def _expand_braces(path_str: str) -> list[str]:
+    """Expand `{a,b,c}` brace groups into concrete paths (recursive for multiples)."""
+    match = re.search(r"\{([^{}]*)\}", path_str)
+    if not match:
+        return [path_str]
+    prefix, suffix = path_str[: match.start()], path_str[match.end():]
+    expanded: list[str] = []
+    for option in match.group(1).split(","):
+        expanded.extend(_expand_braces(prefix + option.strip() + suffix))
+    return expanded
+
+
+def find_broken_skill_refs(text: str, exists) -> list[str]:
+    """Concrete `references/…md` paths in `text` that fail the `exists` predicate.
+
+    Placeholder/glob forms (`<name>`, `*`) can't resolve to a single file and are
+    skipped; brace forms (`{a,b,c}.md`) are expanded and each member checked.
+    `exists` is a predicate over repo-relative path strings, injected so this is
+    unit-testable without touching the real tree.
+    """
+    missing: list[str] = []
+    checked: set[str] = set()
+    for token in SKILL_REF_PATTERN.findall(text):
+        if any(ch in token for ch in "<>*"):
+            continue  # placeholder / glob — cannot resolve to a single file
+        for path_str in _expand_braces(token):
+            # brace check = unbalanced-brace safety (expansion can't leak on well-formed input); + dedup
+            if "{" in path_str or "}" in path_str or path_str in checked:
+                continue
+            checked.add(path_str)
+            if not exists(path_str):
+                missing.append(path_str)
+    return missing
+
+
+def check_referenced_files_exist(result: CheckResult) -> None:
+    """Every literal references/…md path mentioned in SKILL.md must resolve on disk."""
+    skill = ROOT_DIR / "SKILL.md"
+    for path_str in find_broken_skill_refs(read_text(skill), lambda p: (ROOT_DIR / p).exists()):
+        result.error(f"{format_rel(skill)}: referenced file does not exist: `{path_str}`")
+
+
 def check_step0_interview_contract(result: CheckResult) -> None:
     required_patterns = {
         ROOT_DIR / "SKILL.md": [
@@ -401,6 +450,7 @@ def run_all_checks() -> CheckResult:
     check_planning_example(result)
     check_truth_source_docs(result)
     check_resource_route_docs(result)
+    check_referenced_files_exist(result)
     check_step0_interview_contract(result)
     check_visual_qa_contract(result)
     return result
