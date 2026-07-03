@@ -639,6 +639,15 @@ python3 SKILL_DIR/scripts/proof_worksheet.py OUTPUT_DIR [--as-of YYYY-MM-DD]
 - 只读工作表：单一真源是 `planning.json`；切勿手改工作表。
 - 只写 `runtime/proof/`；不动 `references/styles/`、风格计数或版本号。
 
+**决定落盘 + 渲染前置检查（机械闸门）**：用户选定 Review/Render 后落盘决定；Step 5c 写任何 slide HTML 之前 `--check`，非零即硬 STOP（跳过了 Step 4.5）。
+
+```bash
+python3 SKILL_DIR/scripts/proof_gate.py OUTPUT_DIR --decision review        # A（须先跑过 proof_worksheet.py）
+python3 SKILL_DIR/scripts/proof_gate.py OUTPUT_DIR --decision render-direct  # B 直接出图
+python3 SKILL_DIR/scripts/proof_gate.py OUTPUT_DIR --check                   # Step 5c 渲染前置：非零=硬 STOP
+# 标记：OUTPUT_DIR/runtime/proof/gate.json（确定性、无时钟、可覆盖）
+```
+
 ---
 
 ## Step 5 导出
