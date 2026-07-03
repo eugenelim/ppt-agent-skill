@@ -313,6 +313,7 @@ def phase1_tests(style_filter: str = None) -> dict:
         ("qa_selftest", [sys.executable, str(ROOT / "scripts" / "test_diagram_qa.py")]),
         ("gallery_toggle", [sys.executable, str(ROOT / "scripts" / "test_gallery_toggle.py")]),
         ("proof_worksheet", [sys.executable, str(ROOT / "scripts" / "test_proof_worksheet.py")]),
+        ("proof_gate", [sys.executable, str(ROOT / "scripts" / "test_proof_gate.py")]),
     ]:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         ok = proc.returncode == 0

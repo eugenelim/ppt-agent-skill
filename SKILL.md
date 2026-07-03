@@ -1,6 +1,6 @@
 ---
 name: ppt-agent
-description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT 设计公司的完整工作流（需求调研 -> 资料搜集 -> 大纲策划 -> 策划稿 -> 设计稿），输出高质量 HTML 格式演示文稿。当用户提到制作 PPT、做演示文稿、做 slides、做幻灯片、做汇报材料、做培训课件、做路演 deck、做产品介绍页面时触发此技能。即使用户只说"帮我做个关于 X 的介绍"或"我要给老板汇报 Y"，只要暗示需要结构化的多页演示内容，都应该触发。也适用于用户说"帮我把这篇文档做成 PPT"、"把这个主题做成演示"等需要将内容转化为演示格式的场景。
+description: Use when the user wants to build a presentation, slide deck, or PPT — e.g. "make slides on X", "build/create a deck for the client", "turn this doc into a presentation/slides", "I need to present/report Y to my boss", "put together a pitch deck / training deck / product intro". Runs a full pro-agency workflow (research → sourcing → outline → planning → design) and outputs high-quality HTML slides. Fires on implicit asks too — anything implying structured multi-page presentation content, even "help me make an intro about X" or "I have to brief leadership on Y". 中文触发同样适用：制作 PPT、做演示文稿 / slides / 幻灯片、做汇报材料 / 培训课件 / 路演 deck / 产品介绍页面、把文档做成 PPT、把某主题做成演示。
 ---
 
 # PPT Agent -- 专业演示文稿全流程生成
@@ -177,17 +177,17 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 
 ### Step 4.5: 策划意图评审门 [STOP -- 必须先问 Review/Render，禁止跳过]
 
-> **禁止跳过。** Step 4 策划落盘后、进入 Step 5c 渲染前，必须先向用户抛出 Review/Render 二选一并**等用户选择**（默认「先评审」）。不得从 Step 4 直接滑入 Step 5，也不得替用户默认直接出图。
+> **禁止跳过。默认 plan-first：不主动出图。** Step 4 策划落盘后、进入 Step 5c 渲染前，必须先向用户抛出 Review/Render 二选一并**等用户选择**。**默认「先评审」——先交付策划/工作表然后停下，除非用户明确要求出图，否则不要渲染幻灯片**（逐页 HTML 渲染每页都要 LLM 轮次，很贵）。不得从 Step 4 直接滑入 Step 5，也不得替用户默认直接出图。
 
 > **目的**：在昂贵的逐页 HTML 渲染（Step 5c）之前，用一张**确定性、零 LLM** 的低保真"策划意图工作表"快速核对内容——过时事实、缺来源、结构/密度问题往往只有逐页看才暴露，而重跑渲染既慢又费 token。工作表渲染的是**策划（plan）**、不是幻灯片仿版，因此完全确定性、可反复重跑。
 
 **同意闸门（优先结构化采访 UI，回退纯文本）**：Step 4 策划完成后，向用户二选一：
-- **A — 先评审策划意图**（*清理内容时推荐*）：渲染工作表 → 核对 → 改 `planning.json` → 重渲染 → 确认。便宜、无 token。
-- **B — 直接出图**：跳到 Step 5c 完整渲染。附警示：
+- **A — 先评审策划意图（默认）**：渲染工作表 → 核对 → 改 `planning.json` → 重渲染。便宜、无 token。**评审满意后就在此停下、交付策划** —— **不要自动进入 Step 5 出图**；等用户明确说「出图 / 渲染 / 出 PPT」再渲染。
+- **B — 直接出图**：用户明确要立刻出图时，跳到 Step 5c 完整渲染。附警示：
 
 > ⚠️ Rendering now locks in the shape before the facts are checked — later fixes cost a re-render and can drift `planning.json` out of sync. Still reviewable after, just more LLM- and time-intensive.
 
-**推荐默认由已有信号推导**（不新增采访字段、不动 Step-0 采访锚点合同）：`grounding_mode` 为 G1/G2 或页数较多 → 默认 A；G3 示意 / 小 deck → B 可接受。**每个 deck 只问一次**。
+**默认偏向 A（plan-first）**：除非用户明确要求立即出图，否则一律默认 A、评审后停下。渲染是用户主动发起的动作，不是自动的下一步。**每个 deck 只问一次**（不新增采访字段、不动 Step-0 采访锚点合同）。
 
 **评审循环（渲染工作表）**：
 
@@ -195,7 +195,18 @@ description: 专业 PPT 演示文稿全流程 AI 生成助手。模拟顶级 PPT
 python3 SKILL_DIR/scripts/proof_worksheet.py OUTPUT_DIR [--as-of YYYY-MM-DD]
 ```
 
-产物：`OUTPUT_DIR/runtime/proof/<deck-slug>-intent.html`（**只读脚手架**，浏览器打开）。每卡显示角色/类型/内容/数据 + **来源状态 ●有源 / ○无源**（仅呈现有无，不判新旧）；顶部 meta 显示 `layout_hint`、密度（到预算上限时标 ⚠）与页级 `source_guidance`；美术/导演类字段折叠；置顶总览索引给全局叙事节奏。**单一真源是 `planning.json`——改就改 JSON，工作表重生成；切勿手改工作表**（会造成双真源漂移）。循环到用户 **confirm** 才进入 Step 5。`--as-of` 为显式参数（渲染绝不读系统时钟，保证确定性）。
+产物：`OUTPUT_DIR/runtime/proof/<deck-slug>-intent.html`（**只读脚手架**，浏览器打开）。每卡显示角色/类型/内容/数据 + **来源状态 ●有源 / ○无源**（仅呈现有无，不判新旧）；顶部 meta 显示 `layout_hint`、密度（到预算上限时标 ⚠）与页级 `source_guidance`；美术/导演类字段折叠；置顶总览索引给全局叙事节奏。**单一真源是 `planning.json`——改就改 JSON，工作表重生成；切勿手改工作表**（会造成双真源漂移）。评审满意后**停在策划、把控制权交回用户；只有用户明确要求出图时才进入 Step 5**。`--as-of` 为显式参数（渲染绝不读系统时钟，保证确定性）。
+
+**用户选定后，落盘决定（机械闸门 · 不可省略）**：无论用户选 A 还是 B，选择一确定就把决定写入标记文件——这是 Step 5c 渲染前置检查读取的凭据：
+
+```bash
+# A 先评审（须先跑过 proof_worksheet.py，否则拒绝）：
+python3 SKILL_DIR/scripts/proof_gate.py OUTPUT_DIR --decision review
+# B 直接出图：
+python3 SKILL_DIR/scripts/proof_gate.py OUTPUT_DIR --decision render-direct
+```
+
+标记写到 `OUTPUT_DIR/runtime/proof/gate.json`（确定性、无时钟）。可反复覆盖（改主意时后写为准）。**没有这一步，Step 5c 的 `--check` 会硬失败**——这正是把「先问 Review/Render」从软提示变成可验证前置的机制。
 
 **不在范围内（刻意如此）**：工作表**不是**画廊/交付风格（其 `proof.css` 在 `assets/proof/`，不入 `references/styles/`，gallery 风格枚举与计数不变）；**不**自动判定内容过时或伪造来源日期；两栏 contact sheet 已评估后决定不做；把意图行复用到 HTML 幻灯片标题留待独立 spec。
 
@@ -243,6 +254,12 @@ python3 SKILL_DIR/scripts/proof_worksheet.py OUTPUT_DIR [--as-of YYYY-MM-DD]
 
 **执行**：使用 `references/prompts.md` Prompt #4 + `references/bento-grid.md`
 
+> **Step 4.5 前置闸门（机械 · 硬 STOP）。** 生成任何一页 slide HTML 之前，先跑：
+> ```bash
+> python3 SKILL_DIR/scripts/proof_gate.py OUTPUT_DIR --check
+> ```
+> 退出非零 = **硬 STOP：你跳过了 Step 4.5**（没向用户抛 Review/Render 并落盘决定）。回到 Step 4.5 抛选择、按选择跑 `proof_gate.py --decision …` 落盘后，再重跑 `--check` 通过才可继续。**不得**为过闸门而径直写 `gate.json`——决定必须来自真实的用户选择。
+
 > **强制策划闸门（不可绕过）。** 生成任何一页 slide HTML 之前，该页策划必须先**通过 `planning_validator.py`（零 ERROR）**——`skeleton card`（只有 headline、无 body/items/data/chart/image 内容）或 `empty card payload` 都直接拦下、禁止进入 HTML。**禁止**跳过策划稿直接生成，也**禁止**用自建脚本/离线流程绕过本闸门。骨架策划是 P0 缺陷，不是交付物。
 
 **每页 Prompt 组装公式**：
@@ -277,9 +294,9 @@ Prompt #4 模板
 
 ---
 
-### Step 6: 后处理 [必做 -- HTML 生成完后立即执行]
+### Step 6: 后处理 [出图后按需交付 -- 不主动/提前生成]
 
-> **禁止跳过。** HTML 生成完后必须自动执行以下四步，不要停在 preview.html 就结束。
+> **不要提前或强制生成预览/交付物。** 只有当用户已经要求出图（走到了 Step 5c 渲染）后，才执行以下管线交付成品；**不要在用户没要成品时抢先跑 preview/导出**。一旦用户确实要成品，则完整跑完四步、不要只停在 preview.html。逐页 HTML 渲染每页都有 LLM 轮次、很贵，因此渲染与导出都是用户主动发起的动作。
 
 > 三个终产物统一带 `<deck-slug>-` 前缀（`<deck-slug>` = `OUTPUT_DIR` 目录名），单独下载也能看出主题；中间目录（`svg/`、`png/`）与单页文件名不变。产物文件名以 `references/cli-cheatsheet.md` 为准。
 

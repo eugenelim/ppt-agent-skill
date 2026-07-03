@@ -103,6 +103,22 @@ current `charts/` and `styles/` file set (or restores the missing files).
   model can plan in-context and emit `slides/*.html` directly. Same root cause and same
   fix as the item above (export-script gate); tracked together.
 
+## proof-gate-enforcement
+
+- **Deferred: make the marker truly mechanical via the export scripts.** Shipped:
+  `proof_gate.py` records a `runtime/proof/gate.json` decision marker and `--check`
+  hard-fails pre-render; `SKILL.md` Step 5c runs it. But this is still *prose-invoked*
+  (a model that skips Step 4.5 can skip the `--check` too). The portable, unskippable
+  form is the **export-script gate** already tracked under `slide-intent-review` above:
+  `html_packager.py` / `html2svg.py` / `svg2pptx.py` refuse to produce the deliverable
+  unless `gate.json` (serving as / aliasing the `runtime/.review-consent` marker) is
+  present. `gate.json` is the marker that follow-up should consume — track together.
+- **Deferred: formal-acceptance wiring in `milestone_check.py`.** If `milestone_check`
+  is ever wired into Step 6 as a run acceptance gate, add a `gate_status` check to
+  `check_preview` / `check_step5` so a proof-skipped deck also fails acceptance
+  post-render. Dropped from this spec because `milestone_check` stages are post-render
+  and currently unwired from the flow (see spec Assumptions / plan Declined patterns).
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

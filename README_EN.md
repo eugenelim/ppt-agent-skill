@@ -86,9 +86,12 @@ You: Make a presentation about X
   ↓
 Agent asks 7 interview questions (waits for your answers)
   ↓
-Auto-research → outline → planning draft → per-page HTML design
+Auto-research → outline → planning draft → plan review
   ↓
-Auto post-processing: HTML → SVG → PPTX
+[Plan-first by default: the plan is delivered and the run stops here;
+ say "render / make the slides" and only then is per-page HTML designed]
+  ↓
+(on request, after rendering) Post-process: HTML → SVG → PPTX
   ↓
 All artifacts saved to ppt-output/<deck-name>/ (one folder per deck)
 ```
@@ -210,7 +213,7 @@ All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipe
 │  7-Q deep  │  │  3-15 srch │  │  Pyramid + │  │  Bento     │  │  29 styles │  │  HTML→SVG  │
 │  interview │  │  adaptive  │  │  self-test │  │  cards     │  │  + images  │  │  →PPTX     │
 └────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘
-   STOP wait                                       Wait confirm    Batch by part      Auto exec
+   STOP wait                                       Plan-first stop  On request       On request
 ```
 
 Detailed flow in [`SKILL.md`](SKILL.md).
