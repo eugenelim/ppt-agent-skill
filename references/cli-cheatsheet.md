@@ -626,7 +626,7 @@ python3 -c "import os, glob; [os.remove(p) for p in ['OUTPUT_DIR/planning/planni
 
 ---
 
-## Step 4.5 策划意图评审门（proof worksheet · 可选，Review vs Render 之前）
+## Step 4.5 策划意图评审门（proof worksheet · Review vs Render 闸门 · Step 5 之前必做）
 
 确定性、零 LLM 的低保真评审工作表；渲染 `planning/*.json`（+ `outline.json`）为只读脚手架。同意闸门选 A（先评审）时运行；改内容改 `planning.json` 后重跑即可。
 
