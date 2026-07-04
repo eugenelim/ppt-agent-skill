@@ -21,6 +21,9 @@ from lxml import etree
 from pptx import Presentation
 from pptx.util import Emu
 
+# Hardened SVG parser: no entity resolution, no network, no DTD loading (XXE prevention)
+_SVG_PARSER = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False)
+
 # -------------------------------------------------------------------
 # 常量
 # -------------------------------------------------------------------
@@ -419,7 +422,7 @@ class SvgConverter:
     def convert(self, svg_path, slide):
         self.bg_set = False
         self.stats = {'shapes': 0, 'skipped': 0, 'errors': 0}
-        tree = etree.parse(str(svg_path))
+        tree = etree.parse(str(svg_path), _SVG_PARSER)
         root = tree.getroot()
         self._parse_grads(root)
         sp_tree = None
