@@ -162,11 +162,13 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     iframes = []
     for i, srcdoc in enumerate(slides_srcdoc):
         display = "block" if i == 0 else "none"
+        # sandbox="" gives each srcdoc frame an opaque (null) origin — no allow-same-origin,
+        # so a crafted slide cannot read file:// siblings or the parent document (LLM05/CWE-79).
         iframes.append(
             f'<iframe class="slide-frame" id="slide-{i}" '
             f'style="display:{display}" '
             f'srcdoc="{srcdoc}" '
-            f'sandbox="allow-same-origin" '
+            f'sandbox="" '
             f'frameborder="0" scrolling="no"></iframe>'
         )
 

@@ -39,6 +39,17 @@ const path = require('path');
             deviceScaleFactor: scale
         });
 
+        // Block outbound HTTP(S) — allow only file:// and data: (LLM01/ASI05).
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const url = req.url();
+            if (url.startsWith('file://') || url.startsWith('data:')) {
+                req.continue();
+            } else {
+                req.abort('blockedbyresponse');
+            }
+        });
+
         await page.goto('file://' + item.html, {
             waitUntil: 'networkidle0',
             timeout: 30000

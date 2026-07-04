@@ -53,6 +53,13 @@ const fs = require('fs');
     if (!fs.existsSync(pg.html)) { console.warn('skip (no HTML): ' + pg.html); continue; }
     const page = await browser.newPage();
     await page.setViewport({ width: cfg.width, height: cfg.height, deviceScaleFactor: cfg.scale });
+    // Block outbound HTTP(S) — allow only file:// and data: (LLM01/ASI05).
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const url = req.url();
+      if (url.startsWith('file://') || url.startsWith('data:')) { req.continue(); }
+      else { req.abort('blockedbyresponse'); }
+    });
     await page.goto('file://' + pg.html, { waitUntil: 'networkidle0', timeout: 30000 });
     await new Promise(r => setTimeout(r, 600));
     // clip to the exact page box so output == the rendered viewport, no scrollbars
