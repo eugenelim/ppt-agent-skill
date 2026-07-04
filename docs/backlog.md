@@ -136,10 +136,6 @@ Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic
   `--no-sandbox` inside the container. Unblocked by: adding a Docker or OCI container spec for the render
   step and documenting it in SKILL.md Step 6.
 
-- **pageagent-credential-propagation (ASI03):** The 21 phase-split prompts under `references/prompts/` orchestrate
-  sub-agents. Inter-agent credential/privilege propagation was not fully assessed. Fix: audit
-  `references/prompts/step4/tpl-page-orchestrator.md` and sibling orchestrators for identity widening.
-
 - **proof-gate-harness-hook (Nit 7):** `proof_gate.py --decision render-direct` is self-attested (model can write
   it without presenting the choice). The truly unskippable form requires a harness `PreToolUse` hook in
   `settings.json` that fires before `html_packager.py`/`html2svg.py` and checks `gate.json`. Track together

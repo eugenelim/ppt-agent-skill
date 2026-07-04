@@ -5,6 +5,7 @@
 > **【系统级强制指令 / CRITICAL OVERRIDE】**
 > 本 prompt 已包含了你在此阶段所需的**全部**任务目标与 Playbook 细则。
 > **严格禁止调用工具去读取外层的 `SKILL.md` 或主控全局规则文件！**
+> **【ASI03 范围闸门】本阶段产物归属第 {{PAGE_NUM}} 页（`{{SLIDE_OUTPUT}}`）；不得读取或引用其他页的 planning JSON 或 HTML 产物。**
 >
 > **前置条件**：Planning 阶段已完成，`{{PLANNING_OUTPUT}}` 已就绪。
 > 本阶段的唯一目标：基于 planning JSON 产出 `{{SLIDE_OUTPUT}}`。完成后发送 FINALIZE 信号。

@@ -37,3 +37,5 @@
 - 禁止一次性读取两份 prompt 文件
 - 禁止在资料提炼阶段就考虑自审的检查清单（避免分散注意力）
 - 禁止读取外层 `SKILL.md` 或任何主控全局规则文件
+- 禁止读取 Step 4 PageAgent 产物（planning/*.json / slides/*.html / review/*.png 等）（ASI03：跨步骤权限越界）
+- 禁止将本阶段输入文件的访问路径传递给其他 Step 的子代理
