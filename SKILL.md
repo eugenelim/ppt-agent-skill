@@ -1,6 +1,19 @@
 ---
 name: ppt-agent
 description: Use when the user wants to build a presentation, slide deck, or PPT — e.g. "make slides on X", "build/create a deck for the client", "turn this doc into a presentation/slides", "I need to present/report Y to my boss", "put together a pitch deck / training deck / product intro". Runs a full pro-agency workflow (research → sourcing → outline → planning → design) and outputs high-quality HTML slides. Fires on implicit asks too — anything implying structured multi-page presentation content, even "help me make an intro about X" or "I have to brief leadership on Y". 中文触发同样适用：制作 PPT、做演示文稿 / slides / 幻灯片、做汇报材料 / 培训课件 / 路演 deck / 产品介绍页面、把文档做成 PPT、把某主题做成演示。
+metadata:
+  risk_tier: elevated
+  permission_surface:
+    - filesystem_write: "OUTPUT_DIR (per-deck directory under ppt-output/)"
+    - subprocess: "Python3 scripts; Node.js (Puppeteer headless Chrome for html2svg/html2png/build_pdf)"
+    - network_egress: "outbound search/URL fetch during Step 2 research (user-scoped to topic); Puppeteer renders file:// only (HTTP blocked)"
+    - runtime_install: "pip (python-pptx, lxml, Pillow); npm (puppeteer, dom-to-svg, esbuild) — versions should be pinned in CI (see docs/backlog.md#npm-version-pinning)"
+  sandbox_declaration: |
+    Puppeteer subprocesses launch with --no-sandbox (required for non-userns environments);
+    network egress is blocked via page.setRequestInterception in html2svg/html2png/build_pdf.
+    OS-level container isolation (Docker/namespace) is the recommended outer boundary.
+    File reads in html2svg are confined to OUTPUT_DIR via path-prefix check.
+  security_reviewed: "2026-07-04 (OWASP LLM Top 10:2025 + Agentic Skills Top 10 v1.0)"
 ---
 
 # PPT Agent -- 专业演示文稿全流程生成

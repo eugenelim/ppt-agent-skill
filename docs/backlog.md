@@ -119,6 +119,36 @@ current `charts/` and `styles/` file set (or restores the missing files).
   post-render. Dropped from this spec because `milestone_check` stages are post-render
   and currently unwired from the flow (see spec Assumptions / plan Declined patterns).
 
+## owasp-llm-agentic-security
+
+Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic Skills Top 10 review.
+
+- **npm-version-pinning:** `scripts/html2svg.py`, `scripts/html2png.py`, `scripts/build_pdf.py` install
+  `puppeteer`, `dom-to-svg`, and `esbuild` via `npm install`/`npx -y` with no version pins or lockfile.
+  Fix: add a `package.json` + `package-lock.json` to the project root with exact pinned versions and replace
+  `npm install` calls with `npm ci`; replace `npx -y esbuild` with the pinned local binary.
+  Unblocked by: running `npm install --save-exact puppeteer dom-to-svg esbuild` in the project root, committing
+  the generated `package.json` and `package-lock.json`, and wiring `npm audit` / `pip-audit` in CI.
+
+- **no-sandbox-container-isolation (AST06 / ASI02):** Puppeteer scripts launch with `--no-sandbox` (needed in
+  non-userns environments). The portable mitigation is an OS-level container with `seccomp`/`AppArmor` profiles.
+  Fix: wrap the Puppeteer render step in a minimal container that provides the kernel namespace; remove
+  `--no-sandbox` inside the container. Unblocked by: adding a Docker or OCI container spec for the render
+  step and documenting it in SKILL.md Step 6.
+
+- **svg2pptx-lxml-xxe-check:** `scripts/svg2pptx.py` uses `lxml` to parse model-authored SVG. The `resolve_entities`
+  and `no_network` parser flags were not verified during this review. Fix: audit `svg2pptx.py` for
+  `etree.parse`/`lxml.objectify` call sites and confirm `resolve_entities=False, no_network=True` are set.
+
+- **pageagent-credential-propagation (ASI03):** The 21 phase-split prompts under `references/prompts/` orchestrate
+  sub-agents. Inter-agent credential/privilege propagation was not fully assessed. Fix: audit
+  `references/prompts/step4/tpl-page-orchestrator.md` and sibling orchestrators for identity widening.
+
+- **proof-gate-harness-hook (Nit 7):** `proof_gate.py --decision render-direct` is self-attested (model can write
+  it without presenting the choice). The truly unskippable form requires a harness `PreToolUse` hook in
+  `settings.json` that fires before `html_packager.py`/`html2svg.py` and checks `gate.json`. Track together
+  with the `slide-intent-review` export-script gate above.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

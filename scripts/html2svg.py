@@ -40,6 +40,18 @@ const path = require('path');
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
 
+        // Block outbound HTTP(S) requests — slides must be self-contained; only
+        // file:// and data: are legitimate during a local render (LLM01/ASI05).
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const url = req.url();
+            if (url.startsWith('file://') || url.startsWith('data:')) {
+                req.continue();
+            } else {
+                req.abort('blockedbyresponse');
+            }
+        });
+
         await page.goto('file://' + item.html, {
             waitUntil: 'networkidle0',
             timeout: 30000
@@ -58,6 +70,8 @@ const path = require('path');
 
         const imgDataMap = {};
         const htmlDir = path.dirname(item.html);  // HTML文件所在目录
+        // Deck root is the parent of the slides/ directory — confine reads to it (LLM05/CWE-22).
+        const deckRoot = path.resolve(htmlDir, '..');
         for (const src of imgSrcs) {
             if (!src) continue;
             if (src.startsWith('data:')) continue;  // 跳过已内联的
@@ -68,13 +82,20 @@ const path = require('path');
             if (!path.isAbsolute(filePath)) {
                 filePath = path.resolve(htmlDir, filePath);
             }
-            if (fs.existsSync(filePath)) {
-                const data = fs.readFileSync(filePath);
-                const ext = path.extname(filePath).slice(1) || 'png';
+            const resolvedPath = path.resolve(filePath);
+            // Reject paths outside the deck directory to prevent local-file disclosure
+            // driven by model-authored img src attributes.
+            if (!resolvedPath.startsWith(deckRoot + path.sep) && resolvedPath !== deckRoot) {
+                console.warn('Skipping image outside deck directory:', resolvedPath);
+                continue;
+            }
+            if (fs.existsSync(resolvedPath)) {
+                const data = fs.readFileSync(resolvedPath);
+                const ext = path.extname(resolvedPath).slice(1) || 'png';
                 const mime = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
                 imgDataMap[src] = `data:${mime};base64,${data.toString('base64')}`;
             } else {
-                console.warn('Image not found:', filePath, '(src:', src, ')');
+                console.warn('Image not found:', resolvedPath, '(src:', src, ')');
             }
         }
 
@@ -420,6 +441,15 @@ const path = require('path');
     for (const item of config.files) {
         const page = await browser.newPage();
         await page.setViewport({ width: 1280, height: 720 });
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            const url = req.url();
+            if (url.startsWith('file://') || url.startsWith('data:')) {
+                req.continue();
+            } else {
+                req.abort('blockedbyresponse');
+            }
+        });
         await page.goto('file://' + item.html, {
             waitUntil: 'networkidle0',
             timeout: 30000
