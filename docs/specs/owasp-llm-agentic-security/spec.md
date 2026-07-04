@@ -11,7 +11,7 @@ Address the 6 Concerns and 2 Nits from the security-reviewer's OWASP LLM Top 10 
 - [x] AC1 (Concern 1): Puppeteer in html2svg.py, html2png.py, build_pdf.py blocks outbound HTTP(S) requests via `page.setRequestInterception`; `file://` and `data:` are allowed.
 - [x] AC2 (Concern 2): `--no-sandbox` documented with security rationale and AST06 isolation declaration added to SKILL.md metadata.
 - [x] AC3 (Concern 3): `sandbox="allow-same-origin"` removed from preview iframes in html_packager.py; srcdoc content uses opaque-origin sandboxing.
-- [x] AC4 (Concern 4): npm version pins documented; SKILL.md pip install updated with `==` pins; `npx -y` replaced with version-pinned invocation; deferred full lockfile to backlog.
+- [x] AC4 (Concern 4): npm version pins documented; SKILL.md pip install updated with `==` pins; `npx -y` replaced with version-pinned invocation; `package.json` + `package-lock.json` committed; `npm install` calls replaced with `npm ci`; `requirements.txt` added; `npm audit` + `pip-audit` wired in CI (`.github/workflows/security-audit.yml`).
 - [x] AC5 (Concern 5): `{{BACKGROUND_CONTEXT}}`, `{{CONTEXT}}`, `{{SEARCH_RESULTS}}` in prompts.md wrapped with `<untrusted_source>` delimiters and a standing directive added.
 - [x] AC6 (Concern 6): html2svg.py's CONVERT_SCRIPT path-confines image reads to the deck directory before `fs.readFileSync`.
 - [x] Nit 7: proof_gate.py documents the self-attestation limitation.

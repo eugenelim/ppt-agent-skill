@@ -123,12 +123,6 @@ current `charts/` and `styles/` file set (or restores the missing files).
 
 Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic Skills Top 10 review.
 
-- **npm-version-pinning:** `scripts/html2svg.py`, `scripts/html2png.py`, `scripts/build_pdf.py` install
-  `puppeteer`, `dom-to-svg`, and `esbuild` via `npm install`/`npx -y` with no version pins or lockfile.
-  Fix: add a `package.json` + `package-lock.json` to the project root with exact pinned versions and replace
-  `npm install` calls with `npm ci`; replace `npx -y esbuild` with the pinned local binary.
-  Unblocked by: running `npm install --save-exact puppeteer dom-to-svg esbuild` in the project root, committing
-  the generated `package.json` and `package-lock.json`, and wiring `npm audit` / `pip-audit` in CI.
 
 - **no-sandbox-container-isolation (AST06 / ASI02):** Puppeteer scripts launch with `--no-sandbox` (needed in
   non-userns environments). The portable mitigation is an OS-level container with `seccomp`/`AppArmor` profiles.

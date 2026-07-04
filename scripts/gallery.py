@@ -527,9 +527,9 @@ def take_screenshots(styles: list) -> bool:
     if work_dir is None:
         # 如果都没装，在项目根装一个
         work_dir = ROOT
-        print("Installing puppeteer in project root...")
-        subprocess.run(["npm", "install", "puppeteer"],
-                      capture_output=True, text=True, timeout=180, cwd=str(work_dir))
+        print("Installing npm dependencies from lockfile...")
+        subprocess.run(["npm", "ci"],
+                      capture_output=True, text=True, timeout=300, cwd=str(work_dir))
 
     script_path = work_dir / ".gallery_screenshot.cjs"
     files = [{"id": s["style_id"], "html": str(GALLERY_DIR / gallery_face(s["style_id"])), "png": str(GALLERY_DIR / f"{s['style_id']}.png")} for s in styles]
