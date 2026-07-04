@@ -21,7 +21,7 @@ Address the 6 Concerns and 2 Nits from the security-reviewer's OWASP LLM Top 10 
 
 - Removing `--no-sandbox` (would break containerized environments; AST06 declaration is the fix)
 - Full npm lockfile (requires `npm install` in CI; deferred to backlog)
-- svg2pptx.py lxml parser flags (XXE check; separate targeted investigation needed)
+- ~~svg2pptx.py lxml parser flags (XXE check; separate targeted investigation needed)~~ — resolved in PR #30: `resolve_entities=False, no_network=True, load_dtd=False` added to module-level `_SVG_PARSER`
 - PageAgent phase-split credential propagation (ASI03; separate pass needed)
 
 ## Tasks
