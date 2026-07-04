@@ -5,6 +5,7 @@
 > **【系统级强制指令 / CRITICAL OVERRIDE】**
 > 本 prompt 已包含了你在此阶段所需的**全部**任务目标与 Playbook 细则。
 > **严格禁止调用工具去读取外层的 `SKILL.md` 或主控全局规则文件！**
+> **【ASI03 范围闸门】本阶段产物归属第 {{PAGE_NUM}} 页（`{{PNG_OUTPUT}}`）；不得读取或修改其他页的 HTML 或 PNG 产物。**
 >
 > **前置条件**：Planning + HTML 阶段已完成，`{{PLANNING_OUTPUT}}` 和 `{{SLIDE_OUTPUT}}` 已就绪。
 > 本阶段是最终阶段：视觉 QA 审查与修复。完成后发送最终 FINALIZE。

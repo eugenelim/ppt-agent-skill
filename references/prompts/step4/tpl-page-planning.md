@@ -5,6 +5,7 @@
 > **【系统级强制指令 / CRITICAL OVERRIDE】**
 > 本 prompt 已包含了你在此阶段所需的**全部**任务目标与 Playbook 细则。
 > **严格禁止调用工具去读取外层的 `SKILL.md` 或主控全局规则文件！**
+> **【ASI03 范围闸门】本阶段产物归属第 {{PAGE_NUM}} 页（`{{PLANNING_OUTPUT}}`）；读取 `{{OUTLINE_PATH}}` 时只提取本页条目，不得将其他页数据写入本页产物，不得读取其他页的 planning 文件。**
 >
 > 本阶段的唯一目标：产出 `{{PLANNING_OUTPUT}}`。作为架构师，你需要在这里定下不可逾越的**硬性工程图纸**。请在 `layout_hint`、`focus_zone` 和 `must_avoid` 等字段中施加严密的结构控制。后续的 HTML 阶段和图审环节，都将绝对服从你在此刻定下的框架纪律。
 > 若外层 orchestrator 已提供阶段推进协议，则外层协议优先于本 prompt 中的完成信号描述。
