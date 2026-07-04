@@ -112,8 +112,8 @@ def _puppeteer_work_dir() -> Path:
     for cand in (ROOT, ROOT / "ppt-output" / "e2e-test"):
         if (cand / "node_modules" / "puppeteer").exists():
             return cand
-    print("Installing puppeteer in project root (one-time, the sanctioned renderer)...")
-    subprocess.run(["npm", "install", "puppeteer"], capture_output=True, text=True,
+    print("Installing npm dependencies from lockfile (one-time, the sanctioned renderer)...")
+    subprocess.run(["npm", "ci"], capture_output=True, text=True,
                    timeout=300, cwd=str(ROOT))
     return ROOT
 

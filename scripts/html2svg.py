@@ -485,9 +485,9 @@ def ensure_deps(work_dir: Path, run_tmp: Path) -> tuple:
         capture_output=True, text=True, timeout=10, cwd=str(work_dir)
     )
     if r.returncode != 0:
-        print("Installing puppeteer...")
-        subprocess.run(["npm", "install", "puppeteer"],
-                       capture_output=True, text=True, timeout=180, cwd=str(work_dir))
+        print("Installing npm dependencies from lockfile...")
+        subprocess.run(["npm", "ci"],
+                       capture_output=True, text=True, timeout=300, cwd=str(work_dir))
 
     # dom-to-svg
     r = subprocess.run(
@@ -495,9 +495,9 @@ def ensure_deps(work_dir: Path, run_tmp: Path) -> tuple:
         capture_output=True, text=True, timeout=10, cwd=str(work_dir)
     )
     if r.returncode != 0:
-        print("Installing dom-to-svg...")
-        subprocess.run(["npm", "install", "dom-to-svg"],
-                       capture_output=True, text=True, timeout=60, cwd=str(work_dir))
+        print("Installing npm dependencies from lockfile...")
+        subprocess.run(["npm", "ci"],
+                       capture_output=True, text=True, timeout=300, cwd=str(work_dir))
         r = subprocess.run(
             ["node", "-e", "require('dom-to-svg')"],
             capture_output=True, text=True, timeout=10, cwd=str(work_dir)
@@ -514,7 +514,7 @@ def ensure_deps(work_dir: Path, run_tmp: Path) -> tuple:
         entry_path = run_tmp / "bundle_entry.js"
         entry_path.write_text(BUNDLE_ENTRY)
         r = subprocess.run(
-            ["npx", "-y", "esbuild", str(entry_path),
+            [str(work_dir / "node_modules" / ".bin" / "esbuild"), str(entry_path),
              "--bundle", "--format=iife",
              f"--outfile={bundle_path}", "--platform=browser"],
             capture_output=True, text=True, timeout=60, cwd=str(work_dir)

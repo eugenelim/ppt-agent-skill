@@ -1,0 +1,13 @@
+{
+  "name": "ppt-agent-skill",
+  "private": true,
+  "dependencies": {
+    "dom-to-svg": "0.12.2",
+    "esbuild": "0.28.1",
+    "puppeteer": "25.3.0"
+  },
+  "allowScripts": {
+    "puppeteer@25.3.0": true,
+    "esbuild@0.28.1": true
+  }
+}

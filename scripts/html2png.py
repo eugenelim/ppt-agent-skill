@@ -107,8 +107,8 @@ def ensure_puppeteer(work_dir: Path) -> bool:
     print(f"Installing puppeteer in {dep_dir}...")
     try:
         r = subprocess.run(
-            ["npm", "install", "puppeteer"],
-            capture_output=True, text=True, timeout=180, cwd=str(dep_dir)
+            ["npm", "ci"],
+            capture_output=True, text=True, timeout=300, cwd=str(dep_dir)
         )
         return r.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError):
