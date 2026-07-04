@@ -136,10 +136,6 @@ Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic
   `--no-sandbox` inside the container. Unblocked by: adding a Docker or OCI container spec for the render
   step and documenting it in SKILL.md Step 6.
 
-- **svg2pptx-lxml-xxe-check:** `scripts/svg2pptx.py` uses `lxml` to parse model-authored SVG. The `resolve_entities`
-  and `no_network` parser flags were not verified during this review. Fix: audit `svg2pptx.py` for
-  `etree.parse`/`lxml.objectify` call sites and confirm `resolve_entities=False, no_network=True` are set.
-
 - **pageagent-credential-propagation (ASI03):** The 21 phase-split prompts under `references/prompts/` orchestrate
   sub-agents. Inter-agent credential/privilege propagation was not fully assessed. Fix: audit
   `references/prompts/step4/tpl-page-orchestrator.md` and sibling orchestrators for identity widening.
