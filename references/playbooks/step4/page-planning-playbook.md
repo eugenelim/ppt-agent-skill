@@ -28,6 +28,70 @@ image_policy, decoration_budget, overflow_strategy
 
 **如果你要写批量生成脚本**，直接从 `scripts/planning_validator.py` 里复制 `DENSITY_DEFAULTS` 字典作为你的 density 查找表，不要从记忆中重新实现——手写时极易漏掉末尾的 3 个字段或弄错数值（例如 `medium.max_charts` 是 **2** 不是 1，`dashboard.max_lines_per_card` 是 **3** 不是 4）。
 
+### 陷阱 3：`data_points` 是内容信号，`data` 不是
+
+validator 只检查 `data_points: [{"label": "...", "value": "..."}]`（对象数组）来判断卡片是否有数据内容。  
+`"data": {"key": "val"}` 这种自由格式字典**不会被识别为内容信号**，卡片仍会被判定为骨架卡。
+
+```jsonc
+// ❌ 错误 — validator 不识别 data 字段，card 还是骨架卡
+"data": {"TG-A": "Partial", "TG-B": "Strong"}
+
+// ✅ 正确
+"data_points": [{"label": "TG-A", "value": "Partial"}, {"label": "TG-B", "value": "Strong"}]
+```
+
+---
+
+## 复制即用 Skeleton（写批量脚本前先复制，不要从记忆中手写）
+
+### 卡片骨架（所有 card_type 通用）
+
+```jsonc
+{
+  "card_id": "s{N}-anchor-1",
+  "role": "anchor",
+  "card_type": "text",
+  "card_style": "elevated",
+  "argument_role": "claim",
+  "headline": "",
+  "body": [],               // ← 必须是数组。单句也要 ["一句话"]，绝不能写裸字符串
+  "data_points": [],        // ← 对象数组 [{label, value, unit, source}]。无数据时留 []
+  "chart": null,
+  "content_budget": {"headline_max_chars": 12, "body_max_bullets": 3, "body_max_lines": 5},
+  "image": {
+    "mode": "decorate",
+    "needed": false,
+    "usage": null,
+    "placement": null,
+    "content_description": null,
+    "source_hint": null,
+    "decorate_brief": ""
+  },
+  "resource_ref": {"chart": null, "principle": null}
+}
+```
+
+> `needed=true` 时：把 `usage`/`placement`/`content_description`/`source_hint` 改为非 null 字符串。  
+> 有图表时：把 `chart: null` 改为 `"chart": {"chart_type": "metric_row"}`（使用 validator 枚举值，下划线命名）。
+
+### `density_contract` 骨架（按 density_label 复制对应行）
+
+`deck_bias`/`page_lower_bound`/`page_upper_bound` 3 个字段来自 outline，其余 7 个字段直接复制不要改数值：
+
+```jsonc
+// low
+{"deck_bias":"<relaxed|balanced|ultra_dense>","page_lower_bound":"<outline值>","page_upper_bound":"<outline值>","max_cards":2,"max_charts":1,"min_body_font_px":24,"max_lines_per_card":3,"image_policy":"flexible","decoration_budget":"generous","overflow_strategy":"rebalance_layout"}
+// mid_low
+{"deck_bias":"<>","page_lower_bound":"<>","page_upper_bound":"<>","max_cards":3,"max_charts":1,"min_body_font_px":20,"max_lines_per_card":4,"image_policy":"flexible","decoration_budget":"medium","overflow_strategy":"rebalance_layout"}
+// medium
+{"deck_bias":"<>","page_lower_bound":"<>","page_upper_bound":"<>","max_cards":4,"max_charts":2,"min_body_font_px":18,"max_lines_per_card":5,"image_policy":"support_only","decoration_budget":"medium","overflow_strategy":"tighten_budget"}
+// high
+{"deck_bias":"<>","page_lower_bound":"<>","page_upper_bound":"<>","max_cards":6,"max_charts":2,"min_body_font_px":16,"max_lines_per_card":4,"image_policy":"support_only","decoration_budget":"low","overflow_strategy":"table_or_microchart"}
+// dashboard
+{"deck_bias":"<>","page_lower_bound":"<>","page_upper_bound":"<>","max_cards":8,"max_charts":4,"min_body_font_px":14,"max_lines_per_card":3,"image_policy":"decorate_only","decoration_budget":"minimal","overflow_strategy":"rollback_planning"}
+```
+
 ---
 
 ## 目标
