@@ -1,5 +1,35 @@
 # Page Planning Playbook -- 单页策划稿
 
+## ⚠️ 高频 Schema 陷阱（先读这里，防止 100+ 行 validator 错误）
+
+以下两类错误在每张幻灯片上都会触发，累计导致 100-200 行 ERROR。**在写任何 JSON 或生成脚本之前先核对这两条：**
+
+### 陷阱 1：`body` 必须是字符串数组，绝不能是裸字符串
+
+```jsonc
+// ❌ 错误 — 所有 body 为字符串的卡片都会报 "skeleton card" ERROR
+"body": "This is my body text"
+
+// ✅ 正确
+"body": ["This is my body text"]
+```
+
+validator 的 `as_list()` 遇到非列表值返回 `[]`，导致 `has_body = False`，即使有 `headline` 也会把该卡片判定为骨架卡并报 ERROR。
+
+### 陷阱 2：`density_contract` 必须包含全部 9 个字段
+
+每页 `density_contract` 缺少任何一个字段就会在该页报 ERROR。9 个字段是：
+
+```
+deck_bias, page_lower_bound, page_upper_bound,
+max_cards, max_charts, min_body_font_px, max_lines_per_card,
+image_policy, decoration_budget, overflow_strategy
+```
+
+**如果你要写批量生成脚本**，直接从 `scripts/planning_validator.py` 里复制 `DENSITY_DEFAULTS` 字典作为你的 density 查找表，不要从记忆中重新实现——手写时极易漏掉末尾的 3 个字段或弄错数值（例如 `medium.max_charts` 是 **2** 不是 1，`dashboard.max_lines_per_card` 是 **3** 不是 4）。
+
+---
+
 ## 目标
 
 制定一张从布局、字体、配图策略到卡片组织的 1280x720 物理画幅精细蓝图。**本阶段只写 JSON，不写 HTML。**
@@ -60,7 +90,8 @@
 - 两者均为非 `content` 页：不要求 `layout_hint`、禁 `dashboard` 密度；但仍受通用规则约束（>= 1 张卡、恰好 1 张 anchor、`director_command`、`decoration_hints`）。均携带持久页眉/页脚（`slide-header` / `slide-footer`）。
 - `card_type`：写 validator 认可的枚举，如 `data_highlight`、`image_hero`、`matrix_chart`。
 - `chart.chart_type`：写 validator 认可的枚举，**使用下划线命名**，如 `metric_row`、`comparison_bar`、`stacked_bar`、`progress_bar`。
-- `resources.*_refs` 与 `card.resource_ref.*`：推荐写 `references/` 中的真实文件 stem，如 `metric-row`、`comparison-bar`、`visual-hierarchy`；`resource_loader.py` 会自动做下划线/连字符归一化。
+- `resources.chart_refs`：写 `references/charts/` 下的**文件 stem**，而非图表类型名。有效值为 `basic`、`advanced`、`complex`、`index`（对应 `basic.md` 等文件）。**不要把 `chart_type` 值（如 `progress_bar`、`comparison_bar`）直接填到 `chart_refs` 里**——那些是枚举值，不是文件名，validator 找不到对应文件会报 ERROR。
+- `resources.layout_refs`、`block_refs`、`principle_refs`：推荐写 `references/` 对应子目录中的真实文件 stem，如 `hero-top`、`visual-hierarchy`；`resource_loader.py` 会自动做下划线/连字符归一化。
 - `process` 是 schema 原生 `card_type`，但当前没有 `blocks/process.md`。若使用它，必须同时给出更强的 `layout_refs`、`principle_refs`、`director_command` 和必要的 `chart_refs` / `resource_ref`，不要假设会有专属 block 正文可加载。
 - **diagram 配方按 family 加载（重要）**：`card_type:diagram` 永远会注入选择器 `blocks/diagram.md`（主题契约 + 共享基元），但**每类图解的配方正文在按需加载的 family 文件里**。根据 `diagram_type` 在 `resources.block_refs` 里加上对应 family stem，否则 HTML 阶段拿不到该类配方正文：
 
@@ -103,15 +134,17 @@
 
 ## Phase 3：密度合同冻结（强制）
 
-### 五档基础预算
+### 五档基础预算（9 字段全部必填，validator 逐一校验）
+
+> **注意**：这 9 个字段直接来自 `scripts/planning_validator.py` 中的 `DENSITY_DEFAULTS` 字典。写批量生成脚本时请直接复用该字典而非手工重录，以避免漏字段或数值偏差（特别注意 `medium.max_charts=2`，`dashboard.max_lines_per_card=3`）。
 
 | `density_label` | `max_cards` | `max_charts` | `min_body_font_px` | `max_lines_per_card` | `image_policy` | `decoration_budget` | `overflow_strategy` |
 |---|---:|---:|---:|---:|---|---|---|
 | `low` | 2 | 1 | 24 | 3 | `flexible` | `generous` | `rebalance_layout` |
 | `mid_low` | 3 | 1 | 20 | 4 | `flexible` | `medium` | `rebalance_layout` |
-| `medium` | 4 | 2 | 18 | 5 | `support_only` | `medium` | `tighten_budget` |
+| `medium` | 4 | **2** | 18 | 5 | `support_only` | `medium` | `tighten_budget` |
 | `high` | 6 | 2 | 16 | 4 | `support_only` | `low` | `table_or_microchart` |
-| `dashboard` | 8 | 4 | 14 | 3 | `decorate_only` | `minimal` | `rollback_planning` |
+| `dashboard` | 8 | 4 | 14 | **3** | `decorate_only` | `minimal` | `rollback_planning` |
 
 ### 冻结规则
 
@@ -217,6 +250,10 @@
       "planning_packet_version": "4.1",
       "planning_continuity_version": "4.1"
     }
+    // ↑ 版本字符串必须精确匹配 scripts/workflow_versions.py 中的常量。
+    //   批量生成脚本中直接从该模块 import 而不要硬编码字符串：
+    //   from workflow_versions import build_workflow_metadata
+    //   "workflow_metadata": build_workflow_metadata("planning")
   }
 }
 ```
@@ -296,9 +333,9 @@
 - **【反捏造铁律 / 可溯源否则省略】**：`headline` / `body` / `data_points` / 引语归属里的任何**具体事实**都必须来自资料或用户输入——不只是数字，还包括**联系方式（邮箱/电话/网址/账号/二维码）、人名/职衔/机构名、引语的出处、日期/引用**。无可溯源真值时**宁可省略该项或留显眼占位**（如 `[演讲人邮箱]`），**绝不填一个像真的假值**（凭空编一个联系邮箱是重大事故——它看着可信、会被当真发出去）。参见 [`../../method.md`](../../method.md) §7 可溯源否则省略。
 - `data_points`：如有数值则填对象数组
 - `content_budget`：内容预算对象，且必须服从页级 `density_contract`
-- `image`：完整图片合同对象，带 `mode`
+- `image`：完整图片合同对象，带 `mode`。**重要**：`needed=true` 时必填 `content_description` 和 `source_hint`（不是 `prompt`）；`needed=false` 时 `usage`/`placement`/`content_description`/`source_hint` 都必须是 `null`，不得出现非 null 值。
 - `resource_ref`：需要定向绑定某个 block/chart/principle 时写这里
-- `image.slot_note` / `image.decorate_brief` / `image.prompt`：按图片模式按需补充
+- `image.slot_note` / `image.decorate_brief`：按图片模式按需补充
 
 可选但推荐：
 - `argument_role`
