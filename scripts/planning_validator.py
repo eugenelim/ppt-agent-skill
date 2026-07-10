@@ -38,6 +38,62 @@ VALID_CARD_TYPES = {
     "timeline", "diagram", "quote", "comparison", "people", "image_hero",
     "matrix_chart",
 }
+
+# diagram_type -> family recipe file. Single source of truth is the selector
+# table in references/blocks/diagram.md; test_planning_diag_route.py asserts this
+# map stays in lockstep with it. Used by DIAG-ROUTE-01 (below).
+DIAGRAM_FAMILY_BY_TYPE = {
+    # process & flow
+    "flowchart": "diagram-process-flow",
+    "swimlane": "diagram-process-flow",
+    "sequence": "diagram-process-flow",
+    "state-machine": "diagram-process-flow",
+    "data-flow": "diagram-process-flow",
+    # architecture
+    "architecture-component": "diagram-architecture",
+    "architecture-deployment": "diagram-architecture",
+    "er-data-model": "diagram-architecture",
+    "layers": "diagram-architecture",
+    "architecture-canvas": "diagram-architecture",
+    # project management
+    "gantt": "diagram-project",
+    "dependency-network": "diagram-project",
+    "org-tree": "diagram-project",
+    "kanban": "diagram-project",
+    # concept
+    "mind-map": "diagram-concept",
+    "matrix-quadrant": "diagram-concept",
+    "venn": "diagram-concept",
+    "pyramid": "diagram-concept",
+    "funnel": "diagram-concept",
+    "cycle": "diagram-concept",
+    "hub-spoke": "diagram-concept",
+    "onion": "diagram-concept",
+    "fishbone": "diagram-concept",
+    "spectrum-marker": "diagram-concept",
+    "iceberg": "diagram-concept",
+    "force-field": "diagram-concept",
+    "before-after": "diagram-concept",
+    "causal-loop": "diagram-concept",
+    "consultant-2x2": "diagram-concept",
+    "quadrant-trajectory": "diagram-concept",
+}
+DIAGRAM_FAMILY_FILES = set(DIAGRAM_FAMILY_BY_TYPE.values())
+
+# Conservative diagram-shape lexicon: only content that clearly wants to be drawn.
+# Kept specific to avoid WARN noise on ordinary prose (DIAG-ROUTE-01 is WARN-only,
+# but a quiet heuristic is still the goal).
+DIAGRAM_SHAPE_CUES = (
+    # multi-word cues (unambiguous)
+    "pipeline", "data flow", "workflow", "swimlane", "sequence diagram",
+    "state machine", "architecture diagram", "deployment diagram",
+    "org chart", "org-chart", "dependency network", "gantt", "roadmap timeline",
+    "lifecycle", "fishbone", "causal loop", "hub-and-spoke", "hub and spoke",
+    "mind map", "mind-map", "process flow", "flow diagram", "end-to-end flow",
+    # bare high-signal terms (low false-positive) — cover the planned-as-list
+    # architecture/topology failure class the spec cites
+    "architecture", "topology", "funnel", "hierarchy", "quadrant",
+)
 VALID_CARD_STYLES = {"accent", "elevated", "filled", "outline", "glass", "transparent"}
 VALID_ARGUMENT_ROLES = {
     "claim", "evidence", "contrast", "constraint", "method", "synthesis",
@@ -582,7 +638,72 @@ def validate_page(page: dict[str, Any], refs_dir: Path | None) -> ValidationResu
     for index, card in enumerate(cards, start=1):
         validate_card(card, page, label, index, refs_dir, result)
 
+    validate_diagram_routing(page, cards, label, result)
+
     return result
+
+
+def _block_ref_stems(resources: Any) -> set[str]:
+    """block_refs may be bare names or references/blocks/<name>.md paths; reduce
+    each to its filename stem for family-membership comparison."""
+    stems: set[str] = set()
+    if not isinstance(resources, dict):
+        return stems
+    for item in as_list(resources.get("block_refs")):
+        if isinstance(item, str) and item.strip():
+            stems.add(Path(item.strip()).stem.replace("_", "-"))
+    return stems
+
+
+def validate_diagram_routing(
+    page: dict[str, Any],
+    cards: list[dict[str, Any]],
+    label: str,
+    result: ValidationResult,
+) -> None:
+    """DIAG-ROUTE-01 (WARN): a diagram-shaped card must route its recipe family.
+
+    The diagram-consistency-system recipes only reach the render agent via
+    resources.block_refs; when planning leaves them unrouted the diagram is drawn
+    ad-hoc. WARN-only — the shape heuristic can false-positive, and a good deck
+    must never be blocked (promotion to ERROR is Ask-first)."""
+    routed_families = _block_ref_stems(page.get("resources")) & DIAGRAM_FAMILY_FILES
+    for card in cards:
+        card_id = card.get("card_id") or "?"
+        card_type = card.get("card_type")
+        if card_type == "diagram":
+            diagram_type = card.get("diagram_type")
+            if not isinstance(diagram_type, str) or not diagram_type.strip():
+                result.warn(
+                    f"{label} card '{card_id}': DIAG-ROUTE-01 — card_type=diagram but no "
+                    f"diagram_type; set one (see blocks/diagram.md selector) and route its "
+                    f"family file into resources.block_refs so the themed recipe loads"
+                )
+                continue
+            family = DIAGRAM_FAMILY_BY_TYPE.get(diagram_type.strip().lower().replace("_", "-"))
+            if family is None:
+                result.warn(
+                    f"{label} card '{card_id}': DIAG-ROUTE-01 — diagram_type "
+                    f"'{diagram_type}' is not in the blocks/diagram.md selector (unknown or "
+                    f"typo); use a known diagram_type and route its family into block_refs"
+                )
+            elif family not in routed_families:
+                result.warn(
+                    f"{label} card '{card_id}': DIAG-ROUTE-01 — diagram_type "
+                    f"'{diagram_type}' needs '{family}' in resources.block_refs (recipe "
+                    f"not routed; diagram will be drawn without the themed family recipe)"
+                )
+        elif card_type in {"list", "text", "process"} and not routed_families:
+            haystack = " ".join(
+                [str(card.get("headline") or "")]
+                + [str(x) for x in as_list(card.get("body")) if isinstance(x, str)]
+            ).lower()
+            if any(cue in haystack for cue in DIAGRAM_SHAPE_CUES):
+                result.warn(
+                    f"{label} card '{card_id}': DIAG-ROUTE-01 — content looks diagram-shaped "
+                    f"but card_type='{card_type}' with no diagram family routed; consider "
+                    f"card_type=diagram + diagram_type + a blocks/diagram-* family in block_refs"
+                )
 
 
 def validate_cross_page(pages: list[dict[str, Any]]) -> ValidationResult:

@@ -135,6 +135,24 @@ Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic
   `settings.json` that fires before `html_packager.py`/`html2svg.py` and checks `gate.json`. Track together
   with the `slide-intent-review` export-script gate above.
 
+## render-visual-check-and-diagram-routing
+
+- **render-gate-automated-invocation:** the render-completeness gate
+  (`milestone_check.py 4 --with-visual-qa`: PNG-per-slide + freshness + `visual_qa`
+  batch) is invoked by a **prose** render-done step in SKILL.md; a future HTML-only
+  fan-out that skips both Stage 3 and the gate invocation would reproduce the original
+  failure (nothing runs the check). The gate itself is mechanical and cannot be fooled;
+  only its *invocation* is discretionary. Fix: wire the gate into an automated seam — a
+  render-driver step or a harness `PreToolUse` hook before the Step-6 export scripts
+  (track with `proof-gate-harness-hook` above). Deliberately deferred: spec AC B accepts
+  "naming the invocation point" as the fix for this loop.
+- **render-gate-live-e2e-qa:** the gate's live end-to-end QA (render a real fixture deck
+  through `--with-visual-qa`) was not run in the implementing environment (puppeteer not
+  installed; a live install triggers `npm ci`). Covered instead by unit tests
+  (`test_render_gate.py`: freshness, exit-code mapping via stubbed subprocess,
+  node-degradation decision). Fix: run the live e2e once in an environment with
+  puppeteer present.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 SCREENSHOT_SCRIPT = r"""
@@ -91,13 +92,26 @@ def get_dep_dir(work_dir: Path) -> Path:
     return work_dir
 
 
+def node_env(work_dir: Path) -> dict:
+    """Environment for node calls with puppeteer resolvable via an explicit
+    NODE_PATH (<dep_dir>/node_modules), so `require('puppeteer')` resolves
+    regardless of the process cwd or of work_dir sitting under ppt-output."""
+    dep_dir = get_dep_dir(work_dir)
+    env = os.environ.copy()
+    node_modules = str((dep_dir / "node_modules").resolve())
+    existing = env.get("NODE_PATH")
+    env["NODE_PATH"] = node_modules + (os.pathsep + existing if existing else "")
+    return env
+
+
 def ensure_puppeteer(work_dir: Path) -> bool:
     """确保 Puppeteer 已安装，返回是否可用。"""
     dep_dir = get_dep_dir(work_dir)
     try:
         r = subprocess.run(
             ["node", "-e", "require('puppeteer')"],
-            capture_output=True, text=True, timeout=10, cwd=str(work_dir)
+            capture_output=True, text=True, timeout=10,
+            cwd=str(dep_dir), env=node_env(work_dir)
         )
         if r.returncode == 0:
             return True
@@ -142,14 +156,24 @@ def convert(html_dir: Path, output_dir: Path, scale: float = 1.0) -> bool:
         ]
     }
 
-    script_path = work_dir / ".html2png_tmp.js"
+    # Unique temp script (no fixed-name collision across concurrent runs). Prefer
+    # dep_dir (beside node_modules); NODE_PATH drives resolution so the script's
+    # location is otherwise free — fall back to the system temp dir if dep_dir is
+    # not writable (e.g. a read-only mount) rather than crashing.
+    dep_dir = get_dep_dir(work_dir)
+    try:
+        fd, tmp_name = tempfile.mkstemp(prefix=".html2png_tmp_", suffix=".js", dir=str(dep_dir))
+    except OSError:
+        fd, tmp_name = tempfile.mkstemp(prefix=".html2png_tmp_", suffix=".js")
+    os.close(fd)
+    script_path = Path(tmp_name)
     script_path.write_text(SCREENSHOT_SCRIPT)
 
     try:
         print(f"Converting {len(html_files)} HTML files -> PNG ({scale}x scale)...")
         r = subprocess.run(
             ["node", str(script_path), json.dumps(config)],
-            cwd=str(work_dir), timeout=300
+            cwd=str(dep_dir), env=node_env(work_dir), timeout=300
         )
         if r.returncode != 0:
             return False
