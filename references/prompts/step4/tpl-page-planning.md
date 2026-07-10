@@ -90,12 +90,21 @@
 > **密度红线**：`density_label` 只能落在 outline 给你的窗口里。`dashboard` 只允许 `content` 页，且必须同时把 `image_policy` 锁成 `decorate_only`。
 
 **填写 `resources` 字段时必须说明选择理由**（推荐写入 `resources.resource_rationale`），例如回答"为什么用这个布局/组件能最好地让观众产生我想要的感受"。
-10. 将完整 planning 写入 `{{PLANNING_OUTPUT}}`，并同步备份到 `{{PLANNING_RUNTIME_COPY_PATH}}`：
+10. 产出 planning JSON —— **默认走确定性装配器 `assemble_planning.py`**（最省 token：mechanical 字段一律由脚本从 validator 常量填齐，你只写判断字段，几乎不可能触发 schema ERROR）：
+   a. 只写**最小 payload**（判断字段），落到 `$(dirname {{PLANNING_OUTPUT}})/{{PAGE_NUM}}.payload.json`。**⚠️ 文件名不要以 `planning` 开头**——下游整册校验/打包按 `planning*.json` 通配收集本目录，payload 若匹配该通配会被当成一页混入、污染全册校验。你**无需**手写 `density_contract`、`workflow_metadata`、`content_budget`、`card_id`、图片合同——装配器会填；`body` 允许裸字符串（装配器自动包成数组）；`body_max_lines` 会按密度自动封顶；解析不到的 `*_ref`（含卡片 `resource_ref`）会被丢弃并告警。payload 字段契约见 playbook「确定性装配器」节，或 `scripts/assemble_planning.py` 顶部 `MINIMAL_PAYLOAD_EXAMPLE`。
+   b. 运行装配器（**内部已自校验，产出即合规**）：
+   ```bash
+   python3 {{SKILL_DIR}}/scripts/subagent_logger.py run --log {{SUBAGENT_LOG_PATH}} --label planning-assemble -- \
+     python3 {{SKILL_DIR}}/scripts/assemble_planning.py $(dirname {{PLANNING_OUTPUT}})/{{PAGE_NUM}}.payload.json --refs {{REFS_DIR}} --out {{PLANNING_OUTPUT}}
+   ```
+   c. 退出码 2（`ASSEMBLY ERROR`）= 判断级错误（枚举选错 / 骨架卡 / 锚点数不对 / visual_weight 越界 / 跨字段组合非法）。按它**指名的字段或 validator 消息**改 payload 再跑，**不要手改产物**。退出码 0 即完成。
+   d. 装配成功后删除 payload 中间文件并备份产物：
    ```bash
    python3 {{SKILL_DIR}}/scripts/subagent_logger.py run --log {{SUBAGENT_LOG_PATH}} --label planning-runtime-copy -- \
-     cp {{PLANNING_OUTPUT}} {{PLANNING_RUNTIME_COPY_PATH}}
+     bash -c 'rm -f "$(dirname {{PLANNING_OUTPUT}})/{{PAGE_NUM}}.payload.json"; cp {{PLANNING_OUTPUT}} {{PLANNING_RUNTIME_COPY_PATH}}'
    ```
-11. 自审（必须执行，不得跳过）：
+   > **手写回退**：仅当某页结构确实超出 payload 契约能表达的范围时，才手写完整 planning JSON（照 playbook Phase 4 schema 骨架），此时**必须**执行第 11 步校验并修复 ERROR。走装配器路径时第 11 步是可选的冗余复核。
+11. 自审（手写回退路径必须执行；装配器路径可选复核）：
    ```bash
    python3 {{SKILL_DIR}}/scripts/subagent_logger.py run --log {{SUBAGENT_LOG_PATH}} --label planning-validator -- \
      python3 {{SKILL_DIR}}/scripts/planning_validator.py $(dirname {{PLANNING_OUTPUT}}) --refs {{REFS_DIR}} --page {{PAGE_NUM}} --report {{PLANNING_VALIDATOR_REPORT_PATH}}
