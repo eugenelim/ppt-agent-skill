@@ -31,3 +31,14 @@ questions: [
 - 至少覆盖 `presentation_scenario`、`core_audience`、`target_action`、`expected_pages`、`page_density`、`visual_style`、`language_mode`、`imagery_strategy`、`material_strategy`、`grounding_mode`、`manual_audit_mode`
 - `presentation_scenario`、`core_audience`、`visual_style`、`language_mode`、`imagery_strategy`、`material_strategy`、`grounding_mode`、`manual_audit_mode` 必须优先做成单选题（`grounding_mode` 三选一：`represent_user_work` / `researched` / `illustrative`，即"来源接地契约"，决定这份 deck 代表谁的事实）
 - `manual_audit_scope`、`manual_audit_assets`、`must_include`、`must_avoid`、`brand_constraints`、`success_criteria`、`subagent_model_strategy` 可通过第二轮结构化题或“其他”补充收集
+
+## `core_audience` 受众层级选项（单选）
+
+`core_audience` 单选选项 = 受众层级（落盘写入 `audience` 裸 token）：
+- `exec` — C-suite / 董事会 / 投资决策方（治理与资本决策权）
+- `leadership` — VP / 总监 / 职能负责人（功能层决策者）
+- `team` — 业务 / 技术 / 执行团队（交付层）
+- `mixed` — exec + 下属同场 / 跨层级受众
+- 其他（自定义描述）
+
+用户选中某个层级 token 时，`audience` 归一化为该裸 token（如 `audience: exec`）；大纲 Agent 的 Step 2 派生逻辑识别裸层级 token 为权威值并短路受众路由表。选"其他"时回退到 prose 描述，Step 2 按路由表派生。

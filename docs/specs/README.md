@@ -28,6 +28,7 @@ docs/specs/<feature>/
 
 | Spec | Status | Constrained by | Notes |
 | --- | --- | --- | --- |
+| [`audience-type-routing`](audience-type-routing/spec.md) | Shipped | RFC-0002 | Two derived outline fields (`受众层级` 4-tier, `消费模式` 3-mode) + Phase 2 checks #22–#26 + enriched `core_audience` interview, orthogonal to RFC-0001 `叙事范式`; raises `smoke_skill.py` interview caps to 11000/13000 (5th file; deviation recorded in spec scope note) |
 | [`slide-intent-review`](slide-intent-review/spec.md) | Shipped | none | Deterministic, no-LLM slide-intent worksheet (muted `schematic_blueprint` chrome) rendered from `planning/*.json` into `runtime/proof/` for cheap staleness/structure review before the bespoke render, plus a Step 4.5 Review-vs-Render consent gate |
 | [`reference-runbook-archetype`](reference-runbook-archetype/spec.md) | Shipped | none | Outline engine honors the `reference_runbook` narrative archetype: `论证策略` enum + archetype-branched density/skeleton rules in both validators, persuasive decks unchanged |
 | [`reference-runbook-page-types`](reference-runbook-page-types/spec.md) | Shipped | none | `section-marker` (inline divider) + `reference` (back-matter) page_types across all seven enum consumer sites; completes the reference-runbook archetype (backlog items 1 + 4) |

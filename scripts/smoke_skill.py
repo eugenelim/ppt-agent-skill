@@ -1736,7 +1736,7 @@ def run_smoke() -> SmokeResult:
                         ],
                         result,
                     )
-                    assert_max_bytes(label, rendered, 9000, result)
+                    assert_max_bytes(label, rendered, 11000, result)
                 if label == "prompt-interview-text":
                     assert_contains(
                         label,
@@ -1750,7 +1750,7 @@ def run_smoke() -> SmokeResult:
                         ],
                         result,
                     )
-                    assert_max_bytes(label, rendered, 11500, result)
+                    assert_max_bytes(label, rendered, 13000, result)
                 if label == "prompt-style-phase1":
                     assert_contains(
                         label,

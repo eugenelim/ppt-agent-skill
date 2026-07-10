@@ -17,6 +17,7 @@
 
 - `presentation_scenario`（落盘归一化到 `scenario`）: 新人介绍 / 内部汇报 / 社区宣讲 / 招商合作 / 融资路演 / 大众科普等
 - `core_audience`（落盘归一化到 `audience`）: “你是谁，要在台上向谁讲？” 如一线操盘手向高层要资源 / 业务一号位向客户布道 / 讲师向小白泛大众科普
+  - 受众层级参考（`受众层级` 由大纲 Agent 在 Step 2 据 `playbooks/outline-phase1-playbook.md` 受众路由表从本字段派生，不额外询问用户；结构化 UI 模式下用户直接选层级，Step 2 短路）：`exec`（治理/资本决策权）· `leadership`（职能决策权）· `team`（执行交付层）· `mixed`（跨层级同场）。判定按决策权结构而非职级，完整口径见路由表。
 - `target_action`: 建立认知 / 促成意向 / 愿意加入 / 纯信息同步
 
 ### B. 结构密度与生产管线

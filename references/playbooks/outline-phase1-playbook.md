@@ -28,6 +28,8 @@
 2. **确定 Part 数量和主题** -- 含 Part 间逻辑关系（递进/转折/因果）
 
    *Step 2 附加：查阅 `principles/narrative-arc.md` 的哲学路由表，基于 `叙事结构` 输入、`论证策略` 选值、以及 deck 的明确用途，写出 `叙事范式`（pyramid / sparkline / hybrid / reference / status / facilitation / informational）。若输入不明确，先判断是否有说服目标：有则默认 `pyramid`，无则默认 `informational`；两者都要标注原因。*
+
+   *Step 2 附加（受众与消费模式）：查阅本 playbook 下方的「受众层级路由表」，基于 `audience` 字段（含 `core_audience` 层级标签）和 `scenario` 信号写出 `受众层级`。若 `audience` 是结构化 UI 模式写入的裸层级 token（exec / leadership / team / mixed），直接使用；否则按优先级规则：multi-tier 共存取 `mixed`，单 tier 取最高级别，模糊时默认 `leadership` 并标注原因。同理，查阅「消费模式路由表」写出 `消费模式`（live / pre-read / async）。两字段均为派生字段——不询问用户。*
 3. **推导整套密度倾向** -- 把 `requirements-interview.txt` 中的 `page_density` 当成 deck 级倾向，而不是每页固定密度：
    - `少而精 -> relaxed`
    - `适中 -> balanced`
@@ -78,6 +80,64 @@
 
 ---
 
+## 受众层级与消费模式路由（Step 2 派生）
+
+两字段均在 Step 2 派生，正交于 `叙事范式`——`叙事范式` 路由 deck 类型的结构规则，本节路由"讲给谁听"和"怎么被消费"。均**不询问用户**。
+
+### 受众层级路由表
+
+判定边界是**决策权结构，而非职级高低**。目标受众的层级是路由信号，演讲者自身的层级不是。
+
+| `audience` / `scenario` 信号 | `受众层级` |
+|---|---|
+| 结构化 UI 模式写入的裸层级 token：`exec` / `leadership` / `team` / `mixed` | 直接采用该 token，跳过下方各行 |
+| CEO、CFO、COO、CTO、CMO、董事会成员、Managing Partner、出资方（治理角色）、管理合伙人 | `exec` |
+| VP、总监（Director）、职能负责人、项目群负责人、Senior Manager（无论职级高低，决策权在职能层而非治理层） | `leadership` |
+| 业务/技术/执行团队、分析师、工程师、一线员工、操盘手（非管理层） | `team` |
+| 同场包含 exec + 其下属；或用户描述"高层和他们的团队"、"跨层级受众" | `mixed` |
+
+**行优先级规则：**（1）若 `audience` 是裸层级 token → 直接采用，跳过其余行。（2）若多行匹配：≥2 个 tier 明确共存取 `mixed`；否则取受众描述中识别到的**最高级别** tier。（3）路由信号是**目标受众**的层级，不是演讲者的层级。
+
+**四层完整口径（含消费/阅读行为）：**
+- **exec**：C-suite / 董事会 / 投资决策方（治理与资本决策权持有者）——非线性扫读；一页内须能独立理解核心主张。
+- **leadership**：VP、总监、职能负责人、高级经理（决策权在职能层而非治理层）——顺序阅读；领域细节适当；SCQA 结构有效。
+- **team**：业务团队、技术团队、一线员工、执行与交付层——顺序阅读；全量证据内嵌；行动项须具体到人和日期。
+- **mixed**：exec 与下属同场——主页密度和摘要规则按**最高层**受众设计；证据细节服务整个房间（下属会读证据，exec 读摘要）。
+
+**Fallback：**
+
+| 条件 | `受众层级` | 处理方式 |
+|---|---|---|
+| `audience` 描述模糊——无法确定权威层级 | `leadership` | 写 `受众层级: leadership（默认，原因：[说明]）`。中间层默认——偏高触发 exec 检查误报，偏低漏掉 exec 检查；相比之下误报对用户信任伤害更大。|
+
+*pre-RFC 大纲缺少此字段：Phase 2 检查按 `leadership` 处理。*
+
+### 消费模式路由表
+
+| 信号组合 | `消费模式` | 置信度 |
+|---|---|---|
+| `叙事范式: reference` | `async` | 高——查阅文档，无演讲者 |
+| `叙事范式: facilitation` | `live` | 高——主持人恒在场 |
+| `叙事范式: informational`（无场景信号时同样成立） | `async` | 高——说明型 deck 无论场景都是自学内容 |
+| `叙事范式: informational` + `scenario` 含 培训/L&D/课程/入职/知识转移/流程培训/onboarding | `async` | 高——显式自学信号 |
+| `叙事范式: status` | `live` | 高——状态汇报 / QBR / sprint review 是现场演示 |
+| `受众层级: exec` + `scenario` 含 董事会/理事会/board/board packet/materials/board materials | `pre-read` | 高——董事会材料提前发送 |
+| `受众层级: exec` + `scenario` 含 路演/roadshow/pitch/融资 | `live` | 高——投资路演现场进行 |
+| `scenario` 或 `audience` 含 预读/pre-read/提前发送/leave-behind | `pre-read` | 高——显式用户信号 |
+| `pyramid/sparkline/hybrid` 无上述信号 | `live` | 中——最常见的企业演示模式 |
+
+*`async` 作为独立值保留以支持未来对异步 deck 的检查（如参考型 runbook 的导航辅助检查）。当前仅 check #26 消费 `消费模式`，且只在 `pre-read` 时触发。*
+
+**Fallback：**
+
+| 条件 | `消费模式` | 处理方式 |
+|---|---|---|
+| 信号模糊 | `live` | 写 `消费模式: live（默认，原因：[说明]）`；check #26 不适用；若后续确认为预读，修改此字段并重新运行 Phase 2。|
+
+*pre-RFC 大纲缺少此字段：check #26 整项跳过。*
+
+---
+
 ## outline.txt 强制格式骨架
 
 你的输出必须严格遵守以下层级与字段，下游的 Step 4 将会逐行解析你的输出。不要随意更改键名（如 `页目标` 不能改成 `页面目的`）。
@@ -87,6 +147,8 @@
 核心论点：{一句话灵魂，贯穿全篇的中心论断}
 叙事结构：{问题->方案->效果 / 是什么->为什么->怎么做 / 全景->聚焦->行动 / 对比论证 / 时间线 / 其他}
 叙事范式：{pyramid / sparkline / hybrid / reference / status / facilitation / informational}
+受众层级：{exec / leadership / team / mixed}
+消费模式：{live / pre-read / async}
 密度倾向：{relaxed / balanced / ultra_dense}
 密度曲线：{一句话概括整套 deck 的密度节奏，例如：low -> mid_low -> high -> medium -> close}
 持久化页框：{on / off}    # 缺省 off；on = 每张 content 页加装 masthead 顶栏 + runbook 页脚做定向导览（见下方约束）
@@ -129,6 +191,8 @@ Part 目标：{part_goal}
 
 **字段枚举约束**：
 - `叙事范式` 是**派生字段**——大纲 Agent 在 Step 2 通过查阅 `principles/narrative-arc.md` 哲学路由表来选取此值；**不询问用户**。值集：`pyramid / sparkline / hybrid / reference / status / facilitation / informational`。`reference` 要求至少一个 Part 声明 `论证策略: reference_runbook`；仅有 `叙事结构: 时间线` 不足以触发。当 `叙事结构` 不匹配任何已知模式时，使用双叉默认：若 deck 有说服目标写 `pyramid`，否则写 `informational`；两种情况都须在字段值中标注原因。pre-RFC 大纲若缺少此字段，Phase 2 检查一律按 `pyramid` 处理。
+- `受众层级` 是**派生字段**——大纲 Agent 在 Step 2 查阅本 playbook 的「受众层级路由表」从 `audience`（含 `core_audience` 层级标签）与 `scenario` 信号派生；**不询问用户**。值集：`exec / leadership / team / mixed`。判定按**决策权结构而非职级**。结构化 UI 模式写入的裸层级 token 直接采用（见路由表优先级规则）。信号模糊无法确定权威层级时，默认 `leadership` 并在字段值中标注原因。pre-RFC 大纲若缺少此字段，Phase 2 检查一律按 `leadership` 处理。
+- `消费模式` 是**派生字段**——大纲 Agent 在 Step 2 查阅本 playbook 的「消费模式路由表」派生；**不询问用户**。值集：`live / pre-read / async`。信号模糊时默认 `live` 并标注原因。pre-RFC 大纲若缺少此字段，check #26 整项跳过。
 - `叙事角色` 必须从 `{cover, toc, section, section-marker, evidence, comparison, process, reference, close, cta}` 中静态选择。（`section-marker` 与 `reference` 是参考型 archetype 专用，见下方映射与骨架规则。）
 - `页面类型映射` 必须从 `{cover, toc, section, section-marker, content, reference, end}` 中静态选择，与下游 Step 4 的 `page_type` 一一对应。
 - `密度倾向` 必须从 `{relaxed, balanced, ultra_dense}` 中静态选择。
