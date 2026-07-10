@@ -43,6 +43,23 @@ metadata:
 
 **原则**：检查实际可调用的工具列表，有什么用什么。
 
+### 可视化自检的唯一正道：`html2png.py`（file://），不要起本地服务器
+
+需要"亲眼看一眼"某页/整份 deck 的渲染效果时（图审、排查溢出、确认修复），**一律用
+`scripts/html2png.py`**——它用无头 Puppeteer 以 `file://` 直接截图，无端口、无 shell、
+无本地服务器：
+
+```bash
+python3 SKILL_DIR/scripts/html2png.py OUTPUT_DIR/slides/slide-N.html -o OUTPUT_DIR/png --scale 0.75
+```
+
+- **禁止**为"预览"起本地服务器（`python3 -m http.server` 等）或依赖宿主的预览型 MCP
+  （如 `mcp__Claude_Preview__preview_start`）来给 **agent 自己**做可视化核对：它们要么需要
+  预配置的命名服务器，要么在 **CloudStorage/OneDrive 等同步盘**上因登录 shell 的
+  `getcwd` / pyenv 解析失败而起不来——纯属浪费轮次。`html2png.py` 不受此影响。
+- `open <file>.html`（或等价"在浏览器打开"）只用于**把成品交给用户看**，**不**作为 agent
+  的核对手段——它不给 agent 任何像素级读回。
+
 ---
 
 ## 来源接地契约（Grounding Contract）— 不可静默降级
@@ -294,6 +311,13 @@ Prompt #4 模板
 
 **分批策略**：按 Part 为单位分批生成，每批 3-5 页。每批完成后将 HTML 写入 `OUTPUT_DIR/slides/` 目录，再开始下一批。避免上下文爆炸的同时保证同一 Part 内的风格一致性。
 
+> **渲染派发铁律：每页必须走完整三阶段编排（Planning → HTML → Review），禁止只出 HTML。**
+> 逐页由 PageAgent 按 `prompts/step4/tpl-page-orchestrator.md` 依次执行 Planning→HTML→**Review**；
+> Review（Stage 3）是**已存在的强制视觉闸门**——截图 + 逐轮图审（保底 2 轮）+ `visual_qa.py` 非 FAIL，
+> 产出 `png/slide-N.png`。**严禁**把渲染派成"只写 HTML、只做文本核对（如 grep `data-card-id`）"的
+> 批处理 agent 而跳过 Review——那正是把溢出/错版带出厂的路径。`png/slide-N.png` 只由 Review 产出，
+> 因此它的存在与新鲜度就是 Review 确实跑过的机械证据（见下方渲染完成闸门）。
+
 **跨页视觉叙事**（让 PPT 有节奏感，不只是独立页面的堆砌）：
 
 | 策略 | 规则 | 原因 |
@@ -304,6 +328,31 @@ Prompt #4 模板
 | **渐进揭示** | 同一概念跨多页展开时，视觉复杂度应递增（第1页简单色块 -> 第2页加数据 -> 第3页完整图表） | 引导观众逐步深入理解 |
 
 **产物**：每页一个 HTML 文件 -> `OUTPUT_DIR/slides/`
+
+**渲染完成闸门（Step 5c 收尾 · 机械验收）**：全部页渲染完后，跑一次渲染完整性闸门，确认每页
+Review 都真的在**当前 HTML** 上跑过（而非留下上一轮的旧 PNG）：
+
+```bash
+# 渲染开始前先清空 png/（让新鲜度检查有意义）：rm -f OUTPUT_DIR/png/slide-*.png
+python3 SKILL_DIR/scripts/milestone_check.py 4 --output-dir OUTPUT_DIR --with-visual-qa
+```
+
+闸门校验：每个 `slides/slide-N.html` 都有对应且**不比它旧**的 `png/slide-N.png`（证明 Review 在
+当前 HTML 上重跑过）+ `visual_qa.py` 批量退出码 ≠ 1。任一不满足 → 该页回炉重跑 Review。
+
+- **降级（Node/puppeteer 不可用）**：无法截图 → 渲染降级为"仅 HTML + preview.html"，闸门**明确宣告
+  跳过** PNG/visual 验收（`[SKIP] visual gate: node ...`），**不硬失败、也不静默放行**——如实告知用户
+  可安装 Node 后重跑取图。这与下方 SVG/PPTX 的 Node 降级同源。
+
+**给用户的可视化交付：整份 contact sheet（替代起本地服务器）**。要让用户一眼扫完整份 deck 时，
+拼一张联系表 PNG（确定性、无服务器、无端口）：
+
+```bash
+python3 SKILL_DIR/scripts/slide_montage.py OUTPUT_DIR --output OUTPUT_DIR/<deck-slug>-contact-sheet.png
+```
+
+把 `<deck-slug>-contact-sheet.png`（或 `<deck-slug>-preview.html`）交给用户看即可；**不要**为"预览"
+起 `python3 -m http.server` 或依赖预览型 MCP（见「环境感知 · 可视化自检的唯一正道」）。
 
 ---
 

@@ -186,6 +186,17 @@ body {
 
 ---
 
+## Phase 7.5：图解卡「结构先行」（structure-before-coordinates · 仅 diagram 卡）
+
+> **为什么**：LLM 单遍同时"定拓扑 + 手排坐标"是它最弱的一环（坐标算术错误约占一半、多空间约束整合 <50%、随节点数崩塌）。把"先定结构、再由结构派生坐标"固化成步骤，第一遍就更可能画对，而不是留给 Review 收拾。
+
+本页若含 `card_type:diagram` 卡（family 配方已由 `block_refs` 注入），**先声明结构，再落 HTML**：
+
+1. **先写结构清单（不落坐标）**：节点列表（含所属 zone / 分组）+ 连线列表（源→目标 + 方向）。这一步只在对话里想清楚，不写进 HTML。
+2. **分层/网格指派**：按数据流方向做拓扑分层（源在前、汇在后），每层一列/一行；用 **CSS Grid 按层排布**（`display:grid; grid-template-columns/rows` + `gap` 取 8 的倍数），让节点落在网格线上——**不要手摆自由 SVG 坐标**。
+3. **几何用变量、不用漂移字面量**：`--grid-unit` / `--node-w` / `--node-h` 定义一次，连线锚点用它们**算出来**（如中点 `--node-w/2`），换算全程代数化，避免每个节点各写一套会漂移的数字。
+4. 连线拓扑严格照 `blocks/diagram.md` §3.1：终点**夹进目标节点包围盒**（禁止照抄源 center-y）、多对一 fan-in 沿目标边 `a+(b−a)·i/(N+1)` 均匀铺开、稠密同组多对多改**总线**。
+
 ## Phase 8：完成条件
 
 写入目标 HTML 文件后：
@@ -194,5 +205,11 @@ body {
 - 无语法错误（HTML 标签闭合完整）
 - 没有明显乱码或缺失的 CSS 变量引用
 - `planning.cards[]` 全部能在 HTML 中找到对应的 `data-card-id`
+- **【图解首过静态自检 —— 仅本页含 diagram 卡时】**（对着代码/结构核对，不截图，属本阶段边界内）：
+  - 每条连线终点都**落在目标节点包围盒内**（无 overshoot、无照抄源 center-y）；fan-in 已沿目标边均匀分布；稠密同组多对多用了总线而非 N×M 斜线（依据 `blocks/diagram.md` §3.1）。
+  - 无节点内容溢出 / 标签被裁：估算 `文本长度 × 字宽 ≤ 节点宽 − padding`；节点用 `min-width/min-height` + `box-sizing:border-box` 防坍缩。
+  - 同层节点无相互重叠（成对包围盒不相交）。
+  - 管线安全自检通过（`blocks/diagram.md`「管线安全自检」全绿：无 SVG `<text>`、箭头为 `<polygon>`、连线为真实 `<div>`/`<line>`/`<path>`、颜色全走主题变量）。
+  - 任一项不过 → 就地修，别指望 Review 兜底。
 
 发送 FINALIZE 信号，然后等待 Review 阶段指令。

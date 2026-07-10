@@ -578,6 +578,12 @@ python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png/slide-N.png --planning OUT
 
 > 这是整个质量体系的最终防线。`visual_qa.py` 只能抓硬伤，排版质量、内容完整性、视觉和谐度必须由主 agent 亲眼确认。
 
+> **看图的图从哪来**：`OUTPUT_DIR/png/slide-N.png` 由 review 阶段的 `html2png.py`（file://
+> 无头截图）产出。若主 agent 需要对某页重新取图核对，直接重跑
+> `python3 SKILL_DIR/scripts/html2png.py OUTPUT_DIR/slides/slide-N.html -o OUTPUT_DIR/png --scale 0.75`——
+> 这是 agent 可视化自检的**唯一**入口。**不要**起本地服务器（`http.server`）或用预览型 MCP
+> 来给自己看图（同步盘上会因 `getcwd`/pyenv 起不来）；`open` 只用于把成品交给用户。
+
 1. 用当前宿主可用的图像查看能力查看 `OUTPUT_DIR/png/slide-N.png`
 2. 重点关注：
    - 文字是否可读、排版是否正常（竖排单字列、文字溢出截断等）

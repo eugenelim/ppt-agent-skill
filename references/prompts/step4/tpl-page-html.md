@@ -91,6 +91,11 @@
     ```
 13. 完成信号：输出 `--- STAGE 2 COMPLETE: {{SLIDE_OUTPUT}} ---`，然后按外层 orchestrator 协议继续下一阶段
 
+> **本页含 `card_type:diagram` 卡时（重要）**：按 Playbook「Phase 7.5 图解卡结构先行」执行——
+> **先声明节点+连线+分层，再用 CSS Grid 按层排布 + 代数化 CSS 变量几何（`--grid-unit`/`--node-w`）**，
+> 不要手摆自由 SVG 坐标（LLM 单遍手排坐标最易翻车）。FINALIZE 前跑 Playbook「Phase 8 图解首过静态自检」
+> （连线终点夹进目标盒、无节点溢出/重叠、管线安全全绿）——这是**静态代码核对，不截图**，属本阶段边界内。
+
 ---
 
 ## 阶段边界

@@ -316,6 +316,10 @@ def phase1_tests(style_filter: str = None) -> dict:
         ("proof_gate", [sys.executable, str(ROOT / "scripts" / "test_proof_gate.py")]),
         ("html_packager", [sys.executable, str(ROOT / "scripts" / "test_html_packager.py")]),
         ("build_pdf", [sys.executable, str(ROOT / "scripts" / "test_build_pdf.py")]),
+        ("diag_route", [sys.executable, str(ROOT / "scripts" / "test_planning_diag_route.py")]),
+        ("slide_montage", [sys.executable, str(ROOT / "scripts" / "test_slide_montage.py")]),
+        ("html2png_cwd", [sys.executable, str(ROOT / "scripts" / "test_html2png_cwd.py")]),
+        ("render_gate", [sys.executable, str(ROOT / "scripts" / "test_render_gate.py")]),
     ]:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         ok = proc.returncode == 0

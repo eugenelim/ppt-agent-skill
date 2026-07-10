@@ -58,7 +58,17 @@ principle_refs : cognitive-load color-psychology composition data-visualization
 page_template  : cover toc section section-marker reference end
 ```
 
-> **拿不准就留空 `[]`**。空数组永远合法；写一个不存在的 stem 一定报 ERROR。`card_type` 与 `block_refs` 是**两套不同的集合**——选了某个 `card_type` 不等于要在 `block_refs` 里重复它。真正需要为 diagram 追加 family 配方时，按 Phase 2 的 `diagram_type → block_refs` 映射表填（如 `diagram-architecture`）。
+> **拿不准就留空 `[]`**——**diagram 除外**。空数组对普通卡片永远合法；写一个不存在的 stem 一定报 ERROR。`card_type` 与 `block_refs` 是**两套不同的集合**——选了某个 `card_type` 不等于要在 `block_refs` 里重复它。
+>
+> **但只要这一页要画图（架构 / 流程 / 管线 / 拓扑 / 生命周期 / 组织树 / 时序 / 象限 等），"留空"就是错的**：必须把该卡标成 `card_type:diagram` + 明确的 `diagram_type`，并按下方 Phase 2 的 `diagram_type → block_refs` 映射把 family 配方（如 `diagram-architecture`）加进 `block_refs`——否则 HTML 阶段拿不到主题化、管线安全、连线拓扑正确的配方正文，只能凭空临摹（现场事故的直接成因）。`planning_validator.py` 的 **`DIAG-ROUTE-01`（WARN）** 会拦这类"图形卡未路由配方"，看到就补齐 `diagram_type` + family ref。**别把 pipeline/flow/architecture 这类明显要画的内容塞进 `list`/`text` 卡当散文交出去。**
+
+### 图解复杂度预算（画得下、画得对的前提）
+
+> 依据：LLM 在单遍生成里同时"定拓扑 + 手排坐标"最容易翻车（坐标算术错误、多约束整合 <50%、随规模崩塌）。把复杂度压在预算内，第一遍就更可能画对。
+
+- **每张图 ≈ 8–12 个节点、10–15 条连线封顶**；超了就在 planning 阶段拆成子图（分两页或主图+细节图），不要硬塞。
+- **稠密多对多（一组源都连同一组目标）** → 规划成**总线拓扑**（主干 + 短支线，见 `blocks/diagram.md` §3.1 ④），不要 N×M 根斜线。
+- 预算落到 `content_budget` / `density_contract` 的措辞里，让 HTML 阶段知道该页图解的规模上限。（planning JSON 无"节点数"字段，这是**规划期书面约束**，不是机器校验。）
 
 ### 陷阱 5：`narrative_role` 与 `argument_role` 是**两条不同的轴**，别互相串用
 
