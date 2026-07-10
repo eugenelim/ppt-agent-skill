@@ -6,7 +6,8 @@
 
 | #    | Title | Status | Opened     | Closed |
 | ---- | ----- | ------ | ---------- | ------ |
-<!-- no RFCs yet -->
+| 0001 | [Narrative philosophy routing](0001-narrative-philosophy-routing.md) | Accepted | 2026-07-10 | 2026-07-10 |
+| 0002 | [Audience-type routing](0002-audience-type-routing.md) | Accepted | 2026-07-10 | 2026-07-10 |
 
 ## Adding a new RFC
 
