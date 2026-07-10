@@ -1,7 +1,7 @@
 # Plan: narrative philosophy routing (RFC-0001)
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially
@@ -118,6 +118,13 @@ Goal-based greps per task (see Tasks).
 > values, use RFC §Proposal tables (RFC lines ~107–135) as the authoritative source —
 > not the §routing-mechanism question prose at RFC line ~75 (which describes a stale
 > four-value `叙事范式` set). The §Proposal tables have all seven values.
+>
+> **Superseded sentence — do not copy:** RFC line ~139 ("Phase 2 gates specific to `status`,
+> `facilitation`, and `informational` archetypes are follow-on work.") is a stale leftover
+> from the earlier four-value design. It is directly superseded by D8 (`RFC:47`), the BLUF
+> (`RFC:30`), and Open-question-4's in-RFC resolution (`RFC:411` — "Resolved in this RFC —
+> checks #13–#21 added"). Do not copy or cite this sentence; checks #13–#21 are fully in
+> scope for this spec.
 
 1. After the existing `§故事弧线` section and before `§注意力曲线`, add a new section
    with a routing table organized in three tiers:
@@ -149,7 +156,7 @@ guidance items in §说服型的两条"诚实"约定.
 
 ### T2: Update `outline-phase1-playbook.md`
 
-**Depends on:** T1
+**Depends on:** T1 (soft — content drawn from RFC §Proposal, not from T1's output; T1 dependency is citation-ordering: T2 cross-references the routing table that T1 creates)
 **Touches:** `references/playbooks/outline-phase1-playbook.md`
 
 > **Source discipline:** use RFC §File 2 (RFC lines ~152–214) as the canonical source
@@ -224,7 +231,7 @@ examples; Step 1 has cover-resonance requirement.
 
 ### T3: Update `outline-phase2-playbook.md`
 
-**Depends on:** T1
+**Depends on:** T1 (soft — content drawn from RFC §Proposal, not from T1's output; T1 dependency is citation-ordering: checks reference the routing table that T1 creates)
 **Touches:** `references/playbooks/outline-phase2-playbook.md`
 
 **Tests:**
@@ -236,17 +243,18 @@ examples; Step 1 has cover-resonance requirement.
   — old tokens from check #9 are gone.
 - `grep "叙事范式.*pyramid.*sparkline\|pyramid.*sparkline.*叙事范式"
   references/playbooks/outline-phase2-playbook.md` — check #9/10/11/12 archetype gates.
-- `grep "status" references/playbooks/outline-phase2-playbook.md` — checks #13–#15 present.
-- `grep "facilitation" references/playbooks/outline-phase2-playbook.md` — checks #16–#18 present.
-- `grep "informational" references/playbooks/outline-phase2-playbook.md` — checks #19–#21 present.
+- `grep "状态裁决\|决策日志完整性" references/playbooks/outline-phase2-playbook.md` — checks #13–#14 present by check-row-specific name.
+- `grep "会议目标声明\|活动页原子性" references/playbooks/outline-phase2-playbook.md` — checks #16–#17 present by check-row-specific name.
+- `grep "学习目标声明\|模块收束页" references/playbooks/outline-phase2-playbook.md` — checks #19–#20 present by check-row-specific name.
 - `grep "21项.*叙事范式\|叙事范式.*21项\|21 项" references/playbooks/outline-phase2-playbook.md`
   — FINALIZE heading updated.
 - `grep "pyramid.*12.*reference.*8\|#1–12\|#1–8" references/playbooks/outline-phase2-playbook.md`
   — FINALIZE conditional block with per-archetype counts.
-- `grep "7 项\|7 项" references/playbooks/outline-phase2-playbook.md` returns 0 —
+- `grep "7 项" references/playbooks/outline-phase2-playbook.md` returns 0 —
   pre-existing bug string gone.
 - `grep "9 項\|9项.*检查\|这 9 项" references/playbooks/outline-phase2-playbook.md` returns 0
   — stale intro-sentence count "9 项" updated.
+- `grep "9项门禁" references/playbooks/outline-phase2-playbook.md` returns 0 — old header token gone.
 - `grep "pre-RFC\|absent\|缺失.*pyramid\|pyramid.*缺失\|按 pyramid" references/playbooks/outline-phase2-playbook.md`
   returns ≥ 3 — backward-compat default appears in checks #10, #11, and #12.
 
@@ -296,7 +304,7 @@ examples; Step 1 has cover-resonance requirement.
 8. **Update `## 自审检查清单` heading and intro sentence.** Change `（9项门禁）` to
    `（21项，按叙事范式适用）`. Also update the intro sentence ("必须...走完这 9 项检查") to
    reference the per-archetype applicable set instead of a fixed count — e.g. "必须在脑海里
-   走完所有适用于本 deck 叙事范式的检查项（见 FINALIZE 速查）".
+   （或推演日志中）走完所有适用于本 deck 叙事范式的检查项，任何一项不通过都不允许交卷（见 FINALIZE 速查）".
 
 9. **Update FINALIZE contract.** Replace the current FINALIZE paragraph ("只有在 7 项检查…")
    with the per-archetype conditional block from RFC §File 3:
@@ -321,7 +329,7 @@ six speed-reference rows; "7 项" and "灵魂论点" strings are absent.
 
 ### T3.5: Update orchestrator prompt to count-neutral wording
 
-**Depends on:** T3
+**Depends on:** none (count-neutral wording consumes nothing from T1/T2/T3; only line 40 changes)
 **Touches:** `references/prompts/tpl-outline-orchestrator.md`
 
 **Tests:**
@@ -393,7 +401,8 @@ Reversible by revert. No existing generated outlines are invalidated (new checks
 apply to outlines with `叙事范式` set, and absent value defaults to `pyramid`).
 
 Deployment sequencing: T1 → T2 (T2 cites the routing table) → T3 (T3's checks cite
-the routing table) → T4 (consistency verification). All land in a single PR.
+the routing table) → T3.5 (orchestrator count-neutral) → T4 (consistency verification).
+All land in a single PR.
 
 ## Risks
 
@@ -408,6 +417,14 @@ the routing table) → T4 (consistency verification). All land in a single PR.
 - **Bridge sentence examples drift.** The two examples in `与上一 Part 的关系` must match
   the RFC's Chinese text exactly. Mitigation: T2's approach cites the RFC directly;
   review against RFC §File 2 D3 during T4.
+- **RFC §Proposal-vs-§Migration contradiction on checks #13–15 absent-value note.**
+  RFC §Proposal's check #13–15 block (RFC line ~250) contains a per-check sentence treating
+  an absent `叙事范式` as `status` when purpose is status/review — directly contradicting
+  RFC §Migration's global default (`absent = pyramid`). The spec resolves this by following
+  the global default (spec Boundaries §Always do, last bullet). T3 step 5 explicitly says
+  "Do NOT include" that per-check override. Risk: an implementer copying RFC §Proposal text
+  verbatim reintroduces the contradiction. Mitigation: T3 step 5 is bolded with the exclusion;
+  T4 cross-file read confirms no per-check absent override in checks #13–#21.
 
 ## Changelog
 

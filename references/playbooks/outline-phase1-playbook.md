@@ -19,7 +19,15 @@
 ### 5 步思考过程
 
 1. **提炼全局核心论点** -- 纵观全盘，写出 1 句话灵魂
+
+   说服型 deck（`叙事范式: pyramid | sparkline | hybrid`）的封面 `页目标` 必须与 `核心论点` 形成强共鸣：
+   - **Pyramid / hybrid 模式：** 封面 `页目标` 直述或高度浓缩 `核心论点`。读者仅凭封面即可感知全篇核心主张。
+   - **Sparkline 模式：** 封面可用张力句或激发式问句，但必须与 `核心论点` 形成因果呼应——封面设置的悬念，正是 `核心论点` 所解答的。
+
+   Phase 2 check #10 sub-check ① 会对照封面 `页目标` 与 `核心论点` 两个字段来验证。
 2. **确定 Part 数量和主题** -- 含 Part 间逻辑关系（递进/转折/因果）
+
+   *Step 2 附加：查阅 `principles/narrative-arc.md` 的哲学路由表，基于 `叙事结构` 输入、`论证策略` 选值、以及 deck 的明确用途，写出 `叙事范式`（pyramid / sparkline / hybrid / reference / status / facilitation / informational）。若输入不明确，先判断是否有说服目标：有则默认 `pyramid`，无则默认 `informational`；两者都要标注原因。*
 3. **推导整套密度倾向** -- 把 `requirements-interview.txt` 中的 `page_density` 当成 deck 级倾向，而不是每页固定密度：
    - `少而精 -> relaxed`
    - `适中 -> balanced`
@@ -78,6 +86,7 @@
 # 大纲
 核心论点：{一句话灵魂，贯穿全篇的中心论断}
 叙事结构：{问题->方案->效果 / 是什么->为什么->怎么做 / 全景->聚焦->行动 / 对比论证 / 时间线 / 其他}
+叙事范式：{pyramid / sparkline / hybrid / reference / status / facilitation / informational}
 密度倾向：{relaxed / balanced / ultra_dense}
 密度曲线：{一句话概括整套 deck 的密度节奏，例如：low -> mid_low -> high -> medium -> close}
 持久化页框：{on / off}    # 缺省 off；on = 每张 content 页加装 masthead 顶栏 + runbook 页脚做定向导览（见下方约束）
@@ -88,7 +97,13 @@
 ## Part 1: {part_title}
 Part 目标：{part_goal}
 论证策略：{narrative_driven / data_driven / case_study / comparison / framework / step_by_step / authority / reference_runbook}
-与上一 Part 的关系：{无（首Part）/ 递进 / 转折 / 因果 / 并列}
+与上一 Part 的关系：{无（首Part — first section, no predecessor）/ 递进｜转折｜因果 — 一句话：上一 Part 建立了什么，本 Part 如何从中生长出来（递进 progressive）、转折（转折 reversal）、或因果推导（因果 causal）/ 并列 — 一句话："Part N 建立了[A]；本 Part 以[B]补充并行论据"（并列 parallel/coordinate）}
+
+示例 `转折`：`转折 — Part 1 确立了现有边界防护的逻辑；Part 2 通过三个失效案例论证边界模型对 AI 辅助内部攻击无效。`
+
+示例 `并列`：`并列 — Part 1 建立了成本优势论点；本 Part 以速度优势补充并行论据。`
+
+`首Part` 保留 `无`（无前驱，无需 bridge sentence）。Bridge sentence 由大纲 Agent 生成。
 
 ### 第 1 页：{page_title}
 - 页目标：{page_goal，一句话，不含"和"字}
@@ -113,6 +128,7 @@ Part 目标：{part_goal}
 ```
 
 **字段枚举约束**：
+- `叙事范式` 是**派生字段**——大纲 Agent 在 Step 2 通过查阅 `principles/narrative-arc.md` 哲学路由表来选取此值；**不询问用户**。值集：`pyramid / sparkline / hybrid / reference / status / facilitation / informational`。`reference` 要求至少一个 Part 声明 `论证策略: reference_runbook`；仅有 `叙事结构: 时间线` 不足以触发。当 `叙事结构` 不匹配任何已知模式时，使用双叉默认：若 deck 有说服目标写 `pyramid`，否则写 `informational`；两种情况都须在字段值中标注原因。pre-RFC 大纲若缺少此字段，Phase 2 检查一律按 `pyramid` 处理。
 - `叙事角色` 必须从 `{cover, toc, section, section-marker, evidence, comparison, process, reference, close, cta}` 中静态选择。（`section-marker` 与 `reference` 是参考型 archetype 专用，见下方映射与骨架规则。）
 - `页面类型映射` 必须从 `{cover, toc, section, section-marker, content, reference, end}` 中静态选择，与下游 Step 4 的 `page_type` 一一对应。
 - `密度倾向` 必须从 `{relaxed, balanced, ultra_dense}` 中静态选择。
@@ -122,6 +138,22 @@ Part 目标：{part_goal}
 - `信息姿态` 必须从 `{结论页, 解释页, 证据页, 仪表盘页, 呼吸页}` 中选择。
 - `锚点类型` 必须从 `{标题, KPI, 图表, 表格, 图片, 引言}` 中选择。
 - `论证策略`（Part 级）必须从 `{narrative_driven, data_driven, case_study, comparison, framework, step_by_step, authority, reference_runbook}` 中选择；下游 `contract_validator` 会校验此值。任一 Part 选 `reference_runbook` 即把整套 deck 判为**参考型 archetype**（见下方骨架规则）。
+
+**说服型 deck 论证页的 `页目标` 规则（`叙事范式: pyramid | sparkline | hybrid`）：**
+
+`信息姿态` 为 `结论页 / 解释页 / 证据页` 的页面，`页目标` 必须同时满足两个条件：
+
+1. **论断句** — 从观众视角陈述这一页让观众相信什么，而非从制作者视角陈述这一页"展示了"什么。
+2. **具体可感** — 使用可量化或可感知的表述，而非抽象概括。"3 倍增速"优于"显著提升"；"每位分析师节省 3 小时/周"优于"提升效率"。
+
+❌ 描述 + 抽象（不符合）：`展示 AI 安全事件的增长趋势`
+✅ 论断 + 具体（符合）：`2023 年以来 AI 安全事件增速比传统安全事件快 3 倍，威胁已不可忽视`
+
+**"X 因此 Y" 澄清：** 论断句可以是"前提 + 推论"格式（"X 因此 Y"），这视为单一论断，不违反"一页一目标、禁含'和'"规则。违禁的是两个并列目标（"X 和 Y"）。
+
+*Phase 2 check #10 verifies claim-shape（论断句 vs. 主题标签 topic-label）。The concreteness requirement is a Phase 1 generation convention; Phase 2 does not independently gate on concreteness.*
+
+导航页（`cover / section / toc / end`）不受此约束。
 
 ### 叙事角色 → page_type 映射规则
 
