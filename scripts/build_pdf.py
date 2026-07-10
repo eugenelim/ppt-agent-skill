@@ -31,12 +31,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _natural_key(p: Path):
+    """Natural sort key so slide-2 precedes slide-10.
+
+    Plain lexicographic sort orders slide-10..slide-19 ahead of slide-2
+    ('1' < '2'), corrupting page order in the exported PDF. Same contract
+    as png2pptx.py / html_packager.py `_natural_key`."""
+    return [int(x) if x.isdigit() else x.lower()
+            for x in re.split(r'(\d+)', p.stem)]
 
 # Screenshot the exact rendered viewport → guaranteed 1:1 with the HTML.
 NODE_TEMPLATE = """
@@ -82,8 +93,9 @@ def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> li
         # shell (index-print.html) and the packaged preview (<deck-slug>-preview.html),
         # so neither is rendered as a stray page.
         slides = sorted(
-            h for h in d.glob("*.html")
-            if h.name != "index-print.html" and not h.name.endswith("preview.html")
+            (h for h in d.glob("*.html")
+             if h.name != "index-print.html" and not h.name.endswith("preview.html")),
+            key=_natural_key,
         )
         if not slides:
             ip = d / "index-print.html"
@@ -95,7 +107,7 @@ def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> li
     htmls: list[Path] = []
     for p in paths:
         pp = Path(p)
-        htmls.extend(sorted(pp.glob("*.html")) if pp.is_dir() else [pp])
+        htmls.extend(sorted(pp.glob("*.html"), key=_natural_key) if pp.is_dir() else [pp])
     htmls = [h.resolve() for h in htmls]  # file:// needs an absolute path
     if out:  # one multi-page PDF
         return [{"pdf": str(Path(out).resolve()), "pages": [str(h) for h in htmls]}]

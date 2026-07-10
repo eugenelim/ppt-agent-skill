@@ -17,6 +17,22 @@ import sys
 from pathlib import Path
 
 
+def _natural_key(p: Path):
+    """自然排序 key：slide-2 排在 slide-10 前面。
+
+    纯字典序会把 `slide-10.html`..`slide-19.html` 排到 `slide-2.html` 之前
+    （'1' < '2'），导致预览页序错乱。按数字段切分后转 int 比较即可修正。
+    与 png2pptx.py 的 `_natural_key` 契约一致。
+    """
+    return [int(x) if x.isdigit() else x.lower()
+            for x in re.split(r'(\d+)', p.stem)]
+
+
+def collect_slides(slides_dir: Path) -> list:
+    """收集目录下的幻灯片 HTML，按页码自然排序返回。"""
+    return sorted(slides_dir.glob("*.html"), key=_natural_key)
+
+
 def inline_images(html_content: str, html_dir: Path) -> str:
     """将 HTML 中引用的本地图片转为 base64 内联。"""
     def replace_src(match):
@@ -285,7 +301,7 @@ def main():
         print(f"Error: {slides_dir} is not a directory", file=sys.stderr)
         sys.exit(1)
 
-    html_files = sorted(slides_dir.glob("*.html"))
+    html_files = collect_slides(slides_dir)
     if not html_files:
         print(f"Error: No HTML files in {slides_dir}", file=sys.stderr)
         sys.exit(1)

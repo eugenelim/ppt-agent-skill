@@ -314,6 +314,8 @@ def phase1_tests(style_filter: str = None) -> dict:
         ("gallery_toggle", [sys.executable, str(ROOT / "scripts" / "test_gallery_toggle.py")]),
         ("proof_worksheet", [sys.executable, str(ROOT / "scripts" / "test_proof_worksheet.py")]),
         ("proof_gate", [sys.executable, str(ROOT / "scripts" / "test_proof_gate.py")]),
+        ("html_packager", [sys.executable, str(ROOT / "scripts" / "test_html_packager.py")]),
+        ("build_pdf", [sys.executable, str(ROOT / "scripts" / "test_build_pdf.py")]),
     ]:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         ok = proc.returncode == 0
