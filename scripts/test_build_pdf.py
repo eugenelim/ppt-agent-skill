@@ -51,6 +51,19 @@ with tempfile.TemporaryDirectory() as t:
     check(Path(d[0]["pdf"]).name == "my-topic.pdf",
           "--deck without --out → <deck-slug>.pdf (topic-named)")
 
+# --- --deck collates slides by page NUMBER, not lexicographically ---
+# Real slide files are un-padded (cli-cheatsheet: slides/slide-1.html); the
+# old zero-padded fixture masked the mis-sort where slide-10..19 preceded slide-2.
+with tempfile.TemporaryDirectory() as t:
+    dd = Path(t) / "big-deck"
+    dd.mkdir()
+    for n in range(1, 13):
+        (dd / f"slide-{n}.html").write_text("<html></html>")
+    d = B.resolve_documents([], None, str(dd))
+    names = [Path(p).name for p in d[0]["pages"]]
+    check(names == [f"slide-{n}.html" for n in range(1, 13)],
+          f"--deck orders slide-1..12 by page number (got {names[:4]}…)")
+
 # --- node script: screenshot path, not print/page.pdf, no banned tools ---
 with tempfile.TemporaryDirectory() as t:
     js = B.build_node_script(Path(t)).read_text()
