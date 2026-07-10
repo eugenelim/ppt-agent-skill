@@ -32,6 +32,43 @@
 - 用章节封面/金句页制造"呼吸点"
 - 结尾页回到开头的核心信息（首尾呼应）
 
+## 哲学路由：应用场景与叙事范式
+
+大纲 Agent 在 Phase 1 Step 2 读取本表，依据 `叙事结构` 输入、`论证策略` 选值及 deck 的明确用途，将 `叙事范式` 写入大纲头部。
+
+### Tier 1 — 说服型（Persuasion）
+
+| `叙事结构` / 场景信号 | `叙事范式` | Cover | Transition | Closing |
+|---|---|---|---|---|
+| 问题->方案->效果、全景->聚焦->行动、是什么->为什么->怎么做、对比论证；**also routes here:** 咨询 / 顾问 deck、提案 / RFP response、数据报告 + 建议、董事会治理决策议题 | `pyramid` | **Thesis-first**：封面 `页目标` 直述或高度浓缩 `核心论点` | 需要 bridge sentence — 逻辑连线；Part 过渡处使用 SCQA 式桥接 | `narrative_driven` / `data_driven` Parts 必须以至少一页 `叙事角色: close`（结论/综合页）或 `信息姿态: 结论页`（结论/论点页）收束；全 deck 以明确决策 + Owner 收尾 |
+| 愿景叙事、变革叙事、品牌叙事；**also routes here:** keynote / 思想领袖 deck、投资人 pitch（Sequoia 10-section 或 YC 模式）、销售 pitch（Challenger / 新旧对比模式） | `sparkline` | **Hook-first**：封面开一个张力句或疑问——观众当前痛点，或"将来可能的样子"——而非演讲者的论断 | 需要 bridge sentence — 情感转折或对比须明确表述（"当前现实是 X；变为可能的是 Y"） | `close` 页命名转化后的状态；投资人 / 销售变体以具体量化的请求结尾（"投资 2M 以在 [日期] 达到 [里程碑]"） |
+| 对比论证 with Pyramid structure + 视觉简洁强调 | `hybrid` | **Thesis-first** | 需要 bridge sentence | 同 `pyramid` |
+
+### Tier 2 — 参考型（Reference；existing `reference_runbook` code path，不适用说服规则）
+
+| `叙事结构` / 场景信号 | `叙事范式` | Cover | Transition | Closing |
+|---|---|---|---|---|
+| 时间线 / 生命周期 **且** 至少一个 Part 声明 `论证策略: reference_runbook` | `reference` | **Navigation-first**：实体名称 + 生命周期阶段 | 仅标签（无需 bridge sentence） | 横切参考 back-matter（RACI、升级路径、质量门）——非 CTA |
+
+**`reference` 要求有 `reference_runbook` Parts。** 说服型时间线（公司历史、愿景路线图）若无 `reference_runbook` Part，落入下方 fallback 行。
+
+### Tier 3 — 非说服型（Non-persuasion；check #9–12 不适用；check #1–8 仍适用）
+
+| `叙事结构` / 场景信号 | `叙事范式` | Cover | Transition | Closing |
+|---|---|---|---|---|
+| 状态报告、QBR、项目状态、业务回顾、sprint review；围绕指标、计划 vs. 实际、决策、阻塞项结构化 | `status` | **实体 + 周期 + 裁决**：项目 / 公司名、报告周期，以及 RAG（红 / 黄 / 绿）信号或一句"整体符合预期 / 偏差 / 需干预"摘要 | 强制 backward→forward 结构（绩效回顾区块结束后才开前瞻区块）；blocker 页区分"团队可处理"与"需要决策"；各区块间无 SCQA 桥接 | 决策日志含 Owner 和截止日期——"批准 $80K 支出，[日期]前"而非"讨论管道缺口"——每个行动项有 Owner 和日期 |
+| 工作坊、研讨会、共创会、对齐会、发现会；产出由参与者共同生产，而非预先装载 | `facilitation` | **会议主题 + 共同问题或目标**（"今天希望完成什么"）；非建议型 | 口语 / 对话式，不在 slide 层做桥接；活动指令页每项活动最多一页（不跨页） | 共同产出的决策 + 未决问题 + 行动项及 Owner，汇集于收尾收集页；非 CTA |
+| 培训、入职、L&D、流程培训、知识转移、onboarding；内容预先确定，按序递进 | `informational` | **模块标题 + 学习目标或范围**（"完成本课程后你将能够…"）；功能性，非分析性 | 每个模块（Part）结束前有一页模块收束页，再开下一模块；各模块是独立知识域；章节标题是导航线索 | 第一周行动 + 关键联系人（入职变体）；评估或知识测验（培训变体）；确保学员离开时知道"我接下来做什么" |
+
+### Fallback — 双叉显式默认
+
+| 条件 | `叙事范式` | Agent 的处理方式 |
+|---|---|---|
+| `叙事结构` 不可识别 **且** 说服目标明显（正在提建议、论证观点、说服决策者） | `pyramid` | 写 `叙事范式: pyramid（默认，原因：[说明为何判断说服意图明显且无已知模式匹配]）`；适用所有 Tier 1 说服规则 |
+| `叙事结构` 不可识别 **且** 无说服目标（汇报、引导、知识传递） | `informational` | 写 `叙事范式: informational（默认，原因：[说明为何判断为非说服意图]）`；跳过 check #10–#12 |
+
+双叉默认优于静默单一默认的关键：Agent 在选择前先判断 deck 的明确用途并记录原因。状态更新绝不会静默地套上 pyramid 规则。
+
 ## 注意力曲线
 
 观众的注意力不是恒定的：
@@ -70,6 +107,8 @@
 
 1. **so-what netline（每张论证卡以一句"所以"收束）**：每张"论点 + 论据"卡底部挂一行——大写 kicker（`Therefore` / `Result` / `Net`）+ 一句结论。它强制作者把"我陈述了什么"翻译成"所以你该得出什么"，避免"堆事实、不下结论"的懒惰。要点密集的论证页尤其需要它把读者接住。
 2. **估算数字的诚实横幅（illustrative-banner）**：任何页面若展示的百分比/曲线是**来自可比案例、非本受众自己的数据**，页顶必须挂一条横幅讲清"这是形状不是承诺、真实基线稍后与团队共同设定"。把"示意"和"承诺"划清界线是顾问诚信的底线——宁可显眼地标注，也不让读者误把示例当保证。
+
+上面两条保持指导性。Phase 2 新增强制门（check #11）：`论证策略: narrative_driven` 或 `data_driven` 的每个 Part 必须以至少一页 `叙事角色: close` 或 `信息姿态: 结论页` 收束——此为 Phase 2 结构性要求，非写作风格建议，不是对以上两条的修改。
 
 ## 参考型叙事：运行手册 / 工作手册 archetype（非说服弧线）
 
