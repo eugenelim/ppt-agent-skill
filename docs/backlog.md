@@ -166,6 +166,13 @@ on `diagram-consistency-system` shipping its recipe family CSS overrides (the th
 `diagram-consistency-system` spec status reaches `Implementing` and its styled output
 is available in the repo.
 
+## diagram-polish
+
+- **AC-9 (deferred: recipe-example-updates):** Update `references/blocks/diagram-architecture.md`
+  recipe examples to use `:::external` on external system nodes and `|` separator on
+  tech-annotated nodes. Not blocking — conventions are documented in `diagram.md`; recipe
+  examples are illustrative. Unblocked anytime; low-risk recipe-only edit.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

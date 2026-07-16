@@ -216,6 +216,99 @@ def test_style_and_naming():
     check("_slide_number no match", V._slide_number("foo") is None)
 
 
+def test_mermaid_polish():
+    """Tests for diagram polish features: parse fixes, external class, tech label, legend, metadata."""
+    print("mermaid_polish:")
+    import sys as _sys
+    import re as _re
+    _sys.path.insert(0, str(ROOT / "scripts"))
+    from mermaid_layout import (  # noqa: E402
+        _parse_spec, _parse_spec_and_class, _parse_graph_source, _dispatch,
+        _extract_diagram_title, _render_metadata_chip, _render_legend, _wrap_label,
+        COL_GAP, GROUP_PAD_X, GROUP_PAD_Y_TOP,
+    )
+
+    # AC-1: _parse_spec strips surrounding quotes from rect labels
+    nid, label, shape = _parse_spec('A["My Service"]')
+    check("_parse_spec strips quotes from [\"label\"]", label == "My Service")
+    _, label2, _ = _parse_spec("A['single']")
+    check("_parse_spec strips single quotes", label2 == "single")
+
+    # AC-2b: \n in labels renders as <br> line breaks
+    check("_wrap_label splits on literal \\n escape", _wrap_label("Line 1\\nLine 2") == ["Line 1", "Line 2"])
+    check("_wrap_label splits on real newline", _wrap_label("Line 1\nLine 2") == ["Line 1", "Line 2"])
+    html_nl = _dispatch("flowchart TD\nA[\"First\\nSecond\"] --> B", None, 400)
+    check("\\n in label renders as <br>", "<br>" in html_nl and "First" in html_nl and "Second" in html_nl)
+
+    # AC-2: subgraph ID["Label"] bracket extraction (regression guard)
+    nodes, edges, groups = _parse_graph_source([
+        'subgraph db["Database Layer"]', 'N[x]', 'end'
+    ])
+    grp = list(groups.values())[0]
+    check("subgraph ID[\"Label\"] extracts label text", grp.label == "Database Layer")
+
+    # AC-3: COL_GAP and GROUP_PAD constants are at target values
+    check("COL_GAP is 32px", COL_GAP == 32)
+    check("GROUP_PAD_X is 16px", GROUP_PAD_X == 16)
+    check("GROUP_PAD_Y_TOP is 28px", GROUP_PAD_Y_TOP == 28)
+
+    # AC-4: :::external class parsing
+    _, _, _, css_class = _parse_spec_and_class("A[Service]:::external")
+    check("_parse_spec_and_class extracts :::external", css_class == "external")
+    nodes, _, _ = _parse_graph_source(['A["API"]:::external --> B["DB"]'])
+    check("external class stored on node A", nodes["A"].css_class == "external")
+    check("internal node B has no css_class", nodes["B"].css_class == "")
+
+    # External node renders with dim color on the node-external div itself
+    html = _dispatch("flowchart TD\nA[Ext]:::external --> B[Int]", None, 400)
+    check("external node has node-external CSS class in div", "node-external" in html)
+    # Find the node-external div and check it contains --node-fg-dim in its own style attr
+    ext_match = _re.search(r'<div class="node[^"]*node-external[^"]*" style="([^"]*)"', html)
+    check("external node div style uses --node-fg-dim for border",
+          ext_match is not None and "--node-fg-dim" in ext_match.group(1))
+
+    # AC-5: | tech stereotype sub-label
+    html = _dispatch('flowchart TD\nA["Svc|Spring Boot"] --> B[DB]', None, 400)
+    check("tech sub-label span present", "node-tech" in html)
+    check("tech sub-label text rendered", "Spring Boot" in html)
+    check("main label still rendered", "Svc" in html)
+    # | with surrounding spaces should strip whitespace
+    html_ws = _dispatch('flowchart TD\nA["Svc | Spring Boot"] --> B', None, 400)
+    check("tech label whitespace stripped", "Spring Boot" in html_ws)
+
+    # AC-6: legend auto-generated for mixed edge styles
+    html_mixed = _dispatch("flowchart TD\nA --> B\nA -.- C", None, 400)
+    check("legend present for solid+dashed diagram", "diagram-legend" in html_mixed)
+    check("Async legend item present", "Async" in html_mixed)
+    html_plain = _dispatch("flowchart TD\nA --> B --> C", None, 400)
+    check("legend absent for plain solid-only diagram", "diagram-legend" not in html_plain)
+    html_thick = _dispatch("flowchart TD\nA --> B\nA ==> C", None, 400)
+    check("legend present for solid+thick diagram", "diagram-legend" in html_thick)
+    check("Critical path legend item present", "Critical path" in html_thick)
+    # Single non-solid semantic still triggers legend (no solid edges present)
+    html_dashed_only = _dispatch("flowchart TD\nA -.- B -.- C", None, 400)
+    check("legend present for dashed-only diagram", "diagram-legend" in html_dashed_only)
+
+    # AC-7: metadata chip is title-gated (not added to untitled diagrams)
+    check("_extract_diagram_title finds %% title:", _extract_diagram_title(
+        "%% title: My Arch\nflowchart TD\nA-->B") == "My Arch")
+    check("_extract_diagram_title ignores plain %% comment",
+          _extract_diagram_title("%% define nodes\nflowchart TD\nA-->B") == "")
+    check("_extract_diagram_title returns '' for no comment",
+          _extract_diagram_title("flowchart TD\nA-->B") == "")
+    chip = _render_metadata_chip("flowchart", "My Arch")
+    check("metadata chip contains type label", "Flowchart" in chip)
+    check("metadata chip contains title", "My Arch" in chip)
+    check("metadata chip empty for no title", _render_metadata_chip("flowchart", "") == "")
+    check("metadata chip empty for unknown directive and no title",
+          _render_metadata_chip("unknown_xyz", "") == "")
+    html_titled = _dispatch("%% title: Payments\nflowchart TD\nA-->B", None, 400)
+    check("titled diagram has diagram-meta", "diagram-meta" in html_titled)
+    check("title text in titled diagram output", "Payments" in html_titled)
+    html_untitled = _dispatch("flowchart TD\nA --> B", None, 400)
+    check("untitled diagram has no diagram-meta", "diagram-meta" not in html_untitled)
+
+
 def main() -> int:
     test_lint()
     test_visual_qa_html()
@@ -226,6 +319,7 @@ def main() -> int:
     test_light_bg_false_positives()
     test_structural_hex_whitelist()
     test_style_and_naming()
+    test_mermaid_polish()
     print()
     if FAILS:
         print(f"test_diagram_qa: {len(FAILS)} FAILED")

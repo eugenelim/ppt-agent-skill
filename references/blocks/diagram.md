@@ -186,6 +186,51 @@
 - `align-items:center; justify-items:center` 让节点在格内光学居中。
 - 连线 SVG 用 `overflow:visible` 以越出所在格连到相邻节点。
 
+## Mermaid 渲染器语义标注
+
+> 仅适用于通过 `mermaid_layout.py` 渲染的 Mermaid 源码图（`flowchart` / `graph` 指令）。手写 HTML 配方不涉及。
+
+### `:::external` — 外部系统标注
+
+对系统边界之外的节点追加 `:::external`，渲染器自动用次级颜色（`--node-fg-dim`）绘制其边框与文字，形成"灰化"视觉，让内外部边界一目了然。
+
+```
+flowchart TD
+  client["Web Browser"]:::external --> gateway["API Gateway"]
+  gateway --> db["PostgreSQL|Database"]
+  gateway --> stripe["Stripe Payments"]:::external
+```
+
+- 边框颜色：`var(--node-fg-dim, var(--text-secondary))`
+- 文字颜色：`var(--node-fg-dim, var(--text-secondary))`
+- 背景：与普通节点相同（不改底色，仅降低视觉权重）
+
+### `label|tech` — 技术标注副标题（C4 stereotype）
+
+节点 label 含 `|` 分隔符时，`|` 右侧视为技术栈副标题，以 11px `--node-fg-dim` 小字渲染在名称下方。
+
+```
+flowchart TD
+  A["Auth Service|Go 1.22"] --> B["User DB|PostgreSQL 16"]
+  A -.- C["Email Provider|SendGrid"]:::external
+```
+
+渲染结果：主标题（14px 粗体）+ 技术副标题（11px 次色），类似 C4 Container 图的 `[Technology]` 标注。
+
+### `%% title:` — 图表标题
+
+在 Mermaid 源码第一行写 `%% title: 标题文字`，渲染器会在图表上方添加类型徽章（如 `FLOWCHART`）和标题行。
+
+```
+%% title: 支付系统架构
+flowchart TD
+  A --> B
+```
+
+### 图例自动生成
+
+图表使用超过 1 种边样式时（实线 + 虚线、或实线 + 粗线、或含分组框），渲染器在图表下方自动追加图例行，说明各边样式语义（`Synchronous` / `Async / optional` / `Critical path` / `Service boundary`）。纯实线单一样式图表不生成图例，避免多余噪音。
+
 ## 管线安全自检（每个 family 配方都要过）
 - [ ] 颜色/字体全部来自主题契约的局部变量（无硬编码，趋势绿红除外）
 - [ ] 内联 SVG 内**无 `<text>`**；标注全是 HTML 叠加
