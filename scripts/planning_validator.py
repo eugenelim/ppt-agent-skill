@@ -639,6 +639,7 @@ def validate_page(page: dict[str, Any], refs_dir: Path | None) -> ValidationResu
         validate_card(card, page, label, index, refs_dir, result)
 
     validate_diagram_routing(page, cards, label, result)
+    validate_diagram_source(cards, label, result)
 
     return result
 
@@ -704,6 +705,57 @@ def validate_diagram_routing(
                     f"but card_type='{card_type}' with no diagram family routed; consider "
                     f"card_type=diagram + diagram_type + a blocks/diagram-* family in block_refs"
                 )
+
+
+# Recognised Mermaid directive keywords (first token of mermaid_source, case-insensitive)
+_KNOWN_MERMAID_DIRECTIVES: frozenset[str] = frozenset({
+    "flowchart", "graph", "sequencediagram", "statediagram-v2", "statediagram",
+    "erdiagram", "classdiagram", "gantt", "timeline", "quadrantchart", "pie",
+    "xychart-beta", "mindmap", "block-beta", "packet-beta", "kanban",
+    "architecture-beta", "c4context", "c4container", "c4component",
+    "gitgraph", "journey", "requirementdiagram",
+})
+
+
+def validate_diagram_source(
+    cards: list[dict[str, Any]],
+    label: str,
+    result: ValidationResult,
+) -> None:
+    """DIAG-SRC-01 (WARN): diagram_source.mermaid_source must be non-empty and
+    start with a recognised Mermaid directive.  fence_index must be an integer
+    when origin == "source_document".  WARN-only so a malformed fence does not
+    block the gate; the render agent falls back to the ad-hoc path."""
+    for card in cards:
+        if card.get("card_type") != "diagram":
+            continue
+        ds = card.get("diagram_source")
+        if not isinstance(ds, dict):
+            continue
+        card_id = card.get("card_id") or "?"
+
+        mermaid_src = ds.get("mermaid_source")
+        if not isinstance(mermaid_src, str) or not mermaid_src.strip():
+            result.warn(
+                f"{label} card '{card_id}': DIAG-SRC-01 — diagram_source.mermaid_source "
+                f"is missing or empty; render agent will fall back to ad-hoc path"
+            )
+            continue
+
+        first_token = mermaid_src.strip().split()[0].lower().rstrip(";")
+        if first_token not in _KNOWN_MERMAID_DIRECTIVES:
+            result.warn(
+                f"{label} card '{card_id}': DIAG-SRC-01 — mermaid_source begins with "
+                f"'{first_token}' which is not a recognised Mermaid directive; "
+                f"render agent will fall back to ad-hoc path"
+            )
+
+        origin = ds.get("origin")
+        if origin == "source_document" and not isinstance(ds.get("fence_index"), int):
+            result.warn(
+                f"{label} card '{card_id}': DIAG-SRC-01 — diagram_source.fence_index "
+                f"must be an integer when origin='source_document'"
+            )
 
 
 def validate_cross_page(pages: list[dict[str, Any]]) -> ValidationResult:

@@ -182,6 +182,28 @@ python3 SKILL_DIR/scripts/html2png.py OUTPUT_DIR/slides/slide-N.html -o OUTPUT_D
 
 **产物**：`[PPT_OUTLINE]` JSON
 
+#### Mermaid 图表提取分叉（有源文档时）
+
+当用户提供了包含 Mermaid 图表的源文档（RFC、设计规范、系统描述等任何 Markdown
+文件），在读取文档时必须：
+
+1. **枚举所有 Mermaid 围栏**（fenced code block，开头为 ` ```mermaid `），按
+   `fence_index`（0-based）逐一评估。
+2. **对每个决定使用的围栏**，在大纲中创建一个独立的图表幻灯片候选项
+   （一个围栏 → 一张幻灯片候选）。若源文档含 4 个围栏且全部相关，则产出 4
+   个图表幻灯片条目，各持独立的 `mermaid_source`。
+3. **在大纲条目上记录原始 Mermaid 源文本**（passthrough 字段 `mermaid_source`），
+   供 Step 4 写入策划卡。
+4. **前置配置清除规则**：如果围栏带有 YAML frontmatter（`---` 块），须：
+   - 抽取 `title:` 值 → 若大纲条目尚无标题，将其用作 headline；
+   - 删除所有 `config:` / `theme:` / `layout:` / `look:` 等渲染器参数；
+   - `mermaid_source` 仅保留：指令行 + 节点 + 边 + 子图（topology only）。
+5. 若某个围栏是文档内行文示例（两节点示意）而非主要图表，**可以跳过**，但须
+   明确决定，不得静默省略。
+
+**不要**将源文档中的 Mermaid 源留给渲染代理在 Step 5c 时去重新读取——那会绕过
+策划 JSON 作为单一真源的约定，并使证明工作表对图表拓扑视而不见。
+
 ---
 
 ### Step 4: 内容分配 + 策划稿 [建议等用户确认]
@@ -198,6 +220,35 @@ python3 SKILL_DIR/scripts/html2png.py OUTPUT_DIR/slides/slide-N.html -o OUTPUT_D
 - 布局选择参考 `references/bento-grid.md` 的决策矩阵
 
 向用户展示策划稿概览，建议等用户确认后再进入 Step 5。
+
+#### `diagram_source` 字段（有 Mermaid 源时）
+
+当大纲条目携带 `mermaid_source`（来自 Step 3 的提取），在写入 `card_type: diagram`
+策划卡时须同时写入 `diagram_source` 字段：
+
+```json
+{
+  "card_type": "diagram",
+  "diagram_type": "flowchart",
+  "headline": "系统架构概览",
+  "diagram_source": {
+    "origin": "source_document",
+    "mermaid_source": "flowchart TB\n  A[Ingest] --> B[Process]\n  B --> C[Store]",
+    "source_ref": "docs/design/system.md",
+    "fence_index": 0
+  },
+  "resources": {
+    "block_refs": ["diagram", "diagram-process-flow"]
+  }
+}
+```
+
+规则：
+- `diagram_source` 是**加法字段**——不替代 `card_type`、`diagram_type`、`block_refs` 路由。
+- `mermaid_source` 仅含拓扑（指令行 + 节点 + 边），不含 frontmatter config。
+- `fence_index` 是必填整数（当 `origin = "source_document"` 时）。
+- 一个围栏 = 一张卡片，不合并。若多个围栏需要分别展示，各自成为独立的策划卡。
+- 字段缺失时（纯 LLM 合成图表），走现有 ad-hoc 渲染路径，无退化。
 
 **产物**：每页策划卡 JSON -> 逐页保存为 `OUTPUT_DIR/planning/planningN.json`（校验闸门与 cli-cheatsheet 均按此每页路径运行 `planning_validator.py`）
 

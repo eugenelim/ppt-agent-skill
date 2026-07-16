@@ -31,10 +31,26 @@
    ```bash
    python3 {{SKILL_DIR}}/scripts/subagent_logger.py note --log {{SUBAGENT_LOG_PATH}} --label {{SUBAGENT_NAME}} --message "阶段 2：HTML -> {{HTML_PROMPT_PATH}}"
    ```
-2. **读取** `{{HTML_PROMPT_PATH}}`
-3. 按文件中的指令完成全部工作，产出 `{{SLIDE_OUTPUT}}`
-4. 完成后在对话中输出：`--- STAGE 2 COMPLETE: {{SLIDE_OUTPUT}} ---`
-5. **立即进入阶段 3**（不等待外部指令）
+2. **`diagram_source` 预处理（仅 `card_type: diagram` 卡片适用）**：在生成
+   HTML 之前，对每张 `card_type: diagram` 的策划卡执行以下检查：
+   - 若 `diagram_source.mermaid_source` 存在且非空：
+     ```bash
+     # 写入临时文件（避免 shell 引号问题）
+     printf '%s' '<mermaid_source_string>' > /tmp/diag-src-{{PAGE_NUM}}.mmd
+     python3 {{SKILL_DIR}}/scripts/mermaid_layout.py \
+       --source @/tmp/diag-src-{{PAGE_NUM}}.mmd \
+       --output /tmp/diagram-fragment-{{PAGE_NUM}}.html
+     ```
+     - **exit 0**：将 `/tmp/diagram-fragment-{{PAGE_NUM}}.html` 的内容嵌入卡片的
+       图表内容区域。外层 recipe 模板（经 `block_refs` 路由的 family 模板）提供
+       卡片外壳（标题、背景、内边距）；布局引擎输出占据图表内容区域。
+     - **exit 1**：回退到现有 ad-hoc 几何绘制路径，在 HTML 注释中记录错误
+       供追踪（`<!-- mermaid_layout exit 1: <stderr> -->`）。
+   - 若 `diagram_source` 不存在：使用现有 ad-hoc 路径（无退化）。
+3. **读取** `{{HTML_PROMPT_PATH}}`
+4. 按文件中的指令完成全部工作，产出 `{{SLIDE_OUTPUT}}`
+5. 完成后在对话中输出：`--- STAGE 2 COMPLETE: {{SLIDE_OUTPUT}} ---`
+6. **立即进入阶段 3**（不等待外部指令）
 
 ### 阶段 3：Review（视觉审查与修复）
 
