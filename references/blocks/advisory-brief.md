@@ -417,3 +417,79 @@
 **自检**：eyebrow 走 `--focus` 大写 `.22em`；H2 走 heading 收紧字距；brand 灰 + `<b>` 反白；rule 是唯一保留的渐变（`var(--accent-1)` → `transparent`）；pagefoot 两段大写点码 `.18em` + `tabular-nums`；颜色全走契约变量。
 
 **管线安全**：真实 `<div>`/`<hr>`；无伪元素；无 SVG `<text>`；`transparent` 是关键字非命名色；无禁用 CSS。
+
+---
+
+### 带标签的概念卡 (tagged-initiative-card)
+
+**何时用**：单张或网格排列的概念/举措/能力卡——标题 + 可选简述 + 底部类型/分类徽章行。无容器约束，可独立使用于任何布局：2×3 网格展示机会组合、`three-column` 版式的每格方案概念、`l-shape` 版式的主区域能力清单。比 `discovery-readout` 的 `stage-mapped-insight-card`（含 SDLC 阶段药丸）更轻量通用；比 `stage-concept-band`（相位带）更小粒度。
+
+**数据格式**：
+```json
+{
+  "card_type": "list", "block_refs": ["advisory-brief"],
+  "brief_kind": "tagged_initiative_card",
+  "cards": [
+    {
+      "title": "Automated quality gate",
+      "description": "Validate completeness and acceptance criteria coverage before requirements are baselined.",
+      "tags": [{"label": "Process"},{"label": "AI", "highlight": true}],
+      "cdot": "var(--accent-1)"
+    },
+    {
+      "title": "Delivery reporting assistant",
+      "description": "AI-generated delivery status summaries synthesised from project data.",
+      "tags": [{"label": "AI", "highlight": true},{"label": "Tooling"}],
+      "cdot": "var(--accent-2)"
+    }
+  ]
+}
+```
+
+**HTML 模板**（2×N 卡网格，每卡：左边框 cdot + 标题 + 简述 + 底部标签行）：
+```html
+<div style="
+  --focus:var(--accent-1); --ink:var(--text-primary); --dim:var(--text-secondary);
+  --rule:var(--card-border); --paper:var(--card-bg-from); --paper-2:var(--card-bg-to);
+  --sans:var(--font-primary);
+  display:grid; grid-template-columns:1fr 1fr; gap:12px; font-family:var(--sans);">
+
+  <!-- Card 1 (cdot = accent-1) -->
+  <div style="--cdot:var(--accent-1); background:var(--paper); border:1px solid var(--rule); border-left:4px solid var(--cdot); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column;">
+    <div style="font-weight:800; font-size:13.5px; line-height:1.25; color:var(--ink); margin-bottom:7px;">Automated quality gate</div>
+    <div style="font-size:12px; line-height:1.5; color:var(--dim); flex:1; margin-bottom:10px;">Validate completeness and acceptance criteria coverage before requirements are baselined.</div>
+    <div style="display:flex; flex-wrap:wrap; gap:4px;">
+      <span style="font-size:9px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--rule); color:var(--dim); background:var(--paper);">Process</span>
+      <span style="font-size:9px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--cdot); color:var(--cdot); background:var(--paper);">AI</span>
+    </div>
+  </div>
+
+  <!-- Card 2 (cdot = accent-2) -->
+  <div style="--cdot:var(--accent-2); background:var(--paper); border:1px solid var(--rule); border-left:4px solid var(--cdot); border-radius:10px; padding:14px 16px; display:flex; flex-direction:column;">
+    <div style="font-weight:800; font-size:13.5px; line-height:1.25; color:var(--ink); margin-bottom:7px;">Delivery reporting assistant</div>
+    <div style="font-size:12px; line-height:1.5; color:var(--dim); flex:1; margin-bottom:10px;">AI-generated delivery status summaries synthesised from project data.</div>
+    <div style="display:flex; flex-wrap:wrap; gap:4px;">
+      <span style="font-size:9px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--cdot); color:var(--cdot); background:var(--paper);">AI</span>
+      <span style="font-size:9px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--rule); color:var(--dim); background:var(--paper);">Tooling</span>
+    </div>
+  </div>
+
+  <!-- Single-column wide card (span full grid) -->
+  <div style="--cdot:var(--accent-1); grid-column:1/-1; background:var(--paper-2); border:1px solid var(--rule); border-left:4px solid var(--cdot); border-radius:10px; padding:14px 16px; display:flex; align-items:center; gap:16px;">
+    <div style="flex:1;">
+      <div style="font-weight:800; font-size:13.5px; line-height:1.25; color:var(--ink); margin-bottom:5px;">Environment provisioning automation</div>
+      <div style="font-size:12px; line-height:1.5; color:var(--dim);">Eliminate manual steps from developer environment setup with infrastructure-as-code templates.</div>
+    </div>
+    <div style="display:flex; flex-wrap:wrap; gap:4px; flex-shrink:0;">
+      <span style="font-size:9px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--rule); color:var(--dim); background:var(--paper);">Automation</span>
+      <span style="font-size:9px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--rule); color:var(--dim); background:var(--paper);">Tooling</span>
+    </div>
+  </div>
+
+</div>
+```
+> 复制规律：每张卡声明 `--cdot:var(--accent-N)` 局部变量，左边框和高亮标签均引用 `var(--cdot)`——换色仅改该声明；网格宽度由外层 `grid-template-columns` 控制（`1fr 1fr` / `repeat(3,1fr)` / `1fr` 均可）；`grid-column:1/-1` 让单张卡横跨整行。
+
+**自检**：每卡 `--cdot` 局部变量独立声明；左边框 `4px solid var(--cdot)`；高亮标签走 `border:1px solid var(--cdot); color:var(--cdot)`（描边，非实心底）；普通标签走 `var(--rule)` 边框 + `var(--dim)` 文字；标签是真实 `<span>`（非伪元素）；颜色全走契约变量（无 rgba/hex）。
+
+**管线安全**：真实 `<div>` grid；标签是真实 `<span>`；无伪元素装饰内容；无 SVG `<text>`；无禁用 CSS。

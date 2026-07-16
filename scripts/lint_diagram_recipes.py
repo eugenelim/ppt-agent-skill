@@ -202,6 +202,7 @@ def main() -> int:
         blocks_dir / "timeline.md",
         blocks_dir / "worksheet.md",
         blocks_dir / "advisory-brief.md",
+        blocks_dir / "discovery-readout.md",
     ]
     targets = [t for t in targets if t.exists()]
 

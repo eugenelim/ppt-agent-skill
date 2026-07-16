@@ -135,8 +135,44 @@
 
 **与强制骨架的关系**：`cover / toc` 仍在（手册也有封面、目录）。archetype 由 `论证策略：reference_runbook` 触发（`论证策略` 枚举值，下游 `contract_validator` / `planning_validator` 据此分支密度规则）；在此 archetype 下，Part 首页的整页 `section` 呼吸规则**放宽**为内联 `section-marker`，收尾由"行动号召"（`close`/`cta` → `end`）改为 `reference` 横切参考 back-matter。参考型有**专属 page_type**——`section-marker`（内联分隔，消费 `page-templates/section-marker.md`）与 `reference`（横切参考 back-matter，消费 `page-templates/reference.md` + `blocks/worksheet.md` 配方）；二者是自映射的叙事角色+page_type（同 `cover`/`toc`/`section`），枚举与映射见 [outline playbook](../playbooks/outline-phase1-playbook.md)。说服型 deck 不用这两个，其强制骨架不变。
 
+## 发现汇报型叙事 archetype（Discovery-Readout；非说服弧线）
+
+> 上面整套弧线模型适用说服型和参考型。但有一类 deck 是"把我们做了什么发现了什么"呈现给委托方——它**既不是用来说服决策的**（无 CTA 收束），**也不是用来查阅的操作手册**，而是一种**证据驱动的假设展示**，以开放性问题桥接下一阶段。此时改用下面的发现汇报型 archetype。
+
+**何时判定为发现汇报型**：`叙事结构` 落在"发现/discovery/洞察/调研汇报"，且产出包含"痛点列举→观察归纳→假设提出→机会映射"四段，收尾以开放式前瞻问题（而非明确建议或行动号召）收束。
+
+**叙事脊柱（"证据→假设→机会"五段式）**：
+```
+我们做了什么（方法论） → 我们发现了什么（证据列举） →
+规律与主题（观察归纳）→ 我们相信什么（假设）→
+接下来的问题（前瞻桥接）
+```
+
+**与说服型的关键区别**：
+- **说服型**：结论先行、以 CTA 收束、立场明确。
+- **发现汇报型**：证据优先、以开放问题前瞻桥接、作者保持假设语气而非处方语气。
+
+**页面级节奏**：
+- 开场：数字统计看板（`metrics-scoreboard`）或双 callout 摘要面板（`dual-callout-panel`）——快速建立参与深度可信度。
+- 核心：每个综合主题一页 `synthesis-theme-card`（观察→假设→机会链）；跨主题覆盖图用 `coverage-heatmap`。
+- 分析：`prioritization-scorecard` 或 `impact-effort-chart` 展示方案排序逻辑。
+- 收尾：`anchoring-questions-panel`——3–5 个开放式锚定问题，框定下一阶段探索方向，**无结论性建议，无 CTA**。
+
+**推荐组件**：`resources.block_refs:["discovery-readout"]`（见 [`blocks/discovery-readout.md`](../blocks/discovery-readout.md)）。适配 `dark_professional` / `light_premium` 风格；不推荐 `graphite_gold`（后者偏处方型论证）。
+
+**引擎影响**：guidance-only，不新增 `page_type`；大纲阶段写 `叙事结构: discovery-readout` 可提示/引导大纲 agent 使用此脊柱（`叙事结构` 是自由文本，无枚举消费者，不同于 `论证策略: reference_runbook` 的强制分支）；收尾规则和密度规则遵循本段而非 Tier 1/Tier 3 规则。
+
+### 发现汇报型的两条写作约定（指导性）
+
+> 说服型 deck 有"so-what netline"和"诚实横幅"两条纪律；发现汇报型有自己的两条约定，约束的不是"下结论"而是"把观察和结论清晰分离"。
+
+1. **痛点→观察→假设→机会链（Pain–Observation–Hypothesis–Opportunity chain）**：每个综合主题必须完整走完这四个层次——(a) **痛点**（stakeholder 的原话或可引述的直接证据）→ (b) **观察**（主题层级的模式归纳）→ (c) **假设**（"如果…那么…"格式，明示这是假设不是结论）→ (d) **机会**（初步方案概念，非处方建议）。跳过任何一环都会让 deck 看起来像是把"现象"偷渡成了"建议"，侵蚀委托方对发现过程公允性的信任。
+
+2. **开放式锚定问题作为前瞻桥接（Open anchoring questions as forward bridge）**：发现汇报的最后一页或章末过渡页，必须以"我们尚未回答的问题"而非"我们建议你做什么"收束。锚定问题的写作规律：(a) 以"What / Where / How / Which"开头；(b) 假设尚未回答、不声称已知答案；(c) 指向下一阶段的探索而非给出行动指令。这条约定保持了发现汇报的开放性——委托方的反馈和下一阶段的工作决定，需要一个"可以质疑的假设"作为基础，而不是一个"需要接受或拒绝的建议"。
+
 ## 自检
 
-- **先判 archetype**：这是说服型（用弧线）还是参考型（用生命周期时间线）？别把运行手册硬塞进故事弧线。
+- **先判 archetype**：这是说服型（用弧线）还是参考型（用生命周期时间线）还是发现汇报型（用证据→假设→机会脊柱）？别把调研汇报硬塞进建议型故事弧线。
 - 说服型：PPT 作为整体是否有清晰的叙事弧线（而非平铺直叙）？密度高的页面后面是否有呼吸页？结尾页是否回应封面的核心主张（首尾呼应）？
 - 参考型：是否按生命周期阶段组织？节奏是否靠制品形态交替（而非密度高潮）？是否有持久页眉/页脚与横切参考 back-matter？
+- 发现汇报型：每个主题是否走完"痛点→观察→假设→机会"四环？收尾是否以开放式锚定问题前瞻桥接（无 CTA）？假设是否明确标注为假设而非结论？
