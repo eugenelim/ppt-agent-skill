@@ -160,7 +160,7 @@
 
 **推荐组件**：`resources.block_refs:["discovery-readout"]`（见 [`blocks/discovery-readout.md`](../blocks/discovery-readout.md)）。适配 `dark_professional` / `light_premium` 风格；不推荐 `graphite_gold`（后者偏处方型论证）。
 
-**引擎影响**：guidance-only，不新增 `page_type`；大纲阶段写 `叙事结构: discovery-readout` 即可触发大纲 agent 使用此脊柱；收尾规则和密度规则遵循本段而非 Tier 1/Tier 3 规则。
+**引擎影响**：guidance-only，不新增 `page_type`；大纲阶段写 `叙事结构: discovery-readout` 可提示/引导大纲 agent 使用此脊柱（`叙事结构` 是自由文本，无枚举消费者，不同于 `论证策略: reference_runbook` 的强制分支）；收尾规则和密度规则遵循本段而非 Tier 1/Tier 3 规则。
 
 ### 发现汇报型的两条写作约定（指导性）
 

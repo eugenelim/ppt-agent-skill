@@ -437,3 +437,204 @@
 **自检**：callout 黑底 + 4px 紫左条（真实 `<span>`）+ mono 标签走 `--focus`；footer 3px 黑上线 + 3 列 + 紫 h5；颜色全走契约变量。
 
 **管线安全**：真实 `<div>`/`<footer>`；左条/竖线是真实 `<span>` 非伪元素；无 SVG `<text>`；无禁用 CSS。
+
+---
+
+### 覆盖矩阵 (coverage-matrix)
+
+**何时用**：能力/类别行 × 维度/阶段列的覆盖热力表——每格用深浅背景表示密度（空 / 低 / 高），可含计数徽章或勾号。适合能力覆盖评估、工具链映射、培训覆盖矩阵、特性对比表。需要 SDLC 相位与计数药丸的发现汇报版本，用 `block_refs:["discovery-readout"]` 的 `coverage-heatmap`。
+
+**数据格式**：
+```json
+{
+  "card_type": "list", "block_refs": ["worksheet"],
+  "brief_kind": "coverage_matrix",
+  "columns": ["Dimension A", "Dimension B", "Dimension C", "Dimension D"],
+  "rows": [
+    {"label": "Capability 1", "cells": ["high", "medium", "empty", "high"]},
+    {"label": "Capability 2", "cells": ["medium", "empty", "high", "medium"]},
+    {"label": "Capability 3", "cells": ["empty", "high", "medium", "empty"]}
+  ],
+  "density_legend": {"high": "Strong coverage", "medium": "Partial", "empty": "Gap"}
+}
+```
+
+**模板**（黑表头 + 密度背景 + 可选计数 · 全走契约变量）：
+```html
+<div style="
+  --fg:var(--text-primary); --fg-dim:var(--text-secondary); --focus:var(--accent-1);
+  --rule:var(--card-border); --paper:var(--card-bg-from); --paper-2:var(--card-bg-to);
+  --mono:var(--font-mono); --sans:var(--font-primary);
+  font-family:var(--sans); overflow-x:auto;">
+  <table style="border-collapse:collapse; width:100%; font-size:11.5px; min-width:480px; font-variant-numeric:tabular-nums;">
+    <thead>
+      <tr>
+        <th style="padding:9px 12px; background:var(--fg); color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.12em; font-weight:700; text-align:left; min-width:140px;"></th>
+        <th style="padding:9px 10px; background:var(--fg); color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.10em; font-weight:700; text-align:center;">Dimension A</th>
+        <th style="padding:9px 10px; background:var(--fg); color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.10em; font-weight:700; text-align:center;">Dimension B</th>
+        <th style="padding:9px 10px; background:var(--fg); color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.10em; font-weight:700; text-align:center;">Dimension C</th>
+        <th style="padding:9px 10px; background:var(--fg); color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.10em; font-weight:700; text-align:center;">Dimension D</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Row 1 -->
+      <tr>
+        <td style="padding:9px 12px; font-weight:700; color:var(--fg); border:1px solid var(--rule);">Capability 1</td>
+        <!-- High density: dark bg + light text -->
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--fg);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:800; color:var(--paper);">&#10003;</span>
+        </td>
+        <!-- Medium density: subtle bg -->
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--paper-2);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:700; color:var(--focus);">&#10003;</span>
+        </td>
+        <!-- Empty: paper bg + dash -->
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule);">
+          <span style="font-size:11px; color:var(--rule);">—</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--fg);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:800; color:var(--paper);">&#10003;</span>
+        </td>
+      </tr>
+      <!-- Row 2 (zebra) -->
+      <tr style="background:var(--paper-2);">
+        <td style="padding:9px 12px; font-weight:700; color:var(--fg); border:1px solid var(--rule);">Capability 2</td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--paper-2);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:700; color:var(--focus);">&#10003;</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule);">
+          <span style="font-size:11px; color:var(--rule);">—</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--fg);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:800; color:var(--paper);">&#10003;</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--paper-2);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:700; color:var(--focus);">&#10003;</span>
+        </td>
+      </tr>
+      <!-- Row 3 -->
+      <tr>
+        <td style="padding:9px 12px; font-weight:700; color:var(--fg); border:1px solid var(--rule);">Capability 3</td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule);">
+          <span style="font-size:11px; color:var(--rule);">—</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--fg);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:800; color:var(--paper);">&#10003;</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule); background:var(--paper-2);">
+          <span style="font-family:var(--mono); font-size:11px; font-weight:700; color:var(--focus);">&#10003;</span>
+        </td>
+        <td style="padding:9px 8px; text-align:center; border:1px solid var(--rule);">
+          <span style="font-size:11px; color:var(--rule);">—</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+  <!-- Legend -->
+  <div style="display:flex; gap:18px; margin-top:8px; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.09em; color:var(--fg-dim);">
+    <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--fg); vertical-align:middle; margin-right:5px;"></span>Strong</span>
+    <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--paper-2); border:1px solid var(--rule); vertical-align:middle; margin-right:5px;"></span>Partial</span>
+    <span><span style="display:inline-block; width:10px; height:10px; border-radius:2px; border:1px solid var(--rule); vertical-align:middle; margin-right:5px;"></span>Gap</span>
+  </div>
+</div>
+```
+
+**自检**：黑表头走 `var(--fg)` 背景 + `var(--paper)` 反白字；强覆盖格走 `var(--fg)` 背景 + `var(--paper)` 勾号；弱覆盖走 `var(--paper-2)` + `var(--focus)` 勾号；空格走 `—` + `var(--rule)` 颜色；图例用真实 `<span>` 色块；颜色全走契约变量（无 rgba/hex）。
+
+**管线安全**：真实 `<table>`；勾号 `&#10003;` 是 HTML 字符；无伪元素；无 SVG `<text>`；无禁用 CSS。
+
+---
+
+### 严重性分组发现表 (severity-findings-table)
+
+**何时用**：按主题/类别分组呈现发现项、风险条目、审计发现或议题列表——深色 `<tr>` 行作分组标题，每行含优先级/严重性徽章。适合风险登记册、审计发现、议题追踪、质量检查日志。比 `responsibility-matrix` 更侧重"分类+优先级"而非"责任分工"。
+
+**数据格式**：
+```json
+{
+  "card_type": "list", "block_refs": ["worksheet"],
+  "brief_kind": "severity_findings_table",
+  "columns": ["ID", "Area", "Severity", "Finding", "Theme"],
+  "groups": [
+    {
+      "label": "Process",
+      "rows": [
+        {"id": "F-01", "area": "Planning", "severity": "High",   "finding": "No structured handoff between planning and build", "theme": "Coordination"},
+        {"id": "F-02", "area": "Test",     "severity": "Medium", "finding": "Regression scope determined manually each cycle",   "theme": "Efficiency"}
+      ]
+    },
+    {
+      "label": "Tooling",
+      "rows": [
+        {"id": "F-03", "area": "Build", "severity": "Low", "finding": "Local dev environment setup not documented", "theme": "Onboarding"}
+      ]
+    }
+  ]
+}
+```
+
+**模板**（深色分组标题行 + 严重性徽章 · 碳out信号色声明为局部变量）：
+```html
+<div style="
+  --sev-hi:#ef4444; --sev-med:#b35900;
+  --fg:var(--text-primary); --fg-dim:var(--text-secondary);
+  --rule:var(--card-border); --paper:var(--card-bg-from); --paper-2:var(--card-bg-to);
+  --mono:var(--font-mono); --sans:var(--font-primary);
+  font-family:var(--sans); overflow-x:auto;">
+  <table style="border-collapse:collapse; width:100%; font-size:12px; min-width:580px;">
+    <thead>
+      <tr style="background:var(--fg);">
+        <th style="padding:9px 11px; color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.12em; font-weight:700; text-align:left; width:60px;">ID</th>
+        <th style="padding:9px 11px; color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.11em; font-weight:700; text-align:left;">Area</th>
+        <th style="padding:9px 11px; color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.11em; font-weight:700; text-align:left; width:80px;">Severity</th>
+        <th style="padding:9px 11px; color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.11em; font-weight:700; text-align:left;">Finding</th>
+        <th style="padding:9px 11px; color:var(--paper); font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.11em; font-weight:700; text-align:left;">Theme</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Group header: Process -->
+      <tr style="background:var(--fg);">
+        <td colspan="5" style="padding:7px 11px; color:var(--paper); font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.13em;">Process</td>
+      </tr>
+      <!-- High severity row -->
+      <tr style="border-bottom:1px solid var(--rule);">
+        <td style="padding:9px 11px; font-family:var(--mono); font-size:10px; font-weight:700; color:var(--fg-dim);">F-01</td>
+        <td style="padding:9px 11px; color:var(--fg-dim);">Planning</td>
+        <td style="padding:9px 11px;">
+          <span style="font-size:9px; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; padding:2px 8px; border-radius:4px; color:var(--paper); background:var(--sev-hi);">High</span>
+        </td>
+        <td style="padding:9px 11px; font-weight:600; color:var(--fg);">No structured handoff between planning and build</td>
+        <td style="padding:9px 11px; color:var(--fg-dim);">Coordination</td>
+      </tr>
+      <!-- Medium severity row (zebra) -->
+      <tr style="background:var(--paper-2); border-bottom:1px solid var(--rule);">
+        <td style="padding:9px 11px; font-family:var(--mono); font-size:10px; font-weight:700; color:var(--fg-dim);">F-02</td>
+        <td style="padding:9px 11px; color:var(--fg-dim);">Test</td>
+        <td style="padding:9px 11px;">
+          <span style="font-size:9px; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; padding:2px 8px; border-radius:4px; color:var(--paper); background:var(--sev-med);">Med</span>
+        </td>
+        <td style="padding:9px 11px; font-weight:600; color:var(--fg);">Regression scope determined manually each cycle</td>
+        <td style="padding:9px 11px; color:var(--fg-dim);">Efficiency</td>
+      </tr>
+      <!-- Group header: Tooling -->
+      <tr style="background:var(--fg);">
+        <td colspan="5" style="padding:7px 11px; color:var(--paper); font-family:var(--mono); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.13em;">Tooling</td>
+      </tr>
+      <!-- Low severity row -->
+      <tr style="border-bottom:1px solid var(--rule);">
+        <td style="padding:9px 11px; font-family:var(--mono); font-size:10px; font-weight:700; color:var(--fg-dim);">F-03</td>
+        <td style="padding:9px 11px; color:var(--fg-dim);">Build</td>
+        <td style="padding:9px 11px;">
+          <span style="font-size:9px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; padding:2px 8px; border-radius:4px; border:1px solid var(--rule); color:var(--fg-dim);">Low</span>
+        </td>
+        <td style="padding:9px 11px; font-weight:600; color:var(--fg);">Local dev environment setup not documented</td>
+        <td style="padding:9px 11px; color:var(--fg-dim);">Onboarding</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+```
+
+**自检**：全局表头 + 分组标题行走 `var(--fg)` 深色背景 + `var(--paper)` 反白字；High 徽章走 `--sev-hi`（碳out `#ef4444`）；Med 走 `--sev-med`（碳out `#b35900`）；Low 走描边款（`1px var(--rule)` + `var(--fg-dim)` 文字，无背景色）；`--sev-hi`/`--sev-med` 声明为根容器局部变量（可被 deck `:root` 覆盖）；其余颜色全走契约变量。
+
+**管线安全**：真实 `<table>`；徽章是真实 `<span>`（非伪元素）；无 SVG `<text>`；无禁用 CSS；`--sev-hi`/`--sev-med` 是唯一碳out（与 worksheet `status-block` warn 及 `discovery-readout` 同条款）。

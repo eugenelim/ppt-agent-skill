@@ -1,7 +1,7 @@
 # Spec: SDLC Discovery Readout Assimilation
 
-Mode: full (multi-feature brief)
-Status: in-progress
+Mode: light (no single risk trigger — multi-file but familiar territory, primitives-only)
+- **Status:** Shipped
 
 ## Objective
 

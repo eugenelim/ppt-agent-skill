@@ -796,9 +796,9 @@
     {"label": "Risk", "criteria": ["Tech Risk", "Change Risk"]}
   ],
   "concepts": [
-    {"rank": 1, "name": "Automated regression scoping", "scores": [4, 4, 3, 4, 3, 3]},
-    {"rank": 2, "name": "Delivery reporting assistant", "scores": [3, 3, 4, 4, 4, 4]},
-    {"rank": 3, "name": "Story quality gate",           "scores": [3, 4, 3, 3, 4, 3]}
+    {"rank": 1, "name": "Delivery reporting assistant",  "scores": [3, 3, 4, 4, 4, 4]},
+    {"rank": 2, "name": "Automated regression scoping",  "scores": [4, 4, 3, 4, 3, 3]},
+    {"rank": 3, "name": "Story quality gate",            "scores": [3, 4, 3, 3, 4, 3]}
   ]
 }
 ```
@@ -832,10 +832,30 @@
       </tr>
     </thead>
     <tbody>
-      <!-- Rank 1 row -->
+      <!-- Rank 1 row (total 22) -->
       <tr>
-        <td style="padding:9px 12px; font-weight:700; color:var(--ink); border-bottom:1px solid var(--rule);">Automated regression scoping</td>
+        <td style="padding:9px 12px; font-weight:700; color:var(--ink); border-bottom:1px solid var(--rule);">Delivery reporting assistant</td>
         <td style="padding:9px 8px; text-align:center; font-family:var(--mono); font-weight:800; color:var(--ink); border-bottom:1px solid var(--rule);">1</td>
+        <!-- Score 3 (mid = paper-2) -->
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--paper-2);">
+          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--ink);">3</span></td>
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--paper-2);">
+          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--ink);">3</span></td>
+        <!-- Score 4 (high = green) -->
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--heat-ok-soft);">
+          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--heat-ok-soft);">
+          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--heat-ok-soft);">
+          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--heat-ok-soft);">
+          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
+        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); font-family:var(--mono); font-weight:800; font-size:14px; color:var(--ink);">22</td>
+      </tr>
+      <!-- Rank 2 row (total 21) -->
+      <tr style="background:var(--paper-2);">
+        <td style="padding:9px 12px; font-weight:700; color:var(--ink); border-bottom:1px solid var(--rule);">Automated regression scoping</td>
+        <td style="padding:9px 8px; text-align:center; font-family:var(--mono); font-weight:800; color:var(--ink); border-bottom:1px solid var(--rule);">2</td>
         <!-- Score 4 (high = green) -->
         <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--heat-ok-soft);">
           <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
@@ -851,24 +871,6 @@
         <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--paper-2);">
           <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--ink);">3</span></td>
         <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); font-family:var(--mono); font-weight:800; font-size:14px; color:var(--ink);">21</td>
-      </tr>
-      <!-- Rank 2 row -->
-      <tr style="background:var(--paper-2);">
-        <td style="padding:9px 12px; font-weight:700; color:var(--ink); border-bottom:1px solid var(--rule);">Delivery reporting assistant</td>
-        <td style="padding:9px 8px; text-align:center; font-family:var(--mono); font-weight:800; color:var(--ink); border-bottom:1px solid var(--rule);">2</td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--paper-2);">
-          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--ink);">3</span></td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--paper-2);">
-          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--ink);">3</span></td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--heat-ok-soft);">
-          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--heat-ok-soft);">
-          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); border-left:1px solid var(--rule); background:var(--heat-ok-soft);">
-          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); background:var(--heat-ok-soft);">
-          <span style="font-family:var(--mono); font-weight:800; font-size:13px; color:var(--heat-ok);">4</span></td>
-        <td style="padding:9px 8px; text-align:center; border-bottom:1px solid var(--rule); font-family:var(--mono); font-weight:800; font-size:14px; color:var(--ink);">22</td>
       </tr>
     </tbody>
   </table>
