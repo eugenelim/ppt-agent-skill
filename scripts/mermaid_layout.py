@@ -177,17 +177,34 @@ def _detect_directive(src: str) -> tuple[str, str]:
 # ── Mermaid node spec parsing ─────────────────────────────────────────────────
 
 # Matches: ID[label] or ID(label) or ID{label} etc.
+# Quoted variants (rect_q, round_q, cylinder_q) come first so that labels
+# containing bracket characters — e.g. NODE["name\n[inner]"] — are matched
+# by the quote-delimited form before the bracket-delimited fallback rejects them.
 _SPEC_RE = re.compile(
     r'^(?P<id>[A-Za-z_][A-Za-z0-9_\-\.]*)'
     r'(?:'
-    r'\[\((?P<cylinder>[^\)]*)\)\]'      # [(cylinder)]
+    r'\[\("(?P<cylinder_q>[^"]*)"\)\]'   # [("quoted cylinder")]
+    r'|\[\((?P<cylinder>[^\)]*)\)\]'     # [(unquoted cylinder)]
     r'|\(\((?P<circle>[^\)]*)\)\)'       # ((circle))
-    r'|\[(?P<rect>[^\[\]]*)\]'           # [rect]
-    r'|\((?P<round>[^\(\)]*)\)'          # (round)
+    r'|\["(?P<rect_q>[^"]*)"\]'          # ["quoted rect"]
+    r'|\[(?P<rect>[^\[\]]*)\]'           # [unquoted rect]
+    r'|\("(?P<round_q>[^"]*)"\)'         # ("quoted round")
+    r'|\((?P<round>[^\(\)]*)\)'          # (unquoted round)
     r'|\{(?P<diamond>[^\{\}]*)\}'        # {diamond}
     r'|>(?P<flag>[^\]]*)\]'              # >flag]
     r')?'
 )
+
+# Maps _SPEC_RE group names → canonical shape names
+_SPEC_SHAPE_MAP = {
+    "cylinder_q": "cylinder", "cylinder": "cylinder",
+    "circle": "circle",
+    "rect_q": "rect", "rect": "rect",
+    "round_q": "round", "round": "round",
+    "diamond": "diamond",
+    "flag": "flag",
+}
+
 
 def _parse_spec(spec: str) -> tuple[str, str, str]:
     """Return (id, label, shape) from node spec like A[Label]."""
@@ -198,8 +215,8 @@ def _parse_spec(spec: str) -> tuple[str, str, str]:
         nid = safe.group(0) if safe else spec
         return nid, nid, "rect"
     nid = m.group("id")
-    for shape in ("cylinder", "circle", "rect", "round", "diamond", "flag"):
-        val = m.group(shape)
+    for group_name, shape in _SPEC_SHAPE_MAP.items():
+        val = m.group(group_name)
         if val is not None:
             label = val.strip().strip('"\'')
             return nid, label or nid, shape
@@ -473,44 +490,68 @@ def _minimize_crossings(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
 
 # ── coordinate assignment (integer pixels) ────────────────────────────────────
 
-def _assign_coordinates(nodes: dict[str, _Node]) -> tuple[int, int]:
-    """Assign x/y pixel positions; return (canvas_width, canvas_height)."""
+def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple[int, int]:
+    """Assign x/y pixel positions; return (canvas_width, canvas_height).
+
+    TB (default): rank→Y (row), col→X (column).
+    LR: rank→X (column), col→Y (row) with variable Y pitch based on node height.
+    """
     if not nodes:
         return 2 * CANVAS_PAD, 2 * CANVAS_PAD
 
-    col_pitch = NODE_W + COL_GAP
-    row_pitch = NODE_H + RANK_GAP
-
-    max_cols_per_rank: dict[int, int] = {}
-    for n in nodes.values():
-        r = n.rank
-        max_cols_per_rank[r] = max(max_cols_per_rank.get(r, 0), n.col)
-
-    max_col = max(max_cols_per_rank.values(), default=0)
+    is_lr = direction.upper() in ("LR", "RL")
     max_rank = max(n.rank for n in nodes.values())
 
-    for n in nodes.values():
-        n.x = CANVAS_PAD + n.col * col_pitch
-        n.y = CANVAS_PAD + n.rank * row_pitch
+    if not is_lr:
+        col_pitch = NODE_W + COL_GAP
+        row_pitch = NODE_H + RANK_GAP
+        max_col = max(n.col for n in nodes.values())
+        for n in nodes.values():
+            n.x = CANVAS_PAD + n.col * col_pitch
+            n.y = CANVAS_PAD + n.rank * row_pitch
+        canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
+        canvas_h = CANVAS_PAD * 2 + (max_rank + 1) * row_pitch - RANK_GAP
+        return canvas_w, canvas_h
 
-    canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
-    canvas_h = CANVAS_PAD * 2 + (max_rank + 1) * row_pitch - RANK_GAP
+    # LR: rank→X with fixed pitch; col→Y with variable pitch (multi-line nodes)
+    rank_pitch = NODE_W + RANK_GAP
+    for n in nodes.values():
+        n.x = CANVAS_PAD + n.rank * rank_pitch
+
+    # Group nodes by col, accumulate Y positions top-to-bottom
+    col_to_nodes: dict[int, list] = {}
+    for n in nodes.values():
+        col_to_nodes.setdefault(n.col, []).append(n)
+    y_cursor = CANVAS_PAD
+    for col in sorted(col_to_nodes):
+        col_h = max(_node_render_h(n) for n in col_to_nodes[col])
+        for n in col_to_nodes[col]:
+            n.y = y_cursor
+        y_cursor += col_h + COL_GAP
+
+    canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - RANK_GAP
+    canvas_h = y_cursor + CANVAS_PAD - COL_GAP
     return canvas_w, canvas_h
 
 
 # ── edge routing ──────────────────────────────────────────────────────────────
 
-def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float) -> str:
-    """Return SVG polygon points string for an arrowhead tip at (tip_x, tip_y)."""
+def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float,
+               back: int = 8, half_w: int = 4) -> str:
+    """Return SVG polygon points string for an arrowhead tip at (tip_x, tip_y).
+
+    back    — distance from tip to base (px). Normal edges: 8, thick: 10, lifeline: 10.
+    half_w  — half-width at base (px).       Normal edges: 4, thick:  5, lifeline:  6.
+    """
     length = math.hypot(dx, dy) or 1.0
     ux, uy = dx / length, dy / length
     px, py = -uy, ux  # perpendicular
-    bx = int(tip_x - ux * 10)
-    by = int(tip_y - uy * 10)
-    p1x = int(bx + px * 6)
-    p1y = int(by + py * 6)
-    p2x = int(bx - px * 6)
-    p2y = int(by - py * 6)
+    bx = int(tip_x - ux * back)
+    by = int(tip_y - uy * back)
+    p1x = int(bx + px * half_w)
+    p1y = int(by + py * half_w)
+    p2x = int(bx - px * half_w)
+    p2y = int(by - py * half_w)
     return f"{tip_x},{tip_y} {p1x},{p1y} {p2x},{p2y}"
 
 
@@ -523,9 +564,15 @@ def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> 
     return pad + step * (index + 1)
 
 
-def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> list[dict]:
-    """Return list of edge render specs (path_d, arrowhead_pts, label, style)."""
-    # Count fan-in per node (for endpoint distribution)
+_LABEL_PERP = 14  # perpendicular offset for edge labels (px)
+
+
+def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
+                 direction: str = "TB") -> list[dict]:
+    """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot)."""
+    is_lr = direction.upper() in ("LR", "RL")
+
+    # Count fan-in/fan-out per node (for endpoint distribution)
     fan_in: dict[str, list[str]] = {nid: [] for nid in nodes}
     fan_out: dict[str, list[str]] = {nid: [] for nid in nodes}
     for e in edges:
@@ -533,7 +580,15 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> 
             fan_in[e.dst].append(e.src)
             fan_out[e.src].append(e.dst)
 
-    right_lane_x = canvas_w - CANVAS_PAD + 32  # reserved right-lane x
+    # Right-lane x: always clears the rightmost node + group container border
+    non_dummy = [n for n in nodes.values() if not n.is_dummy]
+    right_lane_x = (max(n.x + NODE_W for n in non_dummy) if non_dummy else canvas_w) + 32
+
+    # LR bottom-lane y: clears the tallest node's bottom + margin
+    if is_lr and non_dummy:
+        bottom_lane_y = max(n.y + _node_render_h(n) for n in non_dummy) + 32
+    else:
+        bottom_lane_y = 0
 
     result: list[dict] = []
     for e in edges:
@@ -541,45 +596,84 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> 
             continue
         s = nodes[e.src]
         d = nodes[e.dst]
+        ah_kw: dict = {"back": 10, "half_w": 5} if e.style == "thick" else {}
 
         # Self-loop
         if e.src == e.dst:
             lx = s.x + NODE_W
             ty = s.y
             by_ = s.y + NODE_H
-            # Small arc: right of node, curves back
             path = (f"M {lx} {ty + 12} "
                     f"C {lx + SELF_LOOP_DX} {ty} {lx + SELF_LOOP_DX} {by_} "
                     f"{lx} {by_ - 12}")
             tip_x, tip_y = lx, by_ - 12
-            ah = _arrowhead(tip_x, tip_y, -1, 0) if e.arrow else None
+            ah = _arrowhead(tip_x, tip_y, -1, 0, **ah_kw) if e.arrow else None
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": tip_x + 14, "ly": (ty + by_) // 2})
+                           "lx": tip_x + 14, "ly": (ty + by_) // 2, "rot": 0})
             continue
 
-        # Back-edge or reversed → right-lane orthogonal
         rank_gap = d.rank - s.rank
+
+        # Back-edge or skip-rank → right-lane (TB) or bottom-lane (LR) orthogonal
         if e.reversed_ or rank_gap < 0 or rank_gap > 1:
-            # Right-lane orthogonal: exit right of src, go down to dst rank, enter right of dst
-            sx = s.x + NODE_W
-            sy = s.y + NODE_H // 2
-            dx_ = d.x + NODE_W
-            dy_ = d.y + NODE_H // 2
-            path = (f"M {sx} {sy} H {right_lane_x} V {dy_} H {dx_}")
-            ah = _arrowhead(dx_, dy_, -1, 0) if e.arrow else None
-            mid_x = right_lane_x + 4
-            mid_y = (sy + dy_) // 2
-            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": mid_x, "ly": mid_y})
+            if is_lr:
+                sx = s.x + NODE_W // 2
+                sy = s.y + _node_render_h(s)
+                dx_ = d.x + NODE_W // 2
+                dy_ = d.y + _node_render_h(d)
+                path = f"M {sx} {sy} V {bottom_lane_y} H {dx_} V {dy_}"
+                ah = _arrowhead(dx_, dy_, 0, -1, **ah_kw) if e.arrow else None
+                result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                               "lx": (sx + dx_) // 2, "ly": bottom_lane_y + 4, "rot": 0})
+            else:
+                sx = s.x + NODE_W
+                sy = s.y + NODE_H // 2
+                dx_ = d.x + NODE_W
+                dy_ = d.y + NODE_H // 2
+                path = f"M {sx} {sy} H {right_lane_x} V {dy_} H {dx_}"
+                ah = _arrowhead(dx_, dy_, -1, 0, **ah_kw) if e.arrow else None
+                result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                               "lx": right_lane_x + 4, "ly": (sy + dy_) // 2, "rot": 0})
             continue
 
-        # Adjacent-rank forward edge: cubic Bezier bottom-centre to top-centre
-        # Fan-out from src
+        if is_lr:
+            # LR forward edge: horizontal Bézier, right-of-src to left-of-dst
+            out_list = fan_out[e.src]
+            out_idx = out_list.index(e.dst) if e.dst in out_list else 0
+            out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_h(s))
+
+            in_list = fan_in[e.dst]
+            in_idx = in_list.index(e.src) if e.src in in_list else 0
+            in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
+
+            x1 = s.x + NODE_W
+            y1 = s.y + out_offset
+            x2 = d.x
+            y2 = d.y + in_offset
+            cx1 = x1 + (x2 - x1) // 3
+            cx2 = x1 + 2 * (x2 - x1) // 3
+            path = f"M {x1} {y1} C {cx1} {y1} {cx2} {y2} {x2} {y2}"
+            ah = _arrowhead(x2, y2, x2 - cx2, 0.001, **ah_kw) if e.arrow else None
+            # Label: perpendicular offset from midpoint
+            mid_x = (x1 + x2) // 2
+            mid_y = (y1 + y2) // 2
+            edge_dx = float(x2 - x1)
+            edge_dy = float(y2 - y1)
+            edge_len = math.hypot(edge_dx, edge_dy) or 1.0
+            perp_x = edge_dy / edge_len
+            perp_y = -edge_dx / edge_len
+            lx = int(mid_x + perp_x * _LABEL_PERP)
+            ly = int(mid_y + perp_y * _LABEL_PERP)
+            rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
+            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                           "lx": lx, "ly": ly, "rot": rot})
+            continue
+
+        # TB adjacent-rank forward edge: cubic Bézier bottom-centre to top-centre
         out_list = fan_out[e.src]
         out_idx = out_list.index(e.dst) if e.dst in out_list else 0
         out_offset = _fan_offset(out_idx, len(out_list))
 
-        # Fan-in to dst
         in_list = fan_in[e.dst]
         in_idx = in_list.index(e.src) if e.src in in_list else 0
         in_offset = _fan_offset(in_idx, len(in_list))
@@ -588,16 +682,26 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> 
         y1 = s.y + NODE_H
         x2 = d.x + in_offset
         y2 = d.y
-        # Control points at 1/3 and 2/3 of vertical span
         cy1 = y1 + (y2 - y1) // 3
         cy2 = y1 + 2 * (y2 - y1) // 3
         path = f"M {x1} {y1} C {x1} {cy1} {x2} {cy2} {x2} {y2}"
 
-        ah = _arrowhead(x2, y2, x2 - x1, y2 - cy2) if e.arrow else None
+        ah = _arrowhead(x2, y2, x2 - x1, y2 - cy2, **ah_kw) if e.arrow else None
+
+        # Label: perpendicular offset from midpoint (prevents crossing the line)
         mid_x = (x1 + x2) // 2
         mid_y = (y1 + y2) // 2
+        edge_dx = float(x2 - x1)
+        edge_dy = float(y2 - y1)
+        edge_len = math.hypot(edge_dx, edge_dy) or 1.0
+        # Right perpendicular (90° CW from edge direction)
+        perp_x = edge_dy / edge_len
+        perp_y = -edge_dx / edge_len
+        lx = int(mid_x + perp_x * _LABEL_PERP)
+        ly = int(mid_y + perp_y * _LABEL_PERP)
+        rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                       "lx": mid_x + 4, "ly": mid_y})
+                       "lx": lx, "ly": ly, "rot": rot})
 
     return result
 
@@ -647,12 +751,30 @@ def _wrap_label(label: str) -> list[str]:
     return lines or [normalized]
 
 
+def _node_render_h(n: "_Node") -> int:
+    """Return the rendered pixel height of node n (single source of truth).
+
+    Mirrors the height calculation in _render_graph_fragment so that group
+    bounding boxes, canvas height, and LR layout pitch all stay in sync.
+    Uses n.icon (field) rather than _load_icon so it works before rendering.
+    """
+    main_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
+    lines = _wrap_label(main_label)
+    extra_h = max(0, (len(lines) - 1) * 18)
+    if n.icon:
+        extra_h = max(extra_h, 20)
+    if "|" in n.label:
+        extra_h += 16
+    return NODE_H + extra_h
+
+
 def _render_graph_fragment(
     nodes: dict[str, _Node],
     edges: list[_Edge],
     groups: dict[str, _Group],
     canvas_w: int,
     canvas_h: int,
+    direction: str = "TB",
 ) -> str:
     parts: list[str] = []
 
@@ -673,7 +795,7 @@ def _render_graph_fragment(
         gx = min(n.x for n in mbrs) - GROUP_PAD_X
         gy = min(n.y for n in mbrs) - GROUP_PAD_Y_TOP
         gw = max(n.x + NODE_W for n in mbrs) - gx + GROUP_PAD_X
-        gh = max(n.y + NODE_H for n in mbrs) - gy + GROUP_PAD_Y_BOT
+        gh = max(n.y + _node_render_h(n) for n in mbrs) - gy + GROUP_PAD_Y_BOT
         glabel = _h(grp.label)
         parts.append(
             f'<div class="diagram-group" style="'
@@ -709,14 +831,7 @@ def _render_graph_fragment(
         main_lines = _wrap_label(main_label)
         main_html = "<br>".join(_h(ln) for ln in main_lines)
         icon_svg = _load_icon(n.icon) if n.icon else ""
-
-        # Height: base + multi-line expansion + tech sub-label + icon room
-        extra_h = max(0, (len(main_lines) - 1) * 18)
-        if icon_svg:
-            extra_h = max(extra_h, 20)
-        if tech_label:
-            extra_h += 16
-        node_h = NODE_H + extra_h
+        node_h = _node_render_h(n)
 
         # Color tokens: dim everything for external nodes
         fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
@@ -769,6 +884,7 @@ def _render_graph_fragment(
             f'border:1px solid {border_var}; '
             f'{shape_css} '
             f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+            f'box-shadow:var(--node-shadow,none); '
             f'display:flex; flex-direction:{flex_dir}; align-items:center; justify-content:center; '
             f'text-align:center;">'
             f'{inner}</div>'
@@ -781,7 +897,7 @@ def _render_graph_fragment(
         f'overflow:visible; pointer-events:none;">'
     )
 
-    routed = _route_edges(nodes, edges, canvas_w)
+    routed = _route_edges(nodes, edges, canvas_w, direction)
     for spec in routed:
         d = spec["d"]
         style = spec["style"]
@@ -802,13 +918,16 @@ def _render_graph_fragment(
     for spec in routed:
         if spec["label"]:
             lx, ly = spec["lx"], spec["ly"]
+            rot = spec.get("rot", 0)
+            rot_part = f" rotate({rot}deg)" if rot else ""
             parts.append(
                 f'<span class="edge-label" style="'
-                f'position:absolute; left:{lx}px; top:{ly - 9}px; '
+                f'position:absolute; left:{lx}px; top:{ly}px; '
                 f'font-size:11px; font-family:var(--label-font,var(--font-primary)); '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
                 f'background:var(--node-bg-from,var(--card-bg-from)); '
-                f'padding:0 3px; white-space:nowrap; pointer-events:none;">'
+                f'padding:2px 5px; white-space:nowrap; pointer-events:none; '
+                f'transform:translate(-50%,-50%){rot_part};">'
                 f'{_h(spec["label"])}</span>'
             )
 
@@ -988,7 +1107,7 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
-    canvas_w, canvas_h = _assign_coordinates(nodes)
+    canvas_w, canvas_h = _assign_coordinates(nodes, direction)
 
     # Apply width hint scaling if provided
     if width_hint and canvas_w > 0:
@@ -998,7 +1117,12 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
                 n.x = int(n.x * scale)
             canvas_w = width_hint
 
-    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h)
+    # Recompute canvas_h using actual rendered node heights (Bug 6 fix)
+    real_nodes = [n for n in nodes.values() if not n.is_dummy]
+    if real_nodes:
+        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+
+    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction)
 
     # Wrap with metadata chip (type + title) and auto-legend
     directive, _ = _detect_directive(src)
@@ -1146,13 +1270,13 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
                 f'stroke="var(--edge,var(--card-border))" fill="none" stroke-width="1.5"{dash}/>'
             )
-            ah = _arrowhead(sx, ry + 8, -1, 0)
+            ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
                 f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"{dash}/>'
             )
-            ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0)
+            ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
         parts.append(f'<polygon points="{ah}" fill="var(--edge,var(--card-border))"/>')
         row += 1
     parts.append('</svg>')

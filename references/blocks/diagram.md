@@ -34,6 +34,7 @@
   --edge-strong:  var(--accent-1);       /* 强调连线/关键路径 */
   --node-accent:  var(--accent-1);       /* 焦点/高亮节点 */
   --node-accent-2:var(--accent-2);       /* 第二强调（分组/对比） */
+  --node-shadow:  var(--card-shadow, none); /* 节点立体感（卡片阴影继承） */
   --label-font:   var(--font-primary);
   font-family: var(--label-font);
 }
@@ -230,6 +231,31 @@ flowchart TD
 ### 图例自动生成
 
 图表使用超过 1 种边样式时（实线 + 虚线、或实线 + 粗线、或含分组框），渲染器在图表下方自动追加图例行，说明各边样式语义（`Synchronous` / `Async / optional` / `Critical path` / `Service boundary`）。纯实线单一样式图表不生成图例，避免多余噪音。
+
+## 节点颜色角色 / Semantic colour-role guidance
+
+Each CSS variable in the `.diagram` contract maps to a specific architectural role. Use the right variable for the right role — do not re-purpose.
+
+| Variable | Role | When to use |
+|---|---|---|
+| `--node-bg-from` / `--node-bg-to` | Base node fill | All ordinary nodes (default; no override needed) |
+| `--node-border` | Node outline | Default node border; all non-accented nodes |
+| `--node-fg` | Primary label text | Node titles, main labels |
+| `--node-fg-dim` | Secondary / dim text | Tech sub-labels (`label\|tech`), `:::external` text, edge labels |
+| `--node-accent` | Focus highlight (1–2 nodes max) | Start/end terminal nodes; critical single point of focus |
+| `--node-accent-2` | Second accent (group contrast) | Secondary grouping or paired comparison — rarely needed |
+| `--edge` | Default connector line | All plain connectors and arrowheads |
+| `--edge-strong` | Critical path / emphasis line | Key data flow or primary call path; one edge type per diagram |
+| `--node-shadow` | Node depth / elevation | Inherits `--card-shadow`; set to `none` on flat/lineart themes |
+
+**Architectural-role mapping (C4 / topology diagrams):**
+
+- **Internal services** — default styling; no override.
+- **External systems** — `:::external` class; uses `--node-fg-dim` border + text automatically.
+- **Databases / stores** — cylinder node shape; default colours.
+- **Critical path** — `--edge-strong` on the connecting edge; do NOT recolour the node.
+- **Focus node** — `border-color:var(--node-accent); box-shadow:0 0 0 1px var(--node-accent)`.
+- **Subgraph / boundary** — group container already uses `--node-border` at reduced opacity; no extra colour needed.
 
 ## 管线安全自检（每个 family 配方都要过）
 - [ ] 颜色/字体全部来自主题契约的局部变量（无硬编码，趋势绿红除外）

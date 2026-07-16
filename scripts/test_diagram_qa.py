@@ -309,6 +309,119 @@ def test_mermaid_polish():
     check("untitled diagram has no diagram-meta", "diagram-meta" not in html_untitled)
 
 
+def test_mermaid_routing_polish():
+    """Tests for routing-polish ACs: bracket labels, node height, LR layout, arrowhead, labels."""
+    print("mermaid_routing_polish:")
+    import sys as _sys
+    import math as _math
+    import re as _re
+    _sys.path.insert(0, str(ROOT / "scripts"))
+    from mermaid_layout import (  # noqa: E402
+        _parse_spec, _Node, _node_render_h, _arrowhead, _dispatch,
+        NODE_H, NODE_W,
+    )
+
+    # AC-1: _parse_spec handles bracket characters inside quoted labels
+    _, label_bracket, _ = _parse_spec('NODE["name\\n[inner]"]')
+    check("AC-1: bracket inside quoted label preserved", "[inner]" in label_bracket)
+
+    _, label_simple, _ = _parse_spec('A["Simple"]')
+    check("AC-1: plain quoted label still works", label_simple == "Simple")
+
+    _, label_unquoted, _ = _parse_spec("A[unquoted]")
+    check("AC-1: unquoted label unchanged", label_unquoted == "unquoted")
+
+    # AC-2: _node_render_h reflects extra height for multi-line / icon / tech labels
+    n_single = _Node("x", "one line", "rect")
+    check("AC-2: single-line node height == NODE_H", _node_render_h(n_single) == NODE_H)
+
+    n_multi = _Node("x", "line1\nline2\nline3", "rect")
+    check("AC-2: 3-line node height > NODE_H", _node_render_h(n_multi) > NODE_H)
+
+    n_tech = _Node("x", "Label|Spring Boot", "rect")
+    check("AC-2: tech-label node height > NODE_H", _node_render_h(n_tech) > NODE_H)
+
+    # AC-3: canvas_h reflects multi-line nodes (not fixed formula)
+    html_tall = _dispatch('flowchart TD\nA["L1\\nL2\\nL3\\nL4"] --> B', None, 600)
+    h_match = _re.search(r'height:(\d+)px', html_tall)
+    canvas_h = int(h_match.group(1)) if h_match else 0
+    min_fixed_h = NODE_H * 2 + 60  # conservative floor if fixed formula used
+    check("AC-3: canvas height > conservative fixed floor for tall node", canvas_h > min_fixed_h)
+
+    # AC-4: flowchart LR renders left-to-right (node A left < node B left)
+    html_lr = _dispatch("flowchart LR\nA --> B --> C", None, 800)
+    lefts = [int(m) for m in _re.findall(r'left:(\d+)px', html_lr)]
+    check("AC-4: LR diagram has at least 3 distinct left positions", len(set(lefts)) >= 3)
+    check("AC-4: LR first node x < last node x (left-to-right)", min(lefts) < max(lefts))
+
+    # AC-5: LR layout with multi-line node — no y-overlap between column rows
+    # A["L1\nL2\nL3"] is at col 0; B["L1\nL2\nL3\nL4\nL5"] is at col 1 (same rank 0).
+    # B.top must be >= A.top + _node_render_h(A) so they don't visually overlap.
+    n_a = _Node("A", "L1\nL2\nL3", "rect")
+    n_b = _Node("B", "L1\nL2\nL3\nL4\nL5", "rect")
+    n_a.col = 0; n_a.rank = 0
+    n_b.col = 1; n_b.rank = 0
+    html_lr_tall = _dispatch(
+        'flowchart LR\nA["L1\\nL2\\nL3"] --> C\nB["L1\\nL2\\nL3\\nL4\\nL5"] --> C', None, 800
+    )
+    # Extract top positions of all node divs (class "node")
+    node_tops = sorted(set(int(m) for m in _re.findall(
+        r'class="node[^"]*"[^>]*style="[^"]*top:(\d+)px', html_lr_tall
+    )))
+    check("AC-5: LR multi-line — at least 2 distinct node top values", len(node_tops) >= 2)
+    if len(node_tops) >= 2:
+        gap = node_tops[1] - node_tops[0]
+        min_gap = _node_render_h(n_a)
+        check(f"AC-5: gap between LR rows ({gap}px) >= tallest col-0 node height ({min_gap}px)",
+              gap >= min_gap)
+
+    # AC-6: right_lane_x clears rightmost node by >= 32; verify via back-edge H coordinate
+    html_back = _dispatch("flowchart TD\nA --> B --> C --> A", None, 600)
+    check("AC-6: back-edge diagram renders without error", html_back != "")
+    # The right-lane path is "M x1 y1 H <right_lane_x> V ..." — extract the H value
+    h_coords = [int(m) for m in _re.findall(r'M \d+ \d+ H (\d+) V', html_back)]
+    node_rights = [int(m) + NODE_W for m in _re.findall(r'left:(\d+)px', html_back)]
+    if h_coords and node_rights:
+        check(f"AC-6: right_lane_x ({max(h_coords)}) >= rightmost node edge + 32 ({max(node_rights)+32})",
+              max(h_coords) >= max(node_rights) + 32)
+
+    # AC-7: _arrowhead defaults → half_w=4, back=8
+    pts_normal = _arrowhead(100, 100, 0, 1)
+    pts_xy = [(int(x), int(y)) for x, y in
+              [p.split(",") for p in pts_normal.split()]]
+    tip = pts_xy[0]
+    base_pts = pts_xy[1:]
+    max_perp = max(abs(p[0] - tip[0]) for p in base_pts)
+    check("AC-7: default arrowhead half-width == 4", max_perp == 4)
+
+    pts_thick = _arrowhead(100, 100, 0, 1, back=10, half_w=5)
+    pts_xy_thick = [(int(x), int(y)) for x, y in
+                    [p.split(",") for p in pts_thick.split()]]
+    tip_t = pts_xy_thick[0]
+    max_perp_thick = max(abs(p[0] - tip_t[0]) for p in pts_xy_thick[1:])
+    check("AC-7: thick arrowhead half-width == 5", max_perp_thick == 5)
+
+    pts_life = _arrowhead(100, 100, 0, 1, back=10, half_w=6)
+    pts_xy_life = [(int(x), int(y)) for x, y in
+                   [p.split(",") for p in pts_life.split()]]
+    tip_l = pts_xy_life[0]
+    max_perp_life = max(abs(p[0] - tip_l[0]) for p in pts_xy_life[1:])
+    check("AC-7: lifeline arrowhead half-width == 6", max_perp_life == 6)
+
+    # AC-8: edge labels use translate(-50%,-50%) for centring
+    html_labeled = _dispatch("flowchart TD\nA -->|step| B", None, 400)
+    check("AC-8: edge label translate present", "translate(-50%,-50%)" in html_labeled)
+
+    # AC-8: vertical edge → label has rotate(90deg)
+    # A single straight vertical edge (x1==x2) triggers rot=90
+    html_vert = _dispatch("flowchart TD\nA -->|label| B", None, 400)
+    check("AC-8: vertical edge label has rotate(90deg)", "rotate(90deg)" in html_vert)
+
+    # AC-9: node divs include --node-shadow CSS variable
+    html_shadow = _dispatch("flowchart TD\nA --> B", None, 400)
+    check("AC-9: node div contains --node-shadow variable", "--node-shadow" in html_shadow)
+
+
 def main() -> int:
     test_lint()
     test_visual_qa_html()
@@ -320,6 +433,7 @@ def main() -> int:
     test_structural_hex_whitelist()
     test_style_and_naming()
     test_mermaid_polish()
+    test_mermaid_routing_polish()
     print()
     if FAILS:
         print(f"test_diagram_qa: {len(FAILS)} FAILED")
