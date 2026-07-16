@@ -34,6 +34,7 @@
   --edge-strong:  var(--accent-1);       /* 强调连线/关键路径 */
   --node-accent:  var(--accent-1);       /* 焦点/高亮节点 */
   --node-accent-2:var(--accent-2);       /* 第二强调（分组/对比） */
+  --node-shadow:  var(--card-shadow, none); /* 节点立体感（卡片阴影继承） */
   --label-font:   var(--font-primary);
   font-family: var(--label-font);
 }
@@ -185,6 +186,76 @@
 - 所有 padding/gap/偏移取 4/8/16/24/32px。
 - `align-items:center; justify-items:center` 让节点在格内光学居中。
 - 连线 SVG 用 `overflow:visible` 以越出所在格连到相邻节点。
+
+## Mermaid 渲染器语义标注
+
+> 仅适用于通过 `mermaid_layout.py` 渲染的 Mermaid 源码图（`flowchart` / `graph` 指令）。手写 HTML 配方不涉及。
+
+### `:::external` — 外部系统标注
+
+对系统边界之外的节点追加 `:::external`，渲染器自动用次级颜色（`--node-fg-dim`）绘制其边框与文字，形成"灰化"视觉，让内外部边界一目了然。
+
+```
+flowchart TD
+  client["Web Browser"]:::external --> gateway["API Gateway"]
+  gateway --> db["PostgreSQL|Database"]
+  gateway --> stripe["Stripe Payments"]:::external
+```
+
+- 边框颜色：`var(--node-fg-dim, var(--text-secondary))`
+- 文字颜色：`var(--node-fg-dim, var(--text-secondary))`
+- 背景：与普通节点相同（不改底色，仅降低视觉权重）
+
+### `label|tech` — 技术标注副标题（C4 stereotype）
+
+节点 label 含 `|` 分隔符时，`|` 右侧视为技术栈副标题，以 11px `--node-fg-dim` 小字渲染在名称下方。
+
+```
+flowchart TD
+  A["Auth Service|Go 1.22"] --> B["User DB|PostgreSQL 16"]
+  A -.- C["Email Provider|SendGrid"]:::external
+```
+
+渲染结果：主标题（14px 粗体）+ 技术副标题（11px 次色），类似 C4 Container 图的 `[Technology]` 标注。
+
+### `%% title:` — 图表标题
+
+在 Mermaid 源码第一行写 `%% title: 标题文字`，渲染器会在图表上方添加类型徽章（如 `FLOWCHART`）和标题行。
+
+```
+%% title: 支付系统架构
+flowchart TD
+  A --> B
+```
+
+### 图例自动生成
+
+图表使用超过 1 种边样式时（实线 + 虚线、或实线 + 粗线、或含分组框），渲染器在图表下方自动追加图例行，说明各边样式语义（`Synchronous` / `Async / optional` / `Critical path` / `Service boundary`）。纯实线单一样式图表不生成图例，避免多余噪音。
+
+## 节点颜色角色 / Semantic colour-role guidance
+
+Each CSS variable in the `.diagram` contract maps to a specific architectural role. Use the right variable for the right role — do not re-purpose.
+
+| Variable | Role | When to use |
+|---|---|---|
+| `--node-bg-from` / `--node-bg-to` | Base node fill | All ordinary nodes (default; no override needed) |
+| `--node-border` | Node outline | Default node border; all non-accented nodes |
+| `--node-fg` | Primary label text | Node titles, main labels |
+| `--node-fg-dim` | Secondary / dim text | Tech sub-labels (`label\|tech`), `:::external` text, edge labels |
+| `--node-accent` | Focus highlight (1–2 nodes max) | Start/end terminal nodes; critical single point of focus |
+| `--node-accent-2` | Second accent (group contrast) | Secondary grouping or paired comparison — rarely needed |
+| `--edge` | Default connector line | All plain connectors and arrowheads |
+| `--edge-strong` | Critical path / emphasis line | Key data flow or primary call path; one edge type per diagram |
+| `--node-shadow` | Node depth / elevation | Inherits `--card-shadow`; set to `none` on flat/lineart themes |
+
+**Architectural-role mapping (C4 / topology diagrams):**
+
+- **Internal services** — default styling; no override.
+- **External systems** — `:::external` class; uses `--node-fg-dim` border + text automatically.
+- **Databases / stores** — cylinder node shape; default colours.
+- **Critical path** — `--edge-strong` on the connecting edge; do NOT recolour the node.
+- **Focus node** — `border-color:var(--node-accent); box-shadow:0 0 0 1px var(--node-accent)`.
+- **Subgraph / boundary** — group container already uses `--node-border` at reduced opacity; no extra colour needed.
 
 ## 管线安全自检（每个 family 配方都要过）
 - [ ] 颜色/字体全部来自主题契约的局部变量（无硬编码，趋势绿红除外）

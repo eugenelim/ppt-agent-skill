@@ -93,9 +93,12 @@ CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 # ── default geometry (px) — matches Appendix §A in spec ──────────────────────
 NODE_W = 160
 NODE_H = 56
-RANK_GAP = 48   # --rank-gap: vertical gap between row tops
-COL_GAP = 16    # --col-gap: horizontal gap between nodes in same rank
+RANK_GAP = 48    # --rank-gap: vertical gap between row tops
+COL_GAP = 32     # --col-gap: horizontal gap between nodes in same rank
 CANVAS_PAD = 40  # --canvas-pad: outer inset
+GROUP_PAD_X = 16  # group container horizontal inner padding
+GROUP_PAD_Y_TOP = 28  # group container top inner padding (room for label)
+GROUP_PAD_Y_BOT = 16  # group container bottom inner padding
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 
 # ── directive sets ────────────────────────────────────────────────────────────
@@ -125,6 +128,7 @@ class _Node:
     is_dummy: bool = False
     bary: float = 0.0
     icon: str = ""                # icon name from assets/icons/ (without .svg)
+    css_class: str = ""           # semantic class, e.g. "external"
 
 
 @dataclass
@@ -173,17 +177,34 @@ def _detect_directive(src: str) -> tuple[str, str]:
 # ── Mermaid node spec parsing ─────────────────────────────────────────────────
 
 # Matches: ID[label] or ID(label) or ID{label} etc.
+# Quoted variants (rect_q, round_q, cylinder_q) come first so that labels
+# containing bracket characters — e.g. NODE["name\n[inner]"] — are matched
+# by the quote-delimited form before the bracket-delimited fallback rejects them.
 _SPEC_RE = re.compile(
     r'^(?P<id>[A-Za-z_][A-Za-z0-9_\-\.]*)'
     r'(?:'
-    r'\[\((?P<cylinder>[^\)]*)\)\]'      # [(cylinder)]
+    r'\[\("(?P<cylinder_q>[^"]*)"\)\]'   # [("quoted cylinder")]
+    r'|\[\((?P<cylinder>[^\)]*)\)\]'     # [(unquoted cylinder)]
     r'|\(\((?P<circle>[^\)]*)\)\)'       # ((circle))
-    r'|\[(?P<rect>[^\[\]]*)\]'           # [rect]
-    r'|\((?P<round>[^\(\)]*)\)'          # (round)
+    r'|\["(?P<rect_q>[^"]*)"\]'          # ["quoted rect"]
+    r'|\[(?P<rect>[^\[\]]*)\]'           # [unquoted rect]
+    r'|\("(?P<round_q>[^"]*)"\)'         # ("quoted round")
+    r'|\((?P<round>[^\(\)]*)\)'          # (unquoted round)
     r'|\{(?P<diamond>[^\{\}]*)\}'        # {diamond}
     r'|>(?P<flag>[^\]]*)\]'              # >flag]
     r')?'
 )
+
+# Maps _SPEC_RE group names → canonical shape names
+_SPEC_SHAPE_MAP = {
+    "cylinder_q": "cylinder", "cylinder": "cylinder",
+    "circle": "circle",
+    "rect_q": "rect", "rect": "rect",
+    "round_q": "round", "round": "round",
+    "diamond": "diamond",
+    "flag": "flag",
+}
+
 
 def _parse_spec(spec: str) -> tuple[str, str, str]:
     """Return (id, label, shape) from node spec like A[Label]."""
@@ -194,11 +215,28 @@ def _parse_spec(spec: str) -> tuple[str, str, str]:
         nid = safe.group(0) if safe else spec
         return nid, nid, "rect"
     nid = m.group("id")
-    for shape in ("cylinder", "circle", "rect", "round", "diamond", "flag"):
-        val = m.group(shape)
+    for group_name, shape in _SPEC_SHAPE_MAP.items():
+        val = m.group(group_name)
         if val is not None:
-            return nid, val.strip() or nid, shape
+            label = val.strip().strip('"\'')
+            return nid, label or nid, shape
     return nid, nid, "rect"
+
+
+# Matches :::className suffix on node specs (e.g. A[Label]:::external)
+_CSS_CLASS_RE = re.compile(r':::([A-Za-z][A-Za-z0-9_-]*)$')
+
+
+def _parse_spec_and_class(spec: str) -> tuple[str, str, str, str]:
+    """Return (id, label, shape, css_class). Strips :::class suffix before parsing."""
+    spec = spec.strip()
+    m = _CSS_CLASS_RE.search(spec)
+    css_class = ""
+    if m:
+        css_class = m.group(1)
+        spec = spec[:m.start()].rstrip()
+    nid, label, shape = _parse_spec(spec)
+    return nid, label, shape, css_class
 
 
 # ── graph parser (flowchart / graph / stateDiagram) ───────────────────────────
@@ -222,11 +260,14 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
     groups: dict[str, _Group] = {}
     stack: list[str] = []  # subgraph id stack
 
-    def _ensure(nid: str, label: str, shape: str) -> None:
+    def _ensure(nid: str, label: str, shape: str, css_class: str = "") -> None:
         if nid not in nodes:
-            nodes[nid] = _Node(id=nid, label=label or nid, shape=shape)
-        elif label and label != nid:
-            nodes[nid].label = label
+            nodes[nid] = _Node(id=nid, label=label or nid, shape=shape, css_class=css_class)
+        else:
+            if label and label != nid:
+                nodes[nid].label = label
+            if css_class:
+                nodes[nid].css_class = css_class
         if stack:
             gid = stack[-1]
             nodes[nid].group = gid
@@ -242,11 +283,17 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
 
         # Subgraph start
         if line.lower().startswith("subgraph"):
-            rest = line[8:].strip().strip('"\'')
+            rest = line[8:].strip()
             # remove trailing [direction] if present
             rest = re.sub(r'\s*\[[A-Z]{2,3}\]\s*$', '', rest).strip()
+            # extract label from id["label"] or id[label] — strip surrounding quotes
+            _m_bracket = re.match(r'^[A-Za-z_][A-Za-z0-9_\-\.]*\[([^\[\]]*)\]\s*$', rest)
+            if _m_bracket:
+                label = _m_bracket.group(1).strip().strip('"\'')
+            else:
+                label = rest.strip('"\'')
             gid = f"_g{len(groups)}"
-            groups[gid] = _Group(id=gid, label=rest or gid)
+            groups[gid] = _Group(id=gid, label=label or gid)
             stack.append(gid)
             continue
         if line.lower().strip() in ("end", "end;"):
@@ -265,9 +312,9 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     m = _EDGE_RE.match(line)
     if not m:
         # Standalone node declaration
-        nid, label, shape = _parse_spec(line)
+        nid, label, shape, css_class = _parse_spec_and_class(line)
         if re.match(r'[A-Za-z_]', nid):
-            ensure_fn(nid, label, shape)
+            ensure_fn(nid, label, shape, css_class)
         return
 
     src_raw = m.group("src_raw").strip()
@@ -278,26 +325,26 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     style = "dotted" if "-.-" in arrow else ("thick" if "==" in arrow else "solid")
     has_arrow = arrow.endswith(">")
 
-    src_id, src_lbl, src_shp = _parse_spec(src_raw)
+    src_id, src_lbl, src_shp, src_cls = _parse_spec_and_class(src_raw)
     if not re.match(r'[A-Za-z_]', src_id):
         return
-    ensure_fn(src_id, src_lbl, src_shp)
+    ensure_fn(src_id, src_lbl, src_shp, src_cls)
 
     # dst_raw might chain: B --> C
     chain_m = _EDGE_RE.match(dst_raw)
     if chain_m:
         first_dst = chain_m.group("src_raw").strip()
-        dst_id, dst_lbl, dst_shp = _parse_spec(first_dst)
+        dst_id, dst_lbl, dst_shp, dst_cls = _parse_spec_and_class(first_dst)
         if not re.match(r'[A-Za-z_]', dst_id):
             return
-        ensure_fn(dst_id, dst_lbl, dst_shp)
+        ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
         edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow))
         _parse_line(dst_raw, edges, ensure_fn)
     else:
-        dst_id, dst_lbl, dst_shp = _parse_spec(dst_raw)
+        dst_id, dst_lbl, dst_shp, dst_cls = _parse_spec_and_class(dst_raw)
         if not re.match(r'[A-Za-z_]', dst_id):
             return
-        ensure_fn(dst_id, dst_lbl, dst_shp)
+        ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
         edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow))
 
 
@@ -443,44 +490,68 @@ def _minimize_crossings(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
 
 # ── coordinate assignment (integer pixels) ────────────────────────────────────
 
-def _assign_coordinates(nodes: dict[str, _Node]) -> tuple[int, int]:
-    """Assign x/y pixel positions; return (canvas_width, canvas_height)."""
+def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple[int, int]:
+    """Assign x/y pixel positions; return (canvas_width, canvas_height).
+
+    TB (default): rank→Y (row), col→X (column).
+    LR: rank→X (column), col→Y (row) with variable Y pitch based on node height.
+    """
     if not nodes:
         return 2 * CANVAS_PAD, 2 * CANVAS_PAD
 
-    col_pitch = NODE_W + COL_GAP
-    row_pitch = NODE_H + RANK_GAP
-
-    max_cols_per_rank: dict[int, int] = {}
-    for n in nodes.values():
-        r = n.rank
-        max_cols_per_rank[r] = max(max_cols_per_rank.get(r, 0), n.col)
-
-    max_col = max(max_cols_per_rank.values(), default=0)
+    is_lr = direction.upper() in ("LR", "RL")
     max_rank = max(n.rank for n in nodes.values())
 
-    for n in nodes.values():
-        n.x = CANVAS_PAD + n.col * col_pitch
-        n.y = CANVAS_PAD + n.rank * row_pitch
+    if not is_lr:
+        col_pitch = NODE_W + COL_GAP
+        row_pitch = NODE_H + RANK_GAP
+        max_col = max(n.col for n in nodes.values())
+        for n in nodes.values():
+            n.x = CANVAS_PAD + n.col * col_pitch
+            n.y = CANVAS_PAD + n.rank * row_pitch
+        canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
+        canvas_h = CANVAS_PAD * 2 + (max_rank + 1) * row_pitch - RANK_GAP
+        return canvas_w, canvas_h
 
-    canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
-    canvas_h = CANVAS_PAD * 2 + (max_rank + 1) * row_pitch - RANK_GAP
+    # LR: rank→X with fixed pitch; col→Y with variable pitch (multi-line nodes)
+    rank_pitch = NODE_W + RANK_GAP
+    for n in nodes.values():
+        n.x = CANVAS_PAD + n.rank * rank_pitch
+
+    # Group nodes by col, accumulate Y positions top-to-bottom
+    col_to_nodes: dict[int, list] = {}
+    for n in nodes.values():
+        col_to_nodes.setdefault(n.col, []).append(n)
+    y_cursor = CANVAS_PAD
+    for col in sorted(col_to_nodes):
+        col_h = max(_node_render_h(n) for n in col_to_nodes[col])
+        for n in col_to_nodes[col]:
+            n.y = y_cursor
+        y_cursor += col_h + COL_GAP
+
+    canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - RANK_GAP
+    canvas_h = y_cursor + CANVAS_PAD - COL_GAP
     return canvas_w, canvas_h
 
 
 # ── edge routing ──────────────────────────────────────────────────────────────
 
-def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float) -> str:
-    """Return SVG polygon points string for an arrowhead tip at (tip_x, tip_y)."""
+def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float,
+               back: int = 8, half_w: int = 4) -> str:
+    """Return SVG polygon points string for an arrowhead tip at (tip_x, tip_y).
+
+    back    — distance from tip to base (px). Normal edges: 8, thick: 10, lifeline: 10.
+    half_w  — half-width at base (px).       Normal edges: 4, thick:  5, lifeline:  6.
+    """
     length = math.hypot(dx, dy) or 1.0
     ux, uy = dx / length, dy / length
     px, py = -uy, ux  # perpendicular
-    bx = int(tip_x - ux * 10)
-    by = int(tip_y - uy * 10)
-    p1x = int(bx + px * 6)
-    p1y = int(by + py * 6)
-    p2x = int(bx - px * 6)
-    p2y = int(by - py * 6)
+    bx = int(tip_x - ux * back)
+    by = int(tip_y - uy * back)
+    p1x = int(bx + px * half_w)
+    p1y = int(by + py * half_w)
+    p2x = int(bx - px * half_w)
+    p2y = int(by - py * half_w)
     return f"{tip_x},{tip_y} {p1x},{p1y} {p2x},{p2y}"
 
 
@@ -493,9 +564,15 @@ def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> 
     return pad + step * (index + 1)
 
 
-def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> list[dict]:
-    """Return list of edge render specs (path_d, arrowhead_pts, label, style)."""
-    # Count fan-in per node (for endpoint distribution)
+_LABEL_PERP = 14  # perpendicular offset for edge labels (px)
+
+
+def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
+                 direction: str = "TB") -> list[dict]:
+    """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot)."""
+    is_lr = direction.upper() in ("LR", "RL")
+
+    # Count fan-in/fan-out per node (for endpoint distribution)
     fan_in: dict[str, list[str]] = {nid: [] for nid in nodes}
     fan_out: dict[str, list[str]] = {nid: [] for nid in nodes}
     for e in edges:
@@ -503,7 +580,15 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> 
             fan_in[e.dst].append(e.src)
             fan_out[e.src].append(e.dst)
 
-    right_lane_x = canvas_w - CANVAS_PAD + 32  # reserved right-lane x
+    # Right-lane x: always clears the rightmost node + group container border
+    non_dummy = [n for n in nodes.values() if not n.is_dummy]
+    right_lane_x = (max(n.x + NODE_W for n in non_dummy) if non_dummy else canvas_w) + 32
+
+    # LR bottom-lane y: clears the tallest node's bottom + margin
+    if is_lr and non_dummy:
+        bottom_lane_y = max(n.y + _node_render_h(n) for n in non_dummy) + 32
+    else:
+        bottom_lane_y = 0
 
     result: list[dict] = []
     for e in edges:
@@ -511,45 +596,84 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> 
             continue
         s = nodes[e.src]
         d = nodes[e.dst]
+        ah_kw: dict = {"back": 10, "half_w": 5} if e.style == "thick" else {}
 
         # Self-loop
         if e.src == e.dst:
             lx = s.x + NODE_W
             ty = s.y
             by_ = s.y + NODE_H
-            # Small arc: right of node, curves back
             path = (f"M {lx} {ty + 12} "
                     f"C {lx + SELF_LOOP_DX} {ty} {lx + SELF_LOOP_DX} {by_} "
                     f"{lx} {by_ - 12}")
             tip_x, tip_y = lx, by_ - 12
-            ah = _arrowhead(tip_x, tip_y, -1, 0) if e.arrow else None
+            ah = _arrowhead(tip_x, tip_y, -1, 0, **ah_kw) if e.arrow else None
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": tip_x + 14, "ly": (ty + by_) // 2})
+                           "lx": tip_x + 14, "ly": (ty + by_) // 2, "rot": 0})
             continue
 
-        # Back-edge or reversed → right-lane orthogonal
         rank_gap = d.rank - s.rank
+
+        # Back-edge or skip-rank → right-lane (TB) or bottom-lane (LR) orthogonal
         if e.reversed_ or rank_gap < 0 or rank_gap > 1:
-            # Right-lane orthogonal: exit right of src, go down to dst rank, enter right of dst
-            sx = s.x + NODE_W
-            sy = s.y + NODE_H // 2
-            dx_ = d.x + NODE_W
-            dy_ = d.y + NODE_H // 2
-            path = (f"M {sx} {sy} H {right_lane_x} V {dy_} H {dx_}")
-            ah = _arrowhead(dx_, dy_, -1, 0) if e.arrow else None
-            mid_x = right_lane_x + 4
-            mid_y = (sy + dy_) // 2
-            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": mid_x, "ly": mid_y})
+            if is_lr:
+                sx = s.x + NODE_W // 2
+                sy = s.y + _node_render_h(s)
+                dx_ = d.x + NODE_W // 2
+                dy_ = d.y + _node_render_h(d)
+                path = f"M {sx} {sy} V {bottom_lane_y} H {dx_} V {dy_}"
+                ah = _arrowhead(dx_, dy_, 0, -1, **ah_kw) if e.arrow else None
+                result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                               "lx": (sx + dx_) // 2, "ly": bottom_lane_y + 4, "rot": 0})
+            else:
+                sx = s.x + NODE_W
+                sy = s.y + NODE_H // 2
+                dx_ = d.x + NODE_W
+                dy_ = d.y + NODE_H // 2
+                path = f"M {sx} {sy} H {right_lane_x} V {dy_} H {dx_}"
+                ah = _arrowhead(dx_, dy_, -1, 0, **ah_kw) if e.arrow else None
+                result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                               "lx": right_lane_x + 4, "ly": (sy + dy_) // 2, "rot": 0})
             continue
 
-        # Adjacent-rank forward edge: cubic Bezier bottom-centre to top-centre
-        # Fan-out from src
+        if is_lr:
+            # LR forward edge: horizontal Bézier, right-of-src to left-of-dst
+            out_list = fan_out[e.src]
+            out_idx = out_list.index(e.dst) if e.dst in out_list else 0
+            out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_h(s))
+
+            in_list = fan_in[e.dst]
+            in_idx = in_list.index(e.src) if e.src in in_list else 0
+            in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
+
+            x1 = s.x + NODE_W
+            y1 = s.y + out_offset
+            x2 = d.x
+            y2 = d.y + in_offset
+            cx1 = x1 + (x2 - x1) // 3
+            cx2 = x1 + 2 * (x2 - x1) // 3
+            path = f"M {x1} {y1} C {cx1} {y1} {cx2} {y2} {x2} {y2}"
+            ah = _arrowhead(x2, y2, x2 - cx2, 0.001, **ah_kw) if e.arrow else None
+            # Label: perpendicular offset from midpoint
+            mid_x = (x1 + x2) // 2
+            mid_y = (y1 + y2) // 2
+            edge_dx = float(x2 - x1)
+            edge_dy = float(y2 - y1)
+            edge_len = math.hypot(edge_dx, edge_dy) or 1.0
+            perp_x = edge_dy / edge_len
+            perp_y = -edge_dx / edge_len
+            lx = int(mid_x + perp_x * _LABEL_PERP)
+            ly = int(mid_y + perp_y * _LABEL_PERP)
+            rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
+            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                           "lx": lx, "ly": ly, "rot": rot})
+            continue
+
+        # TB adjacent-rank forward edge: cubic Bézier bottom-centre to top-centre
         out_list = fan_out[e.src]
         out_idx = out_list.index(e.dst) if e.dst in out_list else 0
         out_offset = _fan_offset(out_idx, len(out_list))
 
-        # Fan-in to dst
         in_list = fan_in[e.dst]
         in_idx = in_list.index(e.src) if e.src in in_list else 0
         in_offset = _fan_offset(in_idx, len(in_list))
@@ -558,16 +682,26 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int) -> 
         y1 = s.y + NODE_H
         x2 = d.x + in_offset
         y2 = d.y
-        # Control points at 1/3 and 2/3 of vertical span
         cy1 = y1 + (y2 - y1) // 3
         cy2 = y1 + 2 * (y2 - y1) // 3
         path = f"M {x1} {y1} C {x1} {cy1} {x2} {cy2} {x2} {y2}"
 
-        ah = _arrowhead(x2, y2, x2 - x1, y2 - cy2) if e.arrow else None
+        ah = _arrowhead(x2, y2, x2 - x1, y2 - cy2, **ah_kw) if e.arrow else None
+
+        # Label: perpendicular offset from midpoint (prevents crossing the line)
         mid_x = (x1 + x2) // 2
         mid_y = (y1 + y2) // 2
+        edge_dx = float(x2 - x1)
+        edge_dy = float(y2 - y1)
+        edge_len = math.hypot(edge_dx, edge_dy) or 1.0
+        # Right perpendicular (90° CW from edge direction)
+        perp_x = edge_dy / edge_len
+        perp_y = -edge_dx / edge_len
+        lx = int(mid_x + perp_x * _LABEL_PERP)
+        ly = int(mid_y + perp_y * _LABEL_PERP)
+        rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                       "lx": mid_x + 4, "ly": mid_y})
+                       "lx": lx, "ly": ly, "rot": rot})
 
     return result
 
@@ -588,10 +722,22 @@ _WRAP_CHARS = 22  # label wrap threshold
 
 
 def _wrap_label(label: str) -> list[str]:
-    """Split label into lines of max _WRAP_CHARS characters."""
-    if len(label) <= _WRAP_CHARS:
-        return [label]
-    words = label.split()
+    """Split label into lines of max _WRAP_CHARS characters.
+
+    Treats literal \\n (two-char escape) and real newlines as explicit breaks.
+    """
+    # Normalise literal \n escape sequences to real newlines first
+    normalized = label.replace("\\n", "\n")
+    if "\n" in normalized:
+        result: list[str] = []
+        for chunk in normalized.split("\n"):
+            stripped = chunk.strip()
+            if stripped:
+                result.extend(_wrap_label(stripped))
+        return result or [label]
+    if len(normalized) <= _WRAP_CHARS:
+        return [normalized]
+    words = normalized.split()
     lines: list[str] = []
     cur = ""
     for w in words:
@@ -602,7 +748,24 @@ def _wrap_label(label: str) -> list[str]:
             cur = (cur + " " + w).strip()
     if cur:
         lines.append(cur)
-    return lines or [label]
+    return lines or [normalized]
+
+
+def _node_render_h(n: "_Node") -> int:
+    """Return the rendered pixel height of node n (single source of truth).
+
+    Mirrors the height calculation in _render_graph_fragment so that group
+    bounding boxes, canvas height, and LR layout pitch all stay in sync.
+    Uses n.icon (field) rather than _load_icon so it works before rendering.
+    """
+    main_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
+    lines = _wrap_label(main_label)
+    extra_h = max(0, (len(lines) - 1) * 18)
+    if n.icon:
+        extra_h = max(extra_h, 20)
+    if "|" in n.label:
+        extra_h += 16
+    return NODE_H + extra_h
 
 
 def _render_graph_fragment(
@@ -611,6 +774,7 @@ def _render_graph_fragment(
     groups: dict[str, _Group],
     canvas_w: int,
     canvas_h: int,
+    direction: str = "TB",
 ) -> str:
     parts: list[str] = []
 
@@ -628,10 +792,10 @@ def _render_graph_fragment(
         mbrs = [nodes[m] for m in grp.members if m in nodes and not nodes[m].is_dummy]
         if not mbrs:
             continue
-        gx = min(n.x for n in mbrs) - 12
-        gy = min(n.y for n in mbrs) - 24
-        gw = max(n.x + NODE_W for n in mbrs) - gx + 12
-        gh = max(n.y + NODE_H for n in mbrs) - gy + 16
+        gx = min(n.x for n in mbrs) - GROUP_PAD_X
+        gy = min(n.y for n in mbrs) - GROUP_PAD_Y_TOP
+        gw = max(n.x + NODE_W for n in mbrs) - gx + GROUP_PAD_X
+        gh = max(n.y + _node_render_h(n) for n in mbrs) - gy + GROUP_PAD_Y_BOT
         glabel = _h(grp.label)
         parts.append(
             f'<div class="diagram-group" style="'
@@ -656,46 +820,71 @@ def _render_graph_fragment(
             )
             continue
         shape_css = _NODE_CSS.get(n.shape, _NODE_CSS["rect"])
-        lines = _wrap_label(n.label)
-        label_html = "<br>".join(_h(ln) for ln in lines)
+        is_external = n.css_class == "external"
+
+        # Split label on first | for tech stereotype sub-label (e.g. "User Service|Spring Boot")
+        if "|" in n.label:
+            main_label, tech_label = (p.strip() for p in n.label.split("|", 1))
+        else:
+            main_label, tech_label = n.label, ""
+
+        main_lines = _wrap_label(main_label)
+        main_html = "<br>".join(_h(ln) for ln in main_lines)
         icon_svg = _load_icon(n.icon) if n.icon else ""
-        # Extra height for multi-line labels or icon presence
-        extra_h = max(0, (len(lines) - 1) * 18)
-        if icon_svg:
-            extra_h = max(extra_h, 20)  # icon needs extra vertical room
-        node_h = NODE_H + extra_h
+        node_h = _node_render_h(n)
+
+        # Color tokens: dim everything for external nodes
+        fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
+        border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
+
+        tech_span = ""
+        if tech_label:
+            tech_span = (
+                f'<span class="node-tech" style="'
+                f'display:block; font-size:11px; font-weight:400; '
+                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'font-family:var(--label-font,var(--font-primary)); '
+                f'line-height:1.2; margin-top:2px;">'
+                f'{_h(tech_label)}</span>'
+            )
+
         if icon_svg:
             inner = (
                 f'<span class="node-icon" style="'
                 f'display:block;width:20px;height:20px;margin:0 auto 3px;'
-                f'color:var(--node-fg,var(--text-primary));">'
+                f'color:{fg_var};">'
                 f'{icon_svg}</span>'
                 f'<span class="node-label" style="'
                 f'font-size:13px; font-weight:700; '
-                f'color:var(--node-fg,var(--text-primary)); '
+                f'color:{fg_var}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.3;">{label_html}</span>'
+                f'line-height:1.3;">{main_html}</span>'
+                f'{tech_span}'
             )
             flex_dir = "column"
         else:
             inner = (
                 f'<span class="node-label" style="'
                 f'font-size:14px; font-weight:700; '
-                f'color:var(--node-fg,var(--text-primary)); '
+                f'color:{fg_var}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.3;">{label_html}</span>'
+                f'line-height:1.3;">{main_html}</span>'
+                f'{tech_span}'
             )
-            flex_dir = "row"
+            flex_dir = "column" if tech_label else "row"
+
+        extra_cls = f" node-{n.css_class}" if n.css_class else ""
         parts.append(
-            f'<div class="node node-{_h(n.shape)}" style="'
+            f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
             f'position:absolute; left:{n.x}px; top:{n.y}px; '
             f'width:var(--node-w,{NODE_W}px); height:{node_h}px; '
             f'min-width:{NODE_W}px; min-height:{NODE_H}px; '
             f'padding:var(--node-pad-v,12px) var(--node-pad-h,16px); '
             f'box-sizing:border-box; '
-            f'border:1px solid var(--node-border,var(--card-border)); '
+            f'border:1px solid {border_var}; '
             f'{shape_css} '
             f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+            f'box-shadow:var(--node-shadow,none); '
             f'display:flex; flex-direction:{flex_dir}; align-items:center; justify-content:center; '
             f'text-align:center;">'
             f'{inner}</div>'
@@ -708,7 +897,7 @@ def _render_graph_fragment(
         f'overflow:visible; pointer-events:none;">'
     )
 
-    routed = _route_edges(nodes, edges, canvas_w)
+    routed = _route_edges(nodes, edges, canvas_w, direction)
     for spec in routed:
         d = spec["d"]
         style = spec["style"]
@@ -729,18 +918,157 @@ def _render_graph_fragment(
     for spec in routed:
         if spec["label"]:
             lx, ly = spec["lx"], spec["ly"]
+            rot = spec.get("rot", 0)
+            rot_part = f" rotate({rot}deg)" if rot else ""
             parts.append(
                 f'<span class="edge-label" style="'
-                f'position:absolute; left:{lx}px; top:{ly - 9}px; '
+                f'position:absolute; left:{lx}px; top:{ly}px; '
                 f'font-size:11px; font-family:var(--label-font,var(--font-primary)); '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
                 f'background:var(--node-bg-from,var(--card-bg-from)); '
-                f'padding:0 3px; white-space:nowrap; pointer-events:none;">'
+                f'padding:2px 5px; white-space:nowrap; pointer-events:none; '
+                f'transform:translate(-50%,-50%){rot_part};">'
                 f'{_h(spec["label"])}</span>'
             )
 
     parts.append('</div>')
     return "\n".join(parts)
+
+
+# ── diagram metadata + legend helpers ────────────────────────────────────────
+
+_DIRECTIVE_LABELS: dict[str, str] = {
+    "flowchart": "Flowchart", "graph": "Graph",
+    "sequencediagram": "Sequence", "statediagram-v2": "State Machine",
+    "statediagram": "State Machine", "erdiagram": "ER Diagram",
+    "classdiagram": "Class Diagram", "gantt": "Gantt",
+    "timeline": "Timeline", "quadrantchart": "Quadrant",
+    "pie": "Pie Chart", "xychart-beta": "Chart",
+    "mindmap": "Mind Map", "block-beta": "Block",
+    "architecture-beta": "Architecture", "c4context": "C4 Context",
+    "c4container": "C4 Container", "c4component": "C4 Component",
+    "kanban": "Kanban",
+}
+
+
+def _extract_diagram_title(src: str) -> str:
+    """Return the text from a '%% title: <text>' comment, or '' if none present."""
+    for line in src.splitlines():
+        s = line.strip()
+        if s.startswith("%%"):
+            comment = s[2:].strip()
+            if comment.lower().startswith("title:"):
+                return comment[6:].strip()
+    return ""
+
+
+def _render_metadata_chip(directive: str, title: str) -> str:
+    """Return a type-chip + title bar only when a title is explicitly set.
+
+    Omitting the chip for untitled diagrams avoids adding visual chrome to every
+    existing diagram. The type badge only appears alongside a title.
+    """
+    if not title:
+        return ""
+    type_label = _DIRECTIVE_LABELS.get(directive.lower(), "")
+    parts: list[str] = []
+    parts.append(
+        '<div class="diagram-meta" style="'
+        'display:flex; align-items:center; gap:8px; '
+        'margin-bottom:8px; '
+        'font-family:var(--label-font,var(--font-primary));">'
+    )
+    if type_label:
+        parts.append(
+            f'<span class="diagram-type-chip" style="'
+            f'border:1px solid var(--node-fg-dim,var(--text-secondary)); '
+            f'border-radius:4px; padding:1px 6px; '
+            f'font-size:9px; font-weight:700; letter-spacing:0.07em; '
+            f'text-transform:uppercase; '
+            f'color:var(--node-fg-dim,var(--text-secondary));">'
+            f'{_h(type_label)}</span>'
+        )
+    if title:
+        parts.append(
+            f'<span class="diagram-title" style="'
+            f'font-size:11px; font-weight:600; '
+            f'color:var(--node-fg,var(--text-primary));">'
+            f'{_h(title)}</span>'
+        )
+    parts.append('</div>')
+    return "".join(parts)
+
+
+def _render_legend(edges: list[_Edge], groups: dict) -> str:
+    """Return an auto-generated legend row when ≥1 non-solid semantic is present."""
+    has_solid = any(e.style == "solid" for e in edges if not e.reversed_)
+    has_dashed = any(e.style == "dotted" for e in edges)
+    has_thick = any(e.style == "thick" for e in edges)
+    has_groups = bool(groups)
+
+    # Only show legend when there's something non-obvious to explain
+    semantic_count = sum([has_dashed, has_thick, has_groups])
+    if semantic_count == 0:
+        return ""
+
+    items: list[str] = []
+    if has_solid:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10" style="overflow:visible;">'
+            '<line x1="0" y1="5" x2="20" y2="5" '
+            'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+            '<polygon points="20,5 15,2.5 15,7.5" '
+            'fill="var(--edge,var(--card-border))"/>'
+            '</svg>'
+            'Synchronous</span>'
+        )
+    if has_dashed:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10" style="overflow:visible;">'
+            '<line x1="0" y1="5" x2="20" y2="5" '
+            'stroke="var(--edge,var(--card-border))" stroke-width="1.5" '
+            'stroke-dasharray="4 3"/>'
+            '<polygon points="20,5 15,2.5 15,7.5" '
+            'fill="var(--edge,var(--card-border))"/>'
+            '</svg>'
+            'Async / optional</span>'
+        )
+    if has_thick:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10" style="overflow:visible;">'
+            '<line x1="0" y1="5" x2="20" y2="5" '
+            'stroke="var(--edge-strong,var(--accent-1))" stroke-width="2.5"/>'
+            '<polygon points="20,5 15,2.5 15,7.5" '
+            'fill="var(--edge-strong,var(--accent-1))"/>'
+            '</svg>'
+            'Critical path</span>'
+        )
+    if has_groups:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10">'
+            '<rect x="0" y="1" width="20" height="8" rx="2" '
+            'fill="none" stroke="var(--group-border,var(--accent-1))" '
+            'stroke-width="1"/>'
+            '</svg>'
+            'Service boundary</span>'
+        )
+
+    if not items:
+        return ""
+    joined = "\n".join(items)
+    return (
+        '<div class="diagram-legend" style="'
+        'display:flex; flex-wrap:wrap; gap:12px; '
+        'margin-top:8px; '
+        'font-size:10px; font-family:var(--label-font,var(--font-primary)); '
+        'color:var(--node-fg-dim,var(--text-secondary));">'
+        f'{joined}'
+        '</div>'
+    )
 
 
 # ── graph topology strategy ──────────────────────────────────────────────────
@@ -779,18 +1107,37 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
-    canvas_w, canvas_h = _assign_coordinates(nodes)
+    canvas_w, canvas_h = _assign_coordinates(nodes, direction)
 
     # Apply width hint scaling if provided
     if width_hint and canvas_w > 0:
         scale = width_hint / canvas_w
         if scale < 0.95 or scale > 1.05:
-            # Scale all x coordinates
             for n in nodes.values():
                 n.x = int(n.x * scale)
             canvas_w = width_hint
 
-    return _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h)
+    # Recompute canvas_h using actual rendered node heights (Bug 6 fix)
+    real_nodes = [n for n in nodes.values() if not n.is_dummy]
+    if real_nodes:
+        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+
+    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction)
+
+    # Wrap with metadata chip (type + title) and auto-legend
+    directive, _ = _detect_directive(src)
+    title = _extract_diagram_title(src)
+    meta_html = _render_metadata_chip(directive, title)
+    legend_html = _render_legend(edges, groups)
+
+    if meta_html or legend_html:
+        return (
+            '<div class="diagram-wrapper" style="'
+            'font-family:var(--label-font,var(--font-primary));">'
+            f'{meta_html}{fragment}{legend_html}'
+            '</div>'
+        )
+    return fragment
 
 
 # ── helpers shared by T2/T3 ──────────────────────────────────────────────────
@@ -923,13 +1270,13 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
                 f'stroke="var(--edge,var(--card-border))" fill="none" stroke-width="1.5"{dash}/>'
             )
-            ah = _arrowhead(sx, ry + 8, -1, 0)
+            ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
                 f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"{dash}/>'
             )
-            ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0)
+            ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
         parts.append(f'<polygon points="{ah}" fill="var(--edge,var(--card-border))"/>')
         row += 1
     parts.append('</svg>')

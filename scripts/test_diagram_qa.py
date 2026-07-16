@@ -216,6 +216,212 @@ def test_style_and_naming():
     check("_slide_number no match", V._slide_number("foo") is None)
 
 
+def test_mermaid_polish():
+    """Tests for diagram polish features: parse fixes, external class, tech label, legend, metadata."""
+    print("mermaid_polish:")
+    import sys as _sys
+    import re as _re
+    _sys.path.insert(0, str(ROOT / "scripts"))
+    from mermaid_layout import (  # noqa: E402
+        _parse_spec, _parse_spec_and_class, _parse_graph_source, _dispatch,
+        _extract_diagram_title, _render_metadata_chip, _render_legend, _wrap_label,
+        COL_GAP, GROUP_PAD_X, GROUP_PAD_Y_TOP,
+    )
+
+    # AC-1: _parse_spec strips surrounding quotes from rect labels
+    nid, label, shape = _parse_spec('A["My Service"]')
+    check("_parse_spec strips quotes from [\"label\"]", label == "My Service")
+    _, label2, _ = _parse_spec("A['single']")
+    check("_parse_spec strips single quotes", label2 == "single")
+
+    # AC-2b: \n in labels renders as <br> line breaks
+    check("_wrap_label splits on literal \\n escape", _wrap_label("Line 1\\nLine 2") == ["Line 1", "Line 2"])
+    check("_wrap_label splits on real newline", _wrap_label("Line 1\nLine 2") == ["Line 1", "Line 2"])
+    html_nl = _dispatch("flowchart TD\nA[\"First\\nSecond\"] --> B", None, 400)
+    check("\\n in label renders as <br>", "<br>" in html_nl and "First" in html_nl and "Second" in html_nl)
+
+    # AC-2: subgraph ID["Label"] bracket extraction (regression guard)
+    nodes, edges, groups = _parse_graph_source([
+        'subgraph db["Database Layer"]', 'N[x]', 'end'
+    ])
+    grp = list(groups.values())[0]
+    check("subgraph ID[\"Label\"] extracts label text", grp.label == "Database Layer")
+
+    # AC-3: COL_GAP and GROUP_PAD constants are at target values
+    check("COL_GAP is 32px", COL_GAP == 32)
+    check("GROUP_PAD_X is 16px", GROUP_PAD_X == 16)
+    check("GROUP_PAD_Y_TOP is 28px", GROUP_PAD_Y_TOP == 28)
+
+    # AC-4: :::external class parsing
+    _, _, _, css_class = _parse_spec_and_class("A[Service]:::external")
+    check("_parse_spec_and_class extracts :::external", css_class == "external")
+    nodes, _, _ = _parse_graph_source(['A["API"]:::external --> B["DB"]'])
+    check("external class stored on node A", nodes["A"].css_class == "external")
+    check("internal node B has no css_class", nodes["B"].css_class == "")
+
+    # External node renders with dim color on the node-external div itself
+    html = _dispatch("flowchart TD\nA[Ext]:::external --> B[Int]", None, 400)
+    check("external node has node-external CSS class in div", "node-external" in html)
+    # Find the node-external div and check it contains --node-fg-dim in its own style attr
+    ext_match = _re.search(r'<div class="node[^"]*node-external[^"]*" style="([^"]*)"', html)
+    check("external node div style uses --node-fg-dim for border",
+          ext_match is not None and "--node-fg-dim" in ext_match.group(1))
+
+    # AC-5: | tech stereotype sub-label
+    html = _dispatch('flowchart TD\nA["Svc|Spring Boot"] --> B[DB]', None, 400)
+    check("tech sub-label span present", "node-tech" in html)
+    check("tech sub-label text rendered", "Spring Boot" in html)
+    check("main label still rendered", "Svc" in html)
+    # | with surrounding spaces should strip whitespace
+    html_ws = _dispatch('flowchart TD\nA["Svc | Spring Boot"] --> B', None, 400)
+    check("tech label whitespace stripped", "Spring Boot" in html_ws)
+
+    # AC-6: legend auto-generated for mixed edge styles
+    html_mixed = _dispatch("flowchart TD\nA --> B\nA -.- C", None, 400)
+    check("legend present for solid+dashed diagram", "diagram-legend" in html_mixed)
+    check("Async legend item present", "Async" in html_mixed)
+    html_plain = _dispatch("flowchart TD\nA --> B --> C", None, 400)
+    check("legend absent for plain solid-only diagram", "diagram-legend" not in html_plain)
+    html_thick = _dispatch("flowchart TD\nA --> B\nA ==> C", None, 400)
+    check("legend present for solid+thick diagram", "diagram-legend" in html_thick)
+    check("Critical path legend item present", "Critical path" in html_thick)
+    # Single non-solid semantic still triggers legend (no solid edges present)
+    html_dashed_only = _dispatch("flowchart TD\nA -.- B -.- C", None, 400)
+    check("legend present for dashed-only diagram", "diagram-legend" in html_dashed_only)
+
+    # AC-7: metadata chip is title-gated (not added to untitled diagrams)
+    check("_extract_diagram_title finds %% title:", _extract_diagram_title(
+        "%% title: My Arch\nflowchart TD\nA-->B") == "My Arch")
+    check("_extract_diagram_title ignores plain %% comment",
+          _extract_diagram_title("%% define nodes\nflowchart TD\nA-->B") == "")
+    check("_extract_diagram_title returns '' for no comment",
+          _extract_diagram_title("flowchart TD\nA-->B") == "")
+    chip = _render_metadata_chip("flowchart", "My Arch")
+    check("metadata chip contains type label", "Flowchart" in chip)
+    check("metadata chip contains title", "My Arch" in chip)
+    check("metadata chip empty for no title", _render_metadata_chip("flowchart", "") == "")
+    check("metadata chip empty for unknown directive and no title",
+          _render_metadata_chip("unknown_xyz", "") == "")
+    html_titled = _dispatch("%% title: Payments\nflowchart TD\nA-->B", None, 400)
+    check("titled diagram has diagram-meta", "diagram-meta" in html_titled)
+    check("title text in titled diagram output", "Payments" in html_titled)
+    html_untitled = _dispatch("flowchart TD\nA --> B", None, 400)
+    check("untitled diagram has no diagram-meta", "diagram-meta" not in html_untitled)
+
+
+def test_mermaid_routing_polish():
+    """Tests for routing-polish ACs: bracket labels, node height, LR layout, arrowhead, labels."""
+    print("mermaid_routing_polish:")
+    import sys as _sys
+    import math as _math
+    import re as _re
+    _sys.path.insert(0, str(ROOT / "scripts"))
+    from mermaid_layout import (  # noqa: E402
+        _parse_spec, _Node, _node_render_h, _arrowhead, _dispatch,
+        NODE_H, NODE_W,
+    )
+
+    # AC-1: _parse_spec handles bracket characters inside quoted labels
+    _, label_bracket, _ = _parse_spec('NODE["name\\n[inner]"]')
+    check("AC-1: bracket inside quoted label preserved", "[inner]" in label_bracket)
+
+    _, label_simple, _ = _parse_spec('A["Simple"]')
+    check("AC-1: plain quoted label still works", label_simple == "Simple")
+
+    _, label_unquoted, _ = _parse_spec("A[unquoted]")
+    check("AC-1: unquoted label unchanged", label_unquoted == "unquoted")
+
+    # AC-2: _node_render_h reflects extra height for multi-line / icon / tech labels
+    n_single = _Node("x", "one line", "rect")
+    check("AC-2: single-line node height == NODE_H", _node_render_h(n_single) == NODE_H)
+
+    n_multi = _Node("x", "line1\nline2\nline3", "rect")
+    check("AC-2: 3-line node height > NODE_H", _node_render_h(n_multi) > NODE_H)
+
+    n_tech = _Node("x", "Label|Spring Boot", "rect")
+    check("AC-2: tech-label node height > NODE_H", _node_render_h(n_tech) > NODE_H)
+
+    # AC-3: canvas_h reflects multi-line nodes (not fixed formula)
+    html_tall = _dispatch('flowchart TD\nA["L1\\nL2\\nL3\\nL4"] --> B', None, 600)
+    h_match = _re.search(r'height:(\d+)px', html_tall)
+    canvas_h = int(h_match.group(1)) if h_match else 0
+    min_fixed_h = NODE_H * 2 + 60  # conservative floor if fixed formula used
+    check("AC-3: canvas height > conservative fixed floor for tall node", canvas_h > min_fixed_h)
+
+    # AC-4: flowchart LR renders left-to-right (node A left < node B left)
+    html_lr = _dispatch("flowchart LR\nA --> B --> C", None, 800)
+    lefts = [int(m) for m in _re.findall(r'left:(\d+)px', html_lr)]
+    check("AC-4: LR diagram has at least 3 distinct left positions", len(set(lefts)) >= 3)
+    check("AC-4: LR first node x < last node x (left-to-right)", min(lefts) < max(lefts))
+
+    # AC-5: LR layout with multi-line node — no y-overlap between column rows
+    # A["L1\nL2\nL3"] is at col 0; B["L1\nL2\nL3\nL4\nL5"] is at col 1 (same rank 0).
+    # B.top must be >= A.top + _node_render_h(A) so they don't visually overlap.
+    n_a = _Node("A", "L1\nL2\nL3", "rect")
+    n_b = _Node("B", "L1\nL2\nL3\nL4\nL5", "rect")
+    n_a.col = 0; n_a.rank = 0
+    n_b.col = 1; n_b.rank = 0
+    html_lr_tall = _dispatch(
+        'flowchart LR\nA["L1\\nL2\\nL3"] --> C\nB["L1\\nL2\\nL3\\nL4\\nL5"] --> C', None, 800
+    )
+    # Extract top positions of all node divs (class "node")
+    node_tops = sorted(set(int(m) for m in _re.findall(
+        r'class="node[^"]*"[^>]*style="[^"]*top:(\d+)px', html_lr_tall
+    )))
+    check("AC-5: LR multi-line — at least 2 distinct node top values", len(node_tops) >= 2)
+    if len(node_tops) >= 2:
+        gap = node_tops[1] - node_tops[0]
+        min_gap = _node_render_h(n_a)
+        check(f"AC-5: gap between LR rows ({gap}px) >= tallest col-0 node height ({min_gap}px)",
+              gap >= min_gap)
+
+    # AC-6: right_lane_x clears rightmost node by >= 32; verify via back-edge H coordinate
+    html_back = _dispatch("flowchart TD\nA --> B --> C --> A", None, 600)
+    check("AC-6: back-edge diagram renders without error", html_back != "")
+    # The right-lane path is "M x1 y1 H <right_lane_x> V ..." — extract the H value
+    h_coords = [int(m) for m in _re.findall(r'M \d+ \d+ H (\d+) V', html_back)]
+    node_rights = [int(m) + NODE_W for m in _re.findall(r'left:(\d+)px', html_back)]
+    if h_coords and node_rights:
+        check(f"AC-6: right_lane_x ({max(h_coords)}) >= rightmost node edge + 32 ({max(node_rights)+32})",
+              max(h_coords) >= max(node_rights) + 32)
+
+    # AC-7: _arrowhead defaults → half_w=4, back=8
+    pts_normal = _arrowhead(100, 100, 0, 1)
+    pts_xy = [(int(x), int(y)) for x, y in
+              [p.split(",") for p in pts_normal.split()]]
+    tip = pts_xy[0]
+    base_pts = pts_xy[1:]
+    max_perp = max(abs(p[0] - tip[0]) for p in base_pts)
+    check("AC-7: default arrowhead half-width == 4", max_perp == 4)
+
+    pts_thick = _arrowhead(100, 100, 0, 1, back=10, half_w=5)
+    pts_xy_thick = [(int(x), int(y)) for x, y in
+                    [p.split(",") for p in pts_thick.split()]]
+    tip_t = pts_xy_thick[0]
+    max_perp_thick = max(abs(p[0] - tip_t[0]) for p in pts_xy_thick[1:])
+    check("AC-7: thick arrowhead half-width == 5", max_perp_thick == 5)
+
+    pts_life = _arrowhead(100, 100, 0, 1, back=10, half_w=6)
+    pts_xy_life = [(int(x), int(y)) for x, y in
+                   [p.split(",") for p in pts_life.split()]]
+    tip_l = pts_xy_life[0]
+    max_perp_life = max(abs(p[0] - tip_l[0]) for p in pts_xy_life[1:])
+    check("AC-7: lifeline arrowhead half-width == 6", max_perp_life == 6)
+
+    # AC-8: edge labels use translate(-50%,-50%) for centring
+    html_labeled = _dispatch("flowchart TD\nA -->|step| B", None, 400)
+    check("AC-8: edge label translate present", "translate(-50%,-50%)" in html_labeled)
+
+    # AC-8: vertical edge → label has rotate(90deg)
+    # A single straight vertical edge (x1==x2) triggers rot=90
+    html_vert = _dispatch("flowchart TD\nA -->|label| B", None, 400)
+    check("AC-8: vertical edge label has rotate(90deg)", "rotate(90deg)" in html_vert)
+
+    # AC-9: node divs include --node-shadow CSS variable
+    html_shadow = _dispatch("flowchart TD\nA --> B", None, 400)
+    check("AC-9: node div contains --node-shadow variable", "--node-shadow" in html_shadow)
+
+
 def main() -> int:
     test_lint()
     test_visual_qa_html()
@@ -226,6 +432,8 @@ def main() -> int:
     test_light_bg_false_positives()
     test_structural_hex_whitelist()
     test_style_and_naming()
+    test_mermaid_polish()
+    test_mermaid_routing_polish()
     print()
     if FAILS:
         print(f"test_diagram_qa: {len(FAILS)} FAILED")
