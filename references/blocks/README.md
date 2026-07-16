@@ -27,6 +27,19 @@
 | 2x2 战略定位分析 | **matrix_chart** | 象限图是商业决策最直觉的工具 |
 | 责任矩阵/填空工作表/逐日排期表 | **worksheet**（按需加载） | 桌面文档式表格——可在会上逐格签字讨论 |
 | 论证卡/条件列表/相位流/估算斜坡/诚实横幅 | **advisory-brief**（按需加载） | 顾问战略简报——每张卡以一句 so-what 收束 |
+| 双 callout/评分看板/洞察卡/综合主题/热力图/发现追踪/优先级矩阵/AI 成熟度/锚定问题 | **discovery-readout**（按需加载） | 咨询发现汇报原语——证据优先、假设驱动、开放式前瞻问题 |
+
+## discovery-readout 原语（按需加载）
+
+`discovery-readout` 同为**按需注入配方**（非 validator 枚举）：在 `data` / `list` / `text` 卡上写 `resources.block_refs:["discovery-readout"]` 加载 [`blocks/discovery-readout.md`](discovery-readout.md) 的整套"咨询发现汇报"原语，分五组：
+
+- **A. 摘要 & 证据**：双 callout 摘要面板（左色 = 发现、右色 = 含义）· 数字统计看板（5–6 枚等宽大数字 + 大写标签）。
+- **B. 洞察 & 主题**：阶段映射洞察卡网格（3×2，顶边高亮 + SDLC 阶段药丸）· 综合主题卡（深色标题栏 + 观察 + 假设框 + 编号机会）。
+- **C. 方法论 & 前瞻**：方法论三栏网格（编号步骤 / 聚焦领域 / 大数字三栏竖线分隔）· 锚定问题面板（开放式前瞻问题编号左条行）。
+- **D. 分类 & 参考**：AI 成熟度分类（四级横向进阶 + 最高级主色顶边）· 机会类型徽章条（六类 + AI 高亮）· 覆盖热力图（HTML `<table>` 黑表头 + 双色计数药丸）。
+- **E. 追踪 & 优先级**：发现追踪表（深色分组标题行 + 严重性徽章，碳out `#ef4444`/`#b35900`）· 优先级评分矩阵（分组列头 + 1–4 热力色标）· 影响力-投入定位图（SVG 圆点 + HTML 叠加标签，禁 `<text>`）。
+
+全部绑定 deck 契约变量（焦点 = `var(--accent-1)`、次色 = `var(--accent-2)`、纸 = `var(--card-bg-from)`/`var(--card-bg-to)`、墨 = `var(--text-primary)`、规线 = `var(--card-border)`），换风格随 `:root` 改色；与 `dark_professional` / `light_premium` 最契合。**管线安全**：真实 `<div>`/`<table>`、SVG 仅 `<circle>`/`<line>`/`<polygon>`/`<rect>` + HTML 叠加标注（禁 `<text>`）；仅 `findings-tracker` severity 及 `prioritization-scorecard` 热力色是语义信号 hex 碳out。
 
 ## 灵动组合原则
 

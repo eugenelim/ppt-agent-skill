@@ -712,6 +712,132 @@
 
 ---
 
+### SDLC 解决方案泳道图 (swimlane-solution)
+
+**何时用**：垂直泳道——每列代表一个 SDLC 阶段（Planning / Requirements / Design / Build / Test / Deploy），每格内叠放 1–2 张竖向"解决方案概念卡"（简洁标题 + 机会类型徽章）。展示"哪些解决方案概念针对哪些交付阶段"的覆盖图。适合发现汇报的解决方案映射页或战略路线图。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "swimlane-solution",
+  "phases": ["Planning", "Requirements", "Design", "Build", "Test", "Deploy"],
+  "concepts": [
+    {"phase": "Planning",      "title": "AI-assisted planning dashboard",      "types": ["AI", "Tooling"]},
+    {"phase": "Requirements",  "title": "Automated requirements quality gate", "types": ["Process", "AI"]},
+    {"phase": "Requirements",  "title": "Shared authoring workflow",           "types": ["Process"]},
+    {"phase": "Build",         "title": "CI quality signal integration",       "types": ["Tooling", "Automation"]},
+    {"phase": "Build",         "title": "Environment provisioning automation", "types": ["Automation"]},
+    {"phase": "Test",          "title": "Automated regression scoping",        "types": ["AI", "Automation"]},
+    {"phase": "Deploy",        "title": "Deployment readiness checklist",      "types": ["Process", "Governance"]}
+  ]
+}
+```
+
+**HTML 模板**（垂直泳道列 + 叠放解决方案卡 + 类型徽章，禁 SVG `<text>`）：
+```html
+<div class="diagram swimlane-solution" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,8px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --node-accent:var(--accent-1); --node-accent-2:var(--accent-2);
+  --label-font:var(--font-primary);
+  font-family:var(--label-font); width:720px; border:1px solid var(--node-border); border-radius:var(--node-radius); overflow:hidden;">
+
+  <!-- Column headers (SDLC phases) -->
+  <div style="display:grid; grid-template-columns:repeat(6,1fr);">
+    <div style="padding:9px 8px; background:var(--node-fg); font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.11em; color:var(--node-bg-from); text-align:center; border-right:1px solid var(--node-border);">Planning</div>
+    <div style="padding:9px 8px; background:var(--node-fg); font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.11em; color:var(--node-bg-from); text-align:center; border-right:1px solid var(--node-border);">Requirements</div>
+    <div style="padding:9px 8px; background:var(--node-fg); font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.11em; color:var(--node-bg-from); text-align:center; border-right:1px solid var(--node-border);">Design</div>
+    <div style="padding:9px 8px; background:var(--node-fg); font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.11em; color:var(--node-bg-from); text-align:center; border-right:1px solid var(--node-border);">Build</div>
+    <div style="padding:9px 8px; background:var(--node-fg); font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.11em; color:var(--node-bg-from); text-align:center; border-right:1px solid var(--node-border);">Test</div>
+    <div style="padding:9px 8px; background:var(--node-fg); font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.11em; color:var(--node-bg-from); text-align:center;">Deploy</div>
+  </div>
+
+  <!-- Concept card grid row -->
+  <div style="display:grid; grid-template-columns:repeat(6,1fr); align-items:start; min-height:200px;">
+
+    <!-- Planning column -->
+    <div style="padding:10px 8px; border-right:1px solid var(--node-border); display:flex; flex-direction:column; gap:8px; min-height:200px;">
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-accent); border-top:3px solid var(--node-accent); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">AI-assisted planning dashboard</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-accent); color:var(--node-accent);">AI</span>
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Tooling</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Requirements column (2 cards) -->
+    <div style="padding:10px 8px; border-right:1px solid var(--node-border); display:flex; flex-direction:column; gap:8px; min-height:200px;">
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-accent); border-top:3px solid var(--node-accent); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">Automated requirements quality gate</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Process</span>
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-accent); color:var(--node-accent);">AI</span>
+        </div>
+      </div>
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-top:3px solid var(--node-border); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">Shared authoring workflow</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Process</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Design column (empty) -->
+    <div style="padding:10px 8px; border-right:1px solid var(--node-border); min-height:200px; display:flex; align-items:center; justify-content:center;">
+      <span style="font-size:11px; color:var(--node-fg-dim);">—</span>
+    </div>
+
+    <!-- Build column (2 cards) -->
+    <div style="padding:10px 8px; border-right:1px solid var(--node-border); display:flex; flex-direction:column; gap:8px; min-height:200px;">
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-accent); border-top:3px solid var(--node-accent); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">CI quality signal integration</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Tooling</span>
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Automation</span>
+        </div>
+      </div>
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-top:3px solid var(--node-border); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">Environment provisioning automation</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Automation</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test column -->
+    <div style="padding:10px 8px; border-right:1px solid var(--node-border); display:flex; flex-direction:column; gap:8px; min-height:200px;">
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-accent); border-top:3px solid var(--node-accent); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">Automated regression scoping</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-accent); color:var(--node-accent);">AI</span>
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Automation</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deploy column -->
+    <div style="padding:10px 8px; display:flex; flex-direction:column; gap:8px; min-height:200px;">
+      <div style="background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to)); border:1px solid var(--node-border); border-top:3px solid var(--node-border); border-radius:var(--node-radius); padding:9px 10px;">
+        <div style="font-size:11px; font-weight:700; color:var(--node-fg); line-height:1.3; margin-bottom:6px;">Deployment readiness checklist</div>
+        <div style="display:flex; flex-wrap:wrap; gap:3px;">
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Process</span>
+          <span style="font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; padding:1px 5px; border-radius:3px; border:1px solid var(--node-border); color:var(--node-fg-dim);">Governance</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+```
+
+**自检**：列头走 `var(--node-fg)` 深色背景 + `var(--node-bg-from)` 反白字；高优先级方案卡 `3px var(--node-accent)` 顶边 + accent 边框；标准卡 `3px var(--node-border)` 顶边；空列显示 `—` + `var(--node-fg-dim)`；AI 类型徽章走 `var(--node-accent)` 边框+颜色；颜色全走契约变量（无 rgba/hex）。
+
+**管线安全**：真实 CSS grid；无 SVG `<text>`；徽章是真实 `<span>`（非伪元素）；无 `mask-image`/`conic-gradient`/`background-clip:text`。
+
+---
+
 ### 三相位 Roadmap（phase-band-roadmap）
 
 **何时用**：展示三阶段推进计划（基础期→加速期→复利期），每阶段含目标、里程碑点列表，阶段间插入"结果门"（菱形决策点）。适用于工程交付简报、技术转型 deck、组织变革路径图。`graphite_violet` 首推原语；也可用于任何暗色或浅色风格。

@@ -558,3 +558,202 @@
 **自检**：列标题/卡片颜色全用契约变量；活跃列/focus 卡片用 `--node-accent` 突出；完成列用 `--node-accent-2` 或 `--node-fg-dim` 弱化；所有卡片 `box-sizing:border-box`+`min-height`。
 
 **管线安全**：纯 `<div>` 堆叠；无 SVG/箭头（看板无方向箭头需求）；无伪元素装饰内容；无 `mask-image`/`conic-gradient`/`background-clip:text`；颜色全用契约变量。
+
+---
+
+### 交付参与阶段甘特图 (gantt-engagement)
+
+**何时用**：展示多阶段咨询/交付参与计划——三阶段（Discovery / Design / Delivery）用彩色相位标题行分隔，每阶段下含 2–4 个工作流任务条，主色菱形里程碑标注关键交付物。适合参与汇报、交付路线图、项目启动 deck 中的"我们如何推进"页。
+
+**数据格式**：
+```json
+{
+  "card_type": "diagram", "diagram_type": "gantt-engagement",
+  "phases": [
+    {
+      "label": "Discovery", "color_var": "var(--node-accent)",
+      "rows": [
+        {"label": "Stakeholder Interviews", "start": 0, "span": 1},
+        {"label": "Process Mapping",        "start": 0, "span": 2}
+      ]
+    },
+    {
+      "label": "Design", "color_var": "var(--node-accent-2)",
+      "rows": [
+        {"label": "Theme Synthesis", "start": 2, "span": 1},
+        {"label": "Solution Concepts", "start": 3, "span": 1}
+      ]
+    },
+    {
+      "label": "Delivery", "color_var": "var(--node-fg-dim)",
+      "rows": [
+        {"label": "Prioritisation Workshop", "start": 4, "span": 1},
+        {"label": "Readout & Handoff",       "start": 5, "span": 1}
+      ]
+    }
+  ],
+  "total_weeks": 6,
+  "milestones": [
+    {"label": "Kickoff",  "at": 0},
+    {"label": "Synthesis","at": 2},
+    {"label": "Readout",  "at": 5}
+  ]
+}
+```
+
+**模板**（相位标题行 + 任务条 + 主色菱形里程碑，HTML 叠加标注，禁 SVG `<text>`）：
+```html
+<div class="diagram gantt-engagement" style="
+  --node-bg-from:var(--card-bg-from); --node-bg-to:var(--card-bg-to);
+  --node-border:var(--card-border); --node-radius:var(--card-radius,6px);
+  --node-fg:var(--text-primary); --node-fg-dim:var(--text-secondary);
+  --edge:var(--card-border); --node-accent:var(--accent-1);
+  --node-accent-2:var(--accent-2); --label-font:var(--font-primary);
+  font-family:var(--label-font); width:720px;">
+
+  <!-- Week ruler -->
+  <div style="display:flex; margin-left:160px; margin-bottom:4px;">
+    <div style="flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--node-fg-dim); letter-spacing:1px;">Wk 1</div>
+    <div style="flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--node-fg-dim); letter-spacing:1px;">Wk 2</div>
+    <div style="flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--node-fg-dim); letter-spacing:1px;">Wk 3</div>
+    <div style="flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--node-fg-dim); letter-spacing:1px;">Wk 4</div>
+    <div style="flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--node-fg-dim); letter-spacing:1px;">Wk 5</div>
+    <div style="flex:1; text-align:center; font-size:10px; font-weight:700; color:var(--node-fg-dim); letter-spacing:1px;">Wk 6</div>
+  </div>
+
+  <!-- Phase 1: Discovery (accent header row) -->
+  <div style="display:flex; align-items:center; background:var(--node-accent); border-radius:6px 6px 0 0; margin-bottom:2px;">
+    <span style="width:160px; flex-shrink:0; font-size:11px; font-weight:800; letter-spacing:0.10em; text-transform:uppercase; color:var(--node-bg-from); padding:6px 10px 6px 0; text-align:right;">Discovery</span>
+    <div style="flex:6; height:6px;"></div>
+  </div>
+
+  <!-- Discovery rows -->
+  <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; min-height:34px;">
+      <span style="width:152px; flex-shrink:0; font-size:11px; font-weight:600; color:var(--node-fg); padding-right:8px; text-align:right;">Stakeholder Interviews</span>
+      <div style="flex:6; display:grid; grid-template-columns:repeat(6,1fr); position:relative; height:34px;">
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="position:absolute; left:0%; width:16.67%; top:7px; height:20px;
+          background:linear-gradient(90deg,var(--node-bg-from),var(--node-bg-to));
+          border:1px solid var(--node-accent); border-radius:var(--node-radius);
+          box-sizing:border-box; display:flex; align-items:center; padding:0 6px;">
+          <span style="font-size:10px; color:var(--node-fg-dim);">Interviews</span></div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; min-height:34px;">
+      <span style="width:152px; flex-shrink:0; font-size:11px; font-weight:600; color:var(--node-fg); padding-right:8px; text-align:right;">Process Mapping</span>
+      <div style="flex:6; display:grid; grid-template-columns:repeat(6,1fr); position:relative; height:34px;">
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="position:absolute; left:0%; width:33.33%; top:7px; height:20px;
+          background:linear-gradient(90deg,var(--node-bg-from),var(--node-bg-to));
+          border:1px solid var(--node-accent); border-radius:var(--node-radius);
+          box-sizing:border-box; display:flex; align-items:center; padding:0 6px;">
+          <span style="font-size:10px; color:var(--node-fg-dim);">Process Mapping</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2: Design (accent-2 header row) -->
+  <div style="display:flex; align-items:center; background:var(--node-accent-2); border-radius:6px 6px 0 0; margin-bottom:2px;">
+    <span style="width:160px; flex-shrink:0; font-size:11px; font-weight:800; letter-spacing:0.10em; text-transform:uppercase; color:var(--node-bg-from); padding:6px 10px 6px 0; text-align:right;">Design</span>
+    <div style="flex:6; height:6px;"></div>
+  </div>
+
+  <!-- Design rows -->
+  <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; min-height:34px;">
+      <span style="width:152px; flex-shrink:0; font-size:11px; font-weight:600; color:var(--node-fg); padding-right:8px; text-align:right;">Theme Synthesis</span>
+      <div style="flex:6; display:grid; grid-template-columns:repeat(6,1fr); position:relative; height:34px;">
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="position:absolute; left:33.33%; width:16.67%; top:7px; height:20px;
+          background:linear-gradient(90deg,var(--node-bg-from),var(--node-bg-to));
+          border:1px solid var(--node-accent-2); border-radius:var(--node-radius);
+          box-sizing:border-box; display:flex; align-items:center; padding:0 6px;">
+          <span style="font-size:10px; color:var(--node-fg-dim);">Synthesis</span></div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; min-height:34px;">
+      <span style="width:152px; flex-shrink:0; font-size:11px; font-weight:600; color:var(--node-fg); padding-right:8px; text-align:right;">Solution Concepts</span>
+      <div style="flex:6; display:grid; grid-template-columns:repeat(6,1fr); position:relative; height:34px;">
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="position:absolute; left:50%; width:16.67%; top:7px; height:20px;
+          background:linear-gradient(90deg,var(--node-bg-from),var(--node-bg-to));
+          border:1px solid var(--node-accent-2); border-radius:var(--node-radius);
+          box-sizing:border-box; display:flex; align-items:center; padding:0 6px;">
+          <span style="font-size:10px; color:var(--node-fg-dim);">Concepts</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3: Delivery (dim header row) -->
+  <div style="display:flex; align-items:center; background:var(--node-fg-dim); border-radius:6px 6px 0 0; margin-bottom:2px;">
+    <span style="width:160px; flex-shrink:0; font-size:11px; font-weight:800; letter-spacing:0.10em; text-transform:uppercase; color:var(--node-bg-from); padding:6px 10px 6px 0; text-align:right;">Delivery</span>
+    <div style="flex:6; height:6px;"></div>
+  </div>
+
+  <!-- Delivery rows -->
+  <div style="display:flex; flex-direction:column; gap:6px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; min-height:34px;">
+      <span style="width:152px; flex-shrink:0; font-size:11px; font-weight:600; color:var(--node-fg); padding-right:8px; text-align:right;">Prioritisation Workshop</span>
+      <div style="flex:6; display:grid; grid-template-columns:repeat(6,1fr); position:relative; height:34px;">
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="position:absolute; left:66.67%; width:16.67%; top:7px; height:20px;
+          background:linear-gradient(90deg,var(--node-bg-from),var(--node-bg-to));
+          border:1px solid var(--node-border); border-radius:var(--node-radius);
+          box-sizing:border-box; display:flex; align-items:center; padding:0 6px;">
+          <span style="font-size:10px; color:var(--node-fg-dim);">Workshop</span></div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; min-height:34px;">
+      <span style="width:152px; flex-shrink:0; font-size:11px; font-weight:600; color:var(--node-fg); padding-right:8px; text-align:right;">Readout &amp; Handoff</span>
+      <div style="flex:6; display:grid; grid-template-columns:repeat(6,1fr); position:relative; height:34px;">
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="border-left:1px solid var(--edge); opacity:0.3;"></div><div style="border-left:1px solid var(--edge); opacity:0.3;"></div>
+        <div style="position:absolute; left:83.33%; width:16.67%; top:7px; height:20px;
+          background:linear-gradient(90deg,var(--node-bg-from),var(--node-bg-to));
+          border:1px solid var(--node-accent); border-radius:var(--node-radius);
+          box-sizing:border-box; display:flex; align-items:center; padding:0 6px;">
+          <span style="font-size:10px; color:var(--node-fg-dim);">Readout</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Milestones (SVG polygon diamonds + HTML labels, no SVG <text>) -->
+  <div style="position:relative; margin-left:160px; height:36px; margin-top:4px;">
+    <div style="position:absolute; left:0%; top:0; display:flex; flex-direction:column; align-items:center;">
+      <svg viewBox="0 0 14 14" style="width:14px; height:14px; display:block; overflow:visible;">
+        <polygon points="7,1 13,7 7,13 1,7" fill="var(--node-accent)"/>
+      </svg>
+      <span style="font-size:9px; font-weight:700; color:var(--node-accent); margin-top:2px; white-space:nowrap;">Kickoff</span>
+    </div>
+    <div style="position:absolute; left:33.33%; top:0; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center;">
+      <svg viewBox="0 0 14 14" style="width:14px; height:14px; display:block; overflow:visible;">
+        <polygon points="7,1 13,7 7,13 1,7" fill="var(--node-accent)"/>
+      </svg>
+      <span style="font-size:9px; font-weight:700; color:var(--node-accent); margin-top:2px; white-space:nowrap;">Synthesis</span>
+    </div>
+    <div style="position:absolute; left:83.33%; top:0; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center;">
+      <svg viewBox="0 0 14 14" style="width:14px; height:14px; display:block; overflow:visible;">
+        <polygon points="7,1 13,7 7,13 1,7" fill="var(--node-accent)"/>
+      </svg>
+      <span style="font-size:9px; font-weight:700; color:var(--node-accent); margin-top:2px; white-space:nowrap;">Readout</span>
+    </div>
+  </div>
+
+</div>
+```
+
+**自检**：Discovery 标题行走 `var(--node-accent)` 背景 + `var(--node-bg-from)` 文字；Design 走 `var(--node-accent-2)`；Delivery 走 `var(--node-fg-dim)`；任务条边框随相位色；里程碑用 SVG `<polygon>` 菱形 + HTML span 标注（无 SVG `<text>`）；颜色全走契约变量。
+
+**管线安全**：菱形 SVG `<polygon>`；无 SVG `<text>`（标注全是 HTML span）；无伪元素；无 `mask-image`/`conic-gradient`；任务条为真实 `<div>`。
