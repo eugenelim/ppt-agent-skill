@@ -153,6 +153,19 @@ Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic
   node-degradation decision). Fix: run the live e2e once in an environment with
   puppeteer present.
 
+## mermaid-source-bridge
+
+### mermaid-source-bridge-ac3-visual-qa
+
+**AC3 (deferred: mermaid-source-bridge-ac3-visual-qa):** CSS variable inheritance
+check — render `mermaid_layout.py` fragment via `html2png.py` under three `style.json`
+variants (dark/light/editorial) and confirm `visual_qa.py` returns non-FAIL. Blocked
+on `diagram-consistency-system` shipping its recipe family CSS overrides (the themed
+`:root` variable set that the fragment inherits from). Test stub is at
+`docs/specs/mermaid-source-bridge/notes/ac3-deferred-test.sh`. Unblocked when the
+`diagram-consistency-system` spec status reaches `Implementing` and its styled output
+is available in the repo.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

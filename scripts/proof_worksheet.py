@@ -178,6 +178,22 @@ def render_card_row(card: dict) -> str:
     if isinstance(image, dict) and image.get("needed"):
         img = " ".join(str(x) for x in (image.get("usage"), image.get("content_description")) if x)
         content_bits.append(f'<div class="src">img: {esc(img)}</div>')
+    # diagram_source.mermaid_source — show topology for proof review
+    ds = card.get("diagram_source")
+    if isinstance(ds, dict):
+        ms = ds.get("mermaid_source")
+        if isinstance(ms, str) and ms.strip():
+            src_ref = ds.get("source_ref") or ""
+            fence_idx = ds.get("fence_index")
+            meta = ""
+            if src_ref:
+                meta += f" · {esc(src_ref)}"
+            if isinstance(fence_idx, int):
+                meta += f" · fence {fence_idx}"
+            content_bits.append(
+                f'<div class="mermaid-src-label">mermaid source{meta}</div>'
+                f'<pre class="mermaid-src"><code>```mermaid\n{esc(ms.strip())}\n```</code></pre>'
+            )
 
     marker = source_marker(card)
     if marker == "ok":

@@ -471,6 +471,242 @@ def phase5_e2e_tests(style_filter: str = None) -> dict:
 
 
 # -------------------------------------------------------------------
+# Phase 2: mermaid_layout.py tests
+# -------------------------------------------------------------------
+
+def phase2_mermaid_layout_tests() -> dict:
+    """Phase 2: mermaid_layout.py — parser, determinism, pipeline-safety, cap enforcement."""
+    import subprocess
+    import tempfile
+
+    results = {
+        "phase": 2,
+        "mermaid": [],
+        "summary": {"pass": 0, "fail": 0, "warn": 0},
+    }
+
+    def _pass(name: str, detail: str = "") -> None:
+        results["mermaid"].append({"name": name, "status": "pass", "detail": detail})
+        results["summary"]["pass"] += 1
+
+    def _fail(name: str, detail: str) -> None:
+        results["mermaid"].append({"name": name, "status": "fail", "detail": detail})
+        results["summary"]["fail"] += 1
+
+    ml = ROOT / "scripts" / "mermaid_layout.py"
+
+    def _run(src: str, extra: list[str] | None = None) -> tuple[int, str]:
+        cmd = ["python3", str(ml), "--source", src] + (extra or [])
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        return r.returncode, r.stdout + r.stderr
+
+    # ── Parser correctness ─────────────────────────────────────────
+    rc, out = _run("flowchart TB\\n  A[Start] --> B[End]")
+    if rc == 0 and 'class="node ' in out and "<polygon" in out:
+        _pass("parser-flowchart-tb", "TB flowchart with polygon arrowhead")
+    else:
+        _fail("parser-flowchart-tb", out[:200])
+
+    rc, out = _run("flowchart LR\\n  A --> B --> C")
+    if rc == 0 and out.count('class="node ') >= 3:
+        _pass("parser-chain-lr", "3-node LR chain")
+    else:
+        _fail("parser-chain-lr", out[:200])
+
+    rc, out = _run(
+        "flowchart TB\\n  subgraph G\\n    A[Node] --> B{Decision}\\n  end\\n  B --> C[(Db)]"
+    )
+    if rc == 0 and "diagram-group" in out and "node-diamond" in out and "node-cylinder" in out:
+        _pass("parser-shapes-subgraph", "subgraph + diamond + cylinder shapes")
+    else:
+        _fail("parser-shapes-subgraph", out[:200])
+
+    rc, out = _run("flowchart TB\\n  A --> B\\n  B -.-> C\\n  B ==> D")
+    if rc == 0 and "stroke-dasharray" in out:
+        _pass("parser-edge-styles", "dotted edge produces stroke-dasharray")
+    else:
+        _fail("parser-edge-styles", out[:200])
+
+    rc, out = _run("flowchart TB\\n  A -->|label| B")
+    if rc == 0 and "label" in out.lower() and 'class="edge-label"' in out:
+        _pass("parser-edge-label", "edge label produces edge-label span")
+    else:
+        _fail("parser-edge-label", out[:200])
+
+    # Cycle (back-edge) — should not raise, should exit 0
+    rc, out = _run("flowchart TB\\n  A --> B\\n  B --> C\\n  C --> A")
+    if rc == 0:
+        _pass("parser-cycle", "cycle exits 0 (back-edge reversed)")
+    else:
+        _fail("parser-cycle", out[:200])
+
+    # stateDiagram
+    rc, out = _run("stateDiagram-v2\\n  [*] --> Active\\n  Active --> [*]")
+    if rc == 0 and 'class="node ' in out:
+        _pass("parser-statediagram", "stateDiagram-v2 exits 0")
+    else:
+        _fail("parser-statediagram", out[:200])
+
+    # ── T2/T3 directive coverage (with per-type observable assertion) ──────────
+    # Each entry: (name, src, assertion_fn, assertion_desc)
+    def _nodes(o: str) -> int:
+        return o.count('class="node ')
+    def _polygons(o: str) -> int:
+        return o.count('<polygon ')
+
+    t2_t3 = [
+        ("sequenceDiagram",
+         'sequenceDiagram\\n  Alice->>Bob: hi\\n  Bob-->>Alice: ok',
+         lambda o: _nodes(o) >= 2, "≥2 participant nodes"),
+        ("erDiagram",
+         'erDiagram\\n  A ||--o{ B : rel',
+         lambda o: _nodes(o) >= 2, "≥2 entity nodes"),
+        ("classDiagram",
+         'classDiagram\\n  X <|-- Y',
+         lambda o: _nodes(o) >= 2, "≥2 class nodes"),
+        ("gantt",
+         'gantt\\n  section S\\n  T1 : done, 2024-01-01, 1d',
+         lambda o: "Task" in o or "T1" in o, "task content present"),
+        ("timeline",
+         'timeline\\n  2020 : E1',
+         lambda o: "2020" in o, "period label present"),
+        ("quadrantChart",
+         'quadrantChart\\n  P : [0.5, 0.5]',
+         lambda o: _polygons(o) >= 1, "≥1 data point polygon"),
+        ("pie",
+         'pie\\n  "A" : 60\\n  "B" : 40',
+         lambda o: _polygons(o) >= 2, "≥2 sector polygons"),
+        ("xychart-beta",
+         'xychart-beta\\n  x-axis ["X"]\\n  bar [5]',
+         lambda o: "accent-1" in o, "bar uses accent color"),
+        ("mindmap",
+         'mindmap\\n  root\\n    Branch',
+         lambda o: "root" in o and "Branch" in o, "root + branch labels present"),
+        ("block-beta",
+         'block-beta\\n  A["Box"]',
+         lambda o: _nodes(o) >= 1, "≥1 block node"),
+        ("packet-beta",
+         'packet-beta\\n  0-7: F1\\n  8-15: F2',
+         lambda o: o.count('node-rect') >= 2, "≥2 field cells"),
+        ("kanban",
+         'kanban\\n  Todo\\n    Task1',
+         lambda o: "Todo" in o and "Task1" in o, "column + card labels present"),
+        ("architecture-beta",
+         'architecture-beta\\n  service a(s)[A]\\n  service b(d)[B]\\n  a --> b',
+         lambda o: _nodes(o) >= 2, "≥2 service nodes"),
+        ("C4Context",
+         'C4Context\\n  Person(u, "U")\\n  System(s, "S")\\n  Rel(u, s, "uses")',
+         lambda o: _nodes(o) >= 2, "≥2 C4 elements"),
+    ]
+    for name, src, assert_fn, assert_desc in t2_t3:
+        rc, out = _run(src)
+        if rc == 0 and "diagram mermaid-layout" in out and assert_fn(out):
+            _pass(f"directive-{name}", f"{name} — {assert_desc}")
+        elif rc != 0 or "diagram mermaid-layout" not in out:
+            _fail(f"directive-{name}", f"exit {rc}: {out[:200]}")
+        else:
+            _fail(f"directive-{name}", f"assertion failed ({assert_desc}): {out[:200]}")
+
+    # ── Layout determinism ─────────────────────────────────────────
+    src_det = "flowchart TB\\n  A-->B\\n  A-->C\\n  B-->D\\n  C-->D"
+    _, out1 = _run(src_det)
+    _, out2 = _run(src_det)
+    if out1 == out2:
+        _pass("determinism", "two runs produce byte-identical output")
+    else:
+        _fail("determinism", f"outputs differ: {len(out1)} vs {len(out2)} bytes")
+
+    # ── Pipeline-safety greps ──────────────────────────────────────
+    rc, out = _run("flowchart LR\\n  A[Src]-->|go| B[Dst]")
+    import re as _re
+    # Strip allowed hex constants before checking for hardcoded color hex
+    out_scrubbed = out.replace("#22c55e", "").replace("#ef4444", "")
+    checks = [
+        ("no-svg-text", "<text" not in out),
+        ("has-polygon", "<polygon" in out),
+        ("no-pseudo-elem", "::before" not in out and "::after" not in out),
+        ("no-mask-image", "mask-image" not in out),
+        ("no-dashoffset", "stroke-dashoffset" not in out),
+        ("css-vars-only", "var(--" in out),
+        ("no-hardcoded-hex", not _re.search(r'#[0-9a-fA-F]{3,6}\b', out_scrubbed)),
+        ("no-css-triangle", not _re.search(
+            r'border-(left|right|top|bottom):[^;]*transparent', out)),
+    ]
+    for cname, ok in checks:
+        if ok:
+            _pass(f"pipeline-{cname}")
+        else:
+            _fail(f"pipeline-{cname}", f"violation in output (first 200): {out[:200]}")
+
+    # ── Cap enforcement ────────────────────────────────────────────
+    # Exactly 64 nodes → exit 0
+    nodes_64 = "\\n  ".join(f"N{i}" for i in range(64))   # N0..N63 = 64 nodes
+    edges_64 = "\\n  ".join(f"N{i}-->N{i+1}" for i in range(63))  # 63 edges
+    src_64 = f"flowchart TB\\n  {nodes_64}\\n  {edges_64}"
+    rc, _ = _run(src_64)
+    if rc == 0:
+        _pass("cap-64-nodes-pass", "exactly 64 nodes exits 0 (boundary)")
+    else:
+        _fail("cap-64-nodes-pass", f"exit {rc}")
+
+    # 65 nodes → exit 1
+    nodes_65 = "\\n  ".join(f"N{i}" for i in range(65))
+    src_65 = f"flowchart TB\\n  {nodes_65}"
+    rc, _ = _run(src_65)
+    if rc != 0:
+        _pass("cap-65-nodes-fail", "65-node diagram exits non-zero")
+    else:
+        _fail("cap-65-nodes-fail", "expected exit 1, got 0")
+
+    # ── @file source ──────────────────────────────────────────────
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".mmd", delete=False) as f:
+        f.write("flowchart TB\n  X --> Y\n")
+        tmp = f.name
+    try:
+        cmd = ["python3", str(ml), "--source", f"@{tmp}"]
+        r = subprocess.run(cmd, capture_output=True, text=True)
+        if r.returncode == 0 and "diagram mermaid-layout" in r.stdout:
+            _pass("cli-at-file", "@file source reads from disk")
+        else:
+            _fail("cli-at-file", r.stderr[:200])
+    finally:
+        import os; os.unlink(tmp)
+
+    # ── Exit-1 clean-error path ────────────────────────────────────
+    malformed = [
+        ("pie-zero-total", 'pie\\n  "A" : 0\\n  "B" : 0'),
+        ("packet-reversed-range", 'packet-beta\\n  15-0: BadField'),
+        ("cap-65-edges", "flowchart TB\\n  " + "\\n  ".join(
+            f"A{i}-->A{i+1}" for i in range(130))),  # 130 edges > 128 cap
+    ]
+    for name, src in malformed:
+        r = subprocess.run(["python3", str(ml), "--source", src],
+                           capture_output=True, text=True)
+        if r.returncode != 0 and "Traceback" not in r.stderr:
+            _pass(f"error-{name}", "exits 1 with clean message")
+        elif r.returncode == 0:
+            _fail(f"error-{name}", f"expected exit 1, got 0")
+        else:
+            _fail(f"error-{name}", f"exit 1 but Traceback in stderr: {r.stderr[:200]}")
+
+    # ── Determinism — T2/T3 representative types ──────────────────
+    det_t2t3 = [
+        ("seq-det", 'sequenceDiagram\\n  A->>B: msg\\n  B-->>A: reply'),
+        ("pie-det", 'pie\\n  "X" : 40\\n  "Y" : 60'),
+        ("er-det", 'erDiagram\\n  P ||--o{ O : has\\n  O }o--|| I : in'),
+    ]
+    for name, src in det_t2t3:
+        _, o1 = _run(src)
+        _, o2 = _run(src)
+        if o1 == o2:
+            _pass(f"determinism-{name}", "byte-identical on two runs")
+        else:
+            _fail(f"determinism-{name}", f"outputs differ: {len(o1)} vs {len(o2)} bytes")
+
+    return results
+
+
+# -------------------------------------------------------------------
 # 报告生成
 # -------------------------------------------------------------------
 
@@ -490,6 +726,16 @@ def generate_report(results: dict, out_dir: Path):
 
     if "error" in results:
         lines += [f"## ❌ 全局错误", "", f"```", results["error"], "```", ""]
+
+    # Mermaid layout tests
+    ml_tests = results.get("mermaid", [])
+    if ml_tests:
+        lines += ["## mermaid_layout.py 测试 (Phase 2)", ""]
+        for t in ml_tests:
+            icon = "✅" if t["status"] == "pass" else "❌"
+            lines.append(f"- {icon} `{t['name']}`"
+                         + (f" — {t['detail']}" if t["status"] != "pass" and t.get("detail") else ""))
+        lines.append("")
 
     # Style validation
     sv = results.get("style_validation", {})
@@ -596,7 +842,7 @@ def main():
     parser = argparse.ArgumentParser(description="PPT Agent Smoke Test")
     parser.add_argument("--style", help="只测试指定 style_id")
     parser.add_argument("--phase", type=int, default=1, choices=[0, 1, 2, 3, 4, 5],
-                       help="只跑指定 Phase 测试 (0=check_skill, 1=style+pipeline-compat, 5=e2e)")
+                       help="只跑指定 Phase 测试 (0=check_skill, 1=style+pipeline-compat, 2=mermaid_layout, 5=e2e)")
     parser.add_argument("--quiet", action="store_true", help="只输出失败")
     parser.add_argument("--max-warn", type=int, default=None,
                        help="警告预算：当 summary.warn 超过 N 时以非零退出（默认不启用）。"
@@ -608,6 +854,8 @@ def main():
 
     if args.phase == 1:
         results = phase1_tests(style_filter=args.style)
+    elif args.phase == 2:
+        results = phase2_mermaid_layout_tests()
     elif args.phase == 5:
         results = phase5_e2e_tests(style_filter=args.style)
     elif args.phase == 0:
