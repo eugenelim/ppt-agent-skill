@@ -1,0 +1,386 @@
+from __future__ import annotations
+
+import re
+from html import escape as _h
+
+from ._constants import (
+    _Node, _Edge, _Group,
+    NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
+    GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
+    _NODE_H_LINE, _NODE_H_ICON, _NODE_H_TECH,
+    _load_icon, _wrap_label, _node_render_h,
+)
+from ._routing import _route_edges
+
+# ── HTML renderer (graph topology) ───────────────────────────────────────────
+
+_NODE_CSS = {
+    "rect": "border-radius:var(--node-radius,8px);",
+    "round": "border-radius:28px;",
+    # diamond uses clip-path to avoid rotating the label
+    "diamond": "border-radius:4px; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
+    "cylinder": "border-radius:8px 8px 2px 2px; border-top:2px solid var(--node-border);",
+    "circle": "border-radius:50%;",
+    "flag": "border-radius:0 8px 8px 0;",
+}
+
+
+def _render_graph_fragment(
+    nodes: dict[str, _Node],
+    edges: list[_Edge],
+    groups: dict[str, _Group],
+    canvas_w: int,
+    canvas_h: int,
+    direction: str = "TB",
+    zoom: float = 1.0,
+) -> str:
+    parts: list[str] = []
+
+    # Container — zoom scales the whole diagram proportionally when it exceeds
+    # the width hint, preserving geometry without distorting node sizes or gaps.
+    zoom_css = f" zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
+    parts.append(
+        f'<div class="diagram mermaid-layout" style="'
+        f'position:relative; width:{canvas_w}px; height:{canvas_h}px; '
+        f'--node-w:{NODE_W}px; --node-h:{NODE_H}px; '
+        f'--rank-gap:{RANK_GAP}px; --col-gap:{COL_GAP}px; '
+        f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}">'
+    )
+
+    # Group containers (subgraphs)
+    for gid, grp in groups.items():
+        mbrs = [nodes[m] for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            continue
+        gx = min(n.x for n in mbrs) - GROUP_PAD_X
+        gy = min(n.y for n in mbrs) - GROUP_PAD_Y_TOP
+        gw = max(n.x + NODE_W for n in mbrs) - gx + GROUP_PAD_X
+        gh = max(n.y + _node_render_h(n) for n in mbrs) - gy + GROUP_PAD_Y_BOT
+        glabel = _h(grp.label)
+        parts.append(
+            f'<div class="diagram-group" style="'
+            f'position:absolute; left:{gx}px; top:{gy}px; '
+            f'width:{gw}px; height:{gh}px; '
+            f'border:1px solid var(--group-border,var(--accent-1)); '
+            f'border-radius:var(--group-radius,12px); '
+            f'box-sizing:border-box;">'
+            f'<span class="group-label" style="'
+            f'position:absolute; top:4px; left:8px; '
+            f'font-size:10px; color:var(--node-fg-dim,var(--text-secondary)); '
+            f'font-family:var(--label-font,var(--font-primary));">'
+            f'{glabel}</span></div>'
+        )
+
+    # Node divs
+    for nid, n in nodes.items():
+        if n.is_dummy:
+            parts.append(
+                f'<div style="position:absolute; left:{n.x}px; top:{n.y}px; '
+                f'width:0; height:0; overflow:hidden;"></div>'
+            )
+            continue
+        shape_css = _NODE_CSS.get(n.shape, _NODE_CSS["rect"])
+        is_external = n.css_class == "external"
+
+        # Split label on first | for tech stereotype sub-label (e.g. "User Service|Spring Boot")
+        if "|" in n.label:
+            main_label, tech_label = (p.strip() for p in n.label.split("|", 1))
+        else:
+            main_label, tech_label = n.label, ""
+
+        main_lines = _wrap_label(main_label)
+        main_html = "<br>".join(_h(ln) for ln in main_lines)
+        icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
+        node_h = _node_render_h(n)
+
+        # Color tokens: dim external nodes; accent the title for normal nodes
+        fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
+        border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
+        # Title uses accent-1 so it reads differently from the card body background
+        title_color = fg_var if is_external else "var(--node-title-fg,var(--accent-1))"
+
+        tech_span = ""
+        if tech_label:
+            tech_span = (
+                f'<span class="node-tech" style="'
+                f'display:block; font-size:11px; font-weight:400; '
+                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'font-family:var(--label-font,var(--font-primary)); '
+                f'line-height:1.2; margin-top:2px;">'
+                f'{_h(tech_label)}</span>'
+            )
+
+        if icon_svg:
+            inner = (
+                f'<span class="node-icon" style="'
+                f'display:block;width:20px;height:20px;margin:0 auto 3px;'
+                f'color:{title_color};">'
+                f'{icon_svg}</span>'
+                f'<span class="node-label" style="'
+                f'font-size:13px; font-weight:700; '
+                f'color:{title_color}; '
+                f'font-family:var(--label-font,var(--font-primary)); '
+                f'line-height:1.4;">{main_html}</span>'
+                f'{tech_span}'
+            )
+            flex_dir = "column"
+        else:
+            inner = (
+                f'<span class="node-label" style="'
+                f'font-size:14px; font-weight:700; '
+                f'color:{title_color}; '
+                f'font-family:var(--label-font,var(--font-primary)); '
+                f'line-height:1.4;">{main_html}</span>'
+                f'{tech_span}'
+            )
+            flex_dir = "column"
+
+        extra_cls = f" node-{n.css_class}" if n.css_class else ""
+        parts.append(
+            f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
+            f'position:absolute; left:{n.x}px; top:{n.y}px; '
+            f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
+            f'min-width:{NODE_W}px; '
+            f'padding:var(--node-pad-v,14px) var(--node-pad-h,20px); '
+            f'box-sizing:border-box; '
+            f'border:1px solid {border_var}; '
+            f'{shape_css} '
+            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+            f'box-shadow:var(--node-shadow,none); '
+            f'display:flex; flex-direction:{flex_dir}; align-items:center; justify-content:center; '
+            f'text-align:center;">'
+            f'{inner}</div>'
+        )
+
+    # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below
+    parts.append(
+        f'<svg style="position:absolute; inset:0; '
+        f'width:{canvas_w}px; height:{canvas_h}px; '
+        f'overflow:visible; pointer-events:none;">'
+    )
+
+    routed = _route_edges(nodes, edges, canvas_w, direction)
+    for spec in routed:
+        d = spec["d"]
+        style = spec["style"]
+        stroke_color = "var(--edge-strong,var(--accent-1))" if style == "thick" else "var(--edge,var(--card-border))"
+        dash = ' stroke-dasharray="6 4"' if style == "dotted" else ""
+        parts.append(
+            f'<path d="{d}" stroke="{stroke_color}" fill="none" '
+            f'stroke-width="1.5"{dash}/>'
+        )
+        if spec["ah"]:
+            parts.append(
+                f'<polygon points="{spec["ah"]}" fill="{stroke_color}"/>'
+            )
+
+    parts.append('</svg>')
+
+    # Edge labels as absolutely-positioned HTML siblings (not inside SVG)
+    for spec in routed:
+        if spec["label"]:
+            lx, ly = spec["lx"], spec["ly"]
+            rot = spec.get("rot", 0)
+            rot_part = f" rotate({rot}deg)" if rot else ""
+            parts.append(
+                f'<span class="edge-label" style="'
+                f'position:absolute; left:{lx}px; top:{ly}px; '
+                f'font-size:11px; font-family:var(--label-font,var(--font-primary)); '
+                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'background:var(--node-bg-from,var(--card-bg-from)); '
+                f'padding:2px 5px; white-space:nowrap; pointer-events:none; '
+                f'transform:translate(-50%,-50%){rot_part};">'
+                f'{_h(spec["label"])}</span>'
+            )
+
+    parts.append('</div>')
+    return "\n".join(parts)
+
+
+# ── diagram metadata + legend helpers ────────────────────────────────────────
+
+_DIRECTIVE_LABELS: dict[str, str] = {
+    "flowchart": "Flowchart", "graph": "Graph",
+    "sequencediagram": "Sequence", "statediagram-v2": "State Machine",
+    "statediagram": "State Machine", "erdiagram": "ER Diagram",
+    "classdiagram": "Class Diagram", "gantt": "Gantt",
+    "timeline": "Timeline", "quadrantchart": "Quadrant",
+    "pie": "Pie Chart", "xychart-beta": "Chart",
+    "mindmap": "Mind Map", "block-beta": "Block",
+    "architecture-beta": "Architecture", "c4context": "C4 Context",
+    "c4container": "C4 Container", "c4component": "C4 Component",
+    "kanban": "Kanban",
+}
+
+
+def _extract_diagram_title(src: str) -> str:
+    """Return the text from a '%% title: <text>' comment, or '' if none present."""
+    for line in src.splitlines():
+        s = line.strip()
+        if s.startswith("%%"):
+            comment = s[2:].strip()
+            if comment.lower().startswith("title:"):
+                return comment[6:].strip()
+    return ""
+
+
+def _render_metadata_chip(directive: str, title: str) -> str:
+    """Return a type-chip + title bar only when a title is explicitly set.
+
+    Omitting the chip for untitled diagrams avoids adding visual chrome to every
+    existing diagram. The type badge only appears alongside a title.
+    """
+    if not title:
+        return ""
+    type_label = _DIRECTIVE_LABELS.get(directive.lower(), "")
+    parts: list[str] = []
+    parts.append(
+        '<div class="diagram-meta" style="'
+        'display:flex; align-items:center; gap:8px; '
+        'margin-bottom:8px; '
+        'font-family:var(--label-font,var(--font-primary));">'
+    )
+    if type_label:
+        parts.append(
+            f'<span class="diagram-type-chip" style="'
+            f'border:1px solid var(--node-fg-dim,var(--text-secondary)); '
+            f'border-radius:4px; padding:1px 6px; '
+            f'font-size:9px; font-weight:700; letter-spacing:0.07em; '
+            f'text-transform:uppercase; '
+            f'color:var(--node-fg-dim,var(--text-secondary));">'
+            f'{_h(type_label)}</span>'
+        )
+    if title:
+        parts.append(
+            f'<span class="diagram-title" style="'
+            f'font-size:11px; font-weight:600; '
+            f'color:var(--node-fg,var(--text-primary));">'
+            f'{_h(title)}</span>'
+        )
+    parts.append('</div>')
+    return "".join(parts)
+
+
+def _render_legend(edges: list[_Edge], groups: dict) -> str:
+    """Return an auto-generated legend row when ≥1 non-solid semantic is present."""
+    has_solid = any(e.style == "solid" for e in edges if not e.reversed_)
+    has_dashed = any(e.style == "dotted" for e in edges)
+    has_thick = any(e.style == "thick" for e in edges)
+    has_groups = bool(groups)
+
+    # Only show legend when there's something non-obvious to explain
+    semantic_count = sum([has_dashed, has_thick, has_groups])
+    if semantic_count == 0:
+        return ""
+
+    items: list[str] = []
+    if has_solid:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10" style="overflow:visible;">'
+            '<line x1="0" y1="5" x2="20" y2="5" '
+            'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+            '<polygon points="20,5 15,2.5 15,7.5" '
+            'fill="var(--edge,var(--card-border))"/>'
+            '</svg>'
+            'Synchronous</span>'
+        )
+    if has_dashed:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10" style="overflow:visible;">'
+            '<line x1="0" y1="5" x2="20" y2="5" '
+            'stroke="var(--edge,var(--card-border))" stroke-width="1.5" '
+            'stroke-dasharray="4 3"/>'
+            '<polygon points="20,5 15,2.5 15,7.5" '
+            'fill="var(--edge,var(--card-border))"/>'
+            '</svg>'
+            'Async / optional</span>'
+        )
+    if has_thick:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10" style="overflow:visible;">'
+            '<line x1="0" y1="5" x2="20" y2="5" '
+            'stroke="var(--edge-strong,var(--accent-1))" stroke-width="2.5"/>'
+            '<polygon points="20,5 15,2.5 15,7.5" '
+            'fill="var(--edge-strong,var(--accent-1))"/>'
+            '</svg>'
+            'Critical path</span>'
+        )
+    if has_groups:
+        items.append(
+            '<span style="display:flex;align-items:center;gap:4px;">'
+            '<svg width="20" height="10">'
+            '<rect x="0" y="1" width="20" height="8" rx="2" '
+            'fill="none" stroke="var(--group-border,var(--accent-1))" '
+            'stroke-width="1"/>'
+            '</svg>'
+            'Service boundary</span>'
+        )
+
+    if not items:
+        return ""
+    joined = "\n".join(items)
+    return (
+        '<div class="diagram-legend" style="'
+        'display:flex; flex-wrap:wrap; gap:12px; '
+        'padding-top:8px; '
+        'border-top:1px solid var(--node-fg-dim,var(--card-border)); '
+        'margin-top:0; '
+        'font-size:10px; font-family:var(--label-font,var(--font-primary)); '
+        'color:var(--node-fg-dim,var(--text-secondary));">'
+        f'{joined}'
+        '</div>'
+    )
+
+
+# ── group overlap resolution ─────────────────────────────────────────────────
+
+def _separate_groups_lr(
+    nodes: dict[str, "_Node"],
+    groups: dict[str, "_Group"],
+) -> None:
+    """Iteratively push overlapping group bounding boxes apart vertically (LR mode only).
+
+    When two groups overlap in both x and y, the lower group is shifted down by the
+    overlap depth + COL_GAP. Runs up to GROUP_CAP passes; stops early when stable.
+    """
+
+    def _bbox(gid: str) -> dict | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return {
+            "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+            "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
+            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+        }
+
+    for _pass in range(GROUP_CAP):
+        boxes = {gid: _bbox(gid) for gid in groups}
+        boxes = {gid: b for gid, b in boxes.items() if b is not None}
+        if not boxes:
+            break
+
+        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gy"])
+        moved = False
+        for i, gid1 in enumerate(sorted_gids):
+            b1 = boxes[gid1]
+            for gid2 in sorted_gids[i + 1:]:
+                b2 = boxes[gid2]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
+                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
+                if x_overlap and y_overlap:
+                    shift = b1["gy_bot"] - b2["gy"] + COL_GAP
+                    for nid in groups[gid2].members:
+                        if nid in nodes:
+                            nodes[nid].y += shift
+                    moved = True
+                    break
+            if moved:
+                break
+        if not moved:
+            break
+

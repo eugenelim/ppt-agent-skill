@@ -276,8 +276,8 @@ def _node_available() -> bool:
 # ── Fragment generation ───────────────────────────────────────────────────────
 
 def _render_fragment(source: str) -> tuple[bool, str]:
-    """Run mermaid_layout.py and return (ok, html_fragment_or_error)."""
-    ml = ROOT / "scripts" / "mermaid_layout.py"
+    """Run mermaid_layout and return (ok, html_fragment_or_error)."""
+    ml = ROOT / "scripts" / "mermaid_layout"
     r = subprocess.run(
         [sys.executable, str(ml), "--source", source, "--width-hint", "840"],
         capture_output=True, text=True, timeout=30
@@ -445,7 +445,7 @@ def main() -> int:
         if tmp_path is None:
             # mermaid_layout failed to render
             findings = [Finding(case=case.name, check_id="DIAG-00", severity="FAIL",
-                                detail=f"mermaid_layout.py failed: {render_error[:100]}")]
+                                detail=f"mermaid_layout failed: {render_error[:100]}")]
         elif case.name not in dom_results:
             findings = [Finding(case=case.name, check_id="DIAG-00", severity="FAIL",
                                 detail="Puppeteer did not return DOM result for this case")]

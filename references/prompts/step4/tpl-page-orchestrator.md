@@ -53,7 +53,7 @@ sys.stdout.write(src or '')
    ```
    - 若 `/tmp/diag-src-{{PAGE_NUM}}.mmd` 非空（`-s` 检测）：
      ```bash
-     python3 {{SKILL_DIR}}/scripts/mermaid_layout.py \
+     python3 {{SKILL_DIR}}/scripts/mermaid_layout \
        --source @/tmp/diag-src-{{PAGE_NUM}}.mmd \
        --output /tmp/diagram-fragment-{{PAGE_NUM}}.html
      ```
