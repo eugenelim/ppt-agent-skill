@@ -321,6 +321,7 @@ def phase1_tests(style_filter: str = None) -> dict:
         ("slide_montage", [sys.executable, str(ROOT / "scripts" / "test_slide_montage.py")]),
         ("html2png_cwd", [sys.executable, str(ROOT / "scripts" / "test_html2png_cwd.py")]),
         ("render_gate", [sys.executable, str(ROOT / "scripts" / "test_render_gate.py")]),
+        ("diagram_render_check", [sys.executable, str(ROOT / "scripts" / "diagram_render_check.py")]),
     ]:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         ok = proc.returncode == 0
