@@ -226,6 +226,9 @@ _SEQ_MSG_RE = re.compile(
 )
 _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re.I)
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
+_SEQ_ACTIVATE_RE = re.compile(r'^(activate|deactivate)\s+(\S+)', re.I)
+_SEQ_NOTE_RE = re.compile(r'^[Nn]ote\s+(?:over|left\s+of|right\s+of)\s+([^:]+):\s*(.+)', re.I)
+_SEQ_ELSE_RE = re.compile(r'^else\s*(.*)', re.I)
 
 
 def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
@@ -253,6 +256,16 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             p_label[alias] = display
             _ensure_p(alias)
             continue
+        m = _SEQ_ACTIVATE_RE.match(line)
+        if m:
+            act_type = "activate" if m.group(1).lower() == "activate" else "deactivate"
+            items.append({"type": act_type, "pid": m.group(2).strip()})
+            continue
+        m = _SEQ_NOTE_RE.match(line)
+        if m:
+            items.append({"type": "note", "pid": m.group(1).strip().split(",")[0].strip(),
+                          "text": m.group(2).strip()})
+            continue
         m = _SEQ_MSG_RE.match(line)
         if m:
             sp, arrow, dp, lbl = m.group(1), m.group(2), m.group(3), m.group(4)
@@ -260,6 +273,11 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             items.append({"type": "msg", "src": sp, "dst": dp,
                           "label": lbl.strip(), "dotted": arrow.startswith("--")})
             continue
+        if block_depth > 0:
+            me = _SEQ_ELSE_RE.match(line)
+            if me:
+                items.append({"type": "else", "label": me.group(1).strip()})
+                continue
         m = _SEQ_BLOCK_RE.match(line)
         if m:
             items.append({"type": "block", "kw": m.group(1), "label": m.group(2).strip()})
@@ -280,8 +298,22 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         col_pitch = int(col_pitch * width_hint / canvas_w)
         canvas_w = width_hint
     col_w = min(COL_W, max(40, col_pitch - 8))  # header scales with pitch; min 8px gap
-    n_rows = sum(1 for it in items if it["type"] in ("msg", "block"))
+    n_rows = sum(1 for it in items if it["type"] in ("msg", "block", "note", "else"))
     canvas_h = PAD_V * 2 + HDR_H + n_rows * ROW_H + 32
+
+    # Pre-compute activation spans: [(pid, start_row, end_row)]
+    _act_stacks: dict[str, list[int]] = {}
+    _act_spans: list[tuple[str, int, int]] = []
+    _row_pre = 0
+    for it in items:
+        if it["type"] in ("msg", "block", "note", "else"):
+            _row_pre += 1
+        elif it["type"] == "activate":
+            _act_stacks.setdefault(it["pid"], []).append(_row_pre)
+        elif it["type"] == "deactivate":
+            pid = it["pid"]
+            if pid in _act_stacks and _act_stacks[pid]:
+                _act_spans.append((pid, _act_stacks[pid].pop(), _row_pre))
     ll_top = PAD_V + HDR_H
     ll_bot = canvas_h - PAD_V
 
@@ -319,6 +351,15 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
             f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
         )
+    # Activation boxes (rendered below lifelines, above messages)
+    for pid, start_row, end_row in _act_spans:
+        ax = _cx(pid) - 4
+        ay = ll_top + start_row * ROW_H
+        act_h = max(ROW_H, (end_row - start_row) * ROW_H)
+        parts.append(
+            f'<rect x="{ax}" y="{ay}" width="8" height="{act_h}" '
+            f'fill="var(--edge-strong,var(--accent-1,#60a5fa))" opacity="0.35" rx="2"/>'
+        )
     row = 0
     for it in items:
         if it["type"] == "block":
@@ -329,6 +370,32 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'stroke="{_seq_edge}" stroke-width="1" rx="3"/>'
             )
             row += 1; continue
+        if it["type"] == "else":
+            ry = ll_top + row * ROW_H
+            parts.append(
+                f'<line x1="{PAD_H // 2}" y1="{ry}" x2="{canvas_w - PAD_H // 2}" y2="{ry}" '
+                f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="4 4"/>'
+            )
+            row += 1; continue
+        if it["type"] == "note":
+            pid = it["pid"]
+            note_x = _cx(pid) - col_w // 2
+            note_y = ll_top + row * ROW_H + 4
+            note_w, note_h = col_w, ROW_H - 8
+            fold = 10
+            pts = (f"{note_x},{note_y} "
+                   f"{note_x + note_w - fold},{note_y} "
+                   f"{note_x + note_w},{note_y + fold} "
+                   f"{note_x + note_w},{note_y + note_h} "
+                   f"{note_x},{note_y + note_h}")
+            parts.append(
+                f'<polygon points="{pts}" '
+                f'fill="var(--node-bg-from,var(--card-bg-from,#161d2e))" '
+                f'stroke="{_seq_edge}" stroke-width="1"/>'
+            )
+            row += 1; continue
+        if it["type"] in ("activate", "deactivate"):
+            continue
         if it["type"] != "msg":
             continue
         sx, dx2 = _cx(it["src"]), _cx(it["dst"])
@@ -383,7 +450,61 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
 
 # ── T2: erDiagram ─────────────────────────────────────────────────────────────
 
-_ER_REL_RE = re.compile(r'^(\w+)\s+[|o}\{]{1,2}-{1,2}[|o{\}]{1,2}\s+(\w+)\s*:\s*(.*)$')
+_ER_REL_RE = re.compile(
+    r'^(?P<e1>\w+)\s+'
+    r'(?P<card_src>[|o}{]{1,2})'
+    r'-{1,2}'
+    r'(?P<card_dst>[|o}{]{1,2})'
+    r'\s+(?P<e2>\w+)\s*:\s*(?P<lbl>.*)$'
+)
+_ER_CARD_SRC_MAP = {"||": "one", "o|": "zero-one", "}|": "many", "}o": "zero-many"}
+_ER_CARD_DST_MAP = {"||": "one", "|o": "zero-one", "|{": "many", "o{": "zero-many"}
+
+
+def _render_crow_foot(x: float, y: float, dx: float, dy: float, kind: str, color: str) -> list[str]:
+    """Return SVG strings for a crow's foot marker at (x, y) with edge direction (dx, dy)."""
+    import math as _math
+    px, py = -dy, dx  # perpendicular to edge direction
+    HALF_W = 10.0
+    parts: list[str] = []
+    if kind in ("one", "zero-one"):
+        bx, by = x + dx * 8, y + dy * 8
+        parts.append(
+            f'<line x1="{bx - px * HALF_W:.1f}" y1="{by - py * HALF_W:.1f}" '
+            f'x2="{bx + px * HALF_W:.1f}" y2="{by + py * HALF_W:.1f}" '
+            f'stroke="{color}" stroke-width="1.5"/>'
+        )
+        if kind == "one":
+            bx2, by2 = x + dx * 14, y + dy * 14
+            parts.append(
+                f'<line x1="{bx2 - px * HALF_W:.1f}" y1="{by2 - py * HALF_W:.1f}" '
+                f'x2="{bx2 + px * HALF_W:.1f}" y2="{by2 + py * HALF_W:.1f}" '
+                f'stroke="{color}" stroke-width="1.5"/>'
+            )
+        else:
+            cx_, cy_ = x + dx * 20, y + dy * 20
+            parts.append(
+                f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="4" '
+                f'fill="none" stroke="{color}" stroke-width="1.5"/>'
+            )
+    elif kind in ("many", "zero-many"):
+        bx, by = x + dx * 8, y + dy * 8
+        edge_angle = _math.atan2(dy, dx)
+        for ang in (-12, 0, 12):
+            fa = edge_angle + _math.radians(ang)
+            ex_ = bx + _math.cos(fa) * 12
+            ey_ = by + _math.sin(fa) * 12
+            parts.append(
+                f'<line x1="{bx:.1f}" y1="{by:.1f}" x2="{ex_:.1f}" y2="{ey_:.1f}" '
+                f'stroke="{color}" stroke-width="1.5"/>'
+            )
+        if kind == "zero-many":
+            cx_, cy_ = x + dx * 24, y + dy * 24
+            parts.append(
+                f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="4" '
+                f'fill="none" stroke="{color}" stroke-width="1.5"/>'
+            )
+    return parts
 
 
 def _layout_er(src: str, direction: str, width_hint: int) -> str:
@@ -407,13 +528,58 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
             continue
         m = _ER_REL_RE.match(line)
         if m:
-            e1, e2, lbl = m.group(1), m.group(2), m.group(3).strip()
+            e1 = m.group("e1")
+            card_src_tok = m.group("card_src")
+            card_dst_tok = m.group("card_dst")
+            e2 = m.group("e2")
+            lbl = m.group("lbl").strip()
             for eid in (e1, e2):
                 nodes.setdefault(eid, _Node(id=eid, label=eid, shape="rect"))
-            edges.append(_Edge(src=e1, dst=e2, label=lbl, style="solid", arrow=True))
+            edges.append(_Edge(
+                src=e1, dst=e2, label=lbl, style="solid", arrow=True,
+                cardinality_src=_ER_CARD_SRC_MAP.get(card_src_tok),
+                cardinality_dst=_ER_CARD_DST_MAP.get(card_dst_tok),
+            ))
     if not nodes:
         raise ValueError("No entities found in erDiagram.")
-    return _graph_from_content_nodes(nodes, edges, {}, width_hint)
+
+    # Layout
+    _break_cycles(nodes, edges)
+    _assign_ranks(nodes, edges)
+    _minimize_crossings(nodes, edges)
+    canvas_w, canvas_h = _assign_coordinates(nodes)
+    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
+        scale = width_hint / canvas_w
+        for n in nodes.values():
+            n.x = int(n.x * scale)
+        canvas_w = width_hint
+
+    html = _render_graph_fragment(nodes, edges, {}, canvas_w, canvas_h)
+
+    # Inject crow's foot markers into the overlay SVG
+    _er_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    crow_parts: list[str] = []
+    for e in edges:
+        if not e.cardinality_src and not e.cardinality_dst:
+            continue
+        if e.src not in nodes or e.dst not in nodes:
+            continue
+        s = nodes[e.src]
+        d_node = nodes[e.dst]
+        sx = float(s.x + NODE_W // 2)
+        sy = float(s.y + _node_render_h(s))
+        dx2 = float(d_node.x + NODE_W // 2)
+        dy2 = float(d_node.y)
+        if e.cardinality_src:
+            crow_parts.extend(_render_crow_foot(sx, sy, 0.0, 1.0, e.cardinality_src, _er_color))
+        if e.cardinality_dst:
+            crow_parts.extend(_render_crow_foot(dx2, dy2, 0.0, -1.0, e.cardinality_dst, _er_color))
+
+    if crow_parts:
+        # Inject crow's foot SVG elements into the first </svg> (the overlay)
+        html = html.replace("</svg>", "\n".join(crow_parts) + "\n</svg>", 1)
+
+    return html
 
 
 def _graph_from_content_nodes(
@@ -444,9 +610,22 @@ def _graph_from_content_nodes(
 
 _CLASS_REL_RE = re.compile(
     r'^(\w+)\s*(?:"[^"]*"\s*)?'
-    r'(<\|--|<\|\.\.|\.\.>\||\|>|\*--|o--|-->|\.\.>|\.\.|\|\|)'
+    r'(<\|--|<\|\.\.|\.\.>\||\.\.\|>|\|>|\*--|o--|-->|\.\.>|\.\.|\|\|)'
     r'\s*(?:"[^"]*"\s*)?(\w+)(?:\s*:\s*(.*))?$'
 )
+
+def _class_rel_style(op: str) -> str:
+    """Map a class relationship operator to an _Edge style value."""
+    is_dashed = ".." in op
+    if "<|" in op or "|>" in op:
+        base = "cls-inherit"
+    elif "*" in op:
+        base = "cls-composition"
+    elif "o" in op:
+        base = "cls-aggregation"
+    else:
+        base = "cls-dep"
+    return base + ("-dotted" if is_dashed else "")
 
 
 def _layout_class(src: str, direction: str, width_hint: int) -> str:
@@ -474,8 +653,8 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
             c1, op, c2, lbl = m.group(1), m.group(2), m.group(3), (m.group(4) or "")
             for cid in (c1, c2):
                 nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
-            style = "dotted" if ".." in op else "solid"
-            edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(), style=style, arrow=True))
+            edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(),
+                               style=_class_rel_style(op), arrow=True))
             continue
         # Bare "A : method()" — just ensure class exists
         m2 = re.match(r'^(\w+)\s*:', line)

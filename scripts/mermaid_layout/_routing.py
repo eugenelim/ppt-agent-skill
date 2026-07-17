@@ -14,6 +14,40 @@ def _node_render_w(n: "_Node") -> int:
     """Effective rendered width for routing exit/entry x-coordinate computation."""
     return _TERMINAL_NODE_SIZE if _is_terminal_circle(n) else NODE_W
 
+
+# ── diamond edge clipping ─────────────────────────────────────────────────────
+
+def _clip_to_diamond(
+    tip_x: float, tip_y: float,
+    cx: float, cy: float,
+    w: float, h: float,
+    dx: float, dy: float,
+) -> tuple[float, float]:
+    """Return the point on the diamond outline in the direction from center to tip.
+
+    Diamond vertices: top=(cx,cy-h/2), right=(cx+w/2,cy), bottom=(cx,cy+h/2),
+    left=(cx-w/2,cy). The intersection is computed analytically via the Manhattan
+    metric: cast from center outward along (tip-center) and find the face crossing.
+    Falls back to the nearest vertex when tip is at the center.
+    (dx,dy) is a hint for callers but the computation uses tip position.
+    """
+    hw, hh = w / 2.0, h / 2.0
+    odx = tip_x - cx
+    ody = tip_y - cy
+    length = math.hypot(odx, ody)
+    if length < 1e-9:
+        vertices: list[tuple[float, float]] = [
+            (cx, cy - hh), (cx + hw, cy), (cx, cy + hh), (cx - hw, cy)
+        ]
+        return min(vertices, key=lambda v: (v[0] - tip_x) ** 2 + (v[1] - tip_y) ** 2)
+    ndx, ndy = odx / length, ody / length
+    denom = abs(ndx) / hw + abs(ndy) / hh
+    if denom < 1e-9:
+        return float(cx), float(cy - hh)
+    t = 1.0 / denom
+    return float(cx + ndx * t), float(cy + ndy * t)
+
+
 # ── edge routing ──────────────────────────────────────────────────────────────
 
 def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float,
@@ -233,8 +267,15 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         # head than the default (8/4) for visibility at small zoom levels.
         if e.style == "thick":
             ah_kw: dict = {"back": 11, "half_w": 5}
+            _mid = "arrow-thick"
+        elif e.style.startswith("cls-"):
+            ah_kw = {"back": 9, "half_w": 4}
+            # Class markers: strip optional "-dotted" suffix to get the marker id
+            _mid = e.style.replace("-dotted", "")
         else:
             ah_kw = {"back": 9, "half_w": 4}
+            _mid = "arrow-open" if e.style == "dotted" else "arrow-normal"
+        marker_id: str | None = _mid if e.arrow else None
 
         # Self-loop
         if e.src == e.dst:
@@ -257,7 +298,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             else:
                 llx, lly = tip_x + 14, mid_y
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": llx, "ly": lly, "rot": 0})
+                           "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
             continue
 
         rank_gap = d.rank - s.rank
@@ -307,7 +348,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     else:
                         llx, lly = max(0, x1 - 164), int(y1) - 12
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                                   "lx": llx, "ly": lly, "rot": 0})
+                                   "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
                 else:
                     lane_y = bottom_lane_y + 32 * be_lane
                     sx = s.x + NODE_W // 2
@@ -332,7 +373,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     else:
                         llx, lly = (sx + dx_) // 2, lane_y + 4
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                                   "lx": llx, "ly": lly, "rot": 0})
+                                   "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
             else:
                 lane_x = right_lane_x + 32 * be_lane
                 sx = s.x + _node_render_w(s)
@@ -357,7 +398,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 else:
                     llx, lly = lane_x + 4, (sy + dy_) // 2
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                               "lx": llx, "ly": lly, "rot": 0})
+                               "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
             continue
 
         if is_lr:
@@ -470,7 +511,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             else:
                 lx, ly = x1 + 24, int(y1) - 12
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": lx, "ly": ly, "rot": 0})
+                           "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id})
             continue
 
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
@@ -494,11 +535,24 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         y1 = s.y + _node_render_h(s)
         x2 = d.x + in_offset
         y2 = d.y
+
+        # Clip to diamond face for diamond-shaped source/destination nodes
+        if s.shape == "diamond":
+            _sh = _node_render_h(s)
+            _sx, _sy = s.x + _node_render_w(s) // 2, s.y + _sh // 2
+            x1, y1 = _clip_to_diamond(float(x1), float(y1), float(_sx), float(_sy),
+                                       float(_node_render_w(s)), float(_sh), 0, 0)
+        if d.shape == "diamond":
+            _dh = _node_render_h(d)
+            _dx2, _dy2 = d.x + _node_render_w(d) // 2, d.y + _dh // 2
+            x2, y2 = _clip_to_diamond(float(x2), float(y2), float(_dx2), float(_dy2),
+                                       float(_node_render_w(d)), float(_dh), 0, 0)
+
         # Route: go down to midpoint, then right/left, then down to dst
-        mid_y = (y1 + y2) // 2
+        mid_y = (int(y1) + int(y2)) // 2
         path = _smooth_orthogonal_path([(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)])
 
-        ah = _arrowhead(x2, y2, 0, 1, **ah_kw) if e.arrow else None
+        ah = _arrowhead(int(x2), int(y2), 0, 1, **ah_kw) if e.arrow else None
 
         if e.label:
             H = _LABEL_CHIP_H
@@ -543,7 +597,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         else:
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                       "lx": lx, "ly": ly, "rot": 0})
+                       "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id})
 
     return result
 

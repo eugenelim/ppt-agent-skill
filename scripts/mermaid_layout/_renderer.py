@@ -7,7 +7,7 @@ from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
-    _NODE_H_TECH, _WRAP_CHARS, _WRAP_CHARS_ICON,
+    _NODE_H_TECH, ICON_COL_WIDTH,
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
@@ -24,13 +24,64 @@ def _nh(text: str) -> str:
     return _h(text).replace("-", "‑")
 
 
+def _render_label_html(label: str) -> str:
+    """Apply inline Markdown-like formatting to a joined label string.
+
+    Handles **bold**, *italic*, ~~strikethrough~~ delimiters.  The state
+    machine resets at each <br> so delimiters never cross line boundaries.
+    Mismatched or unclosed delimiters are emitted as literal text — no
+    partial tags.
+    """
+    _DELIMS = [("**", "font-weight:700"), ("~~", "text-decoration:line-through"), ("*", "font-style:italic")]
+    result_parts: list[str] = []
+    for seg in label.split("<br>"):
+        buf: list[str] = []
+        open_delim = ""
+        open_style = ""
+        open_pos = -1
+        i = 0
+        while i < len(seg):
+            found = False
+            for delim, style in _DELIMS:
+                if seg[i : i + len(delim)] == delim:
+                    if not open_delim:
+                        open_delim = delim
+                        open_style = style
+                        open_pos = len(buf)
+                        buf.append(f'<span style="{style}">')
+                    elif open_delim == delim:
+                        buf.append("</span>")
+                        open_delim = ""
+                        open_style = ""
+                        open_pos = -1
+                    else:
+                        buf.append(_h(delim))
+                    i += len(delim)
+                    found = True
+                    break
+            if not found:
+                buf.append(_h(seg[i]))
+                i += 1
+        if open_delim:
+            # Unclosed — replace the opening span tag with the literal delimiter.
+            buf[open_pos] = _h(open_delim)
+        result_parts.append("".join(buf))
+    return "<br>".join(result_parts)
+
+
 # ── HTML renderer (graph topology) ───────────────────────────────────────────
 
 _NODE_CSS = {
     "rect": "border-radius:var(--node-radius,8px);",
     "round": "border-radius:28px;",
+    "stadium": "border-radius:50px;",
     # diamond uses clip-path to avoid rotating the label
     "diamond": "border-radius:4px; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
+    "hexagon": "clip-path:polygon(15% 0%,85% 0%,100% 50%,85% 100%,15% 100%,0% 50%); border-radius:4px; overflow:visible;",
+    "subroutine": "border-radius:4px;",
+    "trapezoid": "clip-path:polygon(10% 0%,90% 0%,100% 100%,0% 100%); border-radius:4px;",
+    "trapezoid-alt": "clip-path:polygon(0% 0%,100% 0%,90% 100%,10% 100%); border-radius:4px;",
+    "doublecircle": "border-radius:50%; position:relative;",
     "cylinder": "border-radius:8px 8px 2px 2px;",
     "circle": "border-radius:50%;",
     "flag": "border-radius:0 8px 8px 0;",
@@ -168,11 +219,11 @@ def _render_graph_fragment(
             _depth_idx = min(n.rank, len(_DEPTH_TINTS) - 1)
             _depth_wash = _DEPTH_TINTS[_depth_idx]
 
-        # Icon-left cards have a narrower text column; use reduced wrap limit so the
-        # HTML line breaks match what _node_render_h already assumed for height sizing.
-        _wc = _WRAP_CHARS_ICON if icon_svg else _WRAP_CHARS
-        main_lines = _wrap_label(main_label, max_chars=_wc)
-        main_html = "<br>".join(_nh(ln) for ln in main_lines)
+        # Icon-left cards have a narrower text column; use the same pixel budget
+        # as _node_render_h so HTML line breaks match the computed height.
+        _wbudget = (NODE_W - 40 - ICON_COL_WIDTH) if icon_svg else (NODE_W - 40)
+        main_lines = _wrap_label(main_label, width_budget=_wbudget)
+        main_html = _render_label_html("<br>".join(_nh(ln) for ln in main_lines))
 
         # Accent color comes from group membership; used for top border + icon.
         # External nodes get no accent (greyscale treatment) — dim top border matches dim body.
@@ -189,7 +240,7 @@ def _render_graph_fragment(
 
         sub_span = ""
         if bracket_sub:
-            sub_lines = _wrap_label(bracket_sub, max_chars=_wc)
+            sub_lines = _wrap_label(bracket_sub, width_budget=_wbudget)
             sub_html = "<br>".join(_nh(ln) for ln in sub_lines)
             sub_span = (
                 f'<span class="node-sub" style="'
@@ -263,28 +314,67 @@ def _render_graph_fragment(
             # Diamond and flag nodes clip their top edge to a point/slant —
             # the 3px accent stripe is invisible. Use a full 2px accent border
             # for those shapes instead.
-            _uses_clip = n.shape in ("diamond", "flag")
+            _uses_clip = n.shape in ("diamond", "flag", "hexagon", "trapezoid", "trapezoid-alt")
             if is_external:
                 _border_css = f'border:1px dashed {border_var};'
             elif _uses_clip:
                 _border_css = f'border:2px solid {accent_color};'
             else:
                 _border_css = f'border:1px solid {border_var}; border-top:3px solid {accent_color};'
-            parts.append(
-                f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
-                f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
-                f'min-width:{NODE_W}px; '
-                f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                f'box-sizing:border-box; overflow:hidden; '
-                f'{_border_css} '
-                f'{shape_css} '
-                f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
-                f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
-                f'text-align:left;">'
-                f'{inner}</div>'
-            )
+
+            if n.shape == "doublecircle":
+                # Outer circle + inner concentric circle (5px inset)
+                parts.append(
+                    f'<div class="node node-doublecircle{extra_cls}" style="'
+                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                    f'width:{node_h}px; height:{node_h}px; '
+                    f'border-radius:50%; box-sizing:border-box; overflow:visible; '
+                    f'border:2px solid {accent_color}; '
+                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
+                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
+                    f'display:flex; align-items:center; justify-content:center;">'
+                    f'<div style="position:absolute; inset:5px; border-radius:50%; '
+                    f'border:2px solid {accent_color}; pointer-events:none;"></div>'
+                    f'{inner}</div>'
+                )
+            elif n.shape == "subroutine":
+                # Rect with two inner vertical lines near left and right edges
+                parts.append(
+                    f'<div class="node node-subroutine{extra_cls}" style="'
+                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                    f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
+                    f'min-width:{NODE_W}px; '
+                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                    f'box-sizing:border-box; overflow:visible; '
+                    f'{_border_css} '
+                    f'{shape_css} '
+                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
+                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
+                    f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+                    f'text-align:left;">'
+                    f'{inner}'
+                    f'<svg style="position:absolute;inset:0;width:{NODE_W}px;height:{node_h}px;pointer-events:none;overflow:visible;">'
+                    f'<line x1="8" y1="0" x2="8" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'<line x1="{NODE_W - 8}" y1="0" x2="{NODE_W - 8}" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'</svg>'
+                    f'</div>'
+                )
+            else:
+                parts.append(
+                    f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
+                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                    f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
+                    f'min-width:{NODE_W}px; '
+                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                    f'box-sizing:border-box; overflow:hidden; '
+                    f'{_border_css} '
+                    f'{shape_css} '
+                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
+                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
+                    f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+                    f'text-align:left;">'
+                    f'{inner}</div>'
+                )
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
     # clip-path:inset(0) keeps edges inside the diagram area so they cannot
@@ -296,25 +386,80 @@ def _render_graph_fragment(
     )
 
     routed = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
+
+    # Collect which marker IDs are needed and emit a <defs> block.
+    _needed_markers = {spec["marker_id"] for spec in routed if spec.get("marker_id")}
+    if _needed_markers:
+        defs_parts = ["<defs>"]
+        if "arrow-normal" in _needed_markers:
+            defs_parts.append(
+                '<marker id="arrow-normal" viewBox="0 -4 9 8" refX="9" refY="0"'
+                ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+                '<polygon points="0,-4 9,0 0,4"'
+                ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
+            )
+        if "arrow-thick" in _needed_markers:
+            defs_parts.append(
+                '<marker id="arrow-thick" viewBox="0 -5 11 10" refX="11" refY="0"'
+                ' markerWidth="11" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
+                '<polygon points="0,-5 11,0 0,5"'
+                ' fill="var(--edge-strong,var(--accent-1,#60a5fa))"/></marker>'
+            )
+        if "arrow-open" in _needed_markers:
+            defs_parts.append(
+                '<marker id="arrow-open" viewBox="0 -4 9 8" refX="9" refY="0"'
+                ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+                '<path d="M 0,-4 L 9,0 L 0,4" fill="none"'
+                ' stroke="var(--accent-4,var(--amber,#E8924A))" stroke-width="1.5"/></marker>'
+            )
+        _cls_edge = "var(--edge,rgba(100,116,139,0.7))"
+        if "cls-inherit" in _needed_markers:
+            defs_parts.append(
+                f'<marker id="cls-inherit" viewBox="0 -6 12 12" refX="12" refY="0"'
+                f' markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">'
+                f'<polygon points="0,-6 12,0 0,6" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
+            )
+        if "cls-composition" in _needed_markers:
+            defs_parts.append(
+                f'<marker id="cls-composition" viewBox="-10 -5 20 10" refX="10" refY="0"'
+                f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
+                f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="{_cls_edge}"/></marker>'
+            )
+        if "cls-aggregation" in _needed_markers:
+            defs_parts.append(
+                f'<marker id="cls-aggregation" viewBox="-10 -5 20 10" refX="10" refY="0"'
+                f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
+                f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
+            )
+        if "cls-dep" in _needed_markers:
+            defs_parts.append(
+                f'<marker id="cls-dep" viewBox="0 -4 9 8" refX="9" refY="0"'
+                f' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+                f'<path d="M 0,-4 L 9,0 L 0,4" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
+            )
+        defs_parts.append("</defs>")
+        parts.append("".join(defs_parts))
+
     for spec in routed:
         d = spec["d"]
         style = spec["style"]
         if style == "thick":
             stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
-        elif style == "dotted":
-            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
+        elif style in ("dotted",) or style.endswith("-dotted"):
+            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
         else:
             stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-        dash = ' stroke-dasharray="6 4"' if style == "dotted" else ""
+        if style == "dotted":
+            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
+        is_dashed = style == "dotted" or style.endswith("-dotted")
+        dash = ' stroke-dasharray="6 4"' if is_dashed else ""
         stroke_w = "2" if style == "thick" else "1.5"
+        mid = spec.get("marker_id")
+        marker_attr = f' marker-end="url(#{mid})"' if mid else ""
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none" '
-            f'stroke-width="{stroke_w}"{dash}/>'
+            f'stroke-width="{stroke_w}"{dash}{marker_attr}/>'
         )
-        if spec["ah"]:
-            parts.append(
-                f'<polygon points="{spec["ah"]}" fill="{stroke_color}"/>'
-            )
 
     parts.append('</svg>')
 

@@ -1,0 +1,11 @@
+sequenceDiagram
+    Client->>Server: Request
+    loop Retry
+        Server->>DB: Query
+        DB-->>Server: Result
+    end
+    alt Success
+        Server-->>Client: 200 OK
+    else Error
+        Server-->>Client: 500 Error
+    end
