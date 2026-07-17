@@ -940,9 +940,11 @@ def _render_graph_fragment(
         icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
 
-        # Color tokens: dim everything for external nodes
+        # Color tokens: dim external nodes; accent the title for normal nodes
         fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
         border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
+        # Title uses accent-1 so it reads differently from the card body background
+        title_color = fg_var if is_external else "var(--node-title-fg,var(--accent-1))"
 
         tech_span = ""
         if tech_label:
@@ -959,11 +961,11 @@ def _render_graph_fragment(
             inner = (
                 f'<span class="node-icon" style="'
                 f'display:block;width:20px;height:20px;margin:0 auto 3px;'
-                f'color:{fg_var};">'
+                f'color:{title_color};">'
                 f'{icon_svg}</span>'
                 f'<span class="node-label" style="'
                 f'font-size:13px; font-weight:700; '
-                f'color:{fg_var}; '
+                f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
                 f'{tech_span}'
@@ -973,7 +975,7 @@ def _render_graph_fragment(
             inner = (
                 f'<span class="node-label" style="'
                 f'font-size:14px; font-weight:700; '
-                f'color:{fg_var}; '
+                f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
                 f'{tech_span}'

@@ -696,6 +696,33 @@ class TestLoadIcon:
         assert 'height="100%"' in svg
 
 
+# ── TestTitleAccentColor ──────────────────────────────────────────────────────
+
+class TestTitleAccentColor:
+    """Node labels should use an accent color distinct from the card body."""
+
+    def test_plain_node_label_uses_title_accent_var(self):
+        """Non-external nodes use --node-title-fg (accent-1 fallback) for label color."""
+        html = _dispatch("flowchart LR\n  A[Service]", None, 400)
+        assert "node-title-fg" in html
+
+    def test_external_node_label_uses_dim_not_accent(self):
+        """External nodes use dim color for label, not the accent title color."""
+        html = _dispatch("flowchart LR\n  A[External]:::external", None, 400)
+        assert "node-fg-dim" in html
+
+    def test_icon_node_label_uses_title_accent_var(self):
+        """Icon nodes also get the title accent color on their label and icon."""
+        html = _dispatch("flowchart LR\n  A[DB]:::database", None, 400)
+        assert "node-title-fg" in html
+
+    def test_accent_color_not_on_tech_sublabel(self):
+        """Tech sub-label (below the title) should use dim color, not accent."""
+        html = _dispatch("flowchart LR\n  A[\"Service|Spring Boot\"]", None, 400)
+        # tech label uses node-fg-dim
+        assert "node-fg-dim" in html
+
+
 # ── TestEdgeOperators ────────────────────────────────────────────────────────
 
 class TestEdgeOperators:
