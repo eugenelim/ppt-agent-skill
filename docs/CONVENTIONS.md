@@ -592,6 +592,48 @@ widen-after-publish gap.
 
 ---
 
+## Python module conventions
+
+### Module size
+
+Scripts in `scripts/` should stay under ~500 lines. Above 800 lines, open a backlog
+item to split into focused sub-modules. `mermaid_layout.py` is a tracked exception
+(backlog: `mermaid-layout-package-split`) with a planned split into
+`_constants.py / _parser.py / _layout.py / _routing.py / _renderer.py / _strategies.py`.
+
+### Private symbols
+
+All internal functions and constants use a `_` prefix. Only `main()` (CLI entry point)
+is intentionally public. Dataclass types (`_Node`, `_Edge`, `_Group`) are private by
+name but importable by tests — this is expected and fine.
+
+### Where tests live
+
+- `tests/` — pytest unit tests; import directly from scripts/ (no subprocess)
+- `scripts/test_*.py` — integration or cross-module tests that need the full scripts/ path
+- `scripts/smoke_test.py` — end-to-end subprocess tests; organized by `--phase N`
+
+Run all: `pytest tests/ scripts/test_diagram_qa.py -x -q`
+Run mermaid smoke: `python scripts/smoke_test.py --phase 2`
+
+### Importing internals in tests
+
+```python
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from mermaid_layout import _dispatch, _parse_spec, _Node, ...
+```
+
+No `conftest.py` needed — the `sys.path.insert` pattern is self-contained per file.
+This is the established pattern used in `tests/test_assemble_planning.py`.
+
+### No new pip dependencies without RFC
+
+Adding any `import` from outside stdlib or the project's `requirements.txt` requires
+an RFC. Check `requirements.txt` first.
+
+---
+
 ## Commits
 
 We use [Conventional Commits](https://www.conventionalcommits.org/):

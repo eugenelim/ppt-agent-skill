@@ -92,13 +92,23 @@ CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 
 # ── default geometry (px) — matches Appendix §A in spec ──────────────────────
 NODE_W = 160
-NODE_H = 56
-RANK_GAP = 48    # --rank-gap: vertical gap between row tops
-COL_GAP = 32     # --col-gap: horizontal gap between nodes in same rank
-CANVAS_PAD = 40  # --canvas-pad: outer inset
+NODE_H = 56       # base height for a single-line node (see _node_render_h formula below)
+RANK_GAP = 72    # gap in flow direction (vertical in TB, horizontal in LR)
+COL_GAP = 48     # gap perpendicular to flow (horizontal in TB, vertical in LR)
+CANVAS_PAD = 48  # outer inset on all sides
 GROUP_PAD_X = 24  # group container horizontal inner padding
-GROUP_PAD_Y_TOP = 28  # group container top inner padding (room for label)
-GROUP_PAD_Y_BOT = 20  # group container bottom inner padding
+GROUP_PAD_Y_TOP = 32  # group container top inner padding (room for label)
+GROUP_PAD_Y_BOT = 24  # group container bottom inner padding
+
+# Node height composition — single source of truth used by _node_render_h:
+#   NODE_H          = base (padding + one text line)
+#   _NODE_H_LINE    = added per extra text line beyond the first
+#   _NODE_H_ICON    = icon block (20px icon + 4px margin) added when icon resolves
+#   _NODE_H_TECH    = tech sub-label line (11px × 1.4 ≈ 16px)
+# All extra_h components are ADDITIVE (not max) so icon + multiline nodes size correctly.
+_NODE_H_LINE = 20   # px per additional text line (14px font × 1.4 line-height)
+_NODE_H_ICON = 24   # icon box: 20px SVG + 4px bottom margin
+_NODE_H_TECH = 16   # tech sub-label line height
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 
@@ -248,7 +258,7 @@ _EDGE_RE = re.compile(
     r'^(?P<src_raw>.+?)\s*'
     r'(?:'
     r'--\s*(?P<mid_label>[^->=]+?)\s*(?P<arrow_long>-->|---)'   # -- text --> / -- text ---
-    r'|(?P<arrow_short>-\.->|-\.-|==>|-->|---)'                  # plain operators
+    r'|(?P<arrow_short>-\.->|-\.-o|-\.-x|-\.-|==>|-->|--o|--x|---)'  # plain operators (longer patterns first)
     r')'
     r'\s*(?:\|(?P<pipe_label>[^\|]*)\|)?\s*'
     r'(?P<dst_raw>.+)$'
@@ -799,7 +809,7 @@ _NODE_CSS = {
     "flag": "border-radius:0 8px 8px 0;",
 }
 
-_WRAP_CHARS = 22  # label wrap threshold
+_WRAP_CHARS = 18  # label wrap threshold (~120px usable at 7px/char, NODE_W=160 minus 40px padding)
 
 
 def _wrap_label(label: str) -> list[str]:
@@ -822,6 +832,13 @@ def _wrap_label(label: str) -> list[str]:
     lines: list[str] = []
     cur = ""
     for w in words:
+        # Break individual words that exceed the wrap limit (e.g. long hyphenated identifiers)
+        while len(w) > _WRAP_CHARS:
+            if cur:
+                lines.append(cur)
+                cur = ""
+            lines.append(w[:_WRAP_CHARS])
+            w = w[_WRAP_CHARS:]
         if cur and len(cur) + 1 + len(w) > _WRAP_CHARS:
             lines.append(cur)
             cur = w
@@ -837,15 +854,21 @@ def _node_render_h(n: "_Node") -> int:
 
     Mirrors the height calculation in _render_graph_fragment so that group
     bounding boxes, canvas height, and LR layout pitch all stay in sync.
-    Uses n.icon (field) rather than _load_icon so it works before rendering.
+    Uses n.icon and n.css_class (via _load_icon) to determine effective icon.
     """
     main_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     lines = _wrap_label(main_label)
-    extra_h = max(0, (len(lines) - 1) * 20)  # 14px font × 1.4 line-height ≈ 20px/line
-    if n.icon:
-        extra_h = max(extra_h, 20)
+    extra_h = max(0, (len(lines) - 1) * _NODE_H_LINE)
+    if n.icon and _load_icon(n.icon):
+        effective_icon = n.icon
+    elif n.css_class and _load_icon(n.css_class):
+        effective_icon = n.css_class
+    else:
+        effective_icon = ""
+    if effective_icon:
+        extra_h += _NODE_H_ICON  # additive: icon + multiple lines don't fight each other
     if "|" in n.label:
-        extra_h += 16
+        extra_h += _NODE_H_TECH
     return NODE_H + extra_h
 
 
@@ -914,12 +937,14 @@ def _render_graph_fragment(
 
         main_lines = _wrap_label(main_label)
         main_html = "<br>".join(_h(ln) for ln in main_lines)
-        icon_svg = _load_icon(n.icon) if n.icon else ""
+        icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
 
-        # Color tokens: dim everything for external nodes
+        # Color tokens: dim external nodes; accent the title for normal nodes
         fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
         border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
+        # Title uses accent-1 so it reads differently from the card body background
+        title_color = fg_var if is_external else "var(--node-title-fg,var(--accent-1))"
 
         tech_span = ""
         if tech_label:
@@ -936,11 +961,11 @@ def _render_graph_fragment(
             inner = (
                 f'<span class="node-icon" style="'
                 f'display:block;width:20px;height:20px;margin:0 auto 3px;'
-                f'color:{fg_var};">'
+                f'color:{title_color};">'
                 f'{icon_svg}</span>'
                 f'<span class="node-label" style="'
                 f'font-size:13px; font-weight:700; '
-                f'color:{fg_var}; '
+                f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
                 f'{tech_span}'
@@ -950,19 +975,19 @@ def _render_graph_fragment(
             inner = (
                 f'<span class="node-label" style="'
                 f'font-size:14px; font-weight:700; '
-                f'color:{fg_var}; '
+                f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
                 f'{tech_span}'
             )
-            flex_dir = "column" if tech_label else "row"
+            flex_dir = "column"
 
         extra_cls = f" node-{n.css_class}" if n.css_class else ""
         parts.append(
             f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
             f'position:absolute; left:{n.x}px; top:{n.y}px; '
-            f'width:var(--node-w,{NODE_W}px); height:{node_h}px; '
-            f'min-width:{NODE_W}px; min-height:{NODE_H}px; '
+            f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
+            f'min-width:{NODE_W}px; '
             f'padding:var(--node-pad-v,14px) var(--node-pad-h,20px); '
             f'box-sizing:border-box; '
             f'border:1px solid {border_var}; '
@@ -1157,6 +1182,56 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
     )
 
 
+# ── group overlap resolution ─────────────────────────────────────────────────
+
+def _separate_groups_lr(
+    nodes: dict[str, "_Node"],
+    groups: dict[str, "_Group"],
+) -> None:
+    """Iteratively push overlapping group bounding boxes apart vertically (LR mode only).
+
+    When two groups overlap in both x and y, the lower group is shifted down by the
+    overlap depth + COL_GAP. Runs up to GROUP_CAP passes; stops early when stable.
+    """
+
+    def _bbox(gid: str) -> dict | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return {
+            "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+            "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
+            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+        }
+
+    for _pass in range(GROUP_CAP):
+        boxes = {gid: _bbox(gid) for gid in groups}
+        boxes = {gid: b for gid, b in boxes.items() if b is not None}
+        if not boxes:
+            break
+
+        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gy"])
+        moved = False
+        for i, gid1 in enumerate(sorted_gids):
+            b1 = boxes[gid1]
+            for gid2 in sorted_gids[i + 1:]:
+                b2 = boxes[gid2]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
+                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
+                if x_overlap and y_overlap:
+                    shift = b1["gy_bot"] - b2["gy"] + COL_GAP
+                    for nid in groups[gid2].members:
+                        if nid in nodes:
+                            nodes[nid].y += shift
+                    moved = True
+                    break
+            if moved:
+                break
+        if not moved:
+            break
+
+
 # ── graph topology strategy ──────────────────────────────────────────────────
 
 def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
@@ -1195,10 +1270,15 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _minimize_crossings(nodes, edges)
     canvas_w, canvas_h = _assign_coordinates(nodes, direction)
 
-    # Recompute canvas_h using actual rendered node heights (Bug 6 fix)
+    # For LR diagrams with groups: push overlapping group bounding boxes apart vertically
+    if direction.upper() in ("LR", "RL") and groups:
+        _separate_groups_lr(nodes, groups)
+
+    # Recompute canvas dimensions using actual rendered node heights after any group shifts
     real_nodes = [n for n in nodes.values() if not n.is_dummy]
     if real_nodes:
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+        canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
 
     # When the natural canvas exceeds the width hint, shrink via CSS zoom rather
     # than distorting x-coordinates (which causes node overlaps when scale < NODE_W/col_pitch).

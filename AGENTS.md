@@ -159,6 +159,10 @@ Run `<lint command>` and follow what it tells you. If something is genuinely
 ambiguous to a linter (naming, file organization, error handling philosophy),
 it's covered in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md).
 
+**Python module conventions** (module size, private-symbol contract, test location,
+import pattern for internals, dependency policy) are in
+[`docs/CONVENTIONS.md` § Python module conventions](docs/CONVENTIONS.md#python-module-conventions).
+
 ## Skill & reference authoring format
 
 Any change to a skill or to skill-facing reference content
