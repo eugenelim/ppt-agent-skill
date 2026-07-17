@@ -8,6 +8,7 @@ from ._constants import (
     NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _NODE_H_TECH, _WRAP_CHARS, _WRAP_CHARS_ICON,
+    _TERMINAL_NODE_SIZE, _is_terminal_circle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
 from ._routing import _route_edges
@@ -237,21 +238,35 @@ def _render_graph_fragment(
 
         # Accent appears as a 2px colored top border; other borders stay neutral
         extra_cls = f" node-{n.css_class}" if n.css_class else ""
-        parts.append(
-            f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
-            f'position:absolute; left:{n.x}px; top:{n.y}px; '
-            f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
-            f'min-width:{NODE_W}px; '
-            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-            f'box-sizing:border-box; overflow:hidden; '
-            f'border:1px solid {border_var}; border-top:3px solid {accent_color}; '
-            f'{shape_css} '
-            f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
-            f'box-shadow:var(--node-shadow,none); '
-            f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
-            f'text-align:left;">'
-            f'{inner}</div>'
-        )
+        if _is_terminal_circle(n):
+            # UML initial/final state: small fixed-size circle, no padding, centered symbol
+            parts.append(
+                f'<div class="node node-circle{extra_cls}" style="'
+                f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
+                f'border-radius:50%; box-sizing:border-box; '
+                f'border:2px solid {accent_color}; '
+                f'background:{_depth_wash},linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+                f'display:flex; align-items:center; justify-content:center;">'
+                f'<span style="color:{accent_color}; font-size:14px; line-height:1;">'
+                f'{_nh(n.label)}</span></div>'
+            )
+        else:
+            parts.append(
+                f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
+                f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
+                f'min-width:{NODE_W}px; '
+                f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                f'box-sizing:border-box; overflow:hidden; '
+                f'border:1px solid {border_var}; border-top:3px solid {accent_color}; '
+                f'{shape_css} '
+                f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+                f'box-shadow:var(--node-shadow,none); '
+                f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+                f'text-align:left;">'
+                f'{inner}</div>'
+            )
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below
     parts.append(

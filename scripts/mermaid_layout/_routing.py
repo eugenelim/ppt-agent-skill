@@ -84,8 +84,8 @@ _LABEL_PERP = 20  # perpendicular offset for edge labels (px)
 
 # ── edge label placement ──────────────────────────────────────────────────────
 
-_LABEL_CHIP_H = 16    # chip height: 11px font + 2×padding + 1px border ≈ 16px
-_LABEL_CHAR_W = 6.2   # average char width at 11px Inter regular (empirical)
+_LABEL_CHIP_H = 17    # chip height: 12px font + 2×padding + 1px border ≈ 17px
+_LABEL_CHAR_W = 6.8   # average char width at 12px Inter regular (empirical)
 
 
 def _est_label_w(text: str) -> int:

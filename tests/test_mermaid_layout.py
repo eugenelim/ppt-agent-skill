@@ -909,6 +909,36 @@ class TestEdgeOperators:
         nodes, edges, _ = _parse_graph_source(["A -->|HTTPS: metadata| B"])
         assert edges[0].label == "HTTPS: metadata"
 
+    def test_statediff_colon_label_parsed(self):
+        """stateDiagram-v2 ': label' suffix on dst should become edge label."""
+        nodes, edges, _ = _parse_graph_source(["Processing --> Done : success"])
+        assert len(edges) == 1
+        assert edges[0].dst == "Done"
+        assert edges[0].label == "success"
+
+    def test_statediff_colon_label_doesnt_corrupt_flowchart_node_labels(self):
+        """A flowchart node like B[\"key: value\"] must not have its label stripped."""
+        nodes, edges, _ = _parse_graph_source(['A --> B["key: value"]'])
+        assert len(edges) == 1
+        assert edges[0].dst == "B"
+        assert nodes["B"].label == "key: value"
+
+    def test_statediff_start_node_parsed(self):
+        """[*] --> State creates a _sm_start_ circle node."""
+        nodes, edges, _ = _parse_graph_source(["[*] --> Idle"])
+        assert "_sm_start_" in nodes, "_sm_start_ node not created from [*] src"
+        assert nodes["_sm_start_"].shape == "circle"
+        assert len(edges) == 1
+        assert edges[0].src == "_sm_start_" and edges[0].dst == "Idle"
+
+    def test_statediff_end_node_parsed(self):
+        """State --> [*] creates a _sm_end_ circle node."""
+        nodes, edges, _ = _parse_graph_source(["Done --> [*]"])
+        assert "_sm_end_" in nodes, "_sm_end_ node not created from [*] dst"
+        assert nodes["_sm_end_"].shape == "circle"
+        assert len(edges) == 1
+        assert edges[0].src == "Done" and edges[0].dst == "_sm_end_"
+
 
 # ── TestLongLabelWrap ────────────────────────────────────────────────────────
 

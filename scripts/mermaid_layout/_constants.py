@@ -90,6 +90,7 @@ _ICON_H = 24        # icon SVG height in card header
 _NODE_H_TECH = 17   # separator + tech text line (7px margin + 7px padding + ~12px text ÷ 2)
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
+_TERMINAL_NODE_SIZE = 32  # px square for circle nodes with symbol labels (UML start/end states)
 
 # ── directive sets ────────────────────────────────────────────────────────────
 _GRAPH_DIRECTIVES = frozenset({
@@ -227,12 +228,20 @@ def _split_sub_label(label: str) -> tuple[str, str]:
     return main, sub
 
 
+def _is_terminal_circle(n: "_Node") -> bool:
+    """True for circle nodes with a single symbol label (UML initial/final state dots)."""
+    return n.shape == "circle" and len(n.label.strip()) <= 2
+
+
 def _node_render_h(n: "_Node") -> int:
     """Return the rendered pixel height of node n (single source of truth).
 
     Icon-left layout: icon sits alongside title text, not below.
     header_h = max(icon_h, title_h + sub_h) — icon only adds height when taller than text.
     """
+    if _is_terminal_circle(n):
+        return _TERMINAL_NODE_SIZE
+
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)
 
