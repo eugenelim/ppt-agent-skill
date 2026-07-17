@@ -22,6 +22,7 @@ from ._renderer import (
     _extract_diagram_title, _render_metadata_chip, _render_legend,
     _separate_groups_lr,
     _separate_groups_tb,
+    _push_nonmembers_out_of_groups_lr,
 )
 
 # ── graph topology strategy ──────────────────────────────────────────────────
@@ -95,6 +96,8 @@ def _layout_graph_topology(
     # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:
         _separate_groups_lr(nodes, groups)
+        # Also push non-member nodes that visually land inside a group bbox downward
+        _push_nonmembers_out_of_groups_lr(nodes, groups)
     elif direction.upper() in ("TB", "TD") and groups:
         canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
 

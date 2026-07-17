@@ -614,6 +614,58 @@ def _separate_groups_tb(
     return canvas_w
 
 
+def _push_nonmembers_out_of_groups_lr(
+    nodes: dict[str, "_Node"],
+    groups: dict[str, "_Group"],
+) -> None:
+    """LR mode only: shift non-member nodes that land inside a group's bbox downward.
+
+    Called after _separate_groups_lr and _assign_coordinates so that when a
+    non-member node ends up at the same rank (x position) as a group member,
+    it is moved below the group's padded bottom edge instead of visually
+    appearing inside the group boundary.
+
+    Iterates until stable (at most GROUP_CAP passes).
+    """
+    member_ids = {nid for grp in groups.values() for nid in grp.members}
+
+    def _grp_bbox(gid: str) -> dict | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return {
+            "x0":  min(n.x for n in mbrs) - GROUP_PAD_X,
+            "x1":  max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "y0":  min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            "y1":  max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+        }
+
+    for _pass in range(GROUP_CAP):
+        moved = False
+        bboxes = {gid: _grp_bbox(gid) for gid in groups}
+        bboxes = {gid: b for gid, b in bboxes.items() if b is not None}
+        if not bboxes:
+            break
+        # Process non-members sorted top-to-bottom so earlier shifts don't invalidate later checks
+        nm_nodes = sorted(
+            [(nid, n) for nid, n in nodes.items() if not n.is_dummy and nid not in member_ids],
+            key=lambda x: x[1].y,
+        )
+        for nid, nd in nm_nodes:
+            nx0, ny0 = nd.x, nd.y
+            nx1, ny1 = nd.x + NODE_W, nd.y + _node_render_h(nd)
+            for gid, b in bboxes.items():
+                if not (b["x0"] < nx1 and nx0 < b["x1"] and b["y0"] < ny1 and ny0 < b["y1"]):
+                    continue
+                # Non-member overlaps group bbox — push it below the group
+                nd.y = int(b["y1"] + COL_GAP)
+                moved = True
+                # Recompute this group's bbox since nd.y changed (nd is non-member, no effect)
+                break
+        if not moved:
+            break
+
+
 def _compute_group_bboxes(
     nodes: dict[str, "_Node"],
     groups: dict[str, "_Group"],
