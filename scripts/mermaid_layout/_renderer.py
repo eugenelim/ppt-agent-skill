@@ -512,6 +512,21 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
 
 # ── group overlap resolution ─────────────────────────────────────────────────
 
+def _is_nested_groups(gid1: str, gid2: str, groups: dict) -> bool:
+    """Return True if gid1 and gid2 are in a parent-child relationship (either direction)."""
+    cur = groups[gid2].parent_group
+    while cur:
+        if cur == gid1:
+            return True
+        cur = groups[cur].parent_group if cur in groups else None
+    cur = groups[gid1].parent_group
+    while cur:
+        if cur == gid2:
+            return True
+        cur = groups[cur].parent_group if cur in groups else None
+    return False
+
+
 def _separate_groups_lr(
     nodes: dict[str, "_Node"],
     groups: dict[str, "_Group"],
@@ -520,6 +535,7 @@ def _separate_groups_lr(
 
     When two groups overlap in both x and y, the lower group is shifted down by the
     overlap depth + COL_GAP. Runs up to GROUP_CAP passes; stops early when stable.
+    Skips parent-child group pairs — nested subgraphs are expected to overlap.
     """
 
     def _bbox(gid: str) -> dict | None:
@@ -544,6 +560,8 @@ def _separate_groups_lr(
         for i, gid1 in enumerate(sorted_gids):
             b1 = boxes[gid1]
             for gid2 in sorted_gids[i + 1:]:
+                if _is_nested_groups(gid1, gid2, groups):
+                    continue
                 b2 = boxes[gid2]
                 x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
@@ -592,6 +610,8 @@ def _separate_groups_tb(
         for i, gid1 in enumerate(sorted_gids):
             b1 = boxes[gid1]
             for gid2 in sorted_gids[i + 1:]:
+                if _is_nested_groups(gid1, gid2, groups):
+                    continue
                 b2 = boxes[gid2]
                 x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
@@ -680,9 +700,18 @@ def _compute_group_bboxes(
     3. Resolve pairwise bbox overlaps by splitting each overlap at its midpoint.
     4. Clip all bboxes to [0, canvas_w] × [0, canvas_h].
     """
+    def _recursive_members(gid: str) -> list[str]:
+        """Collect all member node IDs including those in nested child groups."""
+        result = list(groups[gid].members)
+        for child_gid, child_grp in groups.items():
+            if child_grp.parent_group == gid:
+                result.extend(_recursive_members(child_gid))
+        return result
+
     bboxes: dict[str, list[float]] = {}
-    for gid, grp in groups.items():
-        mbrs = [nodes[m] for m in grp.members if m in nodes and not nodes[m].is_dummy]
+    for gid in groups:
+        all_mbr_ids = _recursive_members(gid)
+        mbrs = [nodes[m] for m in all_mbr_ids if m in nodes and not nodes[m].is_dummy]
         if not mbrs:
             continue
         x0 = float(min(n.x for n in mbrs) - GROUP_PAD_X)
@@ -779,12 +808,15 @@ def _compute_group_bboxes(
                     # else: accept overlap
 
     # Step 3: pairwise overlap resolution (iterative, up to GROUP_CAP passes)
+    # Skip nested pairs — their bboxes overlap by design (parent wraps child).
     gids = list(bboxes)
     for _ in range(GROUP_CAP):
         changed = False
         for i, g1 in enumerate(gids):
             b1 = bboxes[g1]
             for g2 in gids[i + 1:]:
+                if _is_nested_groups(g1, g2, groups):
+                    continue
                 b2 = bboxes[g2]
                 ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
                 oy = min(b1[3], b2[3]) - max(b1[1], b2[1])

@@ -15,7 +15,7 @@ from ._constants import (
     _node_render_h,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter
-from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns
+from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
 from ._routing import _route_edges, _arrowhead
 from ._renderer import (
     _render_graph_fragment,
@@ -111,6 +111,9 @@ def _layout_graph_topology(
         elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
             direction = "LR"
 
+    # Keep group members in adjacent column bands (reduces group bbox y-span in LR mode)
+    if groups:
+        _group_coherent_cols(nodes, groups)
     # Compact group column ranges before coordinate assignment (dagre-inspired)
     if groups:
         _compact_group_columns(nodes, groups)

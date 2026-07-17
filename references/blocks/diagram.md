@@ -305,6 +305,46 @@ Each CSS variable in the `.diagram` contract maps to a specific architectural ro
 - **Focus node** — `border-color:var(--node-accent); box-shadow:0 0 0 1px var(--node-accent)`.
 - **Subgraph / boundary** — group container already uses `--node-border` at reduced opacity; no extra colour needed.
 
+## Visual channels stability
+
+A diagram's visual vocabulary must stay **consistent within a single diagram and across all diagrams in the same deck**. Each visual channel carries exactly one meaning; if a channel carries two meanings, the reader must re-learn the code mid-diagram.
+
+### Channel → meaning table (enforce this mapping, do not re-purpose)
+
+| Visual channel | Assigned meaning | Must NOT be used for |
+|---|---|---|
+| **Shape** | Element kind (process, database, decision, user, external system) | Importance or emphasis |
+| **Enclosure / subgraph** | Boundary or membership (trust zone, deployment host, service group) | Visual grouping for aesthetics only |
+| **Position (rank / column)** | Sequence, hierarchy, or architectural layer | Random placement or alignment convenience |
+| **Line style** (solid / dashed / thick) | Relationship category or state (sync call, async/optional, critical path) | Decorative variation or grouping |
+| **Arrowhead** (filled / hollow / none) | Direction of data/control flow | Step numbering or emphasis |
+| **Text** | Exact identity and semantics (node name, edge label, stereotype) | Color substitute or icon label duplicate |
+| **Color** | Secondary redundant classification or emphasis — always redundant with another channel | Primary sole identifier (color-blind readers must lose nothing) |
+| **Icon** | Recognition aid — accelerates reading but is never the sole identifier | Replacing the text label |
+
+### Stability rules
+
+1. **One meaning per color per diagram.** If `--node-accent` is used for databases, it must mean database everywhere in that diagram. Do not let the same color mean "database" in one subgraph and "external system" in another.
+
+2. **No channel overload.** A single node must not simultaneously signal three things via shape + border style + fill color. Pick the smallest combination of channels that makes the distinction legible; spare channels for future distinctions.
+
+3. **Consistent edge semantics across all diagrams in the deck.** If solid = synchronous and dashed = async in diagram 1, that mapping holds in diagrams 2 and 3. The legend must be identical (or absent) in all.
+
+4. **Moody's legibility principles.** Symbols should be:
+   - *Distinguishable* — two elements that must be told apart look different on every channel needed to tell them apart.
+   - *Visually economical* — the fewest channels that achieve the distinction; additional marks are noise.
+   - *Semantically suggestive* — shape and icon choices borrow from domain conventions (cylinder = storage, diamond = decision, dashed border = external/optional).
+   - *Audience-adapted* — for an executive deck, use 2–3 shapes max; for a technical review, C4 stereotypes and icon classes are appropriate.
+
+### Self-check (add to QA pass for any diagram with ≥2 element kinds or ≥2 edge styles)
+
+- [ ] No color carries two different meanings within the same diagram
+- [ ] Edge styles follow the legend exactly — dashed is not used for grouping when it is already used for async
+- [ ] Shape choices are stable: cylinder = storage, diamond = decision, stadium = user/actor — no reuse for other kinds in the same diagram
+- [ ] Enclosures (subgraphs) all represent the same kind of boundary (trust zone, host, layer) — not mixed with aesthetic groupings
+- [ ] Color is always redundant with at least one other channel (shape, line style, icon, or `:::external` marker) — removing color must not destroy any meaning
+- [ ] Icons, where present, are paired with a text label — the icon does not replace the label
+
 ## 管线安全自检（每个 family 配方都要过）
 - [ ] 颜色/字体全部来自主题契约的局部变量（无硬编码，趋势绿红除外）
 - [ ] 内联 SVG 内**无 `<text>`**；标注全是 HTML 叠加

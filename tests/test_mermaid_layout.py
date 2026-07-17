@@ -26,6 +26,8 @@ from mermaid_layout import (
     _minimize_crossings,
     _assign_coordinates,
     _compact_group_columns,
+    _group_coherent_cols,
+    _route_edges,
     _separate_groups_lr,
     _separate_groups_tb,
     _compute_group_bboxes,
@@ -1349,6 +1351,116 @@ class TestEdgeLabelRotation:
             assert s.get("rot", 0) == 0, f"rot={s['rot']} expected 0 for TB"
 
 
+# ── TestLRCrossRowRouting ─────────────────────────────────────────────────────
+
+class TestLRCrossRowRouting:
+    """Cross-row LR forward edges (e.g. PPT Service → Database above) must route
+    via a bend point closer to the destination, not the mid-point, so their
+    vertical segment doesn't visually merge with horizontal edges from the same
+    column that share the mid-x zone."""
+
+    def _route_two_to_one(self):
+        """Two sources in the same rank-column at different rows, both connecting
+        to one destination in the next rank at row 0.
+
+        Mimics the Architecture LR case: Auth→DB (row0→row0, same row) and
+        PPT→DB (row1→row0, cross row)."""
+        from mermaid_layout import _route_edges, NODE_H, RANK_GAP, NODE_W, CANVAS_PAD
+        node_h = NODE_H  # 42
+        col_gap = 52
+        row1_y = CANVAS_PAD + node_h + col_gap  # row 1 top-y
+
+        nodes = {
+            "src_row0": _Node(id="src_row0", label="Auth", x=320, y=CANVAS_PAD, rank=1, col=0),
+            "src_row1": _Node(id="src_row1", label="PPT",  x=320, y=row1_y,    rank=1, col=1),
+            "dst":      _Node(id="dst",      label="DB",   x=320 + NODE_W + RANK_GAP, y=CANVAS_PAD, rank=2, col=0),
+        }
+        edges = [
+            _Edge(src="src_row0", dst="dst", label="reads", style="solid", arrow=True),
+            _Edge(src="src_row1", dst="dst", label="writes", style="solid", arrow=True),
+        ]
+        return _route_edges(nodes, edges, 900, "LR")
+
+    def _extract_x_coords(self, path_d: str):
+        """Return list of x values from SVG path tokens (M/L/Q coords)."""
+        import re
+        return [float(v) for v in re.findall(r'[-+]?[0-9]*\.?[0-9]+', path_d)]
+
+    def test_cross_row_vertical_bend_not_at_mid_x(self):
+        """PPT→DB (cross-row) vertical segment must be placed past the mid-x of the
+        gap, so it doesn't share x-territory with the Auth→DB near-horizontal."""
+        from mermaid_layout import NODE_W, RANK_GAP, CANVAS_PAD
+        specs = self._route_two_to_one()
+        labeled = {s["label"]: s for s in specs if s.get("label")}
+        assert "reads" in labeled and "writes" in labeled, f"Labels not found: {list(labeled)}"
+
+        x_src = 320 + NODE_W  # right edge of source column
+        x_dst = 320 + NODE_W + RANK_GAP  # left edge of dest column
+        mid_x = (x_src + x_dst) // 2
+
+        # Extract all unique x coordinates from the cross-row (writes) path
+        writes_path = labeled["writes"]["d"]
+        xs = self._extract_x_coords(writes_path)
+        # The vertical bend in writes must be placed at x > mid_x (closer to dest)
+        unique_xs = sorted(set(round(x) for x in xs))
+        bend_candidates = [x for x in unique_xs if x_src < x < x_dst]
+        assert bend_candidates, f"No interior x-coord found in path: {writes_path[:120]}"
+        bend_x = max(bend_candidates)  # the rightmost turn point
+        assert bend_x > mid_x, (
+            f"Cross-row edge bend_x={bend_x} not past mid_x={mid_x}; "
+            f"should be closer to destination to avoid same-zone overlap"
+        )
+
+    def test_same_row_uses_mid_x(self):
+        """Auth→DB (same-row) still uses the standard mid-x for its turn."""
+        from mermaid_layout import NODE_W, RANK_GAP, CANVAS_PAD
+        specs = self._route_two_to_one()
+        labeled = {s["label"]: s for s in specs if s.get("label")}
+        assert "reads" in labeled
+
+        x_src = 320 + NODE_W
+        x_dst = 320 + NODE_W + RANK_GAP
+        mid_x = (x_src + x_dst) // 2
+
+        reads_path = labeled["reads"]["d"]
+        xs = self._extract_x_coords(reads_path)
+        unique_xs = sorted(set(round(x) for x in xs))
+        bend_candidates = [x for x in unique_xs if x_src < x < x_dst]
+        assert bend_candidates, f"No interior x-coord in reads path: {reads_path[:120]}"
+        # Same-row edges should have their turn near or at mid_x (within 8px)
+        bend_x = min(bend_candidates, key=lambda x: abs(x - mid_x))
+        assert abs(bend_x - mid_x) <= 8, (
+            f"Same-row edge bend_x={bend_x} too far from mid_x={mid_x}"
+        )
+
+    def test_cross_row_vertical_does_not_cross_same_row_horizontal(self):
+        """The PPT→DB vertical segment must not geometrically cross the Auth→DB
+        horizontal segment (i.e., their x-ranges must not overlap at the same y)."""
+        from mermaid_layout import NODE_W, RANK_GAP, CANVAS_PAD
+        specs = self._route_two_to_one()
+        labeled = {s["label"]: s for s in specs if s.get("label")}
+
+        # Approximate: extract the turn x from both paths
+        x_src = 320 + NODE_W
+        x_dst = 320 + NODE_W + RANK_GAP
+
+        def _bend_x(path_d):
+            import re
+            xs = [float(v) for v in re.findall(r'[-+]?[0-9]*\.?[0-9]+', path_d)]
+            candidates = sorted(set(round(x) for x in xs if x_src < x < x_dst))
+            return max(candidates) if candidates else None
+
+        reads_bend = _bend_x(labeled["reads"]["d"])
+        writes_bend = _bend_x(labeled["writes"]["d"])
+        assert reads_bend is not None and writes_bend is not None
+        # Cross-row bend must be strictly to the RIGHT of same-row bend:
+        # so the cross-row vertical (at writes_bend) is outside the x-range
+        # of the same-row horizontal (which goes from x_src to reads_bend).
+        assert writes_bend > reads_bend, (
+            f"Cross-row bend={writes_bend} must be right of same-row bend={reads_bend}"
+        )
+
+
 # ── TestHeightHintZoom ────────────────────────────────────────────────────────
 
 class TestHeightHintZoom:
@@ -1486,3 +1598,154 @@ class TestGroupBboxMemberSafety:
         assert b[0] >= ext_right, "bbox still contains non-member Ext"
         # …while still containing the member
         assert b[2] >= nodes["A"].x + NODE_W, "right edge pushed past member A"
+
+
+# ── TestNestedGroupBboxContainment ────────────────────────────────────────────
+
+class TestNestedGroupBboxContainment:
+    """Parent group bbox must visually wrap all nested child group members.
+
+    Regression guard for the bug where _compute_group_bboxes used only direct
+    members, so a parent group's container div didn't encompass nested subgraphs.
+    """
+
+    def _make_nested(self):
+        """Parent group with one direct member + one child group with two members."""
+        nodes = {
+            "IDE":        _Node(id="IDE",        label="IDE",   x=320,  y=48,  rank=1, col=0, group="_g0"),
+            "REPO_PACKS": _Node(id="REPO_PACKS", label="Packs", x=592,  y=142, rank=2, col=1, group="_g1"),
+            "CODE":       _Node(id="CODE",        label="Code",  x=592,  y=48,  rank=2, col=0, group="_g1"),
+        }
+        groups = {
+            "_g0": _Group(id="_g0", label="Machine",    members=["IDE"],                   parent_group=None),
+            "_g1": _Group(id="_g1", label="Repo",       members=["REPO_PACKS", "CODE"],    parent_group="_g0"),
+        }
+        return nodes, groups
+
+    def test_parent_bbox_wraps_nested_child_nodes(self):
+        """Parent group bbox y1 must extend past all nested child members."""
+        nodes, groups = self._make_nested()
+        bboxes = _compute_group_bboxes(nodes, groups, 900, 600)
+        assert "_g0" in bboxes, "Parent group must appear in bboxes"
+        assert "_g1" in bboxes, "Child group must appear in bboxes"
+        b_parent = bboxes["_g0"]
+        # Child members REPO_PACKS (y=142) and CODE (y=48) must be inside parent
+        for nid in ("REPO_PACKS", "CODE"):
+            n = nodes[nid]
+            assert b_parent[1] <= n.y, f"Parent top must be above {nid}.y"
+            assert b_parent[3] >= n.y + NODE_H, f"Parent bottom must be below {nid}.y+h"
+            assert b_parent[0] <= n.x, f"Parent left must be left of {nid}.x"
+            assert b_parent[2] >= n.x + NODE_W, f"Parent right must be right of {nid}.x+w"
+
+    def test_child_bbox_is_contained_by_parent_bbox(self):
+        """Child group bbox must fall entirely within parent group bbox."""
+        nodes, groups = self._make_nested()
+        bboxes = _compute_group_bboxes(nodes, groups, 900, 600)
+        b_p = bboxes["_g0"]
+        b_c = bboxes["_g1"]
+        assert b_p[0] <= b_c[0], "parent left must be ≤ child left"
+        assert b_p[2] >= b_c[2], "parent right must be ≥ child right"
+        assert b_p[1] <= b_c[1], "parent top must be ≤ child top"
+        assert b_p[3] >= b_c[3], "parent bottom must be ≥ child bottom"
+
+
+# ── TestGroupCoherentCols ─────────────────────────────────────────────────────
+
+class TestGroupCoherentCols:
+    """_group_coherent_cols must place same-group nodes in adjacent columns.
+
+    Regression guard for the bug where alphabetical barycenter tiebreaking
+    put group members at non-adjacent col values, inflating the group's y-span
+    and pushing sibling groups far away in _separate_groups_lr.
+    """
+
+    def _make_multi_group_rank(self):
+        """Four rank-2 nodes: two in _g0, one in _g1, one ungrouped.
+        All start with bary=0 (common predecessor at col 0).
+        """
+        nodes = {
+            "A": _Node(id="A", label="A", rank=2, col=0, bary=0.0, group="_g0"),
+            "B": _Node(id="B", label="B", rank=2, col=1, bary=0.0, group="_g0"),
+            "C": _Node(id="C", label="C", rank=2, col=2, bary=0.0, group="_g1"),
+            "D": _Node(id="D", label="D", rank=2, col=3, bary=0.0),
+        }
+        groups = {
+            "_g0": _Group(id="_g0", label="Group0", members=["A", "B"]),
+            "_g1": _Group(id="_g1", label="Group1", members=["C"]),
+        }
+        return nodes, groups
+
+    def test_group_members_are_adjacent(self):
+        """After _group_coherent_cols, same-group nodes must have consecutive cols."""
+        nodes, groups = self._make_multi_group_rank()
+        _group_coherent_cols(nodes, groups)
+        g0_cols = sorted(nodes[nid].col for nid in ("A", "B"))
+        assert g0_cols[1] - g0_cols[0] == 1, (
+            f"_g0 members not adjacent: cols={g0_cols}"
+        )
+
+    def test_all_cols_are_unique(self):
+        """_group_coherent_cols must not assign duplicate col values."""
+        nodes, groups = self._make_multi_group_rank()
+        _group_coherent_cols(nodes, groups)
+        cols = [nodes[nid].col for nid in ("A", "B", "C", "D")]
+        assert len(cols) == len(set(cols)), f"Duplicate cols: {cols}"
+
+
+# ── TestLRLabelCentering ─────────────────────────────────────────────────────
+
+class TestLRLabelCentering:
+    """LR forward edge labels must not cluster at the same position.
+
+    With standard RANK_GAP=80, labeled edges always enter "short-gap" mode
+    (RANK_GAP < label_w + 64), so labels float outside the node bounding box
+    rather than sitting at the midpoint. The fix ensures:
+    1. Each label gets zero overlap with node obstacles (score=0 placement).
+    2. Sequential labeled edges land at distinct x positions (no horizontal bar).
+    """
+
+    def _route_chain_with_labels(self):
+        """Three same-row LR nodes chained A→B→C with edge labels."""
+        rank_pitch = NODE_W + RANK_GAP
+        A = _Node(id="A", label="Source",  x=CANVAS_PAD,                   y=CANVAS_PAD, rank=0, col=0)
+        B = _Node(id="B", label="Middle",  x=CANVAS_PAD + rank_pitch,      y=CANVAS_PAD, rank=1, col=0)
+        C = _Node(id="C", label="Dest",    x=CANVAS_PAD + 2 * rank_pitch,  y=CANVAS_PAD, rank=2, col=0)
+        nodes = {"A": A, "B": B, "C": C}
+        edges = [
+            _Edge(src="A", dst="B", label="step one", style="solid", arrow=True),
+            _Edge(src="B", dst="C", label="step two", style="solid", arrow=True),
+        ]
+        return _route_edges(nodes, edges, 900, "LR"), A, B, C
+
+    def test_labels_have_zero_node_overlap(self):
+        """Label chips must not overlap any node bbox — the placement algorithm
+        guarantees score=0 (zero obstacle overlap) when any valid candidate exists."""
+        from mermaid_layout._routing import _label_chip_bbox, _overlap_area
+        specs, A, B, C = self._route_chain_with_labels()
+        labeled = [s for s in specs if s.get("label")]
+        assert len(labeled) == 2
+
+        obstacles = [
+            (A.x, A.y, A.x + NODE_W, A.y + NODE_H),
+            (B.x, B.y, B.x + NODE_W, B.y + NODE_H),
+            (C.x, C.y, C.x + NODE_W, C.y + NODE_H),
+        ]
+        for spec in labeled:
+            chip = _label_chip_bbox(spec["lx"], spec["ly"], spec["label"])
+            overlap = sum(_overlap_area(chip, ob, margin=0) for ob in obstacles)
+            assert overlap == 0, (
+                f"Label '{spec['label']}' chip={chip} overlaps node(s); "
+                f"total overlap={overlap}"
+            )
+
+    def test_two_labeled_edges_not_at_same_x(self):
+        """Two sequential labeled edges with different midpoints must have
+        distinct lx values — they should not both cluster at the same source."""
+        specs, A, B, C = self._route_chain_with_labels()
+        labeled = {s["label"]: s for s in specs if s.get("label")}
+        ab_lx = labeled["step one"]["lx"]
+        bc_lx = labeled["step two"]["lx"]
+        # A→B and B→C edges have midpoints ~272px apart; their labels must be distinct
+        assert abs(ab_lx - bc_lx) > 60, (
+            f"Labels clustered too close: A→B lx={ab_lx}, B→C lx={bc_lx}"
+        )

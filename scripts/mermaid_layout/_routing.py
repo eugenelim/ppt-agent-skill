@@ -356,9 +356,13 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             y1 = s.y + out_offset
             x2 = d.x
             y2 = d.y + in_offset
-            # Route: go right to midpoint, then down/up, then right to dst
-            mid_x = (x1 + x2) // 2
-            path = _smooth_orthogonal_path([(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)])
+            # For cross-row adjacent-rank edges, place the vertical bend at 3/4 of
+            # the gap (near the destination) rather than the mid-point.  This keeps
+            # the vertical segment out of the x-range occupied by horizontal segments
+            # of same-rank same-destination edges, preventing visual overlap.
+            _cross_row = abs(y1 - y2) > _node_render_h(s) // 2 and rank_gap == 1
+            bend_x = x1 + (x2 - x1) * 3 // 4 if _cross_row else (x1 + x2) // 2
+            path = _smooth_orthogonal_path([(x1, y1), (bend_x, y1), (bend_x, y2), (x2, y2)])
             ah = _arrowhead(x2, y2, 1, 0, **ah_kw) if e.arrow else None
             if e.label:
                 H = _LABEL_CHIP_H
@@ -367,17 +371,19 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 q3_x = x1 + 3 * (x2 - x1) // 4
                 y_top = min(int(y1), int(y2)) - 12
                 y_bot = max(int(y1), int(y2)) + H + 4
+                # Midpoint candidates come first so each label is centered over
+                # its own edge segment rather than clustering near the source.
                 cands = [
-                    (x1 + 32,          int(y1) - 12),
-                    (x1 + 32,          int(y1) + H + 4),
-                    (q1_x - w // 2,    y_top),
-                    (q1_x - w // 2,    y_bot),
-                    (mid_x - w // 2,   y_top),
-                    (mid_x - w // 2,   y_bot),
-                    (q3_x - w // 2,    y_top),
-                    (q3_x - w // 2,    y_bot),
-                    (int(x2) - w - 24, int(y2) - 12),
-                    (int(x2) - w - 24, int(y2) + H + 4),
+                    (bend_x - w // 2,   y_top),
+                    (bend_x - w // 2,   y_bot),
+                    (q1_x - w // 2,     y_top),
+                    (q1_x - w // 2,     y_bot),
+                    (q3_x - w // 2,     y_top),
+                    (q3_x - w // 2,     y_bot),
+                    (x1 + 32,           int(y1) - 12),
+                    (x1 + 32,           int(y1) + H + 4),
+                    (int(x2) - w - 24,  int(y2) - 12),
+                    (int(x2) - w - 24,  int(y2) + H + 4),
                 ]
                 # For short-gap edges (label wider than gap), float the label
                 # just below the source card in the open space between nodes.

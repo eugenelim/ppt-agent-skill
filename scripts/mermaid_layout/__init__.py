@@ -35,6 +35,7 @@ from ._layout import (
     _minimize_crossings,
     _assign_coordinates,
     _compact_group_columns,
+    _group_coherent_cols,
 )
 from ._routing import (
     _arrowhead,
