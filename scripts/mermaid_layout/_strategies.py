@@ -130,16 +130,18 @@ def _layout_graph_topology(
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
         canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
 
-    # Scale to fit both width and height constraints via CSS zoom.
-    # Scale up when the diagram is smaller than the canvas (fills dead space);
-    # scale down when it is larger. Cap scale-up at 1.4× to avoid oversizing.
-    # Using zoom (not transform:scale) avoids distorting pre-computed coordinates.
+    # Scale to fit width/height constraints via CSS zoom.
+    # Without height_hint: scale down only (never scale up — a tall diagram
+    # scaled up to fill width overflows the slide height).
+    # With height_hint: scale to fit both dimensions, capped at 1.4× scale-up.
     zoom = 1.0
     if width_hint and canvas_w > 0:
         w_zoom = width_hint / canvas_w
-        h_zoom = height_hint / canvas_h if (height_hint and canvas_h > 0) else w_zoom
-        zoom = min(w_zoom, h_zoom)
-        zoom = min(zoom, 1.4)  # cap scale-up; scale-down is uncapped
+        if height_hint and canvas_h > 0:
+            h_zoom = height_hint / canvas_h
+            zoom = min(w_zoom, h_zoom, 1.4)  # fit both, cap scale-up
+        else:
+            zoom = min(w_zoom, 1.0)  # scale down only; avoids height overflow
 
     fragment = _render_graph_fragment(
         nodes, edges, groups, canvas_w, canvas_h, direction, zoom,
@@ -154,13 +156,11 @@ def _layout_graph_topology(
     legend_html = _render_legend(edges, groups)
 
     if legend_html:
-        # Flexbox column so the legend is pinned to the bottom of the diagram area
         return (
             '<div class="diagram-wrapper" style="'
-            'display:flex; flex-direction:column; height:100%; '
+            'display:flex; flex-direction:column; '
             'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{meta_html}{fragment}'
-            '<div style="flex:1;"></div>'
             f'{legend_html}'
             '</div>'
         )
