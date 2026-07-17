@@ -177,6 +177,19 @@ is available in the repo.
 
 - **Discovered (not an AC deferral): no reusable script to assemble a `mermaid_layout.py` fragment into a full slide HTML page.** An ad-hoc `gen_slides.py` was written on the fly during a diagram session to: read fragment files, inject the deck's `:root` CSS variables, create a `1280×720` slide body with title bar, two-column content grid (diagram + annotation cards), and `transform:scale(N)` wrapper. `mermaid_layout.py` emits fragments only; `html_packager.py` consumes complete slide HTML and cannot wrap a fragment. Unblocked by creating `scripts/assemble_diagram_slide.py [--fragment path] [--style style.json] [--title "..."] [--annotation annotation.md] [--output slide.html]` — a repeatable, tested script that replaces the ad-hoc approach. Also: `gen_slides.py` hardcoded `frag_h=344` which diverged from actual fragment dimensions after group/canvas height fixes; the assembler should auto-read `width/height` from the fragment's outermost div style.
 
+## mermaid-layout-refactor
+
+### mermaid-layout-package-split
+
+**Deferred from spec mermaid-layout-refactor (not an AC deferral):** Split
+`scripts/mermaid_layout.py` (2,476 lines) into a `scripts/mermaid_layout/` package with
+sub-modules (`_constants.py`, `_parser.py`, `_layout.py`, `_routing.py`, `_renderer.py`,
+`_strategies.py`). Deferred because it requires careful handling of `python3
+scripts/mermaid_layout.py` CLI invocation (package `__main__.py`) and the direct-import
+contract used by `scripts/test_diagram_qa.py` (`from mermaid_layout import _dispatch, ...`).
+Unblocked after the test suite (AC-TEST) is established — the tests act as the safety net
+for a structural split that cannot easily be undone.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>
