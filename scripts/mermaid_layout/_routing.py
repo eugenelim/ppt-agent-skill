@@ -408,20 +408,19 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     src_h = _node_render_h(s)
                     _vstep = H + 24
                     sg_cands: list[tuple[int, int]] = []
-                    # Below-source ladder first (positive y, no canvas-top overflow)
-                    for _si in range(6):
-                        _dy = _si * _vstep
-                        sg_cands += [
-                            (x1 - w - 12, s.y + src_h + H + 4 + _dy),
-                            (x1 + 8,      s.y + src_h + H + 4 + _dy),
-                        ]
-                    # Above-source ladder as last resort
+                    # Below-source: all left-side slots first, then right-side as
+                    # fallback.  Draining the full left column before trying right
+                    # keeps same-source labels in a clean vertical stack instead of
+                    # scattering left-right at the same y level.
+                    for _si in range(8):
+                        sg_cands.append((x1 - w - 12, s.y + src_h + H + 4 + _si * _vstep))
                     for _si in range(4):
-                        _dy = _si * _vstep
-                        sg_cands += [
-                            (x1 - w - 12, s.y - H - 12 - _dy),
-                            (x1 + 8,      s.y - H - 12 - _dy),
-                        ]
+                        sg_cands.append((x1 + 8, s.y + src_h + H + 4 + _si * _vstep))
+                    # Above-source as last resort (heavily penalised when chip_top < 0)
+                    for _si in range(4):
+                        sg_cands.append((x1 - w - 12, s.y - H - 12 - _si * _vstep))
+                    for _si in range(4):
+                        sg_cands.append((x1 + 8, s.y - H - 12 - _si * _vstep))
                     cands = sg_cands + cands
                 lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
             else:

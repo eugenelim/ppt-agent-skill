@@ -14,6 +14,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+from mermaid_layout._strategies import _infer_label_icons
+
 from mermaid_layout import (
     _strip_frontmatter,
     _detect_directive,
@@ -1748,3 +1750,133 @@ class TestLRLabelCentering:
         assert abs(ab_lx - bc_lx) > 60, (
             f"Labels clustered too close: A→B lx={ab_lx}, B→C lx={bc_lx}"
         )
+
+
+# ── TestInferLabelIcons ───────────────────────────────────────────────────────
+
+class TestInferLabelIcons:
+    """_infer_label_icons: keyword matching, word-boundary safety, and priority."""
+
+    def _icon(self, label: str, shape: str = "rect") -> str:
+        n = _Node(id="X", label=label, shape=shape)
+        _infer_label_icons({"X": n})
+        return n.icon
+
+    # ── basic positive matches ────────────────────────────────────────────────
+
+    def test_user_label(self):
+        assert self._icon("User") == "users"
+
+    def test_client_label(self):
+        assert self._icon("External client") == "users"
+
+    def test_developer_label(self):
+        assert self._icon("Developer / repository maintainer") == "users"
+
+    def test_coding_ide(self):
+        assert self._icon("Coding IDE") == "ide"
+
+    def test_ide_standalone(self):
+        assert self._icon("IDE tool") == "ide"
+
+    def test_cli(self):
+        assert self._icon("express-ai-dev-kit installer\\n[CLI]") == "terminal"
+
+    def test_mcp_server(self):
+        assert self._icon("express-ai-atlas\\n[Knowledge MCP server]") == "mcp-server"
+
+    def test_graphrag_search(self):
+        assert self._icon("GraphRAG search / knowledge layer\\n[Retrieval service]") == "graphrag-search"
+
+    def test_coding_subagent_catalogue(self):
+        assert self._icon("Agent Skills / Coding Subagents catalogue\\n[Artifact registry; versioned packs]") == "coding-subagent"
+
+    def test_knowledge_source_hyphenated(self):
+        assert self._icon("express-ai-knowledge-source-enterprise-it\\n[Git repo; IT standards, architecture patterns]") == "knowledge-corpus"
+
+    def test_knowledge_source_space(self):
+        assert self._icon("Governed knowledge source repository") == "knowledge-corpus"
+
+    def test_knowledge_graph_db(self):
+        assert self._icon("Graph database\\n[Derived knowledge graph]") == "knowledge-graph"
+
+    def test_graph_database_standalone(self):
+        assert self._icon("Graph database") == "knowledge-graph"
+
+    def test_application_source_code(self):
+        assert self._icon("Application source and project artifacts") == "source-code"
+
+    def test_repository_scoped_packs(self):
+        assert self._icon("Installed repository-scoped packs") == "package"
+
+    def test_pack_directory(self):
+        assert self._icon("Repository-scoped pack directory\\n[Git working tree]") == "package"
+
+    def test_vector_store(self):
+        assert self._icon("Vector database\\n[Derived semantic index]") == "vector-store"
+
+    def test_ingestion_pipeline(self):
+        assert self._icon("Knowledge-corpus ingestion pipeline\\n[Batch / event pipeline]") == "pipeline"
+
+    def test_database(self):
+        assert self._icon("PostgreSQL database") == "database"
+
+    # ── priority: specific type wins over generic ────────────────────────────
+
+    def test_graphrag_beats_search(self):
+        # "graphrag" entry comes before generic "search engine"
+        assert self._icon("GraphRAG search layer") == "graphrag-search"
+
+    def test_knowledge_graph_beats_database(self):
+        # "knowledge graph" entry comes before generic "database"
+        assert self._icon("Neo4j graph database") == "knowledge-graph"
+
+    def test_knowledge_corpus_beats_pipeline_for_source_repos(self):
+        # knowledge-source repos should get knowledge-corpus, not pipeline
+        assert self._icon("express-ai-knowledge-source-retirement-services\\n[Git repo; business-domain knowledge]") == "knowledge-corpus"
+
+    def test_ingestion_pipeline_not_wrongly_knowledge_corpus(self):
+        # "Knowledge-corpus ingestion pipeline" should get pipeline, not knowledge-corpus
+        # (no "knowledge-source" / "knowledge source" in the label — only hyphenated "knowledge-corpus")
+        assert self._icon("Knowledge-corpus ingestion pipeline\\n[Batch / event pipeline]") == "pipeline"
+
+    # ── word-boundary safety: short tokens must not match inside longer words ──
+
+    def test_rds_does_not_match_standards(self):
+        # "rds" substring of "standards" — must NOT trigger database icon
+        assert self._icon("IT standards and architecture patterns") == ""
+
+    def test_cli_does_not_match_client(self):
+        # "cli" is a prefix of "client" — word boundary must block it
+        # "client" itself matches "users" — verify it doesn't become terminal
+        assert self._icon("Express AI client surfaces") == "users"
+
+    def test_ses_does_not_match_processes(self):
+        # "ses" is a suffix of "processes" — must NOT trigger email icon
+        assert self._icon("processes complete") == ""
+
+    def test_api_does_not_match_rapid(self):
+        # "api" substring of "rapid" — word boundary must block it
+        assert self._icon("rapid deployment") == ""
+
+    def test_mcp_does_not_match_compact(self):
+        # "mcp" could appear inside other words — verify no false positive
+        assert self._icon("compact layout engine") == ""
+
+    def test_ide_does_not_match_guidelines(self):
+        # "ide" is a suffix of "guidelines" — word boundary must block it
+        assert self._icon("see guidelines for usage") == ""
+
+    # ── explicit icon or css_class skips inference ────────────────────────────
+
+    def test_existing_icon_not_overwritten(self):
+        n = _Node(id="X", label="User", icon="custom-icon")
+        _infer_label_icons({"X": n})
+        assert n.icon == "custom-icon"
+
+    def test_css_class_with_valid_icon_skips_inference(self):
+        # If css_class resolves to an icon, inference is skipped
+        n = _Node(id="X", label="User", css_class="database")
+        _infer_label_icons({"X": n})
+        # database css_class resolves to an icon — icon should remain unset
+        assert n.icon == ""

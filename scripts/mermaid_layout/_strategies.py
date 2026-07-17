@@ -31,8 +31,9 @@ def _infer_label_icons(nodes: "dict[str, _Node]") -> None:
     """Assign icons from node labels when no explicit icon or matching css_class is set.
 
     Checks each node's label (lowercased) against _LABEL_ICON_KEYWORDS in order;
-    first match wins. Skips nodes that already have an icon, have a css_class that
-    resolves to an icon, or are marked :::external (which should stay visually subdued).
+    first match wins. Uses word-boundary matching (\\b) so short tokens like "cli"
+    or "mcp" do not false-positive inside longer words ("client", "compact").
+    Skips nodes that already have an icon or have a css_class that resolves to one.
     """
     from ._constants import _load_icon
     for n in nodes.values():
@@ -42,7 +43,10 @@ def _infer_label_icons(nodes: "dict[str, _Node]") -> None:
             continue
         label_lower = n.label.lower()
         for keywords, icon_name in _LABEL_ICON_KEYWORDS:
-            if any(kw in label_lower for kw in keywords):
+            if any(
+                re.search(r"\b" + re.escape(kw) + r"\b", label_lower)
+                for kw in keywords
+            ):
                 n.icon = icon_name
                 break
 
