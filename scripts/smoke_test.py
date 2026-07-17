@@ -495,7 +495,7 @@ def phase2_mermaid_layout_tests() -> dict:
         results["mermaid"].append({"name": name, "status": "fail", "detail": detail})
         results["summary"]["fail"] += 1
 
-    ml = ROOT / "scripts" / "mermaid_layout.py"
+    ml = ROOT / "scripts" / "mermaid_layout"
 
     def _run(src: str, extra: list[str] | None = None) -> tuple[int, str]:
         cmd = ["python3", str(ml), "--source", src] + (extra or [])

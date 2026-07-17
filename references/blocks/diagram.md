@@ -189,7 +189,7 @@
 
 ## Mermaid 渲染器语义标注
 
-> 仅适用于通过 `mermaid_layout.py` 渲染的 Mermaid 源码图（`flowchart` / `graph` 指令）。手写 HTML 配方不涉及。
+> 仅适用于通过 `mermaid_layout` 渲染的 Mermaid 源码图（`flowchart` / `graph` 指令）。手写 HTML 配方不涉及。
 
 ### `:::external` — 外部系统标注
 

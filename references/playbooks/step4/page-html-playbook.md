@@ -191,7 +191,7 @@ body {
 > **为什么**：LLM 单遍同时"定拓扑 + 手排坐标"是它最弱的一环（坐标算术错误约占一半、多空间约束整合 <50%、随节点数崩塌）。把"先定结构、再由结构派生坐标"固化成步骤，第一遍就更可能画对，而不是留给 Review 收拾。
 
 > **【绝对红线 — 违反即 P0】**：
-> 1. **严禁手算像素坐标布局节点**：无论是否有 `mermaid_layout.py` 输出，diagram 卡布局**必须**走 CSS Grid / Flex，**绝不**用 `position:absolute; left:NNpx; top:NNpx` 给节点定位——这条在 ad-hoc 路径下同样生效。
+> 1. **严禁手算像素坐标布局节点**：无论是否有 `mermaid_layout` 输出，diagram 卡布局**必须**走 CSS Grid / Flex，**绝不**用 `position:absolute; left:NNpx; top:NNpx` 给节点定位——这条在 ad-hoc 路径下同样生效。
 > 2. **节点字号下限**：主标签 ≥ **14px**、副标签（tech sub-label、说明行）≥ **12px**、连线标注 ≥ **11px**。此下限**优先于** `density_contract.min_body_font_px`，在 mermaid_layout.py 路径和 ad-hoc 路径中均强制执行。
 > 3. **节点防溢出与文字留白**：每个节点盒子必须写 `min-width` + `min-height` + `box-sizing:border-box`，禁止依赖 `overflow:hidden` 裁掉节点文字——文字消失不是溢出防护，是渲染错误。内边距至少 **14px 上下 / 20px 左右**，`line-height` ≥ **1.4**——文字不得紧贴节点边框。节点宽应满足 `文本长度 × 字宽 + padding × 2`；多行标签用 `white-space:normal; word-break:break-word` 让节点自然撑高，不得硬设固定高度截断内容。
 

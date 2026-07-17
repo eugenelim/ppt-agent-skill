@@ -597,9 +597,9 @@ widen-after-publish gap.
 ### Module size
 
 Scripts in `scripts/` should stay under ~500 lines. Above 800 lines, open a backlog
-item to split into focused sub-modules. `mermaid_layout.py` is a tracked exception
-(backlog: `mermaid-layout-package-split`) with a planned split into
-`_constants.py / _parser.py / _layout.py / _routing.py / _renderer.py / _strategies.py`.
+item to split into focused sub-modules. `scripts/mermaid_layout/_strategies.py` is a
+tracked exception (~1,250 lines) — it contains all diagram-type dispatch strategies and
+is one focused concern that does not split further without losing locality.
 
 ### Private symbols
 

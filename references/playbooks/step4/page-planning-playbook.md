@@ -252,7 +252,7 @@ page_template  : cover toc section section-marker reference end
 
   例：一页用 `diagram_type:architecture-deployment` → `"block_refs": ["diagram-architecture"]`。`timeline` 卡走 `card_type:timeline`（自动加载 `blocks/timeline.md`），不需要 family ref。
 
-  > **`diagram_source` 必须放在卡片级，不是页顶层**：若来源文档含 Mermaid fence，把 `diagram_source` 对象放在 **diagram 卡本身**（`cards[i].diagram_source`），不要放在 JSON 顶层。页顶层放置会导致 HTML 阶段的 `mermaid_layout.py` 预处理优先级降低（仍可回退检测，但不是规范路径）。正确写法：
+  > **`diagram_source` 必须放在卡片级，不是页顶层**：若来源文档含 Mermaid fence，把 `diagram_source` 对象放在 **diagram 卡本身**（`cards[i].diagram_source`），不要放在 JSON 顶层。页顶层放置会导致 HTML 阶段的 `mermaid_layout` 预处理优先级降低（仍可回退检测，但不是规范路径）。正确写法：
   > ```json
   > {
   >   "cards": [{
