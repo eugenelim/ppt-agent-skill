@@ -36,6 +36,16 @@ _NODE_CSS = {
 }
 
 
+# Accent colors in RGBA for group background tints (matches CSS --accent-1/3/4/2 order)
+_ACCENT_CYCLE = ["var(--accent-1)", "var(--accent-3)", "var(--accent-4)", "var(--accent-2)"]
+_ACCENT_TINTS = [
+    "rgba(63,200,130,0.05)",   # emerald (accent-1)
+    "rgba(77,184,236,0.05)",   # sky     (accent-3)
+    "rgba(232,146,74,0.05)",   # amber   (accent-4)
+    "rgba(123,84,245,0.05)",   # violet  (accent-2)
+]
+
+
 def _render_graph_fragment(
     nodes: dict[str, _Node],
     edges: list[_Edge],
@@ -44,24 +54,30 @@ def _render_graph_fragment(
     canvas_h: int,
     direction: str = "TB",
     zoom: float = 1.0,
+    style_overrides: str = "",
 ) -> str:
     parts: list[str] = []
 
     # Container — zoom scales the whole diagram proportionally when it exceeds
     # the width hint, preserving geometry without distorting node sizes or gaps.
     zoom_css = f" zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
+    extra_style = (" " + style_overrides.strip()) if style_overrides else ""
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative; width:{canvas_w}px; height:{canvas_h}px; '
         f'--node-w:{NODE_W}px; --node-h:{NODE_H}px; '
         f'--rank-gap:{RANK_GAP}px; --col-gap:{COL_GAP}px; '
-        f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}">'
+        f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}{extra_style}">'
     )
 
-    # Group containers (subgraphs) — use overlap-resolved, canvas-clipped bboxes.
-    # Each group gets a distinct accent color from the palette so zones are
-    # visually distinguishable at a glance.
-    _ACCENT_CYCLE = ["var(--accent-1)", "var(--accent-3)", "var(--accent-4)", "var(--accent-2)"]
+    # Build node → group accent index for title-color inheritance
+    _grp_ids = list(groups.keys())
+    _node_grp_idx: dict[str, int] = {}
+    for _gi, gid in enumerate(_grp_ids):
+        for _nid in groups[gid].members:
+            _node_grp_idx[_nid] = _gi
+
+    # Group containers (subgraphs) — dashed border + subtle tint per accent slot.
     _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
     for _gi, (gid, grp) in enumerate(groups.items()):
         if gid not in _grp_bboxes:
@@ -71,11 +87,13 @@ def _render_graph_fragment(
         gw, gh = max(1, int(_b[2] - _b[0])), max(1, int(_b[3] - _b[1]))
         glabel = _h(grp.label)
         _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
+        _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
         parts.append(
             f'<div class="diagram-group" style="'
             f'position:absolute; left:{gx}px; top:{gy}px; '
             f'width:{gw}px; height:{gh}px; '
-            f'border:1px solid {_accent}; '
+            f'border:1px dashed {_accent}; '
+            f'background:{_tint}; '
             f'border-radius:var(--group-radius,12px); '
             f'box-sizing:border-box; overflow:visible;">'
             f'<span class="group-label" style="'
@@ -112,11 +130,15 @@ def _render_graph_fragment(
         icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
 
-        # Color tokens: dim external nodes; accent the title for normal nodes
+        # Color tokens: dim external nodes; inherit group accent for title color
         fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
         border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
-        # Title uses accent-1 so it reads differently from the card body background
-        title_color = fg_var if is_external else "var(--node-title-fg,var(--accent-1))"
+        if is_external:
+            title_color = fg_var
+        elif nid in _node_grp_idx:
+            title_color = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
+        else:
+            title_color = "var(--node-title-fg,var(--accent-1))"
 
         sub_span = ""
         if bracket_sub:
@@ -124,7 +146,7 @@ def _render_graph_fragment(
             sub_html = "<br>".join(_nh(ln) for ln in sub_lines)
             sub_span = (
                 f'<span class="node-sub" style="'
-                f'display:block; font-size:11px; font-weight:400; '
+                f'display:block; font-size:var(--node-fs-sub,12px); font-weight:400; '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.3; margin-top:3px;">'
@@ -135,7 +157,7 @@ def _render_graph_fragment(
         if tech_label:
             tech_span = (
                 f'<span class="node-tech" style="'
-                f'display:block; font-size:11px; font-weight:400; '
+                f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.2; margin-top:2px;">'
@@ -145,11 +167,11 @@ def _render_graph_fragment(
         if icon_svg:
             inner = (
                 f'<span class="node-icon" style="'
-                f'display:block;width:20px;height:20px;margin:0 auto 3px;'
+                f'display:block;width:24px;height:24px;margin:0 auto 4px;'
                 f'color:{title_color};">'
                 f'{icon_svg}</span>'
                 f'<span class="node-label" style="'
-                f'font-size:13px; font-weight:700; '
+                f'font-size:var(--node-fs-title,14px); font-weight:700; '
                 f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
@@ -159,7 +181,7 @@ def _render_graph_fragment(
         else:
             inner = (
                 f'<span class="node-label" style="'
-                f'font-size:14px; font-weight:700; '
+                f'font-size:var(--node-fs-title,15px); font-weight:700; '
                 f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
@@ -173,7 +195,7 @@ def _render_graph_fragment(
             f'position:absolute; left:{n.x}px; top:{n.y}px; '
             f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
             f'min-width:{NODE_W}px; '
-            f'padding:var(--node-pad-v,14px) var(--node-pad-h,20px); '
+            f'padding:var(--node-pad-v,16px) var(--node-pad-h,20px); '
             f'box-sizing:border-box; '
             f'border:1px solid {border_var}; '
             f'{shape_css} '
@@ -229,6 +251,30 @@ def _render_graph_fragment(
 
     parts.append('</div>')
     return "\n".join(parts)
+
+
+# ── style preset strings for _dispatch(style_overrides=...) ──────────────────
+
+# Default (no overrides): 15px title, 12px sub/tech — optimized for presentation slides.
+# Pass one of these to _dispatch() to switch layout density:
+
+STYLE_COMPACT = (
+    "--node-fs-title:13px;"
+    "--node-fs-sub:11px;"
+    "--node-fs-tech:11px;"
+    "--node-pad-v:12px;"
+    "--node-pad-h:16px;"
+)
+"""Compact style for information-dense diagrams (smaller fonts, tighter padding)."""
+
+STYLE_LARGE = (
+    "--node-fs-title:17px;"
+    "--node-fs-sub:14px;"
+    "--node-fs-tech:14px;"
+    "--node-pad-v:20px;"
+    "--node-pad-h:24px;"
+)
+"""Large style for hero/title slides with fewer nodes."""
 
 
 # ── diagram metadata + legend helpers ────────────────────────────────────────

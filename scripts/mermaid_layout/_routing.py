@@ -231,7 +231,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         in_offset = _fan_offset(in_idx, len(in_list))
 
         x1 = s.x + out_offset
-        y1 = s.y + NODE_H
+        y1 = s.y + _node_render_h(s)
         x2 = d.x + in_offset
         y2 = d.y
         cy1 = y1 + (y2 - y1) // 3

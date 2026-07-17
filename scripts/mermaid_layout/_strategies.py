@@ -27,7 +27,8 @@ from ._renderer import (
 # ── graph topology strategy ──────────────────────────────────────────────────
 
 def _layout_graph_topology(
-    src: str, direction: str, width_hint: int, height_hint: int = 0
+    src: str, direction: str, width_hint: int, height_hint: int = 0,
+    style_overrides: str = "",
 ) -> str:
     lines = src.splitlines()
     # Skip up to and including the directive line (first non-blank, non-comment line)
@@ -104,14 +105,20 @@ def _layout_graph_topology(
         canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
 
     # Scale to fit both width and height constraints via CSS zoom.
+    # Scale up when the diagram is smaller than the canvas (fills dead space);
+    # scale down when it is larger. Cap scale-up at 1.4× to avoid oversizing.
     # Using zoom (not transform:scale) avoids distorting pre-computed coordinates.
     zoom = 1.0
     if width_hint and canvas_w > 0:
-        w_zoom = width_hint / canvas_w if canvas_w > width_hint * 1.05 else 1.0
-        h_zoom = height_hint / canvas_h if (height_hint and canvas_h > height_hint * 1.05) else 1.0
+        w_zoom = width_hint / canvas_w
+        h_zoom = height_hint / canvas_h if (height_hint and canvas_h > 0) else w_zoom
         zoom = min(w_zoom, h_zoom)
+        zoom = min(zoom, 1.4)  # cap scale-up; scale-down is uncapped
 
-    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction, zoom)
+    fragment = _render_graph_fragment(
+        nodes, edges, groups, canvas_w, canvas_h, direction, zoom,
+        style_overrides=style_overrides,
+    )
 
     # Wrap with metadata chip (type + title) and auto-legend
     directive, _ = _detect_directive(src)
@@ -1286,6 +1293,7 @@ def _dispatch(
     direction_override: Optional[str],
     width_hint: int,
     height_hint: int = 0,
+    style_overrides: str = "",
 ) -> str:
     """Detect directive, dispatch to per-type strategy, return HTML fragment."""
     clean = _strip_frontmatter(src)
@@ -1298,7 +1306,10 @@ def _dispatch(
     d = directive.lower()
 
     if d in _GRAPH_DIRECTIVES:
-        return _layout_graph_topology(clean, direction, width_hint, effective_height)
+        return _layout_graph_topology(
+            clean, direction, width_hint, effective_height,
+            style_overrides=style_overrides,
+        )
     if d == "sequencediagram":
         return _layout_lifeline(clean, direction, width_hint)
     if d == "erdiagram":
@@ -1330,7 +1341,9 @@ def _dispatch(
 
     # Unknown directive — graph-topology best-effort fallback
     try:
-        return _layout_graph_topology(clean, direction, width_hint)
+        return _layout_graph_topology(
+            clean, direction, width_hint, style_overrides=style_overrides,
+        )
     except Exception:
         raise ValueError(f"Unsupported or unrecognised Mermaid directive: '{directive}'")
 

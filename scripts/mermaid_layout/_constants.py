@@ -71,25 +71,25 @@ EDGE_CAP = 128
 GROUP_CAP = 16
 CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 
-# ── default geometry (px) — matches Appendix §A in spec ──────────────────────
-NODE_W = 160
-NODE_H = 56       # base height for a single-line node (see _node_render_h formula below)
-RANK_GAP = 72    # gap in flow direction (vertical in TB, horizontal in LR)
-COL_GAP = 48     # gap perpendicular to flow (horizontal in TB, vertical in LR)
+# ── default geometry (px) ────────────────────────────────────────────────────
+NODE_W = 192
+NODE_H = 68       # base height for a single-line node (see _node_render_h formula below)
+RANK_GAP = 80    # gap in flow direction (vertical in TB, horizontal in LR)
+COL_GAP = 52     # gap perpendicular to flow (horizontal in TB, vertical in LR)
 CANVAS_PAD = 48  # outer inset on all sides
-GROUP_PAD_X = 24  # group container horizontal inner padding
-GROUP_PAD_Y_TOP = 32  # group container top inner padding (room for label)
-GROUP_PAD_Y_BOT = 24  # group container bottom inner padding
+GROUP_PAD_X = 28  # group container horizontal inner padding
+GROUP_PAD_Y_TOP = 36  # group container top inner padding (room for label)
+GROUP_PAD_Y_BOT = 28  # group container bottom inner padding
 
 # Node height composition — single source of truth used by _node_render_h:
 #   NODE_H          = base (padding + one text line)
 #   _NODE_H_LINE    = added per extra text line beyond the first
 #   _NODE_H_ICON    = icon block (20px icon + 4px margin) added when icon resolves
-#   _NODE_H_TECH    = tech sub-label line (11px × 1.4 ≈ 16px)
+#   _NODE_H_TECH    = tech sub-label line (12px × 1.4 ≈ 17px)
 # All extra_h components are ADDITIVE (not max) so icon + multiline nodes size correctly.
-_NODE_H_LINE = 20   # px per additional text line (14px font × 1.4 line-height)
-_NODE_H_ICON = 24   # icon box: 20px SVG + 4px bottom margin
-_NODE_H_TECH = 16   # tech sub-label line height
+_NODE_H_LINE = 22   # px per additional text line (15px font × 1.4 line-height)
+_NODE_H_ICON = 28   # icon box: 24px SVG + 4px bottom margin
+_NODE_H_TECH = 17   # tech sub-label line height
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 
@@ -141,7 +141,7 @@ class _Group:
 
 
 
-_WRAP_CHARS = 18  # label wrap threshold (~120px usable at 7px/char, NODE_W=160 minus 40px padding)
+_WRAP_CHARS = 20  # label wrap threshold (NODE_W=192 minus ~44px padding = ~148px usable ≈ 20 chars at 7.5px/char)
 
 
 def _wrap_label(label: str) -> list[str]:

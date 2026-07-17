@@ -50,6 +50,8 @@ from ._renderer import (
     _separate_groups_lr,
     _separate_groups_tb,
     _compute_group_bboxes,
+    STYLE_COMPACT,
+    STYLE_LARGE,
 )
 from ._strategies import _dispatch
 
@@ -65,5 +67,6 @@ __all__ = [
     "_arrowhead", "_smooth_orthogonal_path", "_fan_offset", "_route_edges",
     "_render_graph_fragment", "_extract_diagram_title", "_render_metadata_chip",
     "_render_legend", "_separate_groups_lr", "_separate_groups_tb", "_compute_group_bboxes",
+    "STYLE_COMPACT", "STYLE_LARGE",
     "_dispatch",
 ]
