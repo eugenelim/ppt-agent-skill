@@ -171,7 +171,8 @@
     cursor: pointer;
     transition: color 0.15s;
   }
-  .row1 .open:hover { color: #22D3EE; }
+  .row1 .open:hover,
+  .row1 .open:focus-visible { color: #22D3EE; }
   .row2 {
     display: flex; gap: 6px; align-items: center;
     font-size: 11px;
@@ -211,7 +212,8 @@
     transition: background 0.15s, color 0.15s;
   }
   .tier-toggle button + button { border-left: 1px solid rgba(255,255,255,0.12); }
-  .tier-toggle button:hover { color: #fff; }
+  .tier-toggle button:hover,
+  .tier-toggle button:focus-visible { color: #fff; }
   .tier-toggle button.active { background: #22D3EE; color: #06121a; font-weight: 700; }
 
   /* global cover/detail switch (header) */
@@ -233,7 +235,8 @@
     transition: background 0.15s, color 0.15s;
   }
   .tierswitch button + button { border-left: 1px solid rgba(255,255,255,0.14); }
-  .tierswitch button:hover { color: #fff; }
+  .tierswitch button:hover,
+  .tierswitch button:focus-visible { color: #fff; }
   .tierswitch button.active { background: #22D3EE; color: #06121a; }
 
   .footer {
@@ -249,7 +252,17 @@
     text-decoration: none;
     transition: color 0.15s;
   }
-  .footer a:hover { color: #22D3EE; }
+  .footer a:hover,
+  .footer a:focus-visible { color: #22D3EE; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -284,7 +297,7 @@
       <div class="grid">
         <div class="card has-both" data-cover="dark_tech.cover.html" data-detail="dark_tech.html">
           <div class="frame">
-            <iframe src="dark_tech.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="dark_tech.cover.html" title="暗黑科技 (Dark Tech) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -306,7 +319,7 @@
         </div>
 <div class="card has-both" data-cover="xiaomi_orange.cover.html" data-detail="xiaomi_orange.html">
           <div class="frame">
-            <iframe src="xiaomi_orange.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="xiaomi_orange.cover.html" title="小米橙 (Xiaomi Orange) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -328,7 +341,7 @@
         </div>
 <div class="card has-both" data-cover="luxury_purple.cover.html" data-detail="luxury_purple.html">
           <div class="frame">
-            <iframe src="luxury_purple.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="luxury_purple.cover.html" title="紫金奢华 (Luxury, Tom Ford-grade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -350,7 +363,7 @@
         </div>
 <div class="card has-both" data-cover="nocturne_violet.cover.html" data-detail="nocturne_violet.html">
           <div class="frame">
-            <iframe src="nocturne_violet.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="nocturne_violet.cover.html" title="紫光夜曲 (Nocturne Violet) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -372,7 +385,7 @@
         </div>
 <div class="card has-both" data-cover="cyberpunk_neon.cover.html" data-detail="cyberpunk_neon.html">
           <div class="frame">
-            <iframe src="cyberpunk_neon.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="cyberpunk_neon.cover.html" title="赛博霓虹 (Cyberpunk Neon) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -394,7 +407,7 @@
         </div>
 <div class="card has-both" data-cover="chrome_y2k.cover.html" data-detail="chrome_y2k.html">
           <div class="frame">
-            <iframe src="chrome_y2k.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="chrome_y2k.cover.html" title="千禧铬感 (Chrome Y2K) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -416,7 +429,7 @@
         </div>
 <div class="card has-both" data-cover="noir_film.cover.html" data-detail="noir_film.html">
           <div class="frame">
-            <iframe src="noir_film.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="noir_film.cover.html" title="黑白胶片 (Noir Film) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -438,7 +451,7 @@
         </div>
 <div class="card has-both" data-cover="graphite_gold.cover.html" data-detail="graphite_gold.html">
           <div class="frame">
-            <iframe src="graphite_gold.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="graphite_gold.cover.html" title="石墨金 (Graphite Gold) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -460,7 +473,7 @@
         </div>
 <div class="card has-both" data-cover="graphite_violet.cover.html" data-detail="graphite_violet.html">
           <div class="frame">
-            <iframe src="graphite_violet.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="graphite_violet.cover.html" title="石墨紫 (Graphite Violet) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -495,7 +508,7 @@
       <div class="grid">
         <div class="card has-both" data-cover="blue_white.cover.html" data-detail="blue_white.html">
           <div class="frame">
-            <iframe src="blue_white.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="blue_white.cover.html" title="蓝白商务 (Blue White, Apple-grade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -517,7 +530,7 @@
         </div>
 <div class="card has-both" data-cover="fresh_green.cover.html" data-detail="fresh_green.html">
           <div class="frame">
-            <iframe src="fresh_green.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="fresh_green.cover.html" title="清新自然 (Fresh Green, Aesop-grade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -539,7 +552,7 @@
         </div>
 <div class="card has-both" data-cover="minimal_gray.cover.html" data-detail="minimal_gray.html">
           <div class="frame">
-            <iframe src="minimal_gray.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="minimal_gray.cover.html" title="极简灰白 (NYT Magazine-grade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -561,7 +574,7 @@
         </div>
 <div class="card has-both" data-cover="mocha_editorial.cover.html" data-detail="mocha_editorial.html">
           <div class="frame">
-            <iframe src="mocha_editorial.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="mocha_editorial.cover.html" title="Mocha 编辑器 (Mocha Editorial, Anthropic-grade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -583,7 +596,7 @@
         </div>
 <div class="card has-both" data-cover="medical_pulse.cover.html" data-detail="medical_pulse.html">
           <div class="frame">
-            <iframe src="medical_pulse.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="medical_pulse.cover.html" title="医疗专科 (Medical Pulse) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -605,7 +618,7 @@
         </div>
 <div class="card has-both" data-cover="earth_concrete.cover.html" data-detail="earth_concrete.html">
           <div class="frame">
-            <iframe src="earth_concrete.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="earth_concrete.cover.html" title="大地水泥 (Earth Concrete) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -627,7 +640,7 @@
         </div>
 <div class="card has-both" data-cover="champagne_gold.cover.html" data-detail="champagne_gold.html">
           <div class="frame">
-            <iframe src="champagne_gold.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="champagne_gold.cover.html" title="香槟金喜 (Champagne Gold) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -649,7 +662,7 @@
         </div>
 <div class="card has-both" data-cover="liquid_glass.cover.html" data-detail="liquid_glass.html">
           <div class="frame">
-            <iframe src="liquid_glass.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="liquid_glass.cover.html" title="液态玻璃 (Liquid Glass) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -671,7 +684,7 @@
         </div>
 <div class="card has-both" data-cover="editorial_paper.cover.html" data-detail="editorial_paper.html">
           <div class="frame">
-            <iframe src="editorial_paper.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="editorial_paper.cover.html" title="温润研究手记 (Editorial Paper) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -693,7 +706,7 @@
         </div>
 <div class="card has-both" data-cover="schematic_blueprint.cover.html" data-detail="schematic_blueprint.html">
           <div class="frame">
-            <iframe src="schematic_blueprint.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="schematic_blueprint.cover.html" title="工程蓝图线稿 (Schematic Blueprint) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -728,7 +741,7 @@
       <div class="grid">
         <div class="card has-both" data-cover="vibrant_rainbow.cover.html" data-detail="vibrant_rainbow.html">
           <div class="frame">
-            <iframe src="vibrant_rainbow.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="vibrant_rainbow.cover.html" title="活力彩虹 (Stripe-grade Gradient) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -750,7 +763,7 @@
         </div>
 <div class="card has-both" data-cover="kindergarten_pop.cover.html" data-detail="kindergarten_pop.html">
           <div class="frame">
-            <iframe src="kindergarten_pop.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="kindergarten_pop.cover.html" title="儿童启蒙 (Kindergarten Pop) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -772,7 +785,7 @@
         </div>
 <div class="card has-both" data-cover="bauhaus_block.cover.html" data-detail="bauhaus_block.html">
           <div class="frame">
-            <iframe src="bauhaus_block.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="bauhaus_block.cover.html" title="包豪斯几何 (Bauhaus Block) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -794,7 +807,7 @@
         </div>
 <div class="card has-both" data-cover="candy_pastel.cover.html" data-detail="candy_pastel.html">
           <div class="frame">
-            <iframe src="candy_pastel.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="candy_pastel.cover.html" title="马卡龙糖果 (Candy Pastel) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -829,7 +842,7 @@
       <div class="grid">
         <div class="card has-both" data-cover="royal_red.cover.html" data-detail="royal_red.html">
           <div class="frame">
-            <iframe src="royal_red.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="royal_red.cover.html" title="朱红宫墙 (Royal Red, Beijing 2022-grade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -851,7 +864,7 @@
         </div>
 <div class="card has-both" data-cover="sakura_wabi.cover.html" data-detail="sakura_wabi.html">
           <div class="frame">
-            <iframe src="sakura_wabi.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="sakura_wabi.cover.html" title="侘寂樱花 (Sakura Wabi) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -873,7 +886,7 @@
         </div>
 <div class="card has-both" data-cover="ink_jade.cover.html" data-detail="ink_jade.html">
           <div class="frame">
-            <iframe src="ink_jade.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="ink_jade.cover.html" title="墨韵新中式 (Ink Jade) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -908,7 +921,7 @@
       <div class="grid">
         <div class="card has-both" data-cover="botanic_forest.cover.html" data-detail="botanic_forest.html">
           <div class="frame">
-            <iframe src="botanic_forest.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="botanic_forest.cover.html" title="深林秘境 (Botanic Forest) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -930,7 +943,7 @@
         </div>
 <div class="card has-both" data-cover="safari_savanna.cover.html" data-detail="safari_savanna.html">
           <div class="frame">
-            <iframe src="safari_savanna.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="safari_savanna.cover.html" title="萨凡纳探险 (Safari Savanna) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -952,7 +965,7 @@
         </div>
 <div class="card has-both" data-cover="retro_70s.cover.html" data-detail="retro_70s.html">
           <div class="frame">
-            <iframe src="retro_70s.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="retro_70s.cover.html" title="70 年代复古 (Retro 70s) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -974,7 +987,7 @@
         </div>
 <div class="card has-both" data-cover="gov_authority.cover.html" data-detail="gov_authority.html">
           <div class="frame">
-            <iframe src="gov_authority.cover.html" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="gov_authority.cover.html" title="庄严官方 (Government Authority) 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">

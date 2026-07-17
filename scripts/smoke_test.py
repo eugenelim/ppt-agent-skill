@@ -311,6 +311,7 @@ def phase1_tests(style_filter: str = None) -> dict:
     for label, cmd in [
         ("recipe_lint", [sys.executable, str(ROOT / "scripts" / "lint_diagram_recipes.py"), "--refs-dir", str(ROOT / "references")]),
         ("qa_selftest", [sys.executable, str(ROOT / "scripts" / "test_diagram_qa.py")]),
+        ("contrast_selftest", [sys.executable, str(ROOT / "scripts" / "test_visual_qa_contrast.py")]),
         ("gallery_toggle", [sys.executable, str(ROOT / "scripts" / "test_gallery_toggle.py")]),
         ("proof_worksheet", [sys.executable, str(ROOT / "scripts" / "test_proof_worksheet.py")]),
         ("proof_gate", [sys.executable, str(ROOT / "scripts" / "test_proof_gate.py")]),
