@@ -5,8 +5,13 @@ import math
 from ._constants import (
     _Node, _Edge,
     NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
-    _node_render_h,
+    _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
 )
+
+
+def _node_render_w(n: "_Node") -> int:
+    """Effective rendered width for routing exit/entry x-coordinate computation."""
+    return _TERMINAL_NODE_SIZE if _is_terminal_circle(n) else NODE_W
 
 # ── edge routing ──────────────────────────────────────────────────────────────
 
@@ -154,7 +159,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     # Group bboxes come from ELK when available; otherwise they're omitted (labels
     # still avoid nodes, which is the most common collision source).
     obstacles: list = [
-        (n.x, n.y, n.x + NODE_W, n.y + _node_render_h(n))
+        (n.x, n.y, n.x + _node_render_w(n), n.y + _node_render_h(n))
         for n in nodes.values() if not n.is_dummy
     ]
     if group_bboxes:
@@ -164,7 +169,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
 
     # Right-lane x: always clears the rightmost node + group container border
     non_dummy = [n for n in nodes.values() if not n.is_dummy]
-    right_lane_x = (max(n.x + NODE_W for n in non_dummy) if non_dummy else canvas_w) + 32
+    right_lane_x = (max(n.x + _node_render_w(n) for n in non_dummy) if non_dummy else canvas_w) + 32
 
     # LR bottom-lane y: clears the tallest node's bottom + margin
     if is_lr and non_dummy:
@@ -254,7 +259,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     in_off = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
                     x1 = s.x               # exit from LEFT side of source
                     y1 = s.y + out_off
-                    x2 = d.x + NODE_W      # enter RIGHT side of destination
+                    x2 = d.x + _node_render_w(d)   # enter RIGHT side of destination
                     y2 = d.y + in_off
                     mid_x = (x1 + x2) // 2
                     path = _smooth_orthogonal_path(
@@ -304,9 +309,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                                    "lx": llx, "ly": lly, "rot": 0})
             else:
                 lane_x = right_lane_x + 32 * be_lane
-                sx = s.x + NODE_W
+                sx = s.x + _node_render_w(s)
                 sy = s.y + _node_render_h(s) // 2
-                dx_ = d.x + NODE_W
+                dx_ = d.x + _node_render_w(d)
                 dy_ = d.y + _node_render_h(d) // 2
                 path = _smooth_orthogonal_path(
                     [(sx, sy), (lane_x, sy), (lane_x, dy_), (dx_, dy_)]
@@ -339,7 +344,15 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             in_idx = in_list.index(e.src) if e.src in in_list else 0
             in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
 
-            x1 = s.x + NODE_W
+            # Stagger parallel edges (same src→dst) so they don't share the same path
+            _par_nudge = int(
+                (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((e.src, e.dst), 1) - 1) / 2)
+                * MIN_FAN_STEP
+            )
+            out_offset += _par_nudge
+            in_offset += _par_nudge
+
+            x1 = s.x + _node_render_w(s)
             y1 = s.y + out_offset
             x2 = d.x
             y2 = d.y + in_offset
@@ -389,11 +402,19 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
         out_list = fan_out[e.src]
         out_idx = out_list.index(e.dst) if e.dst in out_list else 0
-        out_offset = _fan_offset(out_idx, len(out_list))
+        out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_w(s))
 
         in_list = fan_in[e.dst]
         in_idx = in_list.index(e.src) if e.src in in_list else 0
-        in_offset = _fan_offset(in_idx, len(in_list))
+        in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_w(d))
+
+        # Stagger parallel edges (same src→dst) so they don't share the same path
+        _par_nudge = int(
+            (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((e.src, e.dst), 1) - 1) / 2)
+            * MIN_FAN_STEP
+        )
+        out_offset += _par_nudge
+        in_offset += _par_nudge
 
         x1 = s.x + out_offset
         y1 = s.y + _node_render_h(s)

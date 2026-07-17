@@ -38,7 +38,7 @@ _NODE_CSS = {
 
 
 # Accent colors in RGBA for group background tints (matches CSS --accent-1/3/4/2 order)
-_ACCENT_CYCLE = ["var(--accent-1)", "var(--accent-3)", "var(--accent-4)", "var(--accent-2)"]
+_ACCENT_CYCLE = ["var(--accent-1,#60a5fa)", "var(--accent-3,#f472b6)", "var(--accent-4)", "var(--accent-2,#34d399)"]
 # Tints match the default accent-1/3/4/2 palette (#60a5fa blue, #f472b6 pink, #fbbf24 amber, #34d399 green)
 # so the group fill echoes the dashed border color.
 _ACCENT_TINTS = [
@@ -129,7 +129,7 @@ def _render_graph_fragment(
             f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
             f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
             f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
-            f'font-family:var(--label-font,var(--font-primary));">'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{glabel}</span></div>'
         )
 
@@ -176,14 +176,14 @@ def _render_graph_fragment(
 
         # Accent color comes from group membership; used for top border + icon.
         # External nodes get no accent (greyscale treatment) — dim top border matches dim body.
-        fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
-        border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
+        fg_var = "var(--node-fg-dim,var(--text-secondary,#94a3b8))" if is_external else "var(--node-fg,var(--text-primary,#e8eef7))"
+        border_var = "var(--node-fg-dim,var(--text-secondary,#94a3b8))" if is_external else "var(--node-border,var(--card-border,#2a3447))"
         if is_external:
-            accent_color = "var(--node-fg-dim,var(--text-secondary))"
+            accent_color = "var(--node-fg-dim,var(--text-secondary,#94a3b8))"
         elif nid in _node_grp_idx:
             accent_color = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
         else:
-            accent_color = "var(--node-title-fg,var(--accent-1))"
+            accent_color = "var(--node-title-fg,var(--accent-1,#60a5fa))"
         # All text uses the same fg variable regardless of group
         text_color = fg_var
 
@@ -195,7 +195,7 @@ def _render_graph_fragment(
                 f'<span class="node-sub" style="'
                 f'display:block; font-size:var(--node-fs-sub,12px); font-weight:400; '
                 f'color:{text_color}; opacity:0.7; '
-                f'font-family:var(--label-font,var(--font-primary)); '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
                 f'line-height:1.3; margin-top:2px; text-align:left;">'
                 f'{sub_html}</span>'
             )
@@ -207,9 +207,9 @@ def _render_graph_fragment(
                 f'<span class="node-tech" style="'
                 f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
                 f'color:{text_color}; opacity:0.6; '
-                f'font-family:var(--label-font,var(--font-primary)); '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
                 f'line-height:1.3; margin-top:7px; padding-top:7px; '
-                f'border-top:1px solid var(--node-border,var(--card-border)); '
+                f'border-top:1px solid var(--node-border,var(--card-border,#2a3447)); '
                 f'text-align:left; width:100%;">'
                 f'{_h(tech_label)}</span>'
             )
@@ -227,7 +227,7 @@ def _render_graph_fragment(
                 f'<span class="node-label" style="'
                 f'font-size:var(--node-fs-title,14px); font-weight:700; '
                 f'color:{text_color}; '
-                f'font-family:var(--label-font,var(--font-primary)); '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
                 f'line-height:1.3; display:block;">{main_html}</span>'
                 f'{sub_span}'
                 f'</div></div>'
@@ -238,7 +238,7 @@ def _render_graph_fragment(
                 f'<span class="node-label" style="'
                 f'font-size:var(--node-fs-title,15px); font-weight:700; '
                 f'color:{text_color}; '
-                f'font-family:var(--label-font,var(--font-primary)); '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
                 f'line-height:1.4; display:block;">{main_html}</span>'
                 f'{sub_span}{tech_span}'
             )
@@ -253,7 +253,7 @@ def _render_graph_fragment(
                 f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
                 f'border-radius:50%; box-sizing:border-box; '
                 f'border:2px solid {accent_color}; '
-                f'background:{_depth_wash},linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+                f'background:{_depth_wash},linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),var(--node-bg-to,var(--card-bg-to,#0f1422))); '
                 f'display:flex; align-items:center; justify-content:center;">'
                 f'<span style="color:{accent_color}; font-size:14px; line-height:1;">'
                 f'{_nh(n.label)}</span></div>'
@@ -279,7 +279,7 @@ def _render_graph_fragment(
                 f'box-sizing:border-box; overflow:hidden; '
                 f'{_border_css} '
                 f'{shape_css} '
-                f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+                f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),var(--node-bg-to,var(--card-bg-to,#0f1422))); '
                 f'box-shadow:var(--node-shadow,none); '
                 f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
                 f'text-align:left;">'
@@ -298,7 +298,7 @@ def _render_graph_fragment(
         d = spec["d"]
         style = spec["style"]
         if style == "thick":
-            stroke_color = "var(--edge-strong,var(--accent-1))"
+            stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
         elif style == "dotted":
             stroke_color = "var(--accent-4,var(--amber,#E8924A))"
         else:
@@ -326,8 +326,8 @@ def _render_graph_fragment(
                 f'<span class="edge-label" style="'
                 f'position:absolute; left:{lx}px; top:{ly}px; '
                 f'font-size:12px; font-weight:500; '
-                f'font-family:var(--label-font,var(--font-primary)); '
-                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8)); '
                 f'background:var(--bg-primary,var(--card-bg-from,#0a0a0a)); '
                 f'padding:1px 4px; border-radius:3px; '
                 f'max-width:300px; overflow:hidden; '
@@ -413,23 +413,23 @@ def _render_metadata_chip(directive: str, title: str) -> str:
         '<div class="diagram-meta" style="'
         'display:flex; align-items:center; gap:8px; '
         'margin-bottom:8px; '
-        'font-family:var(--label-font,var(--font-primary));">'
+        'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
     )
     if type_label:
         parts.append(
             f'<span class="diagram-type-chip" style="'
-            f'border:1px solid var(--node-fg-dim,var(--text-secondary)); '
+            f'border:1px solid var(--node-fg-dim,var(--text-secondary,#94a3b8)); '
             f'border-radius:4px; padding:1px 6px; '
             f'font-size:9px; font-weight:700; letter-spacing:0.07em; '
             f'text-transform:uppercase; '
-            f'color:var(--node-fg-dim,var(--text-secondary));">'
+            f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));">'
             f'{_h(type_label)}</span>'
         )
     if title:
         parts.append(
             f'<span class="diagram-title" style="'
             f'font-size:11px; font-weight:600; '
-            f'color:var(--node-fg,var(--text-primary));">'
+            f'color:var(--node-fg,var(--text-primary,#e8eef7));">'
             f'{_h(title)}</span>'
         )
     parts.append('</div>')
@@ -477,9 +477,9 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10" style="overflow:visible;">'
             '<line x1="0" y1="5" x2="20" y2="5" '
-            'stroke="var(--edge-strong,var(--accent-1))" stroke-width="2.5"/>'
+            'stroke="var(--edge-strong,var(--accent-1,#60a5fa))" stroke-width="2.5"/>'
             '<polygon points="20,5 15,2.5 15,7.5" '
-            'fill="var(--edge-strong,var(--accent-1))"/>'
+            'fill="var(--edge-strong,var(--accent-1,#60a5fa))"/>'
             '</svg>'
             'Critical path</span>'
         )
@@ -488,7 +488,7 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10">'
             '<rect x="0" y="1" width="20" height="8" rx="2" '
-            'fill="none" stroke="var(--accent-1)" '
+            'fill="none" stroke="var(--accent-1,#60a5fa)" '
             'stroke-dasharray="3 2" stroke-width="1"/>'
             '</svg>'
             'Service boundary</span>'
@@ -501,10 +501,10 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
         '<div class="diagram-legend" style="'
         'display:flex; flex-wrap:wrap; gap:12px; '
         'padding-top:8px; '
-        'border-top:1px solid var(--node-fg-dim,var(--card-border)); '
+        'border-top:1px solid var(--node-fg-dim,var(--card-border,#2a3447)); '
         'margin-top:0; '
-        'font-size:10px; font-family:var(--label-font,var(--font-primary)); '
-        'color:var(--node-fg-dim,var(--text-secondary));">'
+        'font-size:10px; font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+        'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));">'
         f'{joined}'
         '</div>'
     )
@@ -612,6 +612,58 @@ def _separate_groups_tb(
     if all_non_dummy:
         canvas_w = int(max(n.x + NODE_W for n in all_non_dummy) + CANVAS_PAD)
     return canvas_w
+
+
+def _push_nonmembers_out_of_groups_lr(
+    nodes: dict[str, "_Node"],
+    groups: dict[str, "_Group"],
+) -> None:
+    """LR mode only: shift non-member nodes that land inside a group's bbox downward.
+
+    Called after _separate_groups_lr and _assign_coordinates so that when a
+    non-member node ends up at the same rank (x position) as a group member,
+    it is moved below the group's padded bottom edge instead of visually
+    appearing inside the group boundary.
+
+    Iterates until stable (at most GROUP_CAP passes).
+    """
+    member_ids = {nid for grp in groups.values() for nid in grp.members}
+
+    def _grp_bbox(gid: str) -> dict | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return {
+            "x0":  min(n.x for n in mbrs) - GROUP_PAD_X,
+            "x1":  max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "y0":  min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            "y1":  max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+        }
+
+    for _pass in range(GROUP_CAP):
+        moved = False
+        bboxes = {gid: _grp_bbox(gid) for gid in groups}
+        bboxes = {gid: b for gid, b in bboxes.items() if b is not None}
+        if not bboxes:
+            break
+        # Process non-members sorted top-to-bottom so earlier shifts don't invalidate later checks
+        nm_nodes = sorted(
+            [(nid, n) for nid, n in nodes.items() if not n.is_dummy and nid not in member_ids],
+            key=lambda x: x[1].y,
+        )
+        for nid, nd in nm_nodes:
+            nx0, ny0 = nd.x, nd.y
+            nx1, ny1 = nd.x + NODE_W, nd.y + _node_render_h(nd)
+            for gid, b in bboxes.items():
+                if not (b["x0"] < nx1 and nx0 < b["x1"] and b["y0"] < ny1 and ny0 < b["y1"]):
+                    continue
+                # Non-member overlaps group bbox — push it below the group
+                nd.y = int(b["y1"] + COL_GAP)
+                moved = True
+                # Recompute this group's bbox since nd.y changed (nd is non-member, no effect)
+                break
+        if not moved:
+            break
 
 
 def _compute_group_bboxes(

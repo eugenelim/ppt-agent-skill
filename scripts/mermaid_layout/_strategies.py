@@ -10,7 +10,7 @@ from ._constants import (
     NODE_CAP, EDGE_CAP, GROUP_CAP,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
-    _ARCH_ICON_MAP, _C4_ICON_MAP,
+    _ARCH_ICON_MAP, _C4_ICON_MAP, _LABEL_ICON_KEYWORDS,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
     _node_render_h,
 )
@@ -22,7 +22,30 @@ from ._renderer import (
     _extract_diagram_title, _render_metadata_chip, _render_legend,
     _separate_groups_lr,
     _separate_groups_tb,
+    _push_nonmembers_out_of_groups_lr,
 )
+
+# ── label-based icon inference ────────────────────────────────────────────────
+
+def _infer_label_icons(nodes: "dict[str, _Node]") -> None:
+    """Assign icons from node labels when no explicit icon or matching css_class is set.
+
+    Checks each node's label (lowercased) against _LABEL_ICON_KEYWORDS in order;
+    first match wins. Skips nodes that already have an icon, have a css_class that
+    resolves to an icon, or are marked :::external (which should stay visually subdued).
+    """
+    from ._constants import _load_icon
+    for n in nodes.values():
+        if n.icon:
+            continue
+        if n.css_class and _load_icon(n.css_class):
+            continue
+        label_lower = n.label.lower()
+        for keywords, icon_name in _LABEL_ICON_KEYWORDS:
+            if any(kw in label_lower for kw in keywords):
+                n.icon = icon_name
+                break
+
 
 # ── graph topology strategy ──────────────────────────────────────────────────
 
@@ -41,6 +64,7 @@ def _layout_graph_topology(
     content_lines = lines[directive_index + 1:]
 
     nodes, edges, groups = _parse_graph_source(content_lines)
+    _infer_label_icons(nodes)
 
     if len(nodes) > NODE_CAP:
         raise ValueError(
@@ -95,6 +119,8 @@ def _layout_graph_topology(
     # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:
         _separate_groups_lr(nodes, groups)
+        # Also push non-member nodes that visually land inside a group bbox downward
+        _push_nonmembers_out_of_groups_lr(nodes, groups)
     elif direction.upper() in ("TB", "TD") and groups:
         canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
 
@@ -104,16 +130,18 @@ def _layout_graph_topology(
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
         canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
 
-    # Scale to fit both width and height constraints via CSS zoom.
-    # Scale up when the diagram is smaller than the canvas (fills dead space);
-    # scale down when it is larger. Cap scale-up at 1.4× to avoid oversizing.
-    # Using zoom (not transform:scale) avoids distorting pre-computed coordinates.
+    # Scale to fit width/height constraints via CSS zoom.
+    # Without height_hint: scale down only (never scale up — a tall diagram
+    # scaled up to fill width overflows the slide height).
+    # With height_hint: scale to fit both dimensions, capped at 1.4× scale-up.
     zoom = 1.0
     if width_hint and canvas_w > 0:
         w_zoom = width_hint / canvas_w
-        h_zoom = height_hint / canvas_h if (height_hint and canvas_h > 0) else w_zoom
-        zoom = min(w_zoom, h_zoom)
-        zoom = min(zoom, 1.4)  # cap scale-up; scale-down is uncapped
+        if height_hint and canvas_h > 0:
+            h_zoom = height_hint / canvas_h
+            zoom = min(w_zoom, h_zoom, 1.4)  # fit both, cap scale-up
+        else:
+            zoom = min(w_zoom, 1.0)  # scale down only; avoids height overflow
 
     fragment = _render_graph_fragment(
         nodes, edges, groups, canvas_w, canvas_h, direction, zoom,
@@ -128,20 +156,18 @@ def _layout_graph_topology(
     legend_html = _render_legend(edges, groups)
 
     if legend_html:
-        # Flexbox column so the legend is pinned to the bottom of the diagram area
         return (
             '<div class="diagram-wrapper" style="'
-            'display:flex; flex-direction:column; height:100%; '
-            'font-family:var(--label-font,var(--font-primary));">'
+            'display:flex; flex-direction:column; '
+            'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{meta_html}{fragment}'
-            '<div style="flex:1;"></div>'
             f'{legend_html}'
             '</div>'
         )
     if meta_html:
         return (
             '<div class="diagram-wrapper" style="'
-            'font-family:var(--label-font,var(--font-primary));">'
+            'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{meta_html}{fragment}'
             '</div>'
         )
@@ -164,7 +190,7 @@ def _directive_content(src: str) -> list[str]:
 
 _SEQ_PART_RE = re.compile(r'^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?', re.I)
 _SEQ_MSG_RE = re.compile(
-    r'^(\S+)\s*(->>|-->>|->|-->|-x|--x|-\)|--\))\s*(\S+)\s*:\s*(.*)$'
+    r'^(\S+?)\s*(-->>|->>|-->|->|--x|-x|--\)|-\))\s*(\S+)\s*:\s*(.*)$'
 )
 _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re.I)
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
@@ -221,6 +247,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
         col_pitch = int(col_pitch * width_hint / canvas_w)
         canvas_w = width_hint
+    col_w = min(COL_W, max(40, col_pitch - 8))  # header scales with pitch; min 8px gap
     n_rows = sum(1 for it in items if it["type"] in ("msg", "block"))
     canvas_h = PAD_V * 2 + HDR_H + n_rows * ROW_H + 32
     ll_top = PAD_V + HDR_H
@@ -228,7 +255,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
 
     def _cx(pid: str) -> int:
         idx = participants.index(pid) if pid in participants else 0
-        return PAD_H + idx * col_pitch + COL_W // 2
+        return PAD_H + idx * col_pitch + col_pitch // 2
 
     parts: list[str] = []
     parts.append(
@@ -236,17 +263,18 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
     for i, pid in enumerate(participants):
-        lx = PAD_H + i * col_pitch
+        lx = PAD_H + i * col_pitch + (col_pitch - col_w) // 2  # centered in pitch slot
         lbl = _h(p_label.get(pid, pid))
         parts.append(
             f'<div class="node node-rect" style="position:absolute;left:{lx}px;top:{PAD_V}px;'
-            f'width:{COL_W}px;height:{HDR_H - 8}px;display:flex;align-items:center;'
-            f'justify-content:center;border:1px solid var(--node-border,var(--card-border));'
-            f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),'
-            f'var(--node-bg-to,var(--card-bg-to)));"><span class="node-label" style="'
-            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{lbl}</span></div>'
+            f'width:{col_w}px;height:{HDR_H - 8}px;display:flex;align-items:center;'
+            f'justify-content:center;border:1px solid var(--node-border,var(--card-border,#2a3447));'
+            f'border-radius:var(--node-radius,8px);box-sizing:border-box;overflow:hidden;'
+            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),'
+            f'var(--node-bg-to,var(--card-bg-to,#0f1422)));"><span class="node-label" style="'
+            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{lbl}</span></div>'
         )
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
@@ -265,7 +293,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             ry = ll_top + row * ROW_H
             parts.append(
                 f'<rect x="{PAD_H // 2}" y="{ry}" width="{canvas_w - PAD_H}" height="{ROW_H}" '
-                f'fill="var(--node-bg-from,var(--card-bg-from))" opacity="0.6" '
+                f'fill="var(--node-bg-from,var(--card-bg-from,#161d2e))" opacity="0.6" '
                 f'stroke="{_seq_edge}" stroke-width="1" rx="3"/>'
             )
             row += 1; continue
@@ -296,8 +324,8 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             parts.append(
                 f'<span style="position:absolute;left:{PAD_H + 4}px;top:{ry + 3}px;'
                 f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
-                f'color:var(--node-fg-dim,var(--text-secondary));'
-                f'font-family:var(--label-font,var(--font-primary));">'
+                f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
                 f'{_h(it["kw"])}{" " + _h(it["label"]) if it["label"] else ""}</span>'
             )
             row += 1; continue
@@ -311,9 +339,9 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             parts.append(
                 f'<span class="edge-label" style="position:absolute;'
                 f'left:{mid_x - 30}px;top:{ry - 18}px;'
-                f'font-size:11px;color:var(--node-fg-dim,var(--text-secondary));'
-                f'font-family:var(--label-font,var(--font-primary));'
-                f'background:var(--node-bg-from,var(--card-bg-from));'
+                f'font-size:11px;color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+                f'background:var(--node-bg-from,var(--card-bg-from,#161d2e));'
                 f'padding:0 3px;white-space:nowrap;">{lbl}</span>'
             )
         row += 1
@@ -473,8 +501,8 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
     if title:
         parts.append(
             f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
-            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(title)}</div>'
+            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
         )
         y += 28
     for sec in sections:
@@ -484,8 +512,8 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
             f'display:flex;align-items:flex-end;'
             f'border-bottom:1px solid var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)));">'
             f'<span style="font-size:10px;font-weight:700;text-transform:uppercase;'
-            f'letter-spacing:.1em;color:var(--node-fg-dim,var(--text-secondary));'
-            f'font-family:var(--label-font,var(--font-primary));">'
+            f'letter-spacing:.1em;color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{_h(sec["name"])}</span></div>'
         )
         y += SEC_H + 4
@@ -494,23 +522,23 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         for i, task in enumerate(sec["tasks"]):
             tx = bar_x + i * (each_w + 4)
             bar_color = (
-                "var(--edge-strong,var(--accent-1))" if task["crit"]
-                else "var(--node-border,var(--card-border))" if task["done"]
-                else "var(--node-bg-from,var(--card-bg-from))"
+                "var(--edge-strong,var(--accent-1,#60a5fa))" if task["crit"]
+                else "var(--node-border,var(--card-border,#2a3447))" if task["done"]
+                else "var(--node-bg-from,var(--card-bg-from,#161d2e))"
             )
             parts.append(
                 f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
                 f'width:{LABEL_W}px;height:{BAR_H}px;'
                 f'display:flex;align-items:center;overflow:hidden;">'
-                f'<span style="font-size:11px;color:var(--node-fg,var(--text-primary));'
-                f'font-family:var(--label-font,var(--font-primary));'
+                f'<span style="font-size:11px;color:var(--node-fg,var(--text-primary,#e8eef7));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
                 f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
                 f'{_h(task["name"])}</span></div>'
             )
             parts.append(
                 f'<div style="position:absolute;left:{tx}px;top:{y}px;'
                 f'width:{each_w}px;height:{BAR_H}px;background:{bar_color};'
-                f'border:1px solid var(--node-border,var(--card-border));'
+                f'border:1px solid var(--node-border,var(--card-border,#2a3447));'
                 f'border-radius:4px;box-sizing:border-box;"></div>'
             )
         y += BAR_H + ROW_GAP
@@ -557,8 +585,8 @@ def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
     if title:
         parts.append(
             f'<div style="position:absolute;left:{PAD_H}px;top:{PAD_V}px;'
-            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(title)}</div>'
+            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
         )
     ty = PAD_V + (28 if title else 0)
     parts.append(
@@ -577,19 +605,19 @@ def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<div class="node node-rect" style="position:absolute;left:{ix}px;top:{ty}px;'
             f'width:{ITEM_W}px;padding:6px 8px;box-sizing:border-box;'
-            f'border:1px solid var(--node-border,var(--card-border));'
+            f'border:1px solid var(--node-border,var(--card-border,#2a3447));'
             f'border-radius:var(--node-radius,8px);'
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),'
-            f'var(--node-bg-to,var(--card-bg-to)));"><span class="node-label" style="'
+            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),'
+            f'var(--node-bg-to,var(--card-bg-to,#0f1422)));"><span class="node-label" style="'
             f'display:block;font-size:12px;font-weight:700;'
-            f'color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(sec["period"])}</span>'
+            f'color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(sec["period"])}</span>'
         )
         for ev in sec["events"][:2]:
             parts.append(
                 f'<span style="display:block;font-size:10px;'
-                f'color:var(--node-fg-dim,var(--text-secondary));'
-                f'font-family:var(--label-font,var(--font-primary));">{_h(ev)}</span>'
+                f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(ev)}</span>'
             )
         parts.append('</div>')
     parts.append('</div>')
@@ -646,8 +674,8 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
     if title:
         parts.append(
             f'<div style="position:absolute;left:{gx}px;top:{PAD}px;'
-            f'font-size:12px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(title)}</div>'
+            f'font-size:12px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
         )
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
@@ -670,7 +698,7 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
             f"{py + int(r * math.sin(math.pi * 2 * k / 8))}"
             for k in range(8)
         )
-        parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1))"/>')
+        parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1,#60a5fa))"/>')
     parts.append('</svg>')
     for qid, qlbl in quad_labels.items():
         qx = (mx + 8) if qid in ("1",) else (gx + 8)
@@ -678,24 +706,24 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<span style="position:absolute;left:{qx}px;top:{qy}px;'
             f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
-            f'color:var(--node-fg-dim,var(--text-secondary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(qlbl)}</span>'
+            f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(qlbl)}</span>'
         )
     parts.append(
         f'<span style="position:absolute;left:{gx}px;top:{gy + gh + 6}px;'
-        f'font-size:10px;color:var(--node-fg-dim,var(--text-secondary));'
-        f'font-family:var(--label-font,var(--font-primary));">{_h(x_labels[0])}</span>'
+        f'font-size:10px;color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+        f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(x_labels[0])}</span>'
         f'<span style="position:absolute;right:{PAD}px;top:{gy + gh + 6}px;'
-        f'font-size:10px;color:var(--node-fg-dim,var(--text-secondary));'
-        f'font-family:var(--label-font,var(--font-primary));">{_h(x_labels[1])}</span>'
+        f'font-size:10px;color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+        f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(x_labels[1])}</span>'
     )
     for pt in points:
         px = gx + int(pt["x"] * gw)
         py = gy + gh - int(pt["y"] * gh)
         parts.append(
             f'<span style="position:absolute;left:{px + 8}px;top:{py - 8}px;'
-            f'font-size:10px;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));white-space:nowrap;">'
+            f'font-size:10px;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));white-space:nowrap;">'
             f'{_h(pt["name"])}</span>'
         )
     parts.append('</div>')
@@ -734,10 +762,10 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
     r_out = min(cx, cy) - 60
     r_in = r_out * 2 // 5
     accents = [
-        "var(--edge-strong,var(--accent-1))",
-        "var(--node-accent-2,var(--accent-2))",
-        "var(--node-border,var(--card-border))",
-        "var(--node-fg-dim,var(--text-secondary))",
+        "var(--edge-strong,var(--accent-1,#60a5fa))",
+        "var(--node-accent-2,var(--accent-2,#34d399))",
+        "var(--node-border,var(--card-border,#2a3447))",
+        "var(--node-fg-dim,var(--text-secondary,#94a3b8))",
     ]
     parts: list[str] = []
     parts.append(
@@ -763,7 +791,7 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
             pts.append(f"{cx + int(r_out * math.cos(a))},{cy + int(r_out * math.sin(a))}")
         parts.append(
             f'<polygon points="{" ".join(pts)}" fill="{color}" '
-            f'stroke="var(--node-bg-from,var(--card-bg-from))" stroke-width="2"/>'
+            f'stroke="var(--node-bg-from,var(--card-bg-from,#161d2e))" stroke-width="2"/>'
         )
         angle = end_a
     parts.append('</svg>')
@@ -778,8 +806,8 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<span style="position:absolute;left:{lx - 30}px;top:{ly - 8}px;'
             f'width:60px;font-size:10px;text-align:center;'
-            f'color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));white-space:nowrap;">'
+            f'color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));white-space:nowrap;">'
             f'{_h(sl["label"])} {pct}</span>'
         )
         angle += sweep
@@ -787,8 +815,8 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<div style="position:absolute;left:0;bottom:8px;width:{canvas_w}px;'
             f'text-align:center;font-size:12px;font-weight:700;'
-            f'color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(title)}</div>'
+            f'color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
         )
     parts.append('</div>')
     return "\n".join(parts)
@@ -863,7 +891,7 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
             x1, y1a = pts_coords[i]; x2, y2a = pts_coords[i + 1]
             parts.append(
                 f'<line x1="{x1}" y1="{y1a}" x2="{x2}" y2="{y2a}" '
-                f'stroke="var(--edge-strong,var(--accent-1))" stroke-width="2"/>'
+                f'stroke="var(--edge-strong,var(--accent-1,#60a5fa))" stroke-width="2"/>'
             )
         for bx, by in pts_coords:
             r = 4
@@ -872,7 +900,7 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
                 f"{by + int(r * math.sin(math.pi * k / 3))}"
                 for k in range(6)
             )
-            parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1))"/>')
+            parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1,#60a5fa))"/>')
     parts.append('</svg>')
     if bar_data:
         bar_w = max(8, bar_unit - 8)
@@ -884,7 +912,7 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
             parts.append(
                 f'<div style="position:absolute;left:{bx}px;top:{by}px;'
                 f'width:{bar_w}px;height:{bh}px;'
-                f'background:var(--edge-strong,var(--accent-1));'
+                f'background:var(--edge-strong,var(--accent-1,#60a5fa));'
                 f'border-radius:2px 2px 0 0;box-sizing:border-box;"></div>'
             )
             cat = x_cats[i] if i < len(x_cats) else str(i + 1)
@@ -892,15 +920,15 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
                 f'<span style="position:absolute;'
                 f'left:{bx - (bar_unit - bar_w) // 2}px;top:{cy_top + ch + 4}px;'
                 f'width:{bar_unit}px;font-size:10px;text-align:center;'
-                f'color:var(--node-fg-dim,var(--text-secondary));'
-                f'font-family:var(--label-font,var(--font-primary));">'
+                f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
                 f'{_h(cat)}</span>'
             )
     if title:
         parts.append(
             f'<div style="position:absolute;left:{cx_start}px;top:{PAD_V}px;'
-            f'font-size:12px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">{_h(title)}</div>'
+            f'font-size:12px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
         )
     parts.append('</div>')
     return "\n".join(parts)
@@ -961,16 +989,16 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
         ny = PAD_V + i * (NODE_H_MM + NODE_GAP)
         nx = PAD_H + n["depth"] * INDENT_W
         bold = "font-weight:700;" if n["depth"] == 0 else ""
-        bg = (f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),'
-              f'var(--node-bg-to,var(--card-bg-to)));'
-              f'border:1px solid var(--node-border,var(--card-border));') if n["depth"] == 0 else ""
+        bg = (f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),'
+              f'var(--node-bg-to,var(--card-bg-to,#0f1422)));'
+              f'border:1px solid var(--node-border,var(--card-border,#2a3447));') if n["depth"] == 0 else ""
         parts.append(
             f'<div class="node" style="position:absolute;left:{nx}px;top:{ny}px;'
             f'min-width:120px;height:{NODE_H_MM}px;display:flex;align-items:center;'
             f'padding:4px 8px;box-sizing:border-box;border-radius:var(--node-radius,8px);{bg}">'
             f'<span class="node-label" style="font-size:13px;{bold}'
-            f'color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">'
+            f'color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{_h(n["label"])}</span></div>'
         )
     parts.append('</div>')
@@ -1028,12 +1056,12 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
                 f'<div class="node node-rect" style="position:absolute;'
                 f'left:{cx_cur}px;top:{ry}px;width:{bw}px;height:{CELL_H}px;'
                 f'display:flex;align-items:center;justify-content:center;'
-                f'border:1px solid var(--node-border,var(--card-border));'
+                f'border:1px solid var(--node-border,var(--card-border,#2a3447));'
                 f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
-                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),'
-                f'var(--node-bg-to,var(--card-bg-to)));"><span class="node-label" style="'
-                f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-                f'font-family:var(--label-font,var(--font-primary));text-align:center;">'
+                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),'
+                f'var(--node-bg-to,var(--card-bg-to,#0f1422)));"><span class="node-label" style="'
+                f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));text-align:center;">'
                 f'{_h(blk["label"])}</span></div>'
             )
             cx_cur += bw + CELL_GAP
@@ -1087,15 +1115,15 @@ def _layout_packet(src: str, direction: str, width_hint: int) -> str:
             f'<div class="node node-rect" style="position:absolute;'
             f'left:{fx}px;top:{PAD_V}px;width:{fw}px;height:{CELL_H}px;'
             f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
-            f'border:1px solid var(--node-border,var(--card-border));'
+            f'border:1px solid var(--node-border,var(--card-border,#2a3447));'
             f'box-sizing:border-box;'
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),'
-            f'var(--node-bg-to,var(--card-bg-to)));"><span class="node-label" style="'
-            f'font-size:11px;font-weight:700;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));text-align:center;">'
+            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),'
+            f'var(--node-bg-to,var(--card-bg-to,#0f1422)));"><span class="node-label" style="'
+            f'font-size:11px;font-weight:700;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));text-align:center;">'
             f'{_h(fld["label"])}</span>'
-            f'<span style="font-size:9px;color:var(--node-fg-dim,var(--text-secondary));'
-            f'font-family:var(--label-font,var(--font-primary));">'
+            f'<span style="font-size:9px;color:var(--node-fg-dim,var(--text-secondary,#94a3b8));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{fld["start"]}{"–" + str(fld["end"]) if fld["end"] != fld["start"] else ""}'
             f'</span></div>'
         )
@@ -1150,11 +1178,11 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
             f'<div style="position:absolute;left:{cx}px;top:{PAD_V}px;'
             f'width:{COL_W}px;height:{HDR_H}px;'
             f'display:flex;align-items:center;justify-content:center;'
-            f'border-bottom:2px solid var(--edge-strong,var(--accent-1));'
+            f'border-bottom:2px solid var(--edge-strong,var(--accent-1,#60a5fa));'
             f'box-sizing:border-box;">'
             f'<span style="font-size:12px;font-weight:700;text-transform:uppercase;'
-            f'letter-spacing:.08em;color:var(--node-fg,var(--text-primary));'
-            f'font-family:var(--label-font,var(--font-primary));">'
+            f'letter-spacing:.08em;color:var(--node-fg,var(--text-primary,#e8eef7));'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{_h(col["name"])}</span></div>'
         )
         for ki, card in enumerate(col["cards"]):
@@ -1163,12 +1191,12 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
                 f'<div class="node node-rect" style="position:absolute;'
                 f'left:{cx}px;top:{ky}px;width:{COL_W}px;height:{CARD_H}px;'
                 f'display:flex;align-items:center;padding:6px 10px;'
-                f'border:1px solid var(--node-border,var(--card-border));'
+                f'border:1px solid var(--node-border,var(--card-border,#2a3447));'
                 f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
-                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),'
-                f'var(--node-bg-to,var(--card-bg-to)));"><span class="node-label" style="'
-                f'font-size:12px;color:var(--node-fg,var(--text-primary));'
-                f'font-family:var(--label-font,var(--font-primary));overflow:hidden;'
+                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),'
+                f'var(--node-bg-to,var(--card-bg-to,#0f1422)));"><span class="node-label" style="'
+                f'font-size:12px;color:var(--node-fg,var(--text-primary,#e8eef7));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));overflow:hidden;'
                 f'text-overflow:ellipsis;white-space:nowrap;">'
                 f'{_h(card)}</span></div>'
             )

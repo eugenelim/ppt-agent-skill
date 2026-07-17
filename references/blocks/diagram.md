@@ -206,6 +206,54 @@ flowchart TD
 - 文字颜色：`var(--node-fg-dim, var(--text-secondary))`
 - 背景：与普通节点相同（不改底色，仅降低视觉权重）
 
+### `:::icon-name` — 节点图标
+
+在节点追加 `:::icon-name`，渲染器从 `assets/icons/<icon-name>.svg` 内联 SVG 图标到节点卡片左侧（同 architecture-canvas 的图标布局）。规划阶段应根据节点语义选择图标；渲染器也会按标签关键词自动回退推断，但显式标注更准确。
+
+```
+flowchart LR
+  User([End User]):::users --> Web[Web App]:::browser
+  Web --> API[API Gateway]:::api
+  API --> DB[(User Data)]
+  API --> Auth[Auth Service]:::iam
+  Auth -.-> IdP[Identity Provider]:::external
+```
+
+**常用图标速查（完整列表见 `assets/icons/catalog.json`）：**
+
+| `:::icon-name` | 适用节点 |
+|---|---|
+| `:::users` | 用户、人员、客户端、端用户 |
+| `:::user` | 单一用户（单人图标） |
+| `:::browser` | Web 应用、前端、SPA、Web 门户 |
+| `:::mobile` | 移动端、iOS/Android App |
+| `:::api` | API 网关、REST endpoint |
+| `:::connector` | 集成连接器、中间件 |
+| `:::database` | 数据库、数据存储 |
+| `:::cache` | 缓存层（Redis / Memcache） |
+| `:::queue` | 消息队列（SQS / RabbitMQ） |
+| `:::message-broker` | 消息中间件（Kafka / ActiveMQ） |
+| `:::event-bus` | 事件总线（SNS / EventBridge） |
+| `:::search` | 搜索引擎（Elasticsearch / OpenSearch） |
+| `:::vector-store` | 向量库 / RAG 索引 |
+| `:::model` | AI/ML 模型、LLM 推理 |
+| `:::model-api` | 云端模型 API（OpenAI / Anthropic） |
+| `:::agent` | AI Agent / 自主 Agent |
+| `:::iam` | 鉴权服务、IAM、IdP、SSO |
+| `:::vault` | 密钥管理、Secrets Manager |
+| `:::pipeline` | 数据流水线、ETL |
+| `:::scheduler` | 定时任务、Airflow |
+| `:::workflow` | 工作流引擎（Temporal / Step Functions） |
+| `:::cloud` | 云平台、SaaS |
+| `:::cdn` | CDN、边缘节点 |
+| `:::load-balancer` | 负载均衡器 |
+| `:::kubernetes` | K8s 集群 |
+| `:::logs` | 日志服务 |
+| `:::metrics` | 监控指标 |
+| `:::external-system` | 第三方系统（也可用 `:::external` 获得灰化+虚线边框） |
+
+> 标注规则：`:::icon-name` 仅追加图标，不影响节点形状；如需同时标注外部系统，两者可叠加（先写形状注解，再用 CSS 类选一个语义——外部系统优先用 `:::external` 获得完整视觉降权，无需另加图标类）。
+
 ### `label|tech` — 技术标注副标题（C4 stereotype）
 
 节点 label 含 `|` 分隔符时，`|` 右侧视为技术栈副标题，以 11px `--node-fg-dim` 小字渲染在名称下方。
