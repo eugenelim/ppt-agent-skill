@@ -125,6 +125,8 @@ def _best_label_pos(
 
     Checks against pre-built node/group obstacle bboxes plus already-placed
     label chips so label density is distributed rather than stacked.
+    Off-canvas placements (chip_top < 0) are strongly penalised so the
+    algorithm never greedily picks clear-but-invisible negative-y positions.
     """
     w = _est_label_w(label)
     all_obs = obstacles + placed
@@ -134,6 +136,9 @@ def _best_label_pos(
         lx = max(4, min(canvas_w - w - 4, raw_lx))
         bbox = _label_chip_bbox(lx, ly, label)
         score = sum(_overlap_area(bbox, obs) for obs in all_obs)
+        chip_top = ly - _LABEL_CHIP_H
+        if chip_top < 0:
+            score += (-chip_top) * 5000
         if score < best_score:
             best_score, best_lx, best_ly = score, lx, ly
         if score == 0:
