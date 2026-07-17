@@ -43,26 +43,36 @@ def _detect_directive(src: str) -> tuple[str, str]:
 _SPEC_RE = re.compile(
     r'^(?P<id>[A-Za-z_][A-Za-z0-9_\-\.]*)'
     r'(?:'
-    r'\[\("(?P<cylinder_q>[^"]*)"\)\]'   # [("quoted cylinder")]
-    r'|\[\((?P<cylinder>[^\)]*)\)\]'     # [(unquoted cylinder)]
-    r'|\(\((?P<circle>[^\)]*)\)\)'       # ((circle))
-    r'|\(\[(?P<stadium>[^\]]*)\]\)'      # ([stadium]) — pill/capsule shape
-    r'|\["(?P<rect_q>[^"]*)"\]'          # ["quoted rect"]
-    r'|\[(?P<rect>[^\[\]]*)\]'           # [unquoted rect]
-    r'|\("(?P<round_q>[^"]*)"\)'         # ("quoted round")
-    r'|\((?P<round>[^\(\)]*)\)'          # (unquoted round)
-    r'|\{(?P<diamond>[^\{\}]*)\}'        # {diamond}
-    r'|>(?P<flag>[^\]]*)\]'              # >flag]
+    r'\[\("(?P<cylinder_q>[^"]*)"\)\]'           # [("quoted cylinder")]
+    r'|\[\((?P<cylinder>[^\)]*)\)\]'             # [(unquoted cylinder)]
+    r'|\(\(\((?P<doublecircle>[^\)]*)\)\)\)'     # (((doublecircle)))
+    r'|\(\((?P<circle>[^\)]*)\)\)'               # ((circle))
+    r'|\(\[(?P<stadium>[^\]]*)\]\)'              # ([stadium]) — pill/capsule shape
+    r'|\["(?P<rect_q>[^"]*)"\]'                  # ["quoted rect"]
+    r'|\[\\(?P<trapezoid_alt>[^\]]*)\\\]'        # [\trapezoid-alt\]
+    r'|\[/(?P<trapezoid>[^/]*)/\]'               # [/trapezoid/]
+    r'|\[\[(?P<subroutine>[^\]]*)\]\]'           # [[subroutine]]
+    r'|\[(?P<rect>[^\[\]]*)\]'                   # [unquoted rect]
+    r'|\("(?P<round_q>[^"]*)"\)'                 # ("quoted round")
+    r'|\((?P<round>[^\(\)]*)\)'                  # (unquoted round)
+    r'|\{\{(?P<hexagon>[^\}]*)\}\}'              # {{hexagon}}
+    r'|\{(?P<diamond>[^\{\}]*)\}'                # {diamond}
+    r'|>(?P<flag>[^\]]*)\]'                      # >flag]
     r')?'
 )
 
 # Maps _SPEC_RE group names → canonical shape names
 _SPEC_SHAPE_MAP = {
     "cylinder_q": "cylinder", "cylinder": "cylinder",
+    "doublecircle": "doublecircle",
     "circle": "circle",
-    "stadium": "round",  # ([text]) → same rendering as (text) round/pill shape
+    "stadium": "stadium",
     "rect_q": "rect", "rect": "rect",
+    "trapezoid_alt": "trapezoid-alt",
+    "trapezoid": "trapezoid",
+    "subroutine": "subroutine",
     "round_q": "round", "round": "round",
+    "hexagon": "hexagon",
     "diamond": "diamond",
     "flag": "flag",
 }

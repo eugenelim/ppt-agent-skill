@@ -1,0 +1,9 @@
+sequenceDiagram
+    Alice->>Bob: Request
+    activate Bob
+    Bob->>Carol: Forward
+    activate Carol
+    Carol-->>Bob: Response
+    deactivate Carol
+    Bob-->>Alice: Final Response
+    deactivate Bob

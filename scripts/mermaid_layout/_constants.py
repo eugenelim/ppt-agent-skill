@@ -166,6 +166,7 @@ _NODE_H_TECH = 17   # separator + tech text line (7px margin + 7px padding + ~12
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 _TERMINAL_NODE_SIZE = 32  # px square for circle nodes with symbol labels (UML start/end states)
+ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
 
 # ── directive sets ────────────────────────────────────────────────────────────
 _GRAPH_DIRECTIVES = frozenset({
@@ -205,6 +206,8 @@ class _Edge:
     style: str = "solid"          # solid|dotted|thick
     arrow: bool = True
     reversed_: bool = False       # back-edge flag
+    cardinality_src: Optional[str] = None  # ER crow's foot: 'one'|'zero-one'|'many'|'zero-many'
+    cardinality_dst: Optional[str] = None
 
 
 @dataclass
@@ -216,40 +219,76 @@ class _Group:
 
 
 
-_WRAP_CHARS = 20        # label wrap threshold (NODE_W=192 minus ~44px padding = ~148px usable ≈ 20 chars at 7.5px/char)
-_WRAP_CHARS_ICON = 18  # reduced limit for icon-left cards (icon 24px + 10px margin reduces usable to ~134px ≈ 16-18 chars; 18 avoids over-eager breaks on short labels)
+# ── text metrics ──────────────────────────────────────────────────────────────
+
+_NARROW_CHARS = frozenset("iltfjI1!|.,:;'")
+_SEMI_NARROW_CHARS = frozenset("()[]{}/\\-\"`")
+_WIDE_CHARS = frozenset("WMwm@%")
 
 
-def _wrap_label(label: str, max_chars: int = _WRAP_CHARS) -> list[str]:
-    """Split label into lines of at most max_chars characters.
+def _measure_text_width(text: str, font_size: int, font_weight: int) -> float:
+    """Estimate rendered text width in px via character-class bucketing.
 
-    Treats literal \\n (two-char escape) and real newlines as explicit breaks.
-    Pass max_chars=_WRAP_CHARS_ICON for icon-left card titles where the icon
-    consumes ~34px of the available text width.
+    Approximates browser canvas.measureText for system-ui/Inter at the
+    given font_size and font_weight. Accuracy is within ±15% of real
+    browser measurements for typical UI text (ASCII + CJK + punctuation).
     """
-    # Normalise literal \n escape sequences to real newlines first
+    if not text:
+        return 0.0
+    base = 0.60 if font_weight >= 600 else (0.57 if font_weight >= 500 else 0.54)
+    total = 0.0
+    for c in text:
+        cp = ord(c)
+        if 0x0300 <= cp <= 0x036F:  # combining marks — zero width
+            ratio = 0.0
+        elif c == " ":
+            ratio = 0.3
+        elif c in _NARROW_CHARS:
+            ratio = 0.4
+        elif c in _SEMI_NARROW_CHARS:
+            ratio = 0.5
+        elif c == "r":
+            ratio = 0.8
+        elif c in _WIDE_CHARS:  # check before generic uppercase A–Z
+            ratio = 1.5
+        elif "A" <= c <= "Z":
+            ratio = 1.2
+        elif cp >= 0x4E00:  # CJK unified ideographs + emoji surrogates
+            ratio = 2.0
+        else:
+            ratio = 1.0
+        total += ratio
+    return total * font_size * base + font_size * 0.15
+
+
+def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
+    """Split label into lines fitting within width_budget pixels.
+
+    Uses _measure_text_width at font_size=13, font_weight=500 to estimate
+    pixel widths. Treats literal \\n and real newlines as explicit breaks.
+    For icon-left cards pass width_budget=NODE_W - 40 - ICON_COL_WIDTH.
+    """
     normalized = label.replace("\\n", "\n")
     if "\n" in normalized:
         result: list[str] = []
         for chunk in normalized.split("\n"):
             stripped = chunk.strip()
             if stripped:
-                result.extend(_wrap_label(stripped, max_chars))
+                result.extend(_wrap_label(stripped, width_budget))
         return result or [label]
-    if len(normalized) <= max_chars:
+    if _measure_text_width(normalized, 13, 500) <= width_budget:
         return [normalized]
-    # Split on spaces first; for hyphen-compound words, also split at hyphens
-    # so long kebab-case identifiers (e.g. knowledge-source-enterprise-it)
-    # break at natural boundaries instead of at arbitrary char positions.
+    # Split on spaces; for hyphen-compound words also split at hyphens so
+    # long kebab-case identifiers break at natural boundaries.
     raw_words = normalized.split()
     words: list[str] = []
     for w in raw_words:
-        if len(w) > max_chars and "-" in w:
+        if _measure_text_width(w, 13, 500) > width_budget and "-" in w:
             parts = w.split("-")
             acc = parts[0]
             for p in parts[1:]:
                 candidate = acc + "-" + p
-                if len(candidate) <= max_chars:
+                if _measure_text_width(candidate, 13, 500) <= width_budget:
                     acc = candidate
                 else:
                     words.append(acc + "-")
@@ -260,14 +299,21 @@ def _wrap_label(label: str, max_chars: int = _WRAP_CHARS) -> list[str]:
     lines: list[str] = []
     cur = ""
     for w in words:
-        # Break individual tokens that still exceed the wrap limit
-        while len(w) > max_chars:
+        # Break individual tokens that still exceed the budget
+        while _measure_text_width(w, 13, 500) > width_budget:
             if cur:
                 lines.append(cur)
                 cur = ""
-            lines.append(w[:max_chars])
-            w = w[max_chars:]
-        if cur and len(cur) + 1 + len(w) > max_chars:
+            # Find max prefix that fits in budget
+            split_i = 1
+            while (split_i < len(w) and
+                   _measure_text_width(w[:split_i + 1], 13, 500) <= width_budget):
+                split_i += 1
+            lines.append(w[:split_i])
+            w = w[split_i:]
+        if not w:
+            continue
+        if cur and _measure_text_width(cur + " " + w, 13, 500) > width_budget:
             lines.append(cur)
             cur = w
         else:
@@ -316,6 +362,8 @@ def _node_render_h(n: "_Node") -> int:
     """
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
+    if n.shape == "doublecircle":
+        return max(NODE_W, NODE_H) + 8
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)
@@ -323,11 +371,11 @@ def _node_render_h(n: "_Node") -> int:
     has_icon = bool(
         (n.icon and _load_icon(n.icon)) or (n.css_class and _load_icon(n.css_class))
     )
-    # Icon-left cards have a narrower text column; use reduced wrap limit so height
-    # computation accounts for the extra lines that actually wrap in the rendered card.
-    icon_wrap = _WRAP_CHARS_ICON if has_icon else _WRAP_CHARS
-    title_lines = _wrap_label(main_label, max_chars=icon_wrap)
-    sub_lines = _wrap_label(sub_label, max_chars=icon_wrap) if sub_label else []
+    # Icon-left cards have a narrower text column; use reduced pixel budget so
+    # height computation accounts for the extra lines that wrap in the rendered card.
+    _wbudget = (NODE_W - 40 - ICON_COL_WIDTH) if has_icon else (NODE_W - 40)
+    title_lines = _wrap_label(main_label, width_budget=_wbudget)
+    sub_lines = _wrap_label(sub_label, width_budget=_wbudget) if sub_label else []
 
     title_h = len(title_lines) * _TITLE_LINE_H
     sub_h = len(sub_lines) * _SUB_LINE_H

@@ -1,0 +1,7 @@
+architecture-beta
+    group cloud[AWS]
+        service api(internet)[API Gateway]
+        service lambda(server)[Lambda]
+        service db(database)[RDS]
+    api:R --> L:lambda
+    lambda:R --> L:db
