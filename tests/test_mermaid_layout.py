@@ -24,7 +24,10 @@ from mermaid_layout import (
     _assign_ranks,
     _minimize_crossings,
     _assign_coordinates,
+    _compact_group_columns,
     _separate_groups_lr,
+    _separate_groups_tb,
+    _compute_group_bboxes,
     _wrap_label,
     _node_render_h,
     _render_graph_fragment,
@@ -44,6 +47,8 @@ from mermaid_layout import (
     NODE_W,
     NODE_H,
     COL_GAP,
+    RANK_GAP,
+    CANVAS_PAD,
     GROUP_PAD_X,
     GROUP_PAD_Y_TOP,
     GROUP_PAD_Y_BOT,
@@ -898,3 +903,170 @@ class TestErrorPaths:
         """Comment-only body has no parseable nodes — raises ValueError."""
         with pytest.raises(ValueError, match="No nodes"):
             _dispatch_ok("flowchart TB\n  %% just a comment\n  // another comment")
+
+
+# ── TestVariableRankHeights ───────────────────────────────────────────────────
+
+class TestVariableRankHeights:
+    """TB mode _assign_coordinates should use actual node heights per rank (dagre parity)."""
+
+    def _full_pipeline(self, src):
+        lines = src.strip().splitlines()[1:]
+        nodes, edges, groups = _parse_graph_source(lines)
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        _minimize_crossings(nodes, edges)
+        cw, ch = _assign_coordinates(nodes, "TB")
+        return nodes, cw, ch
+
+    def test_tb_variable_rank_heights_tall_last_rank_node(self):
+        """canvas_h must leave CANVAS_PAD below tallest node at max rank."""
+        # B has icon + tech sub-label → taller than NODE_H
+        src = "flowchart TB\n  A[Alpha] --> B[Service B|Spring Boot]:::database"
+        nodes, cw, ch = self._full_pipeline(src)
+        max_rank = max(n.rank for n in nodes.values() if not n.is_dummy)
+        last_rank_nodes = [n for n in nodes.values() if n.rank == max_rank and not n.is_dummy]
+        for n in last_rank_nodes:
+            node_bottom = n.y + _node_render_h(n)
+            assert ch >= node_bottom + CANVAS_PAD, (
+                f"canvas_h={ch} too short for node '{n.id}' bottom={node_bottom} + CANVAS_PAD={CANVAS_PAD}"
+            )
+
+    def test_tb_variable_rank_heights_intermediate_no_overlap(self):
+        """Tall node at rank 0 must not visually overlap rank 1 top."""
+        # A has icon → taller than NODE_H; B is at rank 1
+        src = "flowchart TB\n  A[Alpha]:::database --> B[Beta]"
+        nodes, cw, ch = self._full_pipeline(src)
+        rank0 = [n for n in nodes.values() if n.rank == 0 and not n.is_dummy]
+        rank1 = [n for n in nodes.values() if n.rank == 1 and not n.is_dummy]
+        if not rank0 or not rank1:
+            return
+        rank0_max_bottom = max(n.y + _node_render_h(n) for n in rank0)
+        rank1_min_top = min(n.y for n in rank1)
+        assert rank0_max_bottom <= rank1_min_top, (
+            f"Rank 0 bottom {rank0_max_bottom} overlaps rank 1 top {rank1_min_top}"
+        )
+
+    def test_tb_variable_rank_heights_simple_unchanged_for_uniform_nodes(self):
+        """For single-line nodes without icons, all nodes at rank r have same y."""
+        src = "flowchart TB\n  A --> B --> C"
+        nodes, cw, ch = self._full_pipeline(src)
+        by_rank: dict[int, list] = {}
+        for n in nodes.values():
+            if not n.is_dummy:
+                by_rank.setdefault(n.rank, []).append(n)
+        for r, nds in by_rank.items():
+            ys = {n.y for n in nds}
+            assert len(ys) == 1, f"Rank {r} nodes have different y positions: {ys}"
+
+
+# ── TestCompactGroupColumns ───────────────────────────────────────────────────
+
+class TestCompactGroupColumns:
+    """_compact_group_columns separates groups with overlapping col×rank ranges."""
+
+    def _make_two_groups_overlapping(self):
+        """Two groups both placed at col=0 by barycenter (same rank band)."""
+        nodes = {
+            "A": _Node(id="A", label="A", rank=0, col=0, group="_g1"),
+            "B": _Node(id="B", label="B", rank=0, col=0, group="_g2"),
+        }
+        groups = {
+            "_g1": _Group(id="_g1", label="G1", members=["A"]),
+            "_g2": _Group(id="_g2", label="G2", members=["B"]),
+        }
+        return nodes, groups
+
+    def test_compact_group_columns_separates_overlapping(self):
+        """Two groups at same col AND same rank band → non-overlapping after compact."""
+        nodes, groups = self._make_two_groups_overlapping()
+        _compact_group_columns(nodes, groups)
+        g1_cols = {nodes[m].col for m in groups["_g1"].members if m in nodes}
+        g2_cols = {nodes[m].col for m in groups["_g2"].members if m in nodes}
+        assert g1_cols.isdisjoint(g2_cols), f"Groups still share columns: g1={g1_cols} g2={g2_cols}"
+
+    def test_compact_group_columns_noop_for_nonoverlapping_rank(self):
+        """Groups at same col range but non-overlapping rank range are NOT shifted."""
+        nodes = {
+            "A": _Node(id="A", label="A", rank=0, col=0, group="_g1"),
+            "B": _Node(id="B", label="B", rank=3, col=0, group="_g2"),
+        }
+        groups = {
+            "_g1": _Group(id="_g1", label="G1", members=["A"]),
+            "_g2": _Group(id="_g2", label="G2", members=["B"]),
+        }
+        before_a_col = nodes["A"].col
+        before_b_col = nodes["B"].col
+        _compact_group_columns(nodes, groups)
+        # Ranks 0 and 3 don't overlap — neither group should be shifted
+        assert nodes["A"].col == before_a_col
+        assert nodes["B"].col == before_b_col
+
+
+# ── TestComputeGroupBboxes ────────────────────────────────────────────────────
+
+class TestComputeGroupBboxes:
+    """_compute_group_bboxes resolves overlaps and clips to canvas."""
+
+    def test_compute_group_bboxes_no_overlap(self):
+        """Two groups whose raw padded bboxes overlap → resolved bboxes don't overlap."""
+        # Both groups at same y; A at x=48, B at x=100 (within A's bbox)
+        nodes = {
+            "A": _Node(id="A", label="A", x=48, y=48, group="_g1"),
+            "B": _Node(id="B", label="B", x=100, y=48, group="_g2"),
+        }
+        groups = {
+            "_g1": _Group(id="_g1", label="G1", members=["A"]),
+            "_g2": _Group(id="_g2", label="G2", members=["B"]),
+        }
+        bboxes = _compute_group_bboxes(nodes, groups, 600, 400)
+        b1, b2 = bboxes["_g1"], bboxes["_g2"]
+        ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
+        oy = min(b1[3], b2[3]) - max(b1[1], b2[1])
+        assert not (ox > 0 and oy > 0), f"Bboxes still overlap: g1={b1} g2={b2}"
+
+    def test_compute_group_bboxes_clips_to_canvas(self):
+        """Group bbox is clipped to canvas bounds."""
+        # Group node near right edge — padded bbox would exceed canvas_w=200
+        nodes = {
+            "A": _Node(id="A", label="A", x=180, y=20, group="_g1"),
+        }
+        groups = {"_g1": _Group(id="_g1", label="G1", members=["A"])}
+        bboxes = _compute_group_bboxes(nodes, groups, 200, 200)
+        b = bboxes["_g1"]
+        assert b[0] >= 0, "bbox x0 < 0"
+        assert b[1] >= 0, "bbox y0 < 0"
+        assert b[2] <= 200, f"bbox x1={b[2]} > canvas_w=200"
+        assert b[3] <= 200, f"bbox y1={b[3]} > canvas_h=200"
+
+
+# ── TestSeparateGroupsTB ──────────────────────────────────────────────────────
+
+class TestSeparateGroupsTB:
+    """_separate_groups_tb resolves X+Y overlapping group node positions (TB mode)."""
+
+    def test_separate_groups_tb_resolves_x_overlap(self):
+        """Groups with forced X+Y overlap get separated (X shifted) after the call."""
+        # Both groups at x=48 (same x) and overlapping y range
+        nodes = {
+            "A": _Node(id="A", label="A", x=48, y=48, group="_g1"),
+            "B": _Node(id="B", label="B", x=48, y=48, group="_g2"),
+        }
+        groups = {
+            "_g1": _Group(id="_g1", label="G1", members=["A"]),
+            "_g2": _Group(id="_g2", label="G2", members=["B"]),
+        }
+        canvas_w = _separate_groups_tb(nodes, groups, 400)
+        # After separation, compute padded bboxes
+        def padded_x(gid):
+            mbrs = [nodes[m] for m in groups[gid].members if m in nodes]
+            x0 = min(n.x for n in mbrs) - GROUP_PAD_X
+            x1 = max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X
+            y0 = min(n.y for n in mbrs) - GROUP_PAD_Y_TOP
+            y1 = max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT
+            return (x0, x1, y0, y1)
+        g1 = padded_x("_g1")
+        g2 = padded_x("_g2")
+        x_overlap = g1[0] < g2[1] and g2[0] < g1[1]
+        y_overlap = g1[2] < g2[3] and g2[2] < g1[3]
+        assert not (x_overlap and y_overlap), f"Groups still overlap after separate_groups_tb: g1={g1} g2={g2}"

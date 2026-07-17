@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Optional
 
 from ._constants import (
-    _Node, _Edge,
+    _Node, _Edge, _Group,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
-    CROSSING_PASSES,
+    CROSSING_PASSES, GROUP_CAP,
     _node_render_h,
 )
 
@@ -154,7 +154,8 @@ def _minimize_crossings(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
 def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple[int, int]:
     """Assign x/y pixel positions; return (canvas_width, canvas_height).
 
-    TB (default): rank→Y (row), col→X (column).
+    TB (default): rank→Y (row), col→X (column). Row heights are variable based on
+    actual node render heights (mirrors LR's variable column heights — dagre parity).
     LR: rank→X (column), col→Y (row) with variable Y pitch based on node height.
     """
     if not nodes:
@@ -165,13 +166,23 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
 
     if not is_lr:
         col_pitch = NODE_W + COL_GAP
-        row_pitch = NODE_H + RANK_GAP
         max_col = max(n.col for n in nodes.values())
         for n in nodes.values():
             n.x = CANVAS_PAD + n.col * col_pitch
-            n.y = CANVAS_PAD + n.rank * row_pitch
+
+        # Variable rank heights: accumulate Y positions by actual max node height per rank
+        rank_to_nodes: dict[int, list] = {}
+        for n in nodes.values():
+            rank_to_nodes.setdefault(n.rank, []).append(n)
+        y_cursor = CANVAS_PAD
+        for rank in sorted(rank_to_nodes):
+            rank_h = max(_node_render_h(n) for n in rank_to_nodes[rank])
+            for n in rank_to_nodes[rank]:
+                n.y = y_cursor
+            y_cursor += rank_h + RANK_GAP
+
         canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
-        canvas_h = CANVAS_PAD * 2 + (max_rank + 1) * row_pitch - RANK_GAP
+        canvas_h = y_cursor + CANVAS_PAD - RANK_GAP
         return canvas_w, canvas_h
 
     # LR: rank→X with fixed pitch; col→Y with variable pitch (multi-line nodes)
@@ -193,3 +204,66 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
     canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - RANK_GAP
     canvas_h = y_cursor + CANVAS_PAD - COL_GAP
     return canvas_w, canvas_h
+
+
+# ── group column compaction (dagre-inspired cluster column separation) ─────────
+
+def _compact_group_columns(
+    nodes: dict[str, _Node],
+    groups: dict[str, _Group],
+) -> None:
+    """Push groups with overlapping col×rank ranges to exclusive column bands.
+
+    Called after _minimize_crossings (which assigns n.col) but before
+    _assign_coordinates (which converts col to x pixels). Modifies n.col only.
+
+    Two groups "collide" when their column ranges AND rank ranges both overlap.
+    The right-er group (higher col_min) is shifted right by the overlap + 1.
+    Non-member nodes in the same col×rank band are shifted with the group.
+
+    This is the Python analogue of dagre's cluster-aware ordering step.
+    """
+    if not groups:
+        return
+
+    def _ranges(gid: str) -> Optional[tuple[int, int, int, int]]:
+        mbrs = [nodes[m] for m in groups[gid].members
+                if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return (
+            min(n.col for n in mbrs), max(n.col for n in mbrs),
+            min(n.rank for n in mbrs), max(n.rank for n in mbrs),
+        )
+
+    member_ids = {nid for grp in groups.values() for nid in grp.members}
+
+    for _pass in range(GROUP_CAP):
+        rng = {gid: _ranges(gid) for gid in groups}
+        rng = {gid: r for gid, r in rng.items() if r is not None}
+        if not rng:
+            break
+        sorted_gids = sorted(rng, key=lambda g: rng[g][0])  # by col_min
+        moved = False
+        for i, g1 in enumerate(sorted_gids):
+            c1_lo, c1_hi, r1_lo, r1_hi = rng[g1]
+            for g2 in sorted_gids[i + 1:]:
+                c2_lo, c2_hi, r2_lo, r2_hi = rng[g2]
+                col_overlap = c1_lo <= c2_hi and c2_lo <= c1_hi
+                rank_overlap = r1_lo <= r2_hi and r2_lo <= r1_hi
+                if col_overlap and rank_overlap:
+                    shift = c1_hi - c2_lo + 1
+                    for nid in groups[g2].members:
+                        if nid in nodes:
+                            nodes[nid].col += shift
+                    # Shift non-member nodes in the same col×rank band
+                    for nid, n in nodes.items():
+                        if nid not in member_ids and not n.is_dummy:
+                            if c2_lo <= n.col <= c2_hi and r2_lo <= n.rank <= r2_hi:
+                                n.col += shift
+                    moved = True
+                    break
+            if moved:
+                break
+        if not moved:
+            break
