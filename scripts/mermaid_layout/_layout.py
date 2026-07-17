@@ -178,6 +178,44 @@ def _minimize_crossings(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
         _backward_pass()
 
 
+def _group_coherent_cols(
+    nodes: dict[str, _Node],
+    groups: dict[str, _Group],
+) -> None:
+    """Re-assign cols within each rank so nodes in the same group are adjacent.
+
+    Called after _minimize_crossings. Preserves the relative bary-sorted order of
+    group clusters (the group with the lowest average bary comes first) but ensures
+    all members of a group are consecutive — keeping the group's y-span compact in
+    LR mode and reducing nested-group bbox inflation.
+
+    Nodes with no group affiliation are placed in a cluster keyed by "" (empty string)
+    and sort after all named groups within their rank, maintaining stable ordering.
+    """
+    if not groups:
+        return
+    max_rank = max(n.rank for n in nodes.values())
+    for rank in range(max_rank + 1):
+        rank_nids = [nid for nid, n in nodes.items() if n.rank == rank and not n.is_dummy]
+        if not rank_nids:
+            continue
+        # Group key → list of (bary, nid); "" for ungrouped
+        buckets: dict[str, list[tuple[float, str]]] = {}
+        for nid in rank_nids:
+            gkey = nodes[nid].group or ""
+            buckets.setdefault(gkey, []).append((nodes[nid].bary, nid))
+        # Compute each bucket's average bary so buckets sort by their centre
+        bucket_order = sorted(
+            buckets.items(),
+            key=lambda kv: (kv[0] == "", sum(b for b, _ in kv[1]) / len(kv[1]))
+        )
+        col = 0
+        for _gkey, members in bucket_order:
+            for _bary, nid in sorted(members):
+                nodes[nid].col = col
+                col += 1
+
+
 # ── coordinate assignment (integer pixels) ────────────────────────────────────
 
 def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple[int, int]:
@@ -267,6 +305,20 @@ def _compact_group_columns(
             min(n.rank for n in mbrs), max(n.rank for n in mbrs),
         )
 
+    def _is_nested(ga: str, gb: str) -> bool:
+        """True if ga and gb are in a parent-child relationship (either direction)."""
+        cur = groups[gb].parent_group
+        while cur:
+            if cur == ga:
+                return True
+            cur = groups[cur].parent_group if cur in groups else None
+        cur = groups[ga].parent_group
+        while cur:
+            if cur == gb:
+                return True
+            cur = groups[cur].parent_group if cur in groups else None
+        return False
+
     member_ids = {nid for grp in groups.values() for nid in grp.members}
 
     for _pass in range(GROUP_CAP):
@@ -279,6 +331,8 @@ def _compact_group_columns(
         for i, g1 in enumerate(sorted_gids):
             c1_lo, c1_hi, r1_lo, r1_hi = rng[g1]
             for g2 in sorted_gids[i + 1:]:
+                if _is_nested(g1, g2):
+                    continue
                 c2_lo, c2_hi, r2_lo, r2_hi = rng[g2]
                 col_overlap = c1_lo <= c2_hi and c2_lo <= c1_hi
                 rank_overlap = r1_lo <= r2_hi and r2_lo <= r1_hi
