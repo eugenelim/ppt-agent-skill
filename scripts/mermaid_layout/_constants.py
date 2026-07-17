@@ -160,11 +160,29 @@ def _wrap_label(label: str) -> list[str]:
         return result or [label]
     if len(normalized) <= _WRAP_CHARS:
         return [normalized]
-    words = normalized.split()
+    # Split on spaces first; for hyphen-compound words, also split at hyphens
+    # so long kebab-case identifiers (e.g. express-ai-knowledge-source-enterprise-it)
+    # break at natural boundaries instead of at arbitrary char positions.
+    raw_words = normalized.split()
+    words: list[str] = []
+    for w in raw_words:
+        if len(w) > _WRAP_CHARS and "-" in w:
+            parts = w.split("-")
+            acc = parts[0]
+            for p in parts[1:]:
+                candidate = acc + "-" + p
+                if len(candidate) <= _WRAP_CHARS:
+                    acc = candidate
+                else:
+                    words.append(acc + "-")
+                    acc = p
+            words.append(acc)
+        else:
+            words.append(w)
     lines: list[str] = []
     cur = ""
     for w in words:
-        # Break individual words that exceed the wrap limit (e.g. long hyphenated identifiers)
+        # Break individual tokens that still exceed the wrap limit
         while len(w) > _WRAP_CHARS:
             if cur:
                 lines.append(cur)
@@ -181,6 +199,32 @@ def _wrap_label(label: str) -> list[str]:
     return lines or [normalized]
 
 
+def _split_sub_label(label: str) -> tuple[str, str]:
+    """Split a node label into (main, sub) parts.
+
+    The convention is: label lines before the first [bracketed line] are main;
+    the bracketed portion (stripped of outer brackets) is the sub-label.
+    E.g. "Service name\\n[Tech stack]" → ("Service name", "Tech stack").
+    """
+    normalized = label.replace("\\n", "\n")
+    if "\n" not in normalized:
+        return label, ""
+    chunks = [c.strip() for c in normalized.split("\n") if c.strip()]
+    main_parts, sub_parts = [], []
+    in_sub = False
+    for chunk in chunks:
+        if not in_sub and chunk.startswith("[") and chunk.endswith("]"):
+            in_sub = True
+            sub_parts.append(chunk[1:-1].strip())
+        elif in_sub:
+            sub_parts.append(chunk)
+        else:
+            main_parts.append(chunk)
+    main = "\n".join(main_parts) if main_parts else label
+    sub = " ".join(sub_parts)
+    return main, sub
+
+
 def _node_render_h(n: "_Node") -> int:
     """Return the rendered pixel height of node n (single source of truth).
 
@@ -188,7 +232,8 @@ def _node_render_h(n: "_Node") -> int:
     bounding boxes, canvas height, and LR layout pitch all stay in sync.
     Uses n.icon and n.css_class (via _load_icon) to determine effective icon.
     """
-    main_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
+    raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
+    main_label, sub_label = _split_sub_label(raw_label)
     lines = _wrap_label(main_label)
     extra_h = max(0, (len(lines) - 1) * _NODE_H_LINE)
     if n.icon and _load_icon(n.icon):
@@ -201,5 +246,8 @@ def _node_render_h(n: "_Node") -> int:
         extra_h += _NODE_H_ICON  # additive: icon + multiple lines don't fight each other
     if "|" in n.label:
         extra_h += _NODE_H_TECH
+    if sub_label:
+        sub_lines = _wrap_label(sub_label)
+        extra_h += len(sub_lines) * _NODE_H_LINE
     return NODE_H + extra_h
 

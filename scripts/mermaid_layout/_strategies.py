@@ -8,7 +8,7 @@ from typing import Optional
 from ._constants import (
     _Node, _Edge, _Group,
     NODE_CAP, EDGE_CAP, GROUP_CAP,
-    NODE_W, NODE_H, COL_GAP, CANVAS_PAD,
+    NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _ARCH_ICON_MAP, _C4_ICON_MAP,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
@@ -26,7 +26,9 @@ from ._renderer import (
 
 # ── graph topology strategy ──────────────────────────────────────────────────
 
-def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
+def _layout_graph_topology(
+    src: str, direction: str, width_hint: int, height_hint: int = 0
+) -> str:
     lines = src.splitlines()
     # Skip up to and including the directive line (first non-blank, non-comment line)
     directive_index = 0
@@ -60,6 +62,30 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
+
+    # Auto-select direction (TB vs LR) when a size constraint is given and the
+    # source direction was not explicitly overridden by the caller.  Estimate the
+    # canvas footprint for both orientations and choose the one that requires
+    # less shrinkage (i.e. fits best inside width_hint × height_hint).
+    if width_hint and height_hint:
+        max_rank = max((n.rank for n in nodes.values()), default=0)
+        from collections import Counter
+        rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
+        max_cols = max(rank_counts.values(), default=1)
+        # Use actual average node height (accounts for sub-labels, icons, multi-line)
+        real_ns = [n for n in nodes.values() if not n.is_dummy]
+        avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
+        lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
+        lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
+        tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
+        tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
+        lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
+        tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
+        if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
+            direction = "TB"
+        elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
+            direction = "LR"
+
     # Compact group column ranges before coordinate assignment (dagre-inspired)
     if groups:
         _compact_group_columns(nodes, groups)
@@ -77,11 +103,13 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
         canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
 
-    # When the natural canvas exceeds the width hint, shrink via CSS zoom rather
-    # than distorting x-coordinates (which causes node overlaps when scale < NODE_W/col_pitch).
+    # Scale to fit both width and height constraints via CSS zoom.
+    # Using zoom (not transform:scale) avoids distorting pre-computed coordinates.
     zoom = 1.0
-    if width_hint and canvas_w > width_hint * 1.05:
-        zoom = width_hint / canvas_w
+    if width_hint and canvas_w > 0:
+        w_zoom = width_hint / canvas_w if canvas_w > width_hint * 1.05 else 1.0
+        h_zoom = height_hint / canvas_h if (height_hint and canvas_h > height_hint * 1.05) else 1.0
+        zoom = min(w_zoom, h_zoom)
 
     fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction, zoom)
 
@@ -1253,15 +1281,24 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
 
 # ── strategy dispatch ─────────────────────────────────────────────────────────
 
-def _dispatch(src: str, direction_override: Optional[str], width_hint: int) -> str:
+def _dispatch(
+    src: str,
+    direction_override: Optional[str],
+    width_hint: int,
+    height_hint: int = 0,
+) -> str:
     """Detect directive, dispatch to per-type strategy, return HTML fragment."""
     clean = _strip_frontmatter(src)
     directive, auto_direction = _detect_directive(clean)
+    # When the caller supplied an explicit direction override, respect it and
+    # disable auto-direction (pass height_hint=0 to _layout_graph_topology so
+    # the auto-select branch doesn't fire).
     direction = (direction_override or auto_direction).upper()
+    effective_height = height_hint if not direction_override else 0
     d = directive.lower()
 
     if d in _GRAPH_DIRECTIVES:
-        return _layout_graph_topology(clean, direction, width_hint)
+        return _layout_graph_topology(clean, direction, width_hint, effective_height)
     if d == "sequencediagram":
         return _layout_lifeline(clean, direction, width_hint)
     if d == "erdiagram":

@@ -80,7 +80,7 @@ def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> 
     return start + step * index
 
 
-_LABEL_PERP = 14  # perpendicular offset for edge labels (px)
+_LABEL_PERP = 20  # perpendicular offset for edge labels (px)
 
 
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
@@ -198,24 +198,27 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             cx2 = x1 + 2 * (x2 - x1) // 3
             path = f"M {x1} {y1} C {cx1} {y1} {cx2} {y2} {x2} {y2}"
             ah = _arrowhead(x2, y2, x2 - cx2, 0.001, **ah_kw) if e.arrow else None
-            # Label: perpendicular offset from midpoint
+            # Label: offset from midpoint. For near-horizontal LR edges push downward
+            # (below the line) so the label stays clear of node top-padding areas.
             mid_x = (x1 + x2) // 2
             mid_y = (y1 + y2) // 2
             edge_dx = float(x2 - x1)
             edge_dy = float(y2 - y1)
             edge_len = math.hypot(edge_dx, edge_dy) or 1.0
-            perp_x = edge_dy / edge_len
-            perp_y = -edge_dx / edge_len
-            lx = int(mid_x + perp_x * _LABEL_PERP)
-            ly = int(mid_y + perp_y * _LABEL_PERP)
-            # Stagger labels for parallel edges (same src→dst pair)
+            if abs(edge_dy) < abs(edge_dx) * 0.5:
+                # nearly horizontal: use fixed downward offset
+                lx, ly = int(mid_x), int(mid_y + _LABEL_PERP)
+            else:
+                perp_x = edge_dy / edge_len
+                perp_y = -edge_dx / edge_len
+                lx = int(mid_x + perp_x * _LABEL_PERP)
+                ly = int(mid_y + perp_y * _LABEL_PERP)
+            # Stagger parallel edges (same src→dst pair)
             _par = parallel_edge_idx.get(edge_i, 0)
             if _par:
-                lx = int(lx + perp_x * 12 * _par)
-                ly = int(ly + perp_y * 12 * _par)
-            rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
+                ly = int(ly + 14 * _par)
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": lx, "ly": ly, "rot": rot})
+                           "lx": lx, "ly": ly, "rot": 0})
             continue
 
         # TB adjacent-rank forward edge: cubic Bézier bottom-centre to top-centre
@@ -253,9 +256,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if _par:
             lx = int(lx + perp_x * 12 * _par)
             ly = int(ly + perp_y * 12 * _par)
-        rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                       "lx": lx, "ly": ly, "rot": rot})
+                       "lx": lx, "ly": ly, "rot": 0})
 
     return result
 

@@ -8,9 +8,20 @@ from ._constants import (
     NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _NODE_H_LINE, _NODE_H_ICON, _NODE_H_TECH,
-    _load_icon, _wrap_label, _node_render_h,
+    _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
 from ._routing import _route_edges
+
+
+def _nh(text: str) -> str:
+    """HTML-escape text and replace hyphens with non-breaking hyphens (U+2011).
+
+    Prevents the browser from using hyphens inside node labels as soft line-break
+    opportunities — those breaks come from our wrap algorithm via <br>, not CSS.
+    U+2011 is visually identical to U+002D and supported by Inter/system fonts.
+    """
+    return _h(text).replace("-", "‑")
+
 
 # ── HTML renderer (graph topology) ───────────────────────────────────────────
 
@@ -47,25 +58,31 @@ def _render_graph_fragment(
         f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}">'
     )
 
-    # Group containers (subgraphs) — use overlap-resolved, canvas-clipped bboxes
+    # Group containers (subgraphs) — use overlap-resolved, canvas-clipped bboxes.
+    # Each group gets a distinct accent color from the palette so zones are
+    # visually distinguishable at a glance.
+    _ACCENT_CYCLE = ["var(--accent-1)", "var(--accent-3)", "var(--accent-4)", "var(--accent-2)"]
     _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-    for gid, grp in groups.items():
+    for _gi, (gid, grp) in enumerate(groups.items()):
         if gid not in _grp_bboxes:
             continue
         _b = _grp_bboxes[gid]
         gx, gy = int(_b[0]), int(_b[1])
         gw, gh = max(1, int(_b[2] - _b[0])), max(1, int(_b[3] - _b[1]))
         glabel = _h(grp.label)
+        _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
         parts.append(
             f'<div class="diagram-group" style="'
             f'position:absolute; left:{gx}px; top:{gy}px; '
             f'width:{gw}px; height:{gh}px; '
-            f'border:1px solid var(--group-border,var(--accent-1)); '
+            f'border:1px solid {_accent}; '
             f'border-radius:var(--group-radius,12px); '
-            f'box-sizing:border-box;">'
+            f'box-sizing:border-box; overflow:visible;">'
             f'<span class="group-label" style="'
             f'position:absolute; top:4px; left:8px; '
-            f'font-size:10px; color:var(--node-fg-dim,var(--text-secondary)); '
+            f'font-size:10px; color:{_accent}; '
+            f'font-weight:600; letter-spacing:0.06em; text-transform:uppercase; '
+            f'white-space:nowrap; '
             f'font-family:var(--label-font,var(--font-primary));">'
             f'{glabel}</span></div>'
         )
@@ -83,12 +100,15 @@ def _render_graph_fragment(
 
         # Split label on first | for tech stereotype sub-label (e.g. "User Service|Spring Boot")
         if "|" in n.label:
-            main_label, tech_label = (p.strip() for p in n.label.split("|", 1))
+            raw_label, tech_label = (p.strip() for p in n.label.split("|", 1))
         else:
-            main_label, tech_label = n.label, ""
+            raw_label, tech_label = n.label, ""
+
+        # Split [bracketed sub-label] on newline from the main title
+        main_label, bracket_sub = _split_sub_label(raw_label)
 
         main_lines = _wrap_label(main_label)
-        main_html = "<br>".join(_h(ln) for ln in main_lines)
+        main_html = "<br>".join(_nh(ln) for ln in main_lines)
         icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
 
@@ -97,6 +117,19 @@ def _render_graph_fragment(
         border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
         # Title uses accent-1 so it reads differently from the card body background
         title_color = fg_var if is_external else "var(--node-title-fg,var(--accent-1))"
+
+        sub_span = ""
+        if bracket_sub:
+            sub_lines = _wrap_label(bracket_sub)
+            sub_html = "<br>".join(_nh(ln) for ln in sub_lines)
+            sub_span = (
+                f'<span class="node-sub" style="'
+                f'display:block; font-size:11px; font-weight:400; '
+                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'font-family:var(--label-font,var(--font-primary)); '
+                f'line-height:1.3; margin-top:3px;">'
+                f'{sub_html}</span>'
+            )
 
         tech_span = ""
         if tech_label:
@@ -120,7 +153,7 @@ def _render_graph_fragment(
                 f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
-                f'{tech_span}'
+                f'{sub_span}{tech_span}'
             )
             flex_dir = "column"
         else:
@@ -130,7 +163,7 @@ def _render_graph_fragment(
                 f'color:{title_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'line-height:1.4;">{main_html}</span>'
-                f'{tech_span}'
+                f'{sub_span}{tech_span}'
             )
             flex_dir = "column"
 
@@ -184,10 +217,12 @@ def _render_graph_fragment(
             parts.append(
                 f'<span class="edge-label" style="'
                 f'position:absolute; left:{lx}px; top:{ly}px; '
-                f'font-size:11px; font-family:var(--label-font,var(--font-primary)); '
+                f'font-size:10px; font-family:var(--label-font,var(--font-primary)); '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
-                f'background:var(--node-bg-from,var(--card-bg-from)); '
-                f'padding:2px 5px; white-space:nowrap; pointer-events:none; '
+                f'background:var(--bg-primary,var(--card-bg-from,#0a0a0a)); '
+                f'padding:1px 5px; border-radius:3px; '
+                f'max-width:200px; overflow:hidden; text-overflow:ellipsis; '
+                f'white-space:nowrap; pointer-events:none; z-index:2; '
                 f'transform:translate(-50%,-50%){rot_part};">'
                 f'{_h(spec["label"])}</span>'
             )

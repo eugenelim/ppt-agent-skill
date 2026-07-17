@@ -19,6 +19,7 @@ from ._constants import (
     _Group,
     _load_icon,
     _wrap_label,
+    _split_sub_label,
     _node_render_h,
 )
 from ._parser import (
@@ -56,7 +57,7 @@ __all__ = [
     "NODE_CAP", "EDGE_CAP", "NODE_W", "NODE_H", "COL_GAP", "RANK_GAP", "CANVAS_PAD",
     "GROUP_PAD_X", "GROUP_PAD_Y_TOP", "GROUP_PAD_Y_BOT",
     "_Node", "_Edge", "_Group",
-    "_load_icon", "_wrap_label", "_node_render_h",
+    "_load_icon", "_wrap_label", "_split_sub_label", "_node_render_h",
     "_strip_frontmatter", "_detect_directive", "_parse_spec",
     "_parse_spec_and_class", "_parse_graph_source",
     "_break_cycles", "_assign_ranks", "_minimize_crossings", "_assign_coordinates",

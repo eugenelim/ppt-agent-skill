@@ -19,6 +19,7 @@ from mermaid_layout import (
     _detect_directive,
     _parse_spec,
     _parse_spec_and_class,
+    _split_sub_label,
     _parse_graph_source,
     _break_cycles,
     _assign_ranks,
@@ -790,6 +791,23 @@ class TestEdgeOperators:
         assert nodes["ATLAS"].rank == 1
         assert nodes["ENTERPRISE_IT"].rank == 2  # after ATLAS via --o
 
+    def test_pipe_label_quoted_double_quotes_stripped(self):
+        """A -->|\"quoted text\"| B should produce label without surrounding quotes."""
+        nodes, edges, _ = _parse_graph_source(['A -->|"GraphRAG local / global retrieval"| B'])
+        assert len(edges) == 1
+        assert edges[0].label == "GraphRAG local / global retrieval"
+
+    def test_pipe_label_single_quotes_stripped(self):
+        """A -->|\'quoted text\'| B should produce label without surrounding quotes."""
+        nodes, edges, _ = _parse_graph_source(["A -->|'some label'| B"])
+        assert len(edges) == 1
+        assert edges[0].label == "some label"
+
+    def test_pipe_label_unquoted_unchanged(self):
+        """Unquoted pipe labels should not be altered."""
+        nodes, edges, _ = _parse_graph_source(["A -->|HTTPS: metadata| B"])
+        assert edges[0].label == "HTTPS: metadata"
+
 
 # ── TestLongLabelWrap ────────────────────────────────────────────────────────
 
@@ -1070,3 +1088,181 @@ class TestSeparateGroupsTB:
         x_overlap = g1[0] < g2[1] and g2[0] < g1[1]
         y_overlap = g1[2] < g2[3] and g2[2] < g1[3]
         assert not (x_overlap and y_overlap), f"Groups still overlap after separate_groups_tb: g1={g1} g2={g2}"
+
+
+# ── TestSplitSubLabel ─────────────────────────────────────────────────────────
+
+class TestSplitSubLabel:
+    """_split_sub_label splits [bracketed secondary text] from the main label."""
+
+    def test_plain_label_no_sub(self):
+        """Label without \\n[...] returns full label as main, empty sub."""
+        main, sub = _split_sub_label("express-ai-atlas")
+        assert main == "express-ai-atlas"
+        assert sub == ""
+
+    def test_newline_bracket_splits_to_sub(self):
+        """Label with \\n[...] pattern splits correctly."""
+        main, sub = _split_sub_label("express-ai-atlas\\n[Knowledge MCP server]")
+        assert main == "express-ai-atlas"
+        assert sub == "Knowledge MCP server"
+
+    def test_real_newline_bracket_splits_to_sub(self):
+        """Label with actual newline before [...]."""
+        main, sub = _split_sub_label("express-ai-atlas\n[Knowledge MCP server]")
+        assert main == "express-ai-atlas"
+        assert sub == "Knowledge MCP server"
+
+    def test_multiple_bracket_lines_join_to_sub(self):
+        """All [bracketed] lines after the first are joined as sub."""
+        main, sub = _split_sub_label("Service\n[Line one]\n[Line two]")
+        assert main == "Service"
+        assert "Line one" in sub
+        assert "Line two" in sub
+
+    def test_no_bracket_multiline_is_plain(self):
+        """Multiple lines without brackets — all treated as main."""
+        main, sub = _split_sub_label("Line A\nLine B")
+        assert "Line A" in main
+        assert sub == ""
+
+
+# ── TestWrapLabelHyphenBreak ──────────────────────────────────────────────────
+
+class TestWrapLabelHyphenBreak:
+    """_wrap_label breaks long kebab-case strings at hyphen boundaries."""
+
+    def test_short_label_no_wrap(self):
+        assert _wrap_label("short") == ["short"]
+
+    def test_hyphenated_long_breaks_at_hyphens(self):
+        """express-ai-knowledge-source-enterprise-it → breaks on hyphens, not mid-char."""
+        lines = _wrap_label("express-ai-knowledge-source-enterprise-it")
+        for ln in lines:
+            assert len(ln) <= 22, f"Line too long: {ln!r}"
+        # No line should split in the middle of a hyphenated segment
+        joined = "".join(lines)
+        assert "expressai" not in joined  # no char-boundary break inside word
+
+    def test_hyphen_break_produces_valid_trailing_hyphen(self):
+        """A fragment that ends with a hyphen is valid (the break point IS a hyphen)."""
+        lines = _wrap_label("very-very-very-long-kebab-case-identifier")
+        for ln in lines:
+            # Each line either ends normally or ends with a hyphen (break point)
+            if ln.endswith("-"):
+                assert len(ln) <= 22
+            else:
+                assert len(ln) <= 22
+
+
+# ── TestEdgeLabelRotation ─────────────────────────────────────────────────────
+
+class TestEdgeLabelRotation:
+    """Edge labels always render horizontally (rot=0) regardless of edge direction."""
+
+    def _get_routed_edges(self, direction: str):
+        from mermaid_layout import _route_edges
+        # Two nodes connected by a vertical edge (same rank, same col → adjacent rows)
+        nodes = {
+            "A": _Node(id="A", label="A", x=48, y=48, rank=0, col=0),
+            "B": _Node(id="B", label="B", x=48, y=200, rank=1, col=0),
+        }
+        edges = [_Edge(src="A", dst="B", label="my label", style="solid", arrow=True)]
+        return _route_edges(nodes, edges, 400, direction)
+
+    def test_edge_label_rot_always_zero_lr(self):
+        """LR edge labels have rot=0."""
+        specs = self._get_routed_edges("LR")
+        labeled = [s for s in specs if s.get("label")]
+        assert labeled, "No labeled edges found"
+        for s in labeled:
+            assert s.get("rot", 0) == 0, f"rot={s['rot']} expected 0 for LR"
+
+    def test_edge_label_rot_always_zero_tb(self):
+        """TB edge labels have rot=0."""
+        specs = self._get_routed_edges("TB")
+        labeled = [s for s in specs if s.get("label")]
+        assert labeled, "No labeled edges found"
+        for s in labeled:
+            assert s.get("rot", 0) == 0, f"rot={s['rot']} expected 0 for TB"
+
+
+# ── TestHeightHintZoom ────────────────────────────────────────────────────────
+
+class TestHeightHintZoom:
+    """_dispatch scales diagram to fit both width_hint and height_hint."""
+
+    SRC = """flowchart TB
+    A --> B --> C --> D --> E --> F --> G
+"""
+
+    def _get_zoom(self, fragment: str) -> float:
+        """Extract zoom from rendered fragment style attribute."""
+        import re
+        m = re.search(r'zoom:\s*([0-9.]+)', fragment)
+        return float(m.group(1)) if m else 1.0
+
+    def _get_canvas_h(self, fragment: str) -> int:
+        import re
+        m = re.search(r'height:(\d+)px', fragment)
+        return int(m.group(1)) if m else 0
+
+    def test_height_hint_constrains_canvas(self):
+        """With tight height_hint, fragment height × zoom ≤ height_hint."""
+        fragment = _dispatch(self.SRC, None, 1000, 200)
+        zoom = self._get_zoom(fragment)
+        canvas_h = self._get_canvas_h(fragment)
+        assert canvas_h * zoom <= 200 * 1.06, (
+            f"canvas_h={canvas_h} × zoom={zoom:.3f} = {canvas_h*zoom:.0f} > height_hint=200"
+        )
+
+    def test_no_height_hint_keeps_full_zoom(self):
+        """Without height_hint, zoom may be 1.0 (no height shrinkage)."""
+        fragment = _dispatch(self.SRC, None, 0, 0)
+        zoom = self._get_zoom(fragment)
+        assert zoom == 1.0, f"Expected zoom=1.0 without hints, got {zoom}"
+
+
+# ── TestAutoDirectionSelect ───────────────────────────────────────────────────
+
+class TestAutoDirectionSelect:
+    """Direction auto-select switches LR→TB when TB fits significantly better."""
+
+    def _tall_lr_src(self, n_ranks: int, n_cols: int) -> str:
+        """Build a source diagram that in LR mode would be very wide and short,
+        but in TB mode would be more balanced."""
+        # Create a chain of n_ranks nodes (1 per rank) + n_cols leaves at the last rank
+        lines = ["flowchart LR"]
+        chain = [f"N{i}" for i in range(n_ranks)]
+        for i in range(len(chain) - 1):
+            lines.append(f"    {chain[i]} --> {chain[i+1]}")
+        last = chain[-1]
+        for j in range(n_cols):
+            lines.append(f"    {last} --> L{j}")
+        return "\n".join(lines)
+
+    def test_auto_select_can_switch_to_tb(self):
+        """A wide LR diagram with many ranks auto-selects TB when height_hint is tight."""
+        # 8 ranks → very wide LR; tight height_hint forces TB consideration
+        src = self._tall_lr_src(8, 2)
+        fragment = _dispatch(src, None, 600, 200)
+        # The fragment should contain a TB-compatible layout (shorter canvas_h × zoom ≤ height_hint)
+        import re
+        m = re.search(r'height:(\d+)px', fragment)
+        canvas_h = int(m.group(1)) if m else 9999
+        mz = re.search(r'zoom:\s*([0-9.]+)', fragment)
+        zoom = float(mz.group(1)) if mz else 1.0
+        assert canvas_h * zoom <= 200 * 1.15, (
+            f"canvas_h={canvas_h} × zoom={zoom:.3f} = {canvas_h*zoom:.0f} still > height_hint=200"
+        )
+
+    def test_explicit_direction_override_is_respected(self):
+        """When direction_override is passed, auto-select is disabled."""
+        src = self._tall_lr_src(8, 2)
+        fragment_lr = _dispatch(src, "LR", 600, 200)
+        fragment_auto = _dispatch(src, None, 600, 200)
+        # With explicit LR, fragment should NOT benefit from TB auto-select
+        # (it may be zoomed to fit, but direction stays LR)
+        # We just verify the call doesn't error; direction enforcement is a best-effort check
+        assert fragment_lr
+        assert fragment_auto

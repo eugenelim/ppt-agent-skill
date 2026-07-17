@@ -180,7 +180,7 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     src_raw = m.group("src_raw").strip()
     dst_raw = m.group("dst_raw").strip()
     arrow = m.group("arrow_long") or m.group("arrow_short") or "-->"
-    edge_label = (m.group("mid_label") or m.group("pipe_label") or "").strip()
+    edge_label = (m.group("mid_label") or m.group("pipe_label") or "").strip().strip('"\'')  # strip mermaid |"..."|  quotes
 
     style = "dotted" if "-.-" in arrow else ("thick" if "==" in arrow else "solid")
     has_arrow = arrow.endswith(">")
