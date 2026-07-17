@@ -85,6 +85,49 @@ def _parse_color(value) -> tuple | None:
     return None
 
 
+def _parse_rgba(value) -> tuple | None:
+    """解析 #hex / rgb() / rgba() 为 (r,g,b,a)，a∈[0,1]；无法解析返回 None。
+
+    text_secondary 常写成 rgba(...,0.7) 之类的半透明色 —— 计算对比度前必须先
+    把它按 alpha 混合到所在表面上（见 _composite_over），否则会低估其真实亮度。
+    """
+    rgb = _parse_color(value)
+    if rgb is None:
+        return None
+    a = 1.0
+    if isinstance(value, str):
+        m = re.match(r"rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([0-9.]+)\s*\)",
+                     value.strip(), re.IGNORECASE)
+        if m:
+            try:
+                a = max(0.0, min(1.0, float(m.group(1))))
+            except ValueError:
+                a = 1.0
+    return (rgb[0], rgb[1], rgb[2], a)
+
+
+def _composite_over(rgba: tuple, bg: tuple) -> tuple:
+    """把带 alpha 的前景色混合到不透明背景色上，返回不透明 (r,g,b)。"""
+    a = rgba[3]
+    return tuple(round(rgba[i] * a + bg[i] * (1 - a)) for i in range(3))
+
+
+def _rel_luminance(rgb: tuple) -> float:
+    """WCAG 2.x 相对亮度（sRGB → 线性 → 加权）。"""
+    def _lin(c: float) -> float:
+        c = c / 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (_lin(rgb[0]), _lin(rgb[1]), _lin(rgb[2]))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def _contrast_ratio(a: tuple, b: tuple) -> float:
+    """WCAG 对比度比值 (L1+0.05)/(L2+0.05)，1.0–21.0。"""
+    la, lb = _rel_luminance(a), _rel_luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
 def load_style_bg(style_path: Path | None) -> tuple | None:
     """从 style.json 读取声明的主背景色（css_variables.bg_primary）。
 
@@ -107,6 +150,38 @@ def load_style_bg(style_path: Path | None) -> tuple | None:
         if rgb:
             return rgb
     return None
+
+
+def load_style_palette(style_path: Path | None) -> dict | None:
+    """从 style.json 读取文本色 + 表面色，供 CONTRAST-01/02 算真实 WCAG 对比度。
+
+    只依赖 style-phase1-playbook 的 12 基础 css_variables 红线合同
+    （text_primary / text_secondary + bg_primary / bg_secondary /
+    card_bg_from / card_bg_to），因此对任何风格都成立、无外部依赖。
+    返回 {"texts": {role: (r,g,b,a)}, "surfaces": {name: (r,g,b)}}；缺料返回 None。
+    """
+    if not style_path or not Path(style_path).exists():
+        return None
+    try:
+        data = json.loads(Path(style_path).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    cssv = data.get("css_variables") if isinstance(data, dict) else None
+    if not isinstance(cssv, dict):
+        return None
+    texts = {}
+    for key in ("text_primary", "text_secondary"):
+        rgba = _parse_rgba(cssv.get(key))
+        if rgba:
+            texts[key] = rgba
+    surfaces = {}
+    for key in ("bg_primary", "bg_secondary", "card_bg_from", "card_bg_to"):
+        rgb = _parse_color(cssv.get(key))
+        if rgb:
+            surfaces[key] = rgb
+    if not texts or not surfaces:
+        return None
+    return {"texts": texts, "surfaces": surfaces}
 
 
 # ─────────────────────── 检测函数 ───────────────────────
@@ -326,6 +401,49 @@ def check_contrast_zones(img: Image.Image) -> dict:
 
     return {"id": "CONT-01", "status": "PASS",
             "msg": f"对比度分布正常（低对比区块 {ratio:.0%}）"}
+
+
+# WCAG 1.4.3 文本对比度下限（可读性铁律，非交互 a11y）：
+# 正文(<24px) ≥ 4.5:1；大字(≥24px 或 ≥18.66px 粗体) ≥ 3:1。
+CONTRAST_BODY_MIN = 4.5
+CONTRAST_LARGE_MIN = 3.0
+
+
+def check_text_contrast(palette: dict) -> list[dict]:
+    """CONTRAST-01/02：用声明调色板算真实 WCAG 对比度（deck 级，纯色彩数学）。
+
+    CONT-01 只是像素方差代理（大面积中亮度平面 = 疑似不可读）；本检查用
+    style.json 声明的 text × surface 直接算 WCAG 比值，是可读性的硬下限。
+    每个文本色取「最可读的声明表面」判级：若在所有表面都 < 3:1，主文本视为
+    彻底不可读 → FAIL；仅达大字标准或部分表面不达标 → WARN。深/浅底对称。
+    """
+    results = []
+    surfaces = palette["surfaces"]
+    role_meta = {
+        "text_primary": ("CONTRAST-01", "主文本", True),
+        "text_secondary": ("CONTRAST-02", "次文本", False),
+    }
+    for role, rgba in palette["texts"].items():
+        cid, label, is_primary = role_meta.get(role, ("CONTRAST-00", role, False))
+        pairs = [(_contrast_ratio(_composite_over(rgba, s), s), name)
+                 for name, s in surfaces.items()]
+        if not pairs:
+            continue
+        best_ratio, best_surface = max(pairs, key=lambda t: t[0])
+        worst_ratio, worst_surface = min(pairs, key=lambda t: t[0])
+        if best_ratio < CONTRAST_LARGE_MIN:
+            results.append({"id": cid, "status": "FAIL" if is_primary else "WARN",
+                "msg": f"{label}色在所有声明表面对比度均 < 3:1（最佳 {best_ratio:.1f}:1 @ {best_surface}），正文与大字均不可读"})
+        elif best_ratio < CONTRAST_BODY_MIN:
+            results.append({"id": cid, "status": "WARN",
+                "msg": f"{label}色最佳仅 {best_ratio:.1f}:1（@ {best_surface}），仅达大字(≥24px)标准；正文需 ≥4.5:1"})
+        elif worst_ratio < CONTRAST_BODY_MIN:
+            results.append({"id": cid, "status": "WARN",
+                "msg": f"{label}色在 {worst_surface} 上仅 {worst_ratio:.1f}:1（<4.5:1）；该表面放正文需换色或加深"})
+        else:
+            results.append({"id": cid, "status": "PASS",
+                "msg": f"{label}色对比度 {worst_ratio:.1f}–{best_ratio:.1f}:1，全表面达正文标准(≥4.5:1)"})
+    return results
 
 
 def check_file_size(png_path: Path) -> dict:
@@ -924,6 +1042,8 @@ def main():
 
     # style.json 声明背景色（供 BLANK-01 / CUT-01 排除浅底/深底假阳）
     style_bg = load_style_bg(style_path)
+    # style.json 声明调色板（供 deck 级 CONTRAST-01/02 真实 WCAG 对比度）
+    style_palette = load_style_palette(style_path)
 
     # 收集要检查的 PNG（同时接受 slide-N.png 与 slide_NN.png 两种命名，
     # 兼容 html2png.py 沿用输入 HTML 文件名产出的 slide_NN.png）
@@ -970,6 +1090,16 @@ def main():
         total_fails += f
         total_warns += w
         deck_signals.append(deck_signal(png, hh))
+
+    # deck 级：声明调色板的真实 WCAG 文本对比度（可读性下限，纯色彩数学、无外部依赖）
+    if style_palette:
+        contrast_results = check_text_contrast(style_palette)
+        if contrast_results:
+            clines, cf, cw = build_report_lines("DECK · 文本对比度（WCAG 1.4.3）", contrast_results)
+            report_lines.extend(clines)
+            print("\n".join(clines))
+            total_fails += cf
+            total_warns += cw
 
     # 全 deck 跨页一致性聚合（仅多页时）
     if len(pngs) > 1:
