@@ -66,23 +66,58 @@ _C4_ICON_MAP: dict[str, str] = {
 
 # Flowchart label keyword → icon name (ordered: first match wins; longer phrases before substrings).
 # Used by _infer_label_icons to auto-assign icons when no explicit :::icon-name class is set.
-# Keep entries specific — generic terms ("server", "service") are excluded to avoid false matches.
+# Matching uses word boundaries (\b) so short tokens like "cli" or "mcp" don't false-positive
+# inside longer words ("client", "compact"). Keep entries specific — generic terms ("server",
+# "service") are excluded to avoid false matches.
 _LABEL_ICON_KEYWORDS: list[tuple[list[str], str]] = [
-    (["end user", "web user", "mobile user", "user", "person", "actor", "customer", "client", "principal"], "users"),
+    # Human actors — longer phrases first so "developer" doesn't fall through to generic "user"
+    (["end user", "web user", "mobile user", "developer", "repository maintainer",
+      "pack installer", "user", "person", "actor", "customer", "client", "principal"], "users"),
+    # Development tools
+    (["coding ide", "code editor", "ide"], "ide"),
+    (["cli"], "terminal"),
+    # AI/knowledge protocol
+    (["mcp server", "mcp tool", "mcp"], "mcp-server"),
+    # GraphRAG / specialised retrieval — before generic "search"
+    (["graphrag", "graph rag"], "graphrag-search"),
+    # Agent skill catalogues — before generic "agent"
+    (["coding subagent", "agent skill", "skills catalogue", "skill catalogue",
+      "artifact registry"], "coding-subagent"),
+    # Knowledge infrastructure — specific sub-types before "database"
+    (["knowledge source", "knowledge-source"], "knowledge-corpus"),
+    (["knowledge graph", "graph database", "graph db", "neo4j"], "knowledge-graph"),
+    (["knowledge search", "knowledge layer"], "knowledge-search"),
+    # Source code and versioned artifacts
+    (["application source", "source code", "source artifact", "project artifact"], "source-code"),
+    (["pack directory", "repository-scoped", "scoped packs"], "package"),
+    (["git working tree", "git repo", "version control"], "code-branch"),
+    # Web / frontend
     (["web app", "webapp", "web portal", "spa", "frontend", "browser", "web ui"], "browser"),
     (["admin", "administrator", "operator", "superuser"], "admin"),
     (["mobile app", "ios app", "android app", "native app", "mobile device"], "mobile"),
+    # Data stores
     (["vector store", "vector db", "vector index", "embedding store", "rag index", "vector"], "vector-store"),
-    (["language model", "llm", "gpt", "claude", "gemini", "ai engine", "ai model", "ai inference", "ml model"], "model"),
+    # "amazon rds" replaces bare "rds" which false-positives on "standards"
+    (["database", "postgresql", "mysql", "mongodb", "dynamodb", "aurora",
+      "cosmos db", "amazon rds"], "database"),
+    # AI/ML models
+    (["language model", "llm", "gpt", "claude", "gemini", "ai engine",
+      "ai model", "ai inference", "ml model"], "model"),
     (["model api", "inference api", "openai api", "anthropic api"], "model-api"),
-    (["search engine", "elasticsearch", "opensearch", "full-text search", "knowledge search", "search index"], "search"),
+    # Search (generic, after graphrag-search and knowledge-search)
+    (["search engine", "elasticsearch", "opensearch", "full-text search",
+      "knowledge search", "search index"], "search"),
+    # Messaging / eventing
     (["message broker", "rabbitmq", "activemq", "kafka broker"], "message-broker"),
     (["event bus", "event-bus", "pub/sub", "pubsub", "eventbridge"], "event-bus"),
     (["job queue", "work queue", "task queue", "sqs queue", "queue"], "queue"),
+    # Pipelines
     (["data pipeline", "etl pipeline", "ingestion pipeline"], "pipeline"),
     (["data lake", "data warehouse", "snowflake", "redshift", "bigquery"], "data-warehouse"),
+    # Infrastructure services
     (["cache", "redis", "memcache", "memcached"], "cache"),
-    (["identity provider", "idp", "sso", "saml", "oidc", "keycloak", "auth0", "auth service", "iam"], "iam"),
+    (["identity provider", "idp", "sso", "saml", "oidc",
+      "keycloak", "auth0", "auth service", "iam"], "iam"),
     (["vault", "secrets manager", "keyvault", "secret store"], "vault"),
     (["api gateway", "gateway", "reverse proxy", "ingress controller", "api"], "api"),
     (["load balancer", "load-balancer", "nginx", "haproxy"], "load-balancer"),
@@ -91,12 +126,15 @@ _LABEL_ICON_KEYWORDS: list[tuple[list[str], str]] = [
     (["ci/cd", "ci-cd", "github actions", "jenkins", "build pipeline"], "ci-cd"),
     (["scheduler", "cron job", "airflow", "dagster", "prefect"], "scheduler"),
     (["workflow engine", "step function", "temporal", "bpmn engine"], "workflow"),
-    (["email", "sendgrid", "ses ", "mailgun", "smtp"], "email"),
+    # "ses" with word-boundary matching no longer false-positives on "processes"
+    (["email", "sendgrid", "ses", "mailgun", "smtp"], "email"),
     (["push notification", "fcm", "apns", "sns notification"], "notification"),
     (["object store", "s3 bucket", "gcs bucket", "blob storage"], "object-store"),
-    (["database", "postgresql", "mysql", "mongodb", "dynamodb", "aurora", "cosmos db", "rds"], "database"),
+    # Generic agents
     (["ai agent", "autonomous agent", "reasoning agent"], "agent"),
-    (["cloud platform", "aws ", "azure ", "gcp ", "saas platform"], "cloud"),
+    # Cloud (bare "aws"/"azure"/"gcp" safe with word boundaries)
+    (["cloud platform", "aws", "azure", "gcp", "saas platform"], "cloud"),
+    # Observability
     (["log store", "log stream", "cloudwatch logs", "datadog logs", "splunk"], "logs"),
     (["metrics store", "prometheus", "grafana", "monitoring platform"], "metrics"),
 ]
@@ -111,8 +149,8 @@ CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 # ── default geometry (px) ────────────────────────────────────────────────────
 NODE_W = 192
 NODE_H = 42       # minimum card height (2×pad_v + icon_h = 20+24=44 triggers icon bump above 42)
-RANK_GAP = 80    # gap in flow direction (vertical in TB, horizontal in LR)
-COL_GAP = 52     # gap perpendicular to flow (horizontal in TB, vertical in LR)
+RANK_GAP = 160   # gap in flow direction (vertical in TB, horizontal in LR)
+COL_GAP = 100    # gap perpendicular to flow (horizontal in TB, vertical in LR)
 CANVAS_PAD = 48  # outer inset on all sides
 GROUP_PAD_X = 28  # group container horizontal inner padding
 GROUP_PAD_Y_TOP = 36  # group container top inner padding (room for label)
@@ -201,7 +239,7 @@ def _wrap_label(label: str, max_chars: int = _WRAP_CHARS) -> list[str]:
     if len(normalized) <= max_chars:
         return [normalized]
     # Split on spaces first; for hyphen-compound words, also split at hyphens
-    # so long kebab-case identifiers (e.g. express-ai-knowledge-source-enterprise-it)
+    # so long kebab-case identifiers (e.g. knowledge-source-enterprise-it)
     # break at natural boundaries instead of at arbitrary char positions.
     raw_words = normalized.split()
     words: list[str] = []
