@@ -106,3 +106,199 @@ def test_metadata_leaves_are_exempt(tmp_path):
     )
     assert stats.get("unhandled", 0) == 0, stats
     assert stats["shapes"] == 1, stats
+
+
+# ── <marker> / marker-end resolution (edge arrowheads after renderer #55) ──────
+
+# The renderer's arrow-normal marker, verbatim from mermaid_layout._renderer.
+_MARKER = (
+    '<defs><marker id="ah" viewBox="0 -4 9 8" refX="9" refY="0" markerWidth="9" '
+    'markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+    '<polygon points="0,-4 9,0 0,4" fill="#334455"/></marker></defs>'
+)
+
+
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+
+
+def _offsets(xml):
+    """Every shape's top-left (a:off) in px, back-converted from EMU."""
+    from svg2pptx import EMU_PX
+    root = etree.fromstring(xml.encode())
+    return [(int(o.get("x")) / EMU_PX, int(o.get("y")) / EMU_PX)
+            for o in root.iter(f"{_A}off")]
+
+
+def _boxes(xml):
+    """Every shape's (x, y, w, h) in px — pairs each a:off with its sibling a:ext."""
+    from svg2pptx import EMU_PX
+    root = etree.fromstring(xml.encode())
+    out = []
+    for xfrm in root.iter(f"{_A}xfrm"):
+        off, ext = xfrm.find(f"{_A}off"), xfrm.find(f"{_A}ext")
+        if off is not None and ext is not None:
+            out.append((int(off.get("x")) / EMU_PX, int(off.get("y")) / EMU_PX,
+                        int(ext.get("cx")) / EMU_PX, int(ext.get("cy")) / EMU_PX))
+    return out
+
+
+def _near(offs, x, y, tol=2):
+    return any(abs(px - x) <= tol and abs(py - y) <= tol for px, py in offs)
+
+
+def test_marker_end_adds_arrowhead_shape(tmp_path):
+    """A path with marker-end draws the marker geometry as an extra shape."""
+    without, _ = _convert(
+        '<path d="M 100 100 L 100 300" stroke="#334455" stroke-width="2" fill="none"/>',
+        tmp_path,
+    )
+    with_marker, _ = _convert(
+        _MARKER + '<path d="M 100 100 L 100 300" stroke="#334455" stroke-width="2" '
+        'fill="none" marker-end="url(#ah)"/>',
+        tmp_path,
+    )
+    assert with_marker["shapes"] == without["shapes"] + 1, (without, with_marker)
+    assert with_marker["errors"] == 0
+
+
+def test_marker_end_oriented_at_endpoint(tmp_path):
+    """orient=auto: a downward path puts the arrowhead just above its endpoint (100,300).
+
+    Transform of the arrow-normal triangle rotated to point down gives a bbox of
+    roughly x∈[96,104], y∈[291,300] — top-left ≈ (96, 291).
+    """
+    _, xml = _convert(
+        _MARKER + '<path d="M 100 100 L 100 300" stroke="#334455" stroke-width="2" '
+        'fill="none" marker-end="url(#ah)"/>',
+        tmp_path,
+    )
+    assert _near(_offsets(xml), 96, 291), _offsets(xml)
+
+
+def test_marker_orientation_differs_by_direction(tmp_path):
+    """A rightward path orients the arrowhead differently from a downward one."""
+    _, down = _convert(
+        _MARKER + '<path d="M 100 100 L 100 300" fill="none" stroke="#334455" marker-end="url(#ah)"/>',
+        tmp_path,
+    )
+    _, right = _convert(
+        _MARKER + '<path d="M 100 100 L 300 100" fill="none" stroke="#334455" marker-end="url(#ah)"/>',
+        tmp_path,
+    )
+    # Downward arrow tip at (100,300), top-left ≈ (96,291); rightward at (300,100) ≈ (291,96).
+    assert _near(_offsets(down), 96, 291), _offsets(down)
+    assert _near(_offsets(right), 291, 96), _offsets(right)
+
+
+_START_MARKER = _MARKER.replace('id="ah"', 'id="ah2"').replace(
+    'orient="auto"', 'orient="auto-start-reverse"')
+
+
+def test_marker_start_auto_reverse(tmp_path):
+    """auto-start-reverse flips a start marker to point back along the path.
+
+    Downward path start (100,100): plain auto would point down (base above,
+    top-left y≈91); reversed points up (base below, top-left ≈ (96,100)).
+    """
+    _, xml = _convert(
+        _START_MARKER + '<path d="M 100 100 L 100 300" fill="none" stroke="#334455" '
+        'marker-start="url(#ah2)"/>',
+        tmp_path,
+    )
+    assert _near(_offsets(xml), 96, 100), _offsets(xml)
+
+
+def test_marker_fixed_numeric_orient(tmp_path):
+    """A numeric orient ignores the tangent and rotates by that many degrees."""
+    fixed = _MARKER.replace('id="ah"', 'id="ah3"').replace('orient="auto"', 'orient="90"')
+    _, xml = _convert(
+        fixed + '<path d="M 100 100 L 300 100" fill="none" stroke="#334455" '
+        'marker-end="url(#ah3)"/>',
+        tmp_path,
+    )
+    # Rightward path (auto would give top-left ≈ (291,96)); fixed 90° gives ≈ (296,91).
+    assert _near(_offsets(xml), 296, 91), _offsets(xml)
+
+
+def test_marker_stroke_width_units_scale(tmp_path):
+    """markerUnits=strokeWidth scales the arrowhead by the host stroke-width."""
+    sw = (_MARKER.replace('id="ah"', 'id="ah4"')
+          .replace('markerUnits="userSpaceOnUse"', 'markerUnits="strokeWidth"'))
+    _, xml = _convert(
+        sw + '<path d="M 100 100 L 100 300" fill="none" stroke="#334455" stroke-width="2" '
+        'marker-end="url(#ah4)"/>',
+        tmp_path,
+    )
+    # The base marker is 8×9 px; stroke-width 2 doubles it to ~16×18.
+    arrow = [b for b in _boxes(xml) if abs(b[2] - 16) <= 2 and abs(b[3] - 18) <= 2]
+    assert arrow, _boxes(xml)
+
+
+def test_marker_path_child_renders(tmp_path):
+    """A <path>-child marker (the renderer's arrow-open) exercises _transform_path_d."""
+    open_marker = (
+        '<defs><marker id="ao" viewBox="0 -4 9 8" refX="9" refY="0" markerWidth="9" '
+        'markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+        '<path d="M 0,-4 L 9,0 L 0,4" fill="none" stroke="#e8924a" stroke-width="1.5"/>'
+        '</marker></defs>'
+    )
+    stats, xml = _convert(
+        open_marker + '<path d="M 100 100 L 100 300" fill="none" stroke="#e8924a" '
+        'marker-end="url(#ao)"/>',
+        tmp_path,
+    )
+    assert stats["shapes"] == 2, stats  # edge line + arrowhead
+    assert _near(_offsets(xml), 96, 291), _offsets(xml)
+
+
+def test_marker_on_relative_path_is_skipped(tmp_path):
+    """A relative/H/V host path can't be paired safely, so the marker is skipped
+    (base shape still converts, no crash)."""
+    stats, _ = _convert(
+        _MARKER + '<path d="M 100 100 h 50 v 50" fill="none" stroke="#334455" '
+        'marker-end="url(#ah)"/>',
+        tmp_path,
+    )
+    assert stats["shapes"] == 1, stats  # only the base path; marker safely skipped
+    assert stats["errors"] == 0, stats
+
+
+def test_orient_radians_units():
+    """Unitless orient is degrees; grad is matched before its rad suffix."""
+    import math
+    f = SvgConverter._orient_radians
+    assert f("90") == pytest.approx(math.pi / 2)      # unitless -> degrees
+    assert f("90deg") == pytest.approx(math.pi / 2)
+    assert f("1rad") == pytest.approx(1.0)
+    assert f("200grad") == pytest.approx(math.pi)     # not mis-read as radians
+    assert f("0.5turn") == pytest.approx(math.pi)
+    assert f("junk") == 0.0
+
+
+def test_marker_malformed_viewbox_no_crash(tmp_path):
+    """A <4-number viewBox degrades gracefully instead of aborting the conversion."""
+    bad = _MARKER.replace('viewBox="0 -4 9 8"', 'viewBox="0 -4 9"')
+    stats, _ = _convert(
+        bad + '<path d="M 100 100 L 100 300" fill="none" stroke="#334455" '
+        'marker-end="url(#ah)"/>',
+        tmp_path,
+    )
+    assert stats["errors"] == 0, stats
+    assert stats["shapes"] >= 1, stats
+
+
+def test_unreferenced_defs_marker_not_drawn(tmp_path):
+    """A marker defined but never referenced produces no shape (defs is skipped)."""
+    stats, _ = _convert(_MARKER, tmp_path)
+    assert stats["shapes"] == 0, stats
+    assert stats.get("unhandled", 0) == 0, stats
+
+
+def test_marker_missing_ref_does_not_crash(tmp_path):
+    """marker-end to a missing id: base shape still converts, no error."""
+    stats, _ = _convert(
+        '<path d="M 100 100 L 100 300" stroke="#334455" fill="none" marker-end="url(#nope)"/>',
+        tmp_path,
+    )
+    assert stats["shapes"] == 1, stats
+    assert stats["errors"] == 0, stats

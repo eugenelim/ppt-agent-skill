@@ -25,6 +25,17 @@ Make svg2pptx support the **full SVG basic-shapes surface** (guiding principle:
 everything in the SVG spec the renderer uses should convert), and make the
 *class* of silent-drop bug loud so a future gap surfaces instead of vanishing.
 
+**Amendment (after rebasing onto #55 `mermaid-renderer-uplift`):** #55 replaced
+per-edge `<polygon>` arrowheads with `<marker>` + `marker-end`, where the
+arrowhead geometry now lives inside `<defs>`. dom-to-svg preserves
+`<defs>`/`<marker>`/`marker-end` verbatim (it does not inline markers), and
+svg2pptx *skips* `<defs>` and ignores `marker-end` — so **edge arrowheads are
+lost in the PPTX** even with the basic-shape fix (which still fixes the legend
+arrows and sequence-note dog-ears, which are body polygons). This spec now also
+covers resolving `<marker>`/`marker-end` so the edge arrows survive. Both halves
+matter: basic-shapes for arbitrary external SVGs, marker resolution for our own
+renderer output.
+
 ## Acceptance Criteria
 
 - [x] `<polygon>` converts to a native PPTX shape, reusing the existing
@@ -42,6 +53,24 @@ everything in the SVG spec the renderer uses should convert), and make the
       with falsy tags are exempt; containers still recurse as before).
 - [x] `pytest tests/` (356) and `python scripts/smoke_test.py --phase 5` stay
       green; no regression in existing shape conversion.
+
+Marker resolution (amendment):
+
+- [x] A `<path>`/`<line>`/`<polyline>`/`<polygon>` carrying `marker-end` (and
+      `marker-start`) draws the referenced `<defs>` `<marker>` geometry as a
+      concrete oriented shape at the path vertex — `<defs>` markers are otherwise
+      skipped, so this is the only path by which they render.
+- [x] Markers defined in `<defs>` but never referenced are **not** drawn
+      (no double-draw / no stray shapes).
+- [x] Orientation honors `orient="auto"` (tangent at the vertex),
+      `auto-start-reverse`, and a fixed numeric angle; placement honors
+      `refX`/`refY`, `viewBox`, `markerWidth`/`markerHeight`, and `markerUnits`
+      (`userSpaceOnUse` vs `strokeWidth`).
+- [x] A `marker-end` referencing a missing id does not crash; the base shape
+      still converts.
+- [x] End-to-end: the mermaid renderer's marker-based edge arrows survive
+      `renderer → html2svg → svg2pptx` (verified on a real flowchart: 42 → 47
+      shapes, the 5 edge arrows).
 
 ## Boundaries
 

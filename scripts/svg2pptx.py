@@ -294,7 +294,11 @@ _PATH_RE = re.compile(r'([mMzZlLhHvVcCsSqQtTaA])|([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE
 # unhandled-element warning in _walk's else branch.
 _IGNORE_LEAF = frozenset({'title', 'desc', 'metadata'})
 
+# Shapes that may carry marker-start/-mid/-end references.
+_MARKERABLE = frozenset({'path', 'line', 'polyline', 'polygon'})
+
 _NUM_RE = re.compile(r'[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?')
+_URL_REF_RE = re.compile(r'url\(["\']?#([^"\')\s]+)["\']?\)')
 
 
 def points_to_path_d(points_str, closed):
@@ -310,6 +314,39 @@ def points_to_path_d(points_str, closed):
         return ''
     d = 'M ' + ' L '.join(f'{x} {y}' for x, y in pairs)
     return d + ' Z' if closed else d
+
+
+def _transform_path_d(d_str, fn):
+    """Apply an affine point map `fn(x, y) -> (x, y)` to every coordinate in a
+    path `d`, preserving command letters. Used to place/orient a marker's path
+    geometry. Returns None for relative commands or H/V/A (unsupported here —
+    the caller skips the marker rather than emit wrong geometry). Markers are
+    author-drawn arrowheads, near-always polygon or an absolute M/L/Q/C path.
+    """
+    out, nums = [], []
+
+    def flush():
+        if len(nums) % 2:
+            return False
+        for j in range(0, len(nums), 2):
+            x, y = fn(nums[j], nums[j + 1])
+            out.append(f'{x:.2f} {y:.2f}')
+        nums.clear()
+        return True
+
+    for cmd, num in _PATH_RE.findall(d_str):
+        if cmd:
+            if not flush():
+                return None
+            if cmd in 'zZ':
+                out.append('Z')
+            elif cmd in 'MLQCST':  # absolute, all-pair-argument commands
+                out.append(cmd)
+            else:                  # relative (lower) or H/V/A: bail
+                return None
+        else:
+            nums.append(float(num))
+    return None if not flush() else ' '.join(out)
 
 
 def parse_path_to_custgeom(d_str, bbox):
@@ -437,6 +474,7 @@ class SvgConverter:
         self.on_progress = on_progress  # 进度回调 (i, total, filename)
         self.stats = {'shapes': 0, 'skipped': 0, 'errors': 0, 'unhandled': 0}
         self._warned_tags = set()  # warn once per tag per run
+        self.markers = {}          # id -> parsed <marker> def (see _parse_markers)
 
     def _id(self):
         self.sid += 1
@@ -448,6 +486,7 @@ class SvgConverter:
         tree = etree.parse(str(svg_path), _SVG_PARSER)
         root = tree.getroot()
         self._parse_grads(root)
+        self._parse_markers(root)
         sp_tree = None
         for d in slide._element.iter():
             if d.tag.endswith('}spTree'):
@@ -486,6 +525,40 @@ class SvgConverter:
                 stops.append({'offset': off, 'color_str': s.get('stop-color', '#000'),
                               'opacity': float(s.get('stop-opacity', '1'))})
             self.grads[gid] = {'type': 'radial', 'stops': stops}
+
+    def _parse_markers(self, root):
+        """Index every <marker> def by id.
+
+        <defs> is skipped during the walk, so markers referenced via
+        marker-start/-mid/-end are only ever drawn from here (see _apply_markers).
+        Stores the child geometry element plus the viewBox / ref / units needed to
+        place and orient it.
+        """
+        self.markers = {}
+        for m in root.iter(f'{{{SVG_NS}}}marker'):
+            mid = m.get('id')
+            geom = next((c for c in m if self._tag(c) in ('polygon', 'polyline', 'path')), None)
+            if not mid or geom is None:
+                continue
+            vb = m.get('viewBox')
+            p = [float(n) for n in _NUM_RE.findall(vb)] if vb else []
+            if len(p) >= 4:  # a malformed (<4-number) viewBox degrades, not crashes
+                vb_minx, vb_miny, vb_w, vb_h = p[0], p[1], p[2] or 1, p[3] or 1
+            else:
+                vb_minx = vb_miny = 0.0
+                vb_w = float(strip_unit(m.get('markerWidth', '3')) or 3) or 1
+                vb_h = float(strip_unit(m.get('markerHeight', '3')) or 3) or 1
+            mw = float(strip_unit(m.get('markerWidth', vb_w)) or vb_w)
+            mh = float(strip_unit(m.get('markerHeight', vb_h)) or vb_h)
+            self.markers[mid] = {
+                'geom': geom,
+                'vb_minx': vb_minx, 'vb_miny': vb_miny,
+                'sx': mw / vb_w, 'sy': mh / vb_h,
+                'refx': float(strip_unit(m.get('refX', '0')) or 0),
+                'refy': float(strip_unit(m.get('refY', '0')) or 0),
+                'orient': m.get('orient', '0').strip(),
+                'stroke_units': m.get('markerUnits', 'strokeWidth') == 'strokeWidth',
+            }
 
     def _tag(self, el):
         t = el.tag
@@ -563,6 +636,10 @@ class SvgConverter:
                         self._warned_tags.add(tag)
                         print(f"    Warning: unhandled <{tag}> element dropped",
                               file=sys.stderr)
+            # <defs> markers are skipped above, so a shape's marker-start/-end
+            # reference is the only path by which the arrowhead renders.
+            if self.markers and tag in _MARKERABLE:
+                self._apply_markers(el, tag, sp, ox, oy, scale)
         except Exception as e:
             self.stats['errors'] += 1
             print(f"    Warning: {tag} element failed: {e}", file=sys.stderr)
@@ -864,6 +941,116 @@ class SvgConverter:
         d = points_to_path_d(el.get('points', ''), closed)
         if d:
             self._path(el, sp, ox, oy, opacity, scale, d=d)
+
+    def _marker_vertices(self, el, tag):
+        """Ordered on-path points of a shape, in its local coord space."""
+        if tag == 'line':
+            return [(float(el.get('x1', 0)), float(el.get('y1', 0))),
+                    (float(el.get('x2', 0)), float(el.get('y2', 0)))]
+        if tag in ('polyline', 'polygon'):
+            n = _NUM_RE.findall(el.get('points', ''))
+            pts = [(float(n[i]), float(n[i + 1])) for i in range(0, len(n) - 1, 2)]
+            if tag == 'polygon' and pts:
+                pts.append(pts[0])  # closed: last vertex == first
+            return pts
+        # path: pair every coordinate number — valid only when every command is
+        # absolute and all-pairs (M/L/Q/C/S/T/Z). Relative or H/V/A would mis-pair
+        # and place the marker at a bogus vertex, so bail (skip the marker) as
+        # _transform_path_d does. Renderer output is absolute M/L/Q; this guards
+        # arbitrary external SVGs.
+        d = el.get('d', '')
+        if any(c and c not in 'MLQCSTZ' for c, _ in _PATH_RE.findall(d)):
+            return []
+        n = _NUM_RE.findall(d)
+        return [(float(n[i]), float(n[i + 1])) for i in range(0, len(n) - 1, 2)]
+
+    def _apply_markers(self, el, tag, sp, ox, oy, scale):
+        """Draw referenced <defs> markers at a shape's start / mid / end vertices."""
+        specs = (('marker-start', 0), ('marker-mid', 1), ('marker-end', -1))
+        if not any(el.get(a) for a, _ in specs):
+            return
+        verts = self._marker_vertices(el, tag)
+        if len(verts) < 2:
+            return
+        stroke_w = float(strip_unit(el.get('stroke-width', '1')) or 1)
+        for attr, where in specs:
+            mk = self._resolve_marker(el.get(attr))
+            if not mk:
+                continue
+            idxs = [0] if where == 0 else ([len(verts) - 1] if where == -1
+                                           else range(1, len(verts) - 1))
+            for i in idxs:
+                self._draw_marker(mk, verts, i, where == 0, stroke_w, sp, ox, oy, scale)
+
+    def _resolve_marker(self, ref):
+        m = _URL_REF_RE.search(ref or '')
+        return self.markers.get(m.group(1)) if m else None
+
+    @staticmethod
+    def _orient_radians(orient):
+        """A fixed `orient` angle -> radians. Unitless is degrees (SVG default);
+        deg/grad/rad/turn honored. `grad` is checked before `rad` (it ends in it)."""
+        s = orient.strip().lower()
+        for unit, conv in (('grad', lambda v: v * math.pi / 200),
+                           ('turn', lambda v: v * 2 * math.pi),
+                           ('rad', lambda v: v),
+                           ('deg', math.radians)):
+            if s.endswith(unit):
+                s = s[:-len(unit)]
+                break
+        else:
+            conv = math.radians  # unitless -> degrees
+        try:
+            return conv(float(s))
+        except ValueError:
+            return 0.0
+
+    def _marker_angle(self, verts, i, is_start, orient):
+        if orient not in ('auto', 'auto-start-reverse'):
+            return self._orient_radians(orient)
+        # tangent at vertex i (skip zero-length neighbours)
+        if i == 0:
+            a, b = verts[0], next((p for p in verts[1:] if p != verts[0]), verts[0])
+        elif i == len(verts) - 1:
+            a = next((p for p in reversed(verts[:-1]) if p != verts[-1]), verts[-1])
+            b = verts[-1]
+        else:
+            a, b = verts[i - 1], verts[i + 1]
+        ang = math.atan2(b[1] - a[1], b[0] - a[0])
+        if is_start and orient == 'auto-start-reverse':
+            ang += math.pi
+        return ang
+
+    def _draw_marker(self, mk, verts, i, is_start, stroke_w, sp, ox, oy, scale):
+        vx, vy = verts[i]
+        ang = self._marker_angle(verts, i, is_start, mk['orient'])
+        unit = stroke_w if mk['stroke_units'] else 1.0
+        sx, sy = mk['sx'] * unit, mk['sy'] * unit
+        refx = (mk['refx'] - mk['vb_minx']) * sx
+        refy = (mk['refy'] - mk['vb_miny']) * sy
+        cos_a, sin_a = math.cos(ang), math.sin(ang)
+
+        def fn(px_, py_):
+            # content -> viewport -> centre on ref -> rotate -> translate to vertex
+            cx = (px_ - mk['vb_minx']) * sx - refx
+            cy = (py_ - mk['vb_miny']) * sy - refy
+            return (vx + cx * cos_a - cy * sin_a, vy + cx * sin_a + cy * cos_a)
+
+        geom = mk['geom']
+        gtag = self._tag(geom)
+        if gtag in ('polygon', 'polyline'):
+            n = _NUM_RE.findall(geom.get('points', ''))
+            pts = [fn(float(n[j]), float(n[j + 1])) for j in range(0, len(n) - 1, 2)]
+            if len(pts) < 2:
+                return
+            d = 'M ' + ' L '.join(f'{x:.2f} {y:.2f}' for x, y in pts)
+            if gtag == 'polygon':
+                d += ' Z'
+        else:
+            d = _transform_path_d(geom.get('d', ''), fn)
+            if d is None:
+                return
+        self._path(geom, sp, ox, oy, 1.0, scale, d=d)
 
     def _path(self, el, sp, ox, oy, opacity, scale, d=None):
         """SVG <path> -> OOXML custGeom 形状。"""
