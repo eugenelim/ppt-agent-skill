@@ -466,6 +466,726 @@
       "viewBox": "0 0 24 24",
       "file": "gate-diamond.svg",
       "provenance": "assimilated: engineering-delivery persuasion deck (idea-level redraw)"
+    },
+    {
+      "id": "server",
+      "name": "Server",
+      "category": "infrastructure",
+      "tags": ["server", "compute", "host", "rack", "vm"],
+      "keywords": ["machine", "instance", "hardware", "bare-metal", "virtual machine"],
+      "viewBox": "0 0 24 24",
+      "file": "server.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "load-balancer",
+      "name": "Load Balancer",
+      "category": "infrastructure",
+      "tags": ["load-balancer", "traffic", "distribute", "alb", "nlb"],
+      "keywords": ["routing", "ingress", "reverse proxy", "ha", "high availability"],
+      "viewBox": "0 0 24 24",
+      "file": "load-balancer.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "firewall",
+      "name": "Firewall",
+      "category": "security",
+      "tags": ["firewall", "wall", "perimeter", "network security", "waf"],
+      "keywords": ["ingress control", "egress", "packet filter", "rules", "acl"],
+      "viewBox": "0 0 24 24",
+      "file": "firewall.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "router",
+      "name": "Router",
+      "category": "infrastructure",
+      "tags": ["router", "network", "gateway", "routing", "switch"],
+      "keywords": ["bgp", "ospf", "lan", "wan", "network device"],
+      "viewBox": "0 0 24 24",
+      "file": "router.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "container",
+      "name": "Container",
+      "category": "infrastructure",
+      "tags": ["container", "docker", "image", "runtime", "pod"],
+      "keywords": ["containerization", "oci", "packaging", "isolated process"],
+      "viewBox": "0 0 24 24",
+      "file": "container.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "category": "infrastructure",
+      "tags": ["kubernetes", "k8s", "orchestration", "cluster", "helm"],
+      "keywords": ["deployment", "namespace", "service mesh", "workload", "control plane"],
+      "viewBox": "0 0 24 24",
+      "file": "kubernetes.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "microservice",
+      "name": "Microservice",
+      "category": "infrastructure",
+      "tags": ["microservice", "service", "bounded", "hexagonal", "soa"],
+      "keywords": ["domain service", "api service", "independent deployment", "bounded context"],
+      "viewBox": "0 0 24 24",
+      "file": "microservice.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "cdn",
+      "name": "CDN",
+      "category": "infrastructure",
+      "tags": ["cdn", "content delivery", "edge", "distribution", "cache"],
+      "keywords": ["cloudfront", "akamai", "global", "static assets", "origin"],
+      "viewBox": "0 0 24 24",
+      "file": "cdn.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "vpn",
+      "name": "VPN",
+      "category": "security",
+      "tags": ["vpn", "tunnel", "secure", "encrypted", "private network"],
+      "keywords": ["wireguard", "ipsec", "openvpn", "site-to-site", "remote access"],
+      "viewBox": "0 0 24 24",
+      "file": "vpn.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "dns",
+      "name": "DNS",
+      "category": "infrastructure",
+      "tags": ["dns", "domain", "resolution", "nameserver", "lookup"],
+      "keywords": ["route53", "resolver", "zone", "record", "hostname"],
+      "viewBox": "0 0 24 24",
+      "file": "dns.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "data-silo",
+      "name": "Data Silo",
+      "category": "data",
+      "tags": ["silo", "isolated", "segregated", "legacy", "data store"],
+      "keywords": ["fragmented", "siloed data", "disconnected", "standalone"],
+      "viewBox": "0 0 24 24",
+      "file": "data-silo.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "data-warehouse",
+      "name": "Data Warehouse",
+      "category": "data",
+      "tags": ["warehouse", "dwh", "analytics", "olap", "columnar"],
+      "keywords": ["snowflake", "redshift", "bigquery", "star schema", "fact table"],
+      "viewBox": "0 0 24 24",
+      "file": "data-warehouse.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "cache",
+      "name": "Cache",
+      "category": "data",
+      "tags": ["cache", "in-memory", "redis", "fast", "ephemeral"],
+      "keywords": ["memcached", "ttl", "eviction", "hot data", "lookup"],
+      "viewBox": "0 0 24 24",
+      "file": "cache.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "queue",
+      "name": "Queue",
+      "category": "data",
+      "tags": ["queue", "message queue", "fifo", "async", "buffer"],
+      "keywords": ["sqs", "rabbitmq", "job queue", "worker", "dequeue"],
+      "viewBox": "0 0 24 24",
+      "file": "queue.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "message-broker",
+      "name": "Message Broker",
+      "category": "data",
+      "tags": ["broker", "messaging", "pub-sub", "kafka", "amqp"],
+      "keywords": ["rabbitmq", "activemq", "topic", "exchange", "routing key"],
+      "viewBox": "0 0 24 24",
+      "file": "message-broker.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "event-bus",
+      "name": "Event Bus",
+      "category": "data",
+      "tags": ["event-bus", "event", "pub-sub", "eventbridge", "backbone"],
+      "keywords": ["event-driven", "publish", "subscribe", "fanout", "topic"],
+      "viewBox": "0 0 24 24",
+      "file": "event-bus.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "stream",
+      "name": "Stream",
+      "category": "data",
+      "tags": ["stream", "streaming", "real-time", "kinesis", "kafka"],
+      "keywords": ["flow", "continuous", "unbounded", "windowing", "flink"],
+      "viewBox": "0 0 24 24",
+      "file": "stream.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "object-store",
+      "name": "Object Store",
+      "category": "data",
+      "tags": ["object-store", "blob", "s3", "bucket", "storage"],
+      "keywords": ["gcs", "azure blob", "unstructured", "files", "artifacts"],
+      "viewBox": "0 0 24 24",
+      "file": "object-store.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "data-lake",
+      "name": "Data Lake",
+      "category": "data",
+      "tags": ["data-lake", "lake", "raw", "landing zone", "bronze"],
+      "keywords": ["delta lake", "iceberg", "hudi", "parquet", "medallion"],
+      "viewBox": "0 0 24 24",
+      "file": "data-lake.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "schema",
+      "name": "Schema",
+      "category": "data",
+      "tags": ["schema", "contract", "table", "columns", "structure"],
+      "keywords": ["data model", "definition", "avro", "protobuf", "ddl"],
+      "viewBox": "0 0 24 24",
+      "file": "schema.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "ci-cd",
+      "name": "CI/CD",
+      "category": "process",
+      "tags": ["ci-cd", "continuous integration", "continuous delivery", "build", "deploy"],
+      "keywords": ["github actions", "jenkins", "pipeline", "devops", "gitops"],
+      "viewBox": "0 0 24 24",
+      "file": "ci-cd.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "category": "process",
+      "tags": ["webhook", "callback", "event", "http", "trigger"],
+      "keywords": ["hook", "notification", "push", "endpoint", "integration"],
+      "viewBox": "0 0 24 24",
+      "file": "webhook.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "scheduler",
+      "name": "Scheduler",
+      "category": "process",
+      "tags": ["scheduler", "cron", "timed", "periodic", "job"],
+      "keywords": ["clock", "interval", "batch", "trigger", "airflow"],
+      "viewBox": "0 0 24 24",
+      "file": "scheduler.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "workflow",
+      "name": "Workflow",
+      "category": "process",
+      "tags": ["workflow", "orchestration", "steps", "sequence", "dag"],
+      "keywords": ["step function", "temporal", "conductor", "bpmn", "automation"],
+      "viewBox": "0 0 24 24",
+      "file": "workflow.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "decision",
+      "name": "Decision",
+      "category": "process",
+      "tags": ["decision", "branch", "conditional", "if-else", "logic"],
+      "keywords": ["routing", "fork", "switch", "condition", "flow control"],
+      "viewBox": "0 0 24 24",
+      "file": "decision.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "lock",
+      "name": "Lock",
+      "category": "security",
+      "tags": ["lock", "access control", "encrypt", "secure", "auth"],
+      "keywords": ["padlock", "tls", "encryption", "secret", "private"],
+      "viewBox": "0 0 24 24",
+      "file": "lock.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "key",
+      "name": "Key",
+      "category": "security",
+      "tags": ["key", "credential", "secret", "api key", "token"],
+      "keywords": ["ssh", "rsa", "private key", "auth", "signing"],
+      "viewBox": "0 0 24 24",
+      "file": "key.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "vault",
+      "name": "Vault",
+      "category": "security",
+      "tags": ["vault", "secrets manager", "safe", "credentials", "hsm"],
+      "keywords": ["hashicorp", "aws secrets manager", "keyvault", "rotation"],
+      "viewBox": "0 0 24 24",
+      "file": "vault.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "certificate",
+      "name": "Certificate",
+      "category": "security",
+      "tags": ["certificate", "tls", "ssl", "pki", "x509"],
+      "keywords": ["cert", "ca", "trust", "signing", "acm"],
+      "viewBox": "0 0 24 24",
+      "file": "certificate.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "iam",
+      "name": "IAM",
+      "category": "security",
+      "tags": ["iam", "identity", "access management", "rbac", "permissions"],
+      "keywords": ["okta", "active directory", "sso", "policy", "role"],
+      "viewBox": "0 0 24 24",
+      "file": "iam.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "user",
+      "name": "User",
+      "category": "people",
+      "tags": ["user", "person", "actor", "human", "individual"],
+      "keywords": ["persona", "account", "end user", "operator", "consumer"],
+      "viewBox": "0 0 24 24",
+      "file": "user.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "admin",
+      "name": "Admin",
+      "category": "people",
+      "tags": ["admin", "operator", "sre", "devops", "superuser"],
+      "keywords": ["administrator", "platform engineer", "infra", "maintainer"],
+      "viewBox": "0 0 24 24",
+      "file": "admin.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "external-system",
+      "name": "External System",
+      "category": "people",
+      "tags": ["external", "third-party", "partner", "organisation", "saas"],
+      "keywords": ["c4 external", "out of scope", "vendor", "upstream", "downstream"],
+      "viewBox": "0 0 24 24",
+      "file": "external-system.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "team",
+      "name": "Team",
+      "category": "people",
+      "tags": ["team", "group", "squad", "org", "collective"],
+      "keywords": ["tribe", "crew", "department", "owners", "stakeholders"],
+      "viewBox": "0 0 24 24",
+      "file": "team.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "notification",
+      "name": "Notification",
+      "category": "interface",
+      "tags": ["notification", "alert", "bell", "push", "reminder"],
+      "keywords": ["sns", "fcm", "apns", "badge", "toast"],
+      "viewBox": "0 0 24 24",
+      "file": "notification.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "category": "interface",
+      "tags": ["email", "mail", "envelope", "smtp", "message"],
+      "keywords": ["ses", "sendgrid", "inbox", "notification channel", "outreach"],
+      "viewBox": "0 0 24 24",
+      "file": "email.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "mobile",
+      "name": "Mobile",
+      "category": "interface",
+      "tags": ["mobile", "phone", "app", "ios", "android"],
+      "keywords": ["smartphone", "native app", "push notification", "device", "client"],
+      "viewBox": "0 0 24 24",
+      "file": "mobile.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "browser",
+      "name": "Browser",
+      "category": "interface",
+      "tags": ["browser", "web", "frontend", "spa", "client"],
+      "keywords": ["chrome", "react", "webapp", "ui", "html"],
+      "viewBox": "0 0 24 24",
+      "file": "browser.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "webhook-receiver",
+      "name": "Webhook Receiver",
+      "category": "interface",
+      "tags": ["webhook-receiver", "inbound", "listener", "endpoint", "hook"],
+      "keywords": ["receive", "incoming", "post", "handler", "callback url"],
+      "viewBox": "0 0 24 24",
+      "file": "webhook-receiver.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "logs",
+      "name": "Logs",
+      "category": "process",
+      "tags": ["logs", "logging", "output", "events", "audit"],
+      "keywords": ["cloudwatch", "datadog", "splunk", "loki", "log stream"],
+      "viewBox": "0 0 24 24",
+      "file": "logs.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "metrics",
+      "name": "Metrics",
+      "category": "process",
+      "tags": ["metrics", "time-series", "monitoring", "kpi", "telemetry"],
+      "keywords": ["prometheus", "grafana", "datadog", "chart", "trend"],
+      "viewBox": "0 0 24 24",
+      "file": "metrics.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "alert",
+      "name": "Alert",
+      "category": "process",
+      "tags": ["alert", "alarm", "warning", "incident", "pagerduty"],
+      "keywords": ["threshold", "trigger", "oncall", "sla breach", "anomaly"],
+      "viewBox": "0 0 24 24",
+      "file": "alert.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "trace",
+      "name": "Trace",
+      "category": "process",
+      "tags": ["trace", "distributed tracing", "span", "jaeger", "opentelemetry"],
+      "keywords": ["zipkin", "xray", "latency", "waterfall", "apm"],
+      "viewBox": "0 0 24 24",
+      "file": "trace.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "health-check",
+      "name": "Health Check",
+      "category": "process",
+      "tags": ["health-check", "heartbeat", "pulse", "uptime", "liveness"],
+      "keywords": ["readiness", "probe", "ecg", "ping", "availability"],
+      "viewBox": "0 0 24 24",
+      "file": "health-check.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "remote-agent",
+      "name": "Remote Agent",
+      "category": "ai",
+      "tags": ["remote-agent", "cloud agent", "hosted agent", "broadcast", "autonomous"],
+      "keywords": ["subagent", "cloud-hosted", "remote execution", "agent runtime", "wifi agent"],
+      "viewBox": "0 0 24 24",
+      "file": "remote-agent.svg",
+      "provenance": "foundational (agentic architecture expansion)"
+    },
+    {
+      "id": "ide",
+      "name": "IDE",
+      "category": "interface",
+      "tags": ["ide", "editor", "code editor", "development environment", "workspace"],
+      "keywords": ["vscode", "cursor", "intellij", "development tool", "coding interface"],
+      "viewBox": "0 0 24 24",
+      "file": "ide.svg",
+      "provenance": "foundational (agentic architecture expansion)"
+    },
+    {
+      "id": "coding-subagent",
+      "name": "Coding Subagent",
+      "category": "ai",
+      "tags": ["coding-subagent", "code agent", "programmer", "subagent", "autonomous coder"],
+      "keywords": ["claude code", "devin", "code generation", "agentic coding", "local agent"],
+      "viewBox": "0 0 24 24",
+      "file": "coding-subagent.svg",
+      "provenance": "foundational (agentic architecture expansion)"
+    },
+    {
+      "id": "mcp-server",
+      "name": "MCP Server",
+      "category": "infrastructure",
+      "tags": ["mcp-server", "mcp", "model context protocol", "tool server", "plugin server"],
+      "keywords": ["anthropic mcp", "tool provider", "context server", "agent tool", "function server"],
+      "viewBox": "0 0 24 24",
+      "file": "mcp-server.svg",
+      "provenance": "foundational (agentic architecture expansion)"
+    },
+    {
+      "id": "source-code",
+      "name": "Source Code",
+      "category": "generic",
+      "tags": ["source-code", "code", "file", "script", "program"],
+      "keywords": ["repository", "codebase", "source file", "programming", "code artifact"],
+      "viewBox": "0 0 24 24",
+      "file": "source-code.svg",
+      "provenance": "foundational (agentic architecture expansion)"
+    },
+    {
+      "id": "model-cloud",
+      "name": "Model Cloud",
+      "category": "ai",
+      "tags": ["model", "cloud", "llm", "hosted", "inference"],
+      "keywords": ["bedrock", "azure openai", "vertex", "managed"],
+      "viewBox": "0 0 24 24",
+      "file": "model-cloud.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "model-api",
+      "name": "Model API",
+      "category": "ai",
+      "tags": ["model", "api", "llm", "direct", "inference"],
+      "keywords": ["anthropic", "openai", "api key", "remote call"],
+      "viewBox": "0 0 24 24",
+      "file": "model-api.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "model-onprem",
+      "name": "Model On-Prem",
+      "category": "ai",
+      "tags": ["model", "onprem", "llm", "self-hosted", "local"],
+      "keywords": ["ollama", "vllm", "private", "on-premises"],
+      "viewBox": "0 0 24 24",
+      "file": "model-onprem.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "package",
+      "name": "Package",
+      "category": "process",
+      "tags": ["package", "bundle", "library", "artifact", "module"],
+      "keywords": ["npm", "pip", "cargo", "skill pack", "dependency"],
+      "viewBox": "0 0 24 24",
+      "file": "package.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "knowledge",
+      "name": "Knowledge",
+      "category": "data",
+      "tags": ["knowledge", "base", "book", "repository", "insight"],
+      "keywords": ["knowledge base", "KB", "wisdom", "know-how"],
+      "viewBox": "0 0 24 24",
+      "file": "knowledge.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "ontology",
+      "name": "Ontology",
+      "category": "data",
+      "tags": ["ontology", "class hierarchy", "owl", "rdf", "schema"],
+      "keywords": ["classes", "subclass", "formal model", "taxonomy tree"],
+      "viewBox": "0 0 24 24",
+      "file": "ontology.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "taxonomy",
+      "name": "Taxonomy",
+      "category": "data",
+      "tags": ["taxonomy", "classification", "categories", "hierarchy", "tree"],
+      "keywords": ["facet", "grouping", "categorization", "levels"],
+      "viewBox": "0 0 24 24",
+      "file": "taxonomy.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "semantic-layer",
+      "name": "Semantic Layer",
+      "category": "data",
+      "tags": ["semantic", "layer", "business model", "virtual", "meaning"],
+      "keywords": ["LookML", "semantic model", "dbt metrics", "business logic"],
+      "viewBox": "0 0 24 24",
+      "file": "semantic-layer.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "embedding",
+      "name": "Embedding",
+      "category": "ai",
+      "tags": ["embedding", "vector", "encode", "dense", "representation"],
+      "keywords": ["text embedding", "encode", "sentence transformer", "latent space"],
+      "viewBox": "0 0 24 24",
+      "file": "embedding.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "raw-data",
+      "name": "Raw Data",
+      "category": "data",
+      "tags": ["raw", "unstructured", "source data", "landing", "bronze"],
+      "keywords": ["ingestion", "unprocessed", "dirty data", "stage"],
+      "viewBox": "0 0 24 24",
+      "file": "raw-data.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "data-lineage",
+      "name": "Data Lineage",
+      "category": "data",
+      "tags": ["lineage", "provenance", "origin", "trace", "ancestry"],
+      "keywords": ["data lineage", "column lineage", "impact analysis"],
+      "viewBox": "0 0 24 24",
+      "file": "data-lineage.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "data-catalog",
+      "name": "Data Catalog",
+      "category": "data",
+      "tags": ["catalog", "discovery", "inventory", "search", "index"],
+      "keywords": ["data discovery", "Alation", "Atlan", "Collibra", "registry"],
+      "viewBox": "0 0 24 24",
+      "file": "data-catalog.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "data-contract",
+      "name": "Data Contract",
+      "category": "data",
+      "tags": ["contract", "agreement", "schema", "sla", "quality"],
+      "keywords": ["data contract", "SLA", "interface agreement", "ownership"],
+      "viewBox": "0 0 24 24",
+      "file": "data-contract.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "enrichment",
+      "name": "Enrichment",
+      "category": "data",
+      "tags": ["enrichment", "augment", "enhance", "join", "append"],
+      "keywords": ["data enrichment", "attribute", "context", "annotate"],
+      "viewBox": "0 0 24 24",
+      "file": "enrichment.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "transform",
+      "name": "Transform",
+      "category": "data",
+      "tags": ["transform", "convert", "reshape", "map", "ETL"],
+      "keywords": ["transformation", "dbt", "mapping", "data prep"],
+      "viewBox": "0 0 24 24",
+      "file": "transform.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "metadata",
+      "name": "Metadata",
+      "category": "data",
+      "tags": ["metadata", "tags", "attributes", "properties", "labels"],
+      "keywords": ["data about data", "annotations", "description", "lineage tags"],
+      "viewBox": "0 0 24 24",
+      "file": "metadata.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "feature-store",
+      "name": "Feature Store",
+      "category": "ai",
+      "tags": ["feature store", "features", "ml", "training", "serving"],
+      "keywords": ["Feast", "Hopsworks", "feature engineering", "ML features"],
+      "viewBox": "0 0 24 24",
+      "file": "feature-store.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "topic",
+      "name": "Topic",
+      "category": "process",
+      "tags": ["topic", "pub-sub", "channel", "kafka", "broadcast"],
+      "keywords": ["message topic", "event channel", "SNS", "subscription"],
+      "viewBox": "0 0 24 24",
+      "file": "topic.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "event",
+      "name": "Event",
+      "category": "process",
+      "tags": ["event", "domain event", "trigger", "notification", "fired"],
+      "keywords": ["business event", "event-driven", "webhook trigger", "signal"],
+      "viewBox": "0 0 24 24",
+      "file": "event.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "knowledge-corpus",
+      "name": "Knowledge Corpus",
+      "category": "data",
+      "tags": ["corpus", "knowledge source", "collection", "documents", "reference"],
+      "keywords": ["RAG corpus", "document collection", "source material", "knowledge base", "retrieval source"],
+      "viewBox": "0 0 24 24",
+      "file": "knowledge-corpus.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "search",
+      "name": "Search",
+      "category": "infrastructure",
+      "tags": ["search", "query", "retrieval", "find", "lookup"],
+      "keywords": ["Elasticsearch", "OpenSearch", "Azure AI Search", "search engine", "full-text"],
+      "viewBox": "0 0 24 24",
+      "file": "search.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "knowledge-search",
+      "name": "Knowledge Search",
+      "category": "data",
+      "tags": ["knowledge search", "kb search", "semantic search", "answer", "insight"],
+      "keywords": ["knowledge base query", "QA system", "structured retrieval", "answer engine"],
+      "viewBox": "0 0 24 24",
+      "file": "knowledge-search.svg",
+      "provenance": "foundational (IT architecture expansion)"
+    },
+    {
+      "id": "graphrag-search",
+      "name": "GraphRAG Search",
+      "category": "ai",
+      "tags": ["graphrag", "graph search", "graph retrieval", "graph-augmented", "rag"],
+      "keywords": ["GraphRAG", "graph traversal", "knowledge graph search", "entity retrieval", "community search"],
+      "viewBox": "0 0 24 24",
+      "file": "graphrag-search.svg",
+      "provenance": "foundational (IT architecture expansion)"
     }
   ]
 }

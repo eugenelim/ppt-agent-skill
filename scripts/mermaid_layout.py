@@ -556,6 +556,41 @@ def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float,
     return f"{tip_x},{tip_y} {p1x},{p1y} {p2x},{p2y}"
 
 
+def _smooth_orthogonal_path(pts: list[tuple[int, int]], r: int = 10) -> str:
+    """Build an SVG path through orthogonal waypoints with rounded corners (radius r).
+
+    Each interior corner is replaced by a quadratic bezier arc: a straight line
+    segment to (r px before the corner), a Q command through the corner to
+    (r px after the corner), then the next segment.  Terminal points are reached
+    with a plain L command.  Works for any sequence of ≥2 waypoints.
+    """
+    if len(pts) < 2:
+        return ""
+    d = f"M {pts[0][0]} {pts[0][1]}"
+    for i in range(1, len(pts)):
+        prev = pts[i - 1]
+        curr = pts[i]
+        nxt = pts[i + 1] if i < len(pts) - 1 else None
+        if nxt is None:
+            d += f" L {curr[0]} {curr[1]}"
+        else:
+            dx1 = curr[0] - prev[0]
+            dy1 = curr[1] - prev[1]
+            len1 = max(math.hypot(dx1, dy1), 0.001)
+            # arc-start: r px before the corner along the incoming segment
+            ax = curr[0] - dx1 / len1 * min(r, len1 / 2)
+            ay = curr[1] - dy1 / len1 * min(r, len1 / 2)
+            dx2 = nxt[0] - curr[0]
+            dy2 = nxt[1] - curr[1]
+            len2 = max(math.hypot(dx2, dy2), 0.001)
+            # arc-end: r px after the corner along the outgoing segment
+            bx = curr[0] + dx2 / len2 * min(r, len2 / 2)
+            by_ = curr[1] + dy2 / len2 * min(r, len2 / 2)
+            d += (f" L {ax:.1f} {ay:.1f}"
+                  f" Q {curr[0]} {curr[1]} {bx:.1f} {by_:.1f}")
+    return d
+
+
 def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> int:
     """Distribute fan-in/fan-out endpoints across node edge (spec §Step6).
 
@@ -598,8 +633,28 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     else:
         bottom_lane_y = 0
 
+    # Build back-edge lane assignments so each back-edge uses its own stagger lane,
+    # preventing multiple back-edges from collapsing onto the same routing lane.
+    back_edge_lane: dict[int, int] = {}
+    _be_count = 0
+    for _i, _e in enumerate(edges):
+        if _e.src not in nodes or _e.dst not in nodes or _e.src == _e.dst:
+            continue
+        _rg = nodes[_e.dst].rank - nodes[_e.src].rank
+        if _e.reversed_ or _rg < 0 or _rg > 1:
+            back_edge_lane[_i] = _be_count
+            _be_count += 1
+
+    # Build parallel-edge indices so labels for A→B, A→B can be staggered.
+    _par_count: dict[tuple, int] = {}
+    parallel_edge_idx: dict[int, int] = {}
+    for _i, _e in enumerate(edges):
+        _key = (_e.src, _e.dst)
+        parallel_edge_idx[_i] = _par_count.get(_key, 0)
+        _par_count[_key] = _par_count.get(_key, 0) + 1
+
     result: list[dict] = []
-    for e in edges:
+    for edge_i, e in enumerate(edges):
         if e.src not in nodes or e.dst not in nodes:
             continue
         s = nodes[e.src]
@@ -622,26 +677,34 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
 
         rank_gap = d.rank - s.rank
 
-        # Back-edge or skip-rank → right-lane (TB) or bottom-lane (LR) orthogonal
+        # Back-edge or skip-rank → right-lane (TB) or bottom-lane (LR) smooth path.
+        # Each back-edge gets its own stagger lane so they don't overlap.
         if e.reversed_ or rank_gap < 0 or rank_gap > 1:
+            be_lane = back_edge_lane.get(edge_i, 0)
             if is_lr:
+                lane_y = bottom_lane_y + 32 * be_lane
                 sx = s.x + NODE_W // 2
                 sy = s.y + _node_render_h(s)
                 dx_ = d.x + NODE_W // 2
                 dy_ = d.y + _node_render_h(d)
-                path = f"M {sx} {sy} V {bottom_lane_y} H {dx_} V {dy_}"
+                path = _smooth_orthogonal_path(
+                    [(sx, sy), (sx, lane_y), (dx_, lane_y), (dx_, dy_)]
+                )
                 ah = _arrowhead(dx_, dy_, 0, -1, **ah_kw) if e.arrow else None
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                               "lx": (sx + dx_) // 2, "ly": bottom_lane_y + 4, "rot": 0})
+                               "lx": (sx + dx_) // 2, "ly": lane_y + 4, "rot": 0})
             else:
+                lane_x = right_lane_x + 32 * be_lane
                 sx = s.x + NODE_W
                 sy = s.y + NODE_H // 2
                 dx_ = d.x + NODE_W
                 dy_ = d.y + NODE_H // 2
-                path = f"M {sx} {sy} H {right_lane_x} V {dy_} H {dx_}"
+                path = _smooth_orthogonal_path(
+                    [(sx, sy), (lane_x, sy), (lane_x, dy_), (dx_, dy_)]
+                )
                 ah = _arrowhead(dx_, dy_, -1, 0, **ah_kw) if e.arrow else None
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                               "lx": right_lane_x + 4, "ly": (sy + dy_) // 2, "rot": 0})
+                               "lx": lane_x + 4, "ly": (sy + dy_) // 2, "rot": 0})
             continue
 
         if is_lr:
@@ -672,6 +735,11 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             perp_y = -edge_dx / edge_len
             lx = int(mid_x + perp_x * _LABEL_PERP)
             ly = int(mid_y + perp_y * _LABEL_PERP)
+            # Stagger labels for parallel edges (same src→dst pair)
+            _par = parallel_edge_idx.get(edge_i, 0)
+            if _par:
+                lx = int(lx + perp_x * 12 * _par)
+                ly = int(ly + perp_y * 12 * _par)
             rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": lx, "ly": ly, "rot": rot})
@@ -707,6 +775,11 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         perp_y = -edge_dx / edge_len
         lx = int(mid_x + perp_x * _LABEL_PERP)
         ly = int(mid_y + perp_y * _LABEL_PERP)
+        # Stagger labels for parallel edges (same src→dst pair)
+        _par = parallel_edge_idx.get(edge_i, 0)
+        if _par:
+            lx = int(lx + perp_x * 12 * _par)
+            ly = int(ly + perp_y * 12 * _par)
         rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                        "lx": lx, "ly": ly, "rot": rot})
@@ -1074,7 +1147,9 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
     return (
         '<div class="diagram-legend" style="'
         'display:flex; flex-wrap:wrap; gap:12px; '
-        'margin-top:8px; '
+        'padding-top:8px; '
+        'border-top:1px solid var(--node-fg-dim,var(--card-border)); '
+        'margin-top:0; '
         'font-size:10px; font-family:var(--label-font,var(--font-primary)); '
         'color:var(--node-fg-dim,var(--text-secondary));">'
         f'{joined}'
@@ -1139,11 +1214,22 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     meta_html = _render_metadata_chip(directive, title)
     legend_html = _render_legend(edges, groups)
 
-    if meta_html or legend_html:
+    if legend_html:
+        # Flexbox column so the legend is pinned to the bottom of the diagram area
+        return (
+            '<div class="diagram-wrapper" style="'
+            'display:flex; flex-direction:column; height:100%; '
+            'font-family:var(--label-font,var(--font-primary));">'
+            f'{meta_html}{fragment}'
+            '<div style="flex:1;"></div>'
+            f'{legend_html}'
+            '</div>'
+        )
+    if meta_html:
         return (
             '<div class="diagram-wrapper" style="'
             'font-family:var(--label-font,var(--font-primary));">'
-            f'{meta_html}{fragment}{legend_html}'
+            f'{meta_html}{fragment}'
             '</div>'
         )
     return fragment

@@ -367,6 +367,65 @@
 
 ---
 
+### 用户/角色节点变体 (user-actor card)
+
+**何时用**：放置在 **Sources zone** 或 **Consumers zone** 边界的人类用户、操作员或外部组织节点；凡是"我们不拥有/控制的行为主体"均用此变体——对应 C4 里的 `Person` / `Person_Ext`。内部系统组件仍用主模板（实线边框 + `--accent-1`）。
+
+**视觉信号：**
+- `border: 1.5px dashed var(--people-accent)` — 虚线边框，来自 C4 的外部行为者惯例
+- icon 颜色：`var(--people-accent)`（= `var(--accent-2)`），与系统节点的 `--accent-1` 形成区分
+- 图标推荐：`user.svg`（单人）、`users.svg`（群组/渠道）、`external-system.svg`（第三方组织）
+
+**CSS 局部变量别名**（在画布根元素或 `:root` 声明一次）：
+```css
+--people-accent: var(--accent-2);
+```
+
+**模板 — 普通用户/角色卡**（在 Sources / Consumers zone 的节点卡行中使用）：
+```html
+<!-- 用户/角色卡：虚线 accent-2 边框，区分于实线系统节点 -->
+<div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px;
+  background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
+  border:1.5px dashed var(--people-accent); border-radius:var(--node-radius); color:var(--node-fg);">
+  <span style="flex-shrink:0; width:24px; height:24px; color:var(--people-accent); display:inline-flex;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/>
+    </svg>
+  </span>
+  <span style="display:flex; flex-direction:column; gap:1px; min-width:0;">
+    <span style="font-weight:700; font-size:13px;">End User</span>
+    <span style="font-size:11px; color:var(--node-fg-dim);">web · mobile</span>
+  </span>
+</div>
+```
+
+**模板 — focus 状态用户/角色卡**（当该行为者是本幻灯片叙事的主角时）：
+```html
+<!-- focus 用户/角色卡：双边框（虚线 + box-shadow），凸显主体 -->
+<div style="flex:1; display:flex; align-items:center; gap:10px; padding:11px 13px; box-sizing:border-box; min-height:52px;
+  background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
+  border:1.5px dashed var(--people-accent); border-radius:var(--node-radius); color:var(--node-fg);
+  box-shadow:0 0 0 1.5px var(--people-accent);">
+  <span style="flex-shrink:0; width:24px; height:24px; color:var(--people-accent); display:inline-flex;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/>
+    </svg>
+  </span>
+  <span style="display:flex; flex-direction:column; gap:1px; min-width:0;">
+    <span style="font-weight:700; font-size:13px;">Data Analyst</span>
+    <span style="font-size:11px; color:var(--node-fg-dim);">primary consumer</span>
+  </span>
+</div>
+```
+
+> 复制规律：用户/角色卡与系统节点卡结构完全相同，仅将 `border` 从 `1px solid var(--node-border)` 改为 `1.5px dashed var(--people-accent)`，图标颜色从 `--node-accent` 改为 `--people-accent`。画布根元素上加 `--people-accent:var(--accent-2)` 即可激活。
+
+**自检**：虚线边框来自契约变量（禁硬编码色值）；图标内联 `<svg currentColor>`；人物卡可与系统卡同处一个 zone row 的 `flex` 容器——二者 `flex:1` 等宽，dashed vs solid 对比清晰。
+
+**管线安全**：无伪元素；无 `mask-image`；`box-shadow` 仅用于 focus 变体（无 `filter:blur`）。
+
+---
+
 ### 技术层矩阵（tech-layer-matrix）
 
 **何时用**：按平台层级（工具层/智能层/基础设施层）展示技术工具全景，每行一个层，每格一个工具芯片。适用于平台架构概览、工具选型矩阵、技术生态梳理。`graphite_violet` 首推原语；也可用于 `dark_tech` / `schematic_blueprint`。
