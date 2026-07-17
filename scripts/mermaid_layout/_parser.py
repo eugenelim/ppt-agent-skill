@@ -46,6 +46,7 @@ _SPEC_RE = re.compile(
     r'\[\("(?P<cylinder_q>[^"]*)"\)\]'   # [("quoted cylinder")]
     r'|\[\((?P<cylinder>[^\)]*)\)\]'     # [(unquoted cylinder)]
     r'|\(\((?P<circle>[^\)]*)\)\)'       # ((circle))
+    r'|\(\[(?P<stadium>[^\]]*)\]\)'      # ([stadium]) — pill/capsule shape
     r'|\["(?P<rect_q>[^"]*)"\]'          # ["quoted rect"]
     r'|\[(?P<rect>[^\[\]]*)\]'           # [unquoted rect]
     r'|\("(?P<round_q>[^"]*)"\)'         # ("quoted round")
@@ -59,6 +60,7 @@ _SPEC_RE = re.compile(
 _SPEC_SHAPE_MAP = {
     "cylinder_q": "cylinder", "cylinder": "cylinder",
     "circle": "circle",
+    "stadium": "round",  # ([text]) → same rendering as (text) round/pill shape
     "rect_q": "rect", "rect": "rect",
     "round_q": "round", "round": "round",
     "diamond": "diamond",
@@ -140,6 +142,11 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             continue
         if line.startswith(("style ", "classDef ", "class ", "linkStyle ", "click ")):
             continue
+        # stateDiagram-v2: [*] is the initial/terminal state marker; map to a
+        # renderable node id. src position → _sm_start_; dst position → _sm_end_.
+        # Replace before any further parsing so _parse_line sees valid identifiers.
+        line = re.sub(r'^\[\*\]\s*(?=-->|--)', '_sm_start_', line)
+        line = re.sub(r'(?<=-->)\s*\[\*\]', ' _sm_end_', line)
 
         # Subgraph start
         if line.lower().startswith("subgraph"):
@@ -153,7 +160,8 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             else:
                 label = rest.strip('"\'')
             gid = f"_g{len(groups)}"
-            groups[gid] = _Group(id=gid, label=label or gid)
+            parent_gid = stack[-1] if stack else None
+            groups[gid] = _Group(id=gid, label=label or gid, parent_group=parent_gid)
             stack.append(gid)
             continue
         if line.lower().strip() in ("end", "end;"):
@@ -163,6 +171,15 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
 
         # Try to match as edge chain; a line can chain: A --> B --> C
         _parse_line(line, edges, _ensure)
+
+    # Post-process: stateDiagram terminal nodes get circle shape and empty label
+    for _sm_id, _sm_label, _sm_shape in [
+        ("_sm_start_", "●", "circle"),
+        ("_sm_end_", "◎", "circle"),
+    ]:
+        if _sm_id in nodes:
+            nodes[_sm_id].shape = _sm_shape
+            nodes[_sm_id].label = _sm_label
 
     return nodes, edges, groups
 
@@ -180,7 +197,16 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     src_raw = m.group("src_raw").strip()
     dst_raw = m.group("dst_raw").strip()
     arrow = m.group("arrow_long") or m.group("arrow_short") or "-->"
-    edge_label = (m.group("mid_label") or m.group("pipe_label") or "").strip()
+    edge_label = (m.group("mid_label") or m.group("pipe_label") or "").strip().strip('"\'')  # strip mermaid |"..."|  quotes
+
+    # stateDiagram-v2 uses ": transition_label" appended to the destination node.
+    # Only extract it when the dst has no bracket/paren spec (stateDiagram nodes are
+    # plain identifiers) to avoid stripping colons from flowchart labels like B["k:v"].
+    if not edge_label and ' : ' in dst_raw and not re.search(r'[\[\](){}]', dst_raw.split(' : ', 1)[0]):
+        _parts = dst_raw.split(' : ', 1)
+        dst_raw = _parts[0].strip()
+        edge_label = _parts[1].strip().strip('"\'')
+
 
     style = "dotted" if "-.-" in arrow else ("thick" if "==" in arrow else "solid")
     has_arrow = arrow.endswith(">")

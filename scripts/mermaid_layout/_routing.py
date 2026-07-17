@@ -80,11 +80,65 @@ def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> 
     return start + step * index
 
 
-_LABEL_PERP = 14  # perpendicular offset for edge labels (px)
+_LABEL_PERP = 20  # perpendicular offset for edge labels (px)
+
+# ── edge label placement ──────────────────────────────────────────────────────
+
+_LABEL_CHIP_H = 17    # chip height: 12px font + 2×padding + 1px border ≈ 17px
+_LABEL_CHAR_W = 6.8   # average char width at 12px Inter regular (empirical)
+
+
+def _est_label_w(text: str) -> int:
+    return min(300, max(30, int(len(text) * _LABEL_CHAR_W)))
+
+
+def _label_chip_bbox(lx: int, ly: int, text: str) -> tuple:
+    """Bbox (x1,y1,x2,y2) for a chip placed at left=lx, bottom=ly (CSS translateY(-100%))."""
+    return (lx, ly - _LABEL_CHIP_H, lx + _est_label_w(text), ly)
+
+
+def _overlap_area(a: tuple, b: tuple, margin: int = 8) -> float:
+    """Intersection area of two bboxes each expanded outward by `margin` px.
+
+    Default margin raised to 8px (was 4) to give labels more clearance from node
+    borders at the current 11px chip size — prevents labels from touching card edges.
+    """
+    ox = max(0.0, min(a[2] + margin, b[2] + margin) - max(a[0] - margin, b[0] - margin))
+    oy = max(0.0, min(a[3] + margin, b[3] + margin) - max(a[1] - margin, b[1] - margin))
+    return ox * oy
+
+
+def _best_label_pos(
+    candidates: list,
+    label: str,
+    obstacles: list,
+    placed: list,
+    canvas_w: int,
+) -> tuple:
+    """Pick the (lx, ly) from candidates with minimum total overlap.
+
+    Checks against pre-built node/group obstacle bboxes plus already-placed
+    label chips so label density is distributed rather than stacked.
+    """
+    w = _est_label_w(label)
+    all_obs = obstacles + placed
+    best_lx, best_ly = candidates[0][0], candidates[0][1]
+    best_score = float("inf")
+    for raw_lx, ly in candidates:
+        lx = max(4, min(canvas_w - w - 4, raw_lx))
+        bbox = _label_chip_bbox(lx, ly, label)
+        score = sum(_overlap_area(bbox, obs) for obs in all_obs)
+        if score < best_score:
+            best_score, best_lx, best_ly = score, lx, ly
+        if score == 0:
+            break
+    placed.append(_label_chip_bbox(best_lx, best_ly, label))
+    return best_lx, best_ly
 
 
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
-                 direction: str = "TB") -> list[dict]:
+                 direction: str = "TB",
+                 group_bboxes: "dict | None" = None) -> list[dict]:
     """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot)."""
     is_lr = direction.upper() in ("LR", "RL")
 
@@ -95,6 +149,18 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if e.src in nodes and e.dst in nodes and not e.reversed_:
             fan_in[e.dst].append(e.src)
             fan_out[e.src].append(e.dst)
+
+    # Obstacle bboxes for label placement: every node card + every group container.
+    # Group bboxes come from ELK when available; otherwise they're omitted (labels
+    # still avoid nodes, which is the most common collision source).
+    obstacles: list = [
+        (n.x, n.y, n.x + NODE_W, n.y + _node_render_h(n))
+        for n in nodes.values() if not n.is_dummy
+    ]
+    if group_bboxes:
+        obstacles += [(int(x1), int(y1), int(x2), int(y2))
+                      for x1, y1, x2, y2 in group_bboxes.values()]
+    placed_labels: list = []  # accumulates placed chip bboxes to prevent inter-label collision
 
     # Right-lane x: always clears the rightmost node + group container border
     non_dummy = [n for n in nodes.values() if not n.is_dummy]
@@ -132,56 +198,139 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             continue
         s = nodes[e.src]
         d = nodes[e.dst]
-        ah_kw: dict = {"back": 10, "half_w": 5} if e.style == "thick" else {}
+        # thick edges get a larger arrowhead; all other edges get a slightly larger
+        # head than the default (8/4) for visibility at small zoom levels.
+        if e.style == "thick":
+            ah_kw: dict = {"back": 11, "half_w": 5}
+        else:
+            ah_kw = {"back": 9, "half_w": 4}
 
         # Self-loop
         if e.src == e.dst:
             lx = s.x + NODE_W
             ty = s.y
-            by_ = s.y + NODE_H
+            by_ = s.y + _node_render_h(s)
             path = (f"M {lx} {ty + 12} "
                     f"C {lx + SELF_LOOP_DX} {ty} {lx + SELF_LOOP_DX} {by_} "
                     f"{lx} {by_ - 12}")
             tip_x, tip_y = lx, by_ - 12
             ah = _arrowhead(tip_x, tip_y, -1, 0, **ah_kw) if e.arrow else None
+            mid_y = (ty + by_) // 2
+            if e.label:
+                cands = [
+                    (tip_x + 14, mid_y),
+                    (tip_x + 14, ty - _LABEL_CHIP_H - 4),
+                    (tip_x + 14, by_ + _LABEL_CHIP_H + 4),
+                ]
+                llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+            else:
+                llx, lly = tip_x + 14, mid_y
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": tip_x + 14, "ly": (ty + by_) // 2, "rot": 0})
+                           "lx": llx, "ly": lly, "rot": 0})
             continue
 
         rank_gap = d.rank - s.rank
 
-        # Back-edge or skip-rank → right-lane (TB) or bottom-lane (LR) smooth path.
-        # Each back-edge gets its own stagger lane so they don't overlap.
-        if e.reversed_ or rank_gap < 0 or rank_gap > 1:
+        # Back-edge → right-lane (TB) or bottom-lane (LR) smooth path.
+        # Use geometry to detect direction: works for both Sugiyama (rank-based coords)
+        # and ELK (which places long forward edges without dummy nodes).
+        # A forward edge goes RIGHT (LR) or DOWN (TB); anything else is a back edge.
+        if is_lr:
+            _goes_back = (d.x + NODE_W // 2) < s.x  # dst center left of src left
+        else:
+            _goes_back = (d.y + _node_render_h(d) // 2) < s.y  # dst center above src top
+        if e.reversed_ or _goes_back:
             be_lane = back_edge_lane.get(edge_i, 0)
             if is_lr:
-                lane_y = bottom_lane_y + 32 * be_lane
-                sx = s.x + NODE_W // 2
-                sy = s.y + _node_render_h(s)
-                dx_ = d.x + NODE_W // 2
-                dy_ = d.y + _node_render_h(d)
-                path = _smooth_orthogonal_path(
-                    [(sx, sy), (sx, lane_y), (dx_, lane_y), (dx_, dy_)]
-                )
-                ah = _arrowhead(dx_, dy_, 0, -1, **ah_kw) if e.arrow else None
-                result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                               "lx": (sx + dx_) // 2, "ly": lane_y + 4, "rot": 0})
+                # Right-to-left crossing: source LEFT edge is past destination RIGHT edge.
+                # Route directly (left-exit → midpoint → right-enter) instead of
+                # the bottom lane, which adds unnecessary vertical canvas space.
+                if not e.reversed_ and s.x >= d.x + NODE_W:
+                    out_list = fan_out[e.src]
+                    out_idx = out_list.index(e.dst) if e.dst in out_list else 0
+                    out_off = _fan_offset(out_idx, len(out_list), node_w=_node_render_h(s))
+                    in_list = fan_in[e.dst]
+                    in_idx = in_list.index(e.src) if e.src in in_list else 0
+                    in_off = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
+                    x1 = s.x               # exit from LEFT side of source
+                    y1 = s.y + out_off
+                    x2 = d.x + NODE_W      # enter RIGHT side of destination
+                    y2 = d.y + in_off
+                    mid_x = (x1 + x2) // 2
+                    path = _smooth_orthogonal_path(
+                        [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
+                    )
+                    ah = _arrowhead(x2, y2, -1, 0, **ah_kw) if e.arrow else None
+                    if e.label:
+                        H = _LABEL_CHIP_H
+                        w = _est_label_w(e.label)
+                        cands = [
+                            (x1 - w - 8,         int(y1) - 12),
+                            (x1 - w - 8,         int(y1) + H + 4),
+                            (mid_x - w // 2,     min(int(y1), int(y2)) - 12),
+                            (mid_x - w // 2,     max(int(y1), int(y2)) + H + 4),
+                            (int(x2) + 8,        int(y2) - 12),
+                            (int(x2) + 8,        int(y2) + H + 4),
+                        ]
+                        llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    else:
+                        llx, lly = max(0, x1 - 164), int(y1) - 12
+                    result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                                   "lx": llx, "ly": lly, "rot": 0})
+                else:
+                    lane_y = bottom_lane_y + 32 * be_lane
+                    sx = s.x + NODE_W // 2
+                    sy = s.y + _node_render_h(s)
+                    dx_ = d.x + NODE_W // 2
+                    dy_ = d.y + _node_render_h(d)
+                    path = _smooth_orthogonal_path(
+                        [(sx, sy), (sx, lane_y), (dx_, lane_y), (dx_, dy_)]
+                    )
+                    ah = _arrowhead(dx_, dy_, 0, -1, **ah_kw) if e.arrow else None
+                    if e.label:
+                        H = _LABEL_CHIP_H
+                        w = _est_label_w(e.label)
+                        mid = (sx + dx_) // 2
+                        cands = [
+                            (mid - w // 2,  lane_y - H - 4),
+                            (mid - w // 2,  lane_y + H + 4),
+                            (sx + 8,        lane_y - H - 4),
+                            (dx_ + 8,       lane_y - H - 4),
+                        ]
+                        llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    else:
+                        llx, lly = (sx + dx_) // 2, lane_y + 4
+                    result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                                   "lx": llx, "ly": lly, "rot": 0})
             else:
                 lane_x = right_lane_x + 32 * be_lane
                 sx = s.x + NODE_W
-                sy = s.y + NODE_H // 2
+                sy = s.y + _node_render_h(s) // 2
                 dx_ = d.x + NODE_W
-                dy_ = d.y + NODE_H // 2
+                dy_ = d.y + _node_render_h(d) // 2
                 path = _smooth_orthogonal_path(
                     [(sx, sy), (lane_x, sy), (lane_x, dy_), (dx_, dy_)]
                 )
                 ah = _arrowhead(dx_, dy_, -1, 0, **ah_kw) if e.arrow else None
+                if e.label:
+                    H = _LABEL_CHIP_H
+                    w = _est_label_w(e.label)
+                    mid_y = (sy + dy_) // 2
+                    cands = [
+                        (lane_x + 4,      mid_y),
+                        (lane_x - w - 4,  mid_y),
+                        (lane_x + 4,      sy + H + 4),
+                        (lane_x + 4,      dy_ - H - 4),
+                    ]
+                    llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                else:
+                    llx, lly = lane_x + 4, (sy + dy_) // 2
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                               "lx": lane_x + 4, "ly": (sy + dy_) // 2, "rot": 0})
+                               "lx": llx, "ly": lly, "rot": 0})
             continue
 
         if is_lr:
-            # LR forward edge: horizontal Bézier, right-of-src to left-of-dst
+            # LR forward edge: orthogonal path right-of-src to left-of-dst
             out_list = fan_out[e.src]
             out_idx = out_list.index(e.dst) if e.dst in out_list else 0
             out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_h(s))
@@ -194,31 +343,50 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             y1 = s.y + out_offset
             x2 = d.x
             y2 = d.y + in_offset
-            cx1 = x1 + (x2 - x1) // 3
-            cx2 = x1 + 2 * (x2 - x1) // 3
-            path = f"M {x1} {y1} C {cx1} {y1} {cx2} {y2} {x2} {y2}"
-            ah = _arrowhead(x2, y2, x2 - cx2, 0.001, **ah_kw) if e.arrow else None
-            # Label: perpendicular offset from midpoint
+            # Route: go right to midpoint, then down/up, then right to dst
             mid_x = (x1 + x2) // 2
-            mid_y = (y1 + y2) // 2
-            edge_dx = float(x2 - x1)
-            edge_dy = float(y2 - y1)
-            edge_len = math.hypot(edge_dx, edge_dy) or 1.0
-            perp_x = edge_dy / edge_len
-            perp_y = -edge_dx / edge_len
-            lx = int(mid_x + perp_x * _LABEL_PERP)
-            ly = int(mid_y + perp_y * _LABEL_PERP)
-            # Stagger labels for parallel edges (same src→dst pair)
-            _par = parallel_edge_idx.get(edge_i, 0)
-            if _par:
-                lx = int(lx + perp_x * 12 * _par)
-                ly = int(ly + perp_y * 12 * _par)
-            rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
+            path = _smooth_orthogonal_path([(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)])
+            ah = _arrowhead(x2, y2, 1, 0, **ah_kw) if e.arrow else None
+            if e.label:
+                H = _LABEL_CHIP_H
+                w = _est_label_w(e.label)
+                q1_x = x1 + (x2 - x1) // 4
+                q3_x = x1 + 3 * (x2 - x1) // 4
+                y_top = min(int(y1), int(y2)) - 12
+                y_bot = max(int(y1), int(y2)) + H + 4
+                cands = [
+                    (x1 + 32,          int(y1) - 12),
+                    (x1 + 32,          int(y1) + H + 4),
+                    (q1_x - w // 2,    y_top),
+                    (q1_x - w // 2,    y_bot),
+                    (mid_x - w // 2,   y_top),
+                    (mid_x - w // 2,   y_bot),
+                    (q3_x - w // 2,    y_top),
+                    (q3_x - w // 2,    y_bot),
+                    (int(x2) - w - 24, int(y2) - 12),
+                    (int(x2) - w - 24, int(y2) + H + 4),
+                ]
+                # For short-gap edges (label wider than gap), float the label
+                # just below the source card in the open space between nodes.
+                # src_buf adds 20% clearance above the bottom to absorb CSS
+                # rendering discrepancies (actual char width > char-based estimate).
+                if x2 - x1 < w + 64:
+                    src_buf = int(_node_render_h(s) * 1.2)
+                    src_clear = s.y + src_buf
+                    cands += [
+                        (x1 - w - 12, src_clear + H + 4),
+                        (x1 - w - 12, s.y - H - 12),
+                        (x1 + 8,      src_clear + H + 4),
+                        (x1 + 8,      s.y - H - 12),
+                    ]
+                lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+            else:
+                lx, ly = x1 + 24, int(y1) - 12
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": lx, "ly": ly, "rot": rot})
+                           "lx": lx, "ly": ly, "rot": 0})
             continue
 
-        # TB adjacent-rank forward edge: cubic Bézier bottom-centre to top-centre
+        # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
         out_list = fan_out[e.src]
         out_idx = out_list.index(e.dst) if e.dst in out_list else 0
         out_offset = _fan_offset(out_idx, len(out_list))
@@ -228,34 +396,32 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         in_offset = _fan_offset(in_idx, len(in_list))
 
         x1 = s.x + out_offset
-        y1 = s.y + NODE_H
+        y1 = s.y + _node_render_h(s)
         x2 = d.x + in_offset
         y2 = d.y
-        cy1 = y1 + (y2 - y1) // 3
-        cy2 = y1 + 2 * (y2 - y1) // 3
-        path = f"M {x1} {y1} C {x1} {cy1} {x2} {cy2} {x2} {y2}"
-
-        ah = _arrowhead(x2, y2, x2 - x1, y2 - cy2, **ah_kw) if e.arrow else None
-
-        # Label: perpendicular offset from midpoint (prevents crossing the line)
-        mid_x = (x1 + x2) // 2
+        # Route: go down to midpoint, then right/left, then down to dst
         mid_y = (y1 + y2) // 2
-        edge_dx = float(x2 - x1)
-        edge_dy = float(y2 - y1)
-        edge_len = math.hypot(edge_dx, edge_dy) or 1.0
-        # Right perpendicular (90° CW from edge direction)
-        perp_x = edge_dy / edge_len
-        perp_y = -edge_dx / edge_len
-        lx = int(mid_x + perp_x * _LABEL_PERP)
-        ly = int(mid_y + perp_y * _LABEL_PERP)
-        # Stagger labels for parallel edges (same src→dst pair)
-        _par = parallel_edge_idx.get(edge_i, 0)
-        if _par:
-            lx = int(lx + perp_x * 12 * _par)
-            ly = int(ly + perp_y * 12 * _par)
-        rot = 90 if abs(edge_dy) > abs(edge_dx) * 1.5 else 0
+        path = _smooth_orthogonal_path([(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)])
+
+        ah = _arrowhead(x2, y2, 0, 1, **ah_kw) if e.arrow else None
+
+        if e.label:
+            H = _LABEL_CHIP_H
+            w = _est_label_w(e.label)
+            seg_mid_y = int((y1 + mid_y) // 2)
+            cands = [
+                (int(x1) + _LABEL_PERP,              seg_mid_y),
+                (int(x1) - w - _LABEL_PERP,          seg_mid_y),
+                (int(x1) + _LABEL_PERP,              int(y1) + H + 4),
+                (int(x1) + _LABEL_PERP,              int(mid_y) - H - 4),
+                (int(x2) + _LABEL_PERP,              int((mid_y + y2) // 2)),
+                (int(x2) - w - _LABEL_PERP,          int((mid_y + y2) // 2)),
+            ]
+            lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+        else:
+            lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                       "lx": lx, "ly": ly, "rot": rot})
+                       "lx": lx, "ly": ly, "rot": 0})
 
     return result
 

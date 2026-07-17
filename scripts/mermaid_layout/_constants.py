@@ -71,27 +71,26 @@ EDGE_CAP = 128
 GROUP_CAP = 16
 CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 
-# ── default geometry (px) — matches Appendix §A in spec ──────────────────────
-NODE_W = 160
-NODE_H = 56       # base height for a single-line node (see _node_render_h formula below)
-RANK_GAP = 72    # gap in flow direction (vertical in TB, horizontal in LR)
-COL_GAP = 48     # gap perpendicular to flow (horizontal in TB, vertical in LR)
+# ── default geometry (px) ────────────────────────────────────────────────────
+NODE_W = 192
+NODE_H = 42       # minimum card height (2×pad_v + icon_h = 20+24=44 triggers icon bump above 42)
+RANK_GAP = 80    # gap in flow direction (vertical in TB, horizontal in LR)
+COL_GAP = 52     # gap perpendicular to flow (horizontal in TB, vertical in LR)
 CANVAS_PAD = 48  # outer inset on all sides
-GROUP_PAD_X = 24  # group container horizontal inner padding
-GROUP_PAD_Y_TOP = 32  # group container top inner padding (room for label)
-GROUP_PAD_Y_BOT = 24  # group container bottom inner padding
+GROUP_PAD_X = 28  # group container horizontal inner padding
+GROUP_PAD_Y_TOP = 36  # group container top inner padding (room for label)
+GROUP_PAD_Y_BOT = 28  # group container bottom inner padding
 
-# Node height composition — single source of truth used by _node_render_h:
-#   NODE_H          = base (padding + one text line)
-#   _NODE_H_LINE    = added per extra text line beyond the first
-#   _NODE_H_ICON    = icon block (20px icon + 4px margin) added when icon resolves
-#   _NODE_H_TECH    = tech sub-label line (11px × 1.4 ≈ 16px)
-# All extra_h components are ADDITIVE (not max) so icon + multiline nodes size correctly.
-_NODE_H_LINE = 20   # px per additional text line (14px font × 1.4 line-height)
-_NODE_H_ICON = 24   # icon box: 20px SVG + 4px bottom margin
-_NODE_H_TECH = 16   # tech sub-label line height
+# Node height constants — icon-left layout: icon sits ALONGSIDE text (not below).
+# header_h = max(icon_h, title_h + sub_h); icon only adds height when taller than text.
+_NODE_PAD_V = 12   # vertical padding per side (top and bottom)
+_TITLE_LINE_H = 18  # title text line height (~14px font × 1.3)
+_SUB_LINE_H = 16    # sub-label line height (~12px font × 1.3)
+_ICON_H = 24        # icon SVG height in card header
+_NODE_H_TECH = 17   # separator + tech text line (7px margin + 7px padding + ~12px text ÷ 2)
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
+_TERMINAL_NODE_SIZE = 32  # px square for circle nodes with symbol labels (UML start/end states)
 
 # ── directive sets ────────────────────────────────────────────────────────────
 _GRAPH_DIRECTIVES = frozenset({
@@ -138,16 +137,20 @@ class _Group:
     id: str
     label: str = ""
     members: list[str] = field(default_factory=list)
+    parent_group: Optional[str] = None  # set when this subgraph is nested inside another
 
 
 
-_WRAP_CHARS = 18  # label wrap threshold (~120px usable at 7px/char, NODE_W=160 minus 40px padding)
+_WRAP_CHARS = 20        # label wrap threshold (NODE_W=192 minus ~44px padding = ~148px usable ≈ 20 chars at 7.5px/char)
+_WRAP_CHARS_ICON = 18  # reduced limit for icon-left cards (icon 24px + 10px margin reduces usable to ~134px ≈ 16-18 chars; 18 avoids over-eager breaks on short labels)
 
 
-def _wrap_label(label: str) -> list[str]:
-    """Split label into lines of max _WRAP_CHARS characters.
+def _wrap_label(label: str, max_chars: int = _WRAP_CHARS) -> list[str]:
+    """Split label into lines of at most max_chars characters.
 
     Treats literal \\n (two-char escape) and real newlines as explicit breaks.
+    Pass max_chars=_WRAP_CHARS_ICON for icon-left card titles where the icon
+    consumes ~34px of the available text width.
     """
     # Normalise literal \n escape sequences to real newlines first
     normalized = label.replace("\\n", "\n")
@@ -156,22 +159,40 @@ def _wrap_label(label: str) -> list[str]:
         for chunk in normalized.split("\n"):
             stripped = chunk.strip()
             if stripped:
-                result.extend(_wrap_label(stripped))
+                result.extend(_wrap_label(stripped, max_chars))
         return result or [label]
-    if len(normalized) <= _WRAP_CHARS:
+    if len(normalized) <= max_chars:
         return [normalized]
-    words = normalized.split()
+    # Split on spaces first; for hyphen-compound words, also split at hyphens
+    # so long kebab-case identifiers (e.g. express-ai-knowledge-source-enterprise-it)
+    # break at natural boundaries instead of at arbitrary char positions.
+    raw_words = normalized.split()
+    words: list[str] = []
+    for w in raw_words:
+        if len(w) > max_chars and "-" in w:
+            parts = w.split("-")
+            acc = parts[0]
+            for p in parts[1:]:
+                candidate = acc + "-" + p
+                if len(candidate) <= max_chars:
+                    acc = candidate
+                else:
+                    words.append(acc + "-")
+                    acc = p
+            words.append(acc)
+        else:
+            words.append(w)
     lines: list[str] = []
     cur = ""
     for w in words:
-        # Break individual words that exceed the wrap limit (e.g. long hyphenated identifiers)
-        while len(w) > _WRAP_CHARS:
+        # Break individual tokens that still exceed the wrap limit
+        while len(w) > max_chars:
             if cur:
                 lines.append(cur)
                 cur = ""
-            lines.append(w[:_WRAP_CHARS])
-            w = w[_WRAP_CHARS:]
-        if cur and len(cur) + 1 + len(w) > _WRAP_CHARS:
+            lines.append(w[:max_chars])
+            w = w[max_chars:]
+        if cur and len(cur) + 1 + len(w) > max_chars:
             lines.append(cur)
             cur = w
         else:
@@ -181,25 +202,63 @@ def _wrap_label(label: str) -> list[str]:
     return lines or [normalized]
 
 
+def _split_sub_label(label: str) -> tuple[str, str]:
+    """Split a node label into (main, sub) parts.
+
+    The convention is: label lines before the first [bracketed line] are main;
+    the bracketed portion (stripped of outer brackets) is the sub-label.
+    E.g. "Service name\\n[Tech stack]" → ("Service name", "Tech stack").
+    """
+    normalized = label.replace("\\n", "\n")
+    if "\n" not in normalized:
+        return label, ""
+    chunks = [c.strip() for c in normalized.split("\n") if c.strip()]
+    main_parts, sub_parts = [], []
+    in_sub = False
+    for chunk in chunks:
+        if not in_sub and chunk.startswith("[") and chunk.endswith("]"):
+            in_sub = True
+            sub_parts.append(chunk[1:-1].strip())
+        elif in_sub:
+            sub_parts.append(chunk)
+        else:
+            main_parts.append(chunk)
+    main = "\n".join(main_parts) if main_parts else label
+    sub = " ".join(sub_parts)
+    return main, sub
+
+
+def _is_terminal_circle(n: "_Node") -> bool:
+    """True for circle nodes with a single symbol label (UML initial/final state dots)."""
+    return n.shape == "circle" and len(n.label.strip()) <= 2
+
+
 def _node_render_h(n: "_Node") -> int:
     """Return the rendered pixel height of node n (single source of truth).
 
-    Mirrors the height calculation in _render_graph_fragment so that group
-    bounding boxes, canvas height, and LR layout pitch all stay in sync.
-    Uses n.icon and n.css_class (via _load_icon) to determine effective icon.
+    Icon-left layout: icon sits alongside title text, not below.
+    header_h = max(icon_h, title_h + sub_h) — icon only adds height when taller than text.
     """
-    main_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
-    lines = _wrap_label(main_label)
-    extra_h = max(0, (len(lines) - 1) * _NODE_H_LINE)
-    if n.icon and _load_icon(n.icon):
-        effective_icon = n.icon
-    elif n.css_class and _load_icon(n.css_class):
-        effective_icon = n.css_class
-    else:
-        effective_icon = ""
-    if effective_icon:
-        extra_h += _NODE_H_ICON  # additive: icon + multiple lines don't fight each other
-    if "|" in n.label:
-        extra_h += _NODE_H_TECH
-    return NODE_H + extra_h
+    if _is_terminal_circle(n):
+        return _TERMINAL_NODE_SIZE
+
+    raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
+    main_label, sub_label = _split_sub_label(raw_label)
+
+    has_icon = bool(
+        (n.icon and _load_icon(n.icon)) or (n.css_class and _load_icon(n.css_class))
+    )
+    # Icon-left cards have a narrower text column; use reduced wrap limit so height
+    # computation accounts for the extra lines that actually wrap in the rendered card.
+    icon_wrap = _WRAP_CHARS_ICON if has_icon else _WRAP_CHARS
+    title_lines = _wrap_label(main_label, max_chars=icon_wrap)
+    sub_lines = _wrap_label(sub_label, max_chars=icon_wrap) if sub_label else []
+
+    title_h = len(title_lines) * _TITLE_LINE_H
+    sub_h = len(sub_lines) * _SUB_LINE_H
+
+    header_h = max(_ICON_H, title_h + sub_h) if has_icon else (title_h + sub_h)
+    tech_h = _NODE_H_TECH if "|" in n.label else 0
+
+    return max(NODE_H, 2 * _NODE_PAD_V + header_h + tech_h)
 

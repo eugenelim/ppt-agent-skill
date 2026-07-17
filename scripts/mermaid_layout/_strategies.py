@@ -8,7 +8,7 @@ from typing import Optional
 from ._constants import (
     _Node, _Edge, _Group,
     NODE_CAP, EDGE_CAP, GROUP_CAP,
-    NODE_W, NODE_H, COL_GAP, CANVAS_PAD,
+    NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _ARCH_ICON_MAP, _C4_ICON_MAP,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
@@ -26,7 +26,10 @@ from ._renderer import (
 
 # ── graph topology strategy ──────────────────────────────────────────────────
 
-def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
+def _layout_graph_topology(
+    src: str, direction: str, width_hint: int, height_hint: int = 0,
+    style_overrides: str = "",
+) -> str:
     lines = src.splitlines()
     # Skip up to and including the directive line (first non-blank, non-comment line)
     directive_index = 0
@@ -60,6 +63,30 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
+
+    # Auto-select direction (TB vs LR) when a size constraint is given and the
+    # source direction was not explicitly overridden by the caller.  Estimate the
+    # canvas footprint for both orientations and choose the one that requires
+    # less shrinkage (i.e. fits best inside width_hint × height_hint).
+    if width_hint and height_hint:
+        max_rank = max((n.rank for n in nodes.values()), default=0)
+        from collections import Counter
+        rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
+        max_cols = max(rank_counts.values(), default=1)
+        # Use actual average node height (accounts for sub-labels, icons, multi-line)
+        real_ns = [n for n in nodes.values() if not n.is_dummy]
+        avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
+        lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
+        lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
+        tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
+        tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
+        lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
+        tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
+        if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
+            direction = "TB"
+        elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
+            direction = "LR"
+
     # Compact group column ranges before coordinate assignment (dagre-inspired)
     if groups:
         _compact_group_columns(nodes, groups)
@@ -77,13 +104,22 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
         canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
 
-    # When the natural canvas exceeds the width hint, shrink via CSS zoom rather
-    # than distorting x-coordinates (which causes node overlaps when scale < NODE_W/col_pitch).
+    # Scale to fit both width and height constraints via CSS zoom.
+    # Scale up when the diagram is smaller than the canvas (fills dead space);
+    # scale down when it is larger. Cap scale-up at 1.4× to avoid oversizing.
+    # Using zoom (not transform:scale) avoids distorting pre-computed coordinates.
     zoom = 1.0
-    if width_hint and canvas_w > width_hint * 1.05:
-        zoom = width_hint / canvas_w
+    if width_hint and canvas_w > 0:
+        w_zoom = width_hint / canvas_w
+        h_zoom = height_hint / canvas_h if (height_hint and canvas_h > 0) else w_zoom
+        zoom = min(w_zoom, h_zoom)
+        zoom = min(zoom, 1.4)  # cap scale-up; scale-down is uncapped
 
-    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction, zoom)
+    fragment = _render_graph_fragment(
+        nodes, edges, groups, canvas_w, canvas_h, direction, zoom,
+        style_overrides=style_overrides,
+        show_legend=False,
+    )
 
     # Wrap with metadata chip (type + title) and auto-legend
     directive, _ = _detect_directive(src)
@@ -216,11 +252,12 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
+    _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
     for pid in participants:
         lx = _cx(pid)
         parts.append(
             f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
-            f'stroke="var(--edge,var(--card-border))" stroke-width="1" stroke-dasharray="5 4"/>'
+            f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
         )
     row = 0
     for it in items:
@@ -229,7 +266,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             parts.append(
                 f'<rect x="{PAD_H // 2}" y="{ry}" width="{canvas_w - PAD_H}" height="{ROW_H}" '
                 f'fill="var(--node-bg-from,var(--card-bg-from))" opacity="0.6" '
-                f'stroke="var(--edge,var(--card-border))" stroke-width="1" rx="3"/>'
+                f'stroke="{_seq_edge}" stroke-width="1" rx="3"/>'
             )
             row += 1; continue
         if it["type"] != "msg":
@@ -240,16 +277,16 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if sx == dx2:
             parts.append(
                 f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
-                f'stroke="var(--edge,var(--card-border))" fill="none" stroke-width="1.5"{dash}/>'
+                f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}/>'
             )
             ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
-                f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"{dash}/>'
+                f'stroke="{_seq_edge}" stroke-width="1.5"{dash}/>'
             )
             ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
-        parts.append(f'<polygon points="{ah}" fill="var(--edge,var(--card-border))"/>')
+        parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
         row += 1
     parts.append('</svg>')
     row = 0
@@ -445,7 +482,7 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
             f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
             f'width:{canvas_w - PAD_H * 2}px;height:{SEC_H}px;'
             f'display:flex;align-items:flex-end;'
-            f'border-bottom:1px solid var(--edge,var(--card-border));">'
+            f'border-bottom:1px solid var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)));">'
             f'<span style="font-size:10px;font-weight:700;text-transform:uppercase;'
             f'letter-spacing:.1em;color:var(--node-fg-dim,var(--text-secondary));'
             f'font-family:var(--label-font,var(--font-primary));">'
@@ -532,7 +569,7 @@ def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
     ax2 = canvas_w - PAD_H - ITEM_W // 2
     parts.append(
         f'<line x1="{ax1}" y1="{axis_y}" x2="{ax2}" y2="{axis_y}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
     )
     parts.append('</svg>')
     for i, sec in enumerate(sections):
@@ -618,11 +655,11 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
     )
     parts.append(
         f'<rect x="{gx}" y="{gy}" width="{gw}" height="{gh}" '
-        f'fill="none" stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'fill="none" stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
         f'<line x1="{mx}" y1="{gy}" x2="{mx}" y2="{gy + gh}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1" stroke-dasharray="4 3"/>'
         f'<line x1="{gx}" y1="{my}" x2="{gx + gw}" y2="{my}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1" stroke-dasharray="4 3"/>'
     )
     for pt in points:
         px = gx + int(pt["x"] * gw)
@@ -812,9 +849,9 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
         f'<line x1="{cx_start}" y1="{cy_top}" x2="{cx_start}" y2="{cy_top + ch}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
         f'<line x1="{cx_start}" y1="{cy_top + ch}" x2="{cx_start + cw}" y2="{cy_top + ch}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
     )
     if line_data and not bar_data:
         pts_coords = []
@@ -916,7 +953,7 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
                     pnx = PAD_H + flat[j]["depth"] * INDENT_W + 120
                     parts.append(
                         f'<line x1="{pnx}" y1="{y_pos[j]}" x2="{nx}" y2="{ny}" '
-                        f'stroke="var(--edge,var(--card-border))" stroke-width="1"/>'
+                        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1"/>'
                     )
                     break
     parts.append('</svg>')
@@ -1234,9 +1271,10 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
             eid, elbl = m.group(2), m.group(3)
             shape = "circle" if "person" in elem_type else "rect"
             icon_name = _C4_ICON_MAP.get(elem_type, "node")
+            css_class = "external" if elem_type.endswith("_ext") else ""
             gin = boundary_stack[-1] if boundary_stack else None
             nodes[eid] = _Node(id=eid, label=elbl, shape=shape,
-                               group=gin, icon=icon_name)
+                               group=gin, icon=icon_name, css_class=css_class)
             if gin:
                 groups.setdefault(gin, _Group(id=gin, label=gin, members=[]))
                 if eid not in groups[gin].members:
@@ -1253,15 +1291,28 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
 
 # ── strategy dispatch ─────────────────────────────────────────────────────────
 
-def _dispatch(src: str, direction_override: Optional[str], width_hint: int) -> str:
+def _dispatch(
+    src: str,
+    direction_override: Optional[str],
+    width_hint: int,
+    height_hint: int = 0,
+    style_overrides: str = "",
+) -> str:
     """Detect directive, dispatch to per-type strategy, return HTML fragment."""
     clean = _strip_frontmatter(src)
     directive, auto_direction = _detect_directive(clean)
+    # When the caller supplied an explicit direction override, respect it and
+    # disable auto-direction (pass height_hint=0 to _layout_graph_topology so
+    # the auto-select branch doesn't fire).
     direction = (direction_override or auto_direction).upper()
+    effective_height = height_hint if not direction_override else 0
     d = directive.lower()
 
     if d in _GRAPH_DIRECTIVES:
-        return _layout_graph_topology(clean, direction, width_hint)
+        return _layout_graph_topology(
+            clean, direction, width_hint, effective_height,
+            style_overrides=style_overrides,
+        )
     if d == "sequencediagram":
         return _layout_lifeline(clean, direction, width_hint)
     if d == "erdiagram":
@@ -1293,7 +1344,9 @@ def _dispatch(src: str, direction_override: Optional[str], width_hint: int) -> s
 
     # Unknown directive — graph-topology best-effort fallback
     try:
-        return _layout_graph_topology(clean, direction, width_hint)
+        return _layout_graph_topology(
+            clean, direction, width_hint, style_overrides=style_overrides,
+        )
     except Exception:
         raise ValueError(f"Unsupported or unrecognised Mermaid directive: '{directive}'")
 
