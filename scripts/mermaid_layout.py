@@ -96,10 +96,11 @@ NODE_H = 56
 RANK_GAP = 48    # --rank-gap: vertical gap between row tops
 COL_GAP = 32     # --col-gap: horizontal gap between nodes in same rank
 CANVAS_PAD = 40  # --canvas-pad: outer inset
-GROUP_PAD_X = 16  # group container horizontal inner padding
+GROUP_PAD_X = 24  # group container horizontal inner padding
 GROUP_PAD_Y_TOP = 28  # group container top inner padding (room for label)
-GROUP_PAD_Y_BOT = 16  # group container bottom inner padding
+GROUP_PAD_Y_BOT = 20  # group container bottom inner padding
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
+MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 
 # ── directive sets ────────────────────────────────────────────────────────────
 _GRAPH_DIRECTIVES = frozenset({
@@ -556,12 +557,19 @@ def _arrowhead(tip_x: int, tip_y: int, dx: float, dy: float,
 
 
 def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> int:
-    """Distribute fan-in/fan-out endpoints across node edge (spec §Step6)."""
-    usable = node_w - 2 * pad
+    """Distribute fan-in/fan-out endpoints across node edge (spec §Step6).
+
+    Endpoints are spaced at least MIN_FAN_STEP px apart and centred on the node
+    midpoint so parallel edges stay visually separated even on short nodes.
+    """
     if total <= 1:
         return node_w // 2
-    step = usable // (total + 1)
-    return pad + step * (index + 1)
+    usable = node_w - 2 * pad
+    step = max(usable // (total + 1), MIN_FAN_STEP)
+    # Centre the fan: span = step * (total-1), start = mid - span/2.
+    centre = node_w // 2
+    start = centre - step * (total - 1) // 2
+    return start + step * index
 
 
 _LABEL_PERP = 14  # perpendicular offset for edge labels (px)
@@ -760,7 +768,7 @@ def _node_render_h(n: "_Node") -> int:
     """
     main_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     lines = _wrap_label(main_label)
-    extra_h = max(0, (len(lines) - 1) * 18)
+    extra_h = max(0, (len(lines) - 1) * 20)  # 14px font × 1.4 line-height ≈ 20px/line
     if n.icon:
         extra_h = max(extra_h, 20)
     if "|" in n.label:
@@ -775,16 +783,19 @@ def _render_graph_fragment(
     canvas_w: int,
     canvas_h: int,
     direction: str = "TB",
+    zoom: float = 1.0,
 ) -> str:
     parts: list[str] = []
 
-    # Container
+    # Container — zoom scales the whole diagram proportionally when it exceeds
+    # the width hint, preserving geometry without distorting node sizes or gaps.
+    zoom_css = f" zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative; width:{canvas_w}px; height:{canvas_h}px; '
         f'--node-w:{NODE_W}px; --node-h:{NODE_H}px; '
         f'--rank-gap:{RANK_GAP}px; --col-gap:{COL_GAP}px; '
-        f'--canvas-pad:{CANVAS_PAD}px;">'
+        f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}">'
     )
 
     # Group containers (subgraphs)
@@ -858,7 +869,7 @@ def _render_graph_fragment(
                 f'font-size:13px; font-weight:700; '
                 f'color:{fg_var}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.3;">{main_html}</span>'
+                f'line-height:1.4;">{main_html}</span>'
                 f'{tech_span}'
             )
             flex_dir = "column"
@@ -868,7 +879,7 @@ def _render_graph_fragment(
                 f'font-size:14px; font-weight:700; '
                 f'color:{fg_var}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.3;">{main_html}</span>'
+                f'line-height:1.4;">{main_html}</span>'
                 f'{tech_span}'
             )
             flex_dir = "column" if tech_label else "row"
@@ -879,7 +890,7 @@ def _render_graph_fragment(
             f'position:absolute; left:{n.x}px; top:{n.y}px; '
             f'width:var(--node-w,{NODE_W}px); height:{node_h}px; '
             f'min-width:{NODE_W}px; min-height:{NODE_H}px; '
-            f'padding:var(--node-pad-v,12px) var(--node-pad-h,16px); '
+            f'padding:var(--node-pad-v,14px) var(--node-pad-h,20px); '
             f'box-sizing:border-box; '
             f'border:1px solid {border_var}; '
             f'{shape_css} '
@@ -1109,20 +1120,18 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _minimize_crossings(nodes, edges)
     canvas_w, canvas_h = _assign_coordinates(nodes, direction)
 
-    # Apply width hint scaling if provided
-    if width_hint and canvas_w > 0:
-        scale = width_hint / canvas_w
-        if scale < 0.95 or scale > 1.05:
-            for n in nodes.values():
-                n.x = int(n.x * scale)
-            canvas_w = width_hint
-
     # Recompute canvas_h using actual rendered node heights (Bug 6 fix)
     real_nodes = [n for n in nodes.values() if not n.is_dummy]
     if real_nodes:
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
 
-    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction)
+    # When the natural canvas exceeds the width hint, shrink via CSS zoom rather
+    # than distorting x-coordinates (which causes node overlaps when scale < NODE_W/col_pitch).
+    zoom = 1.0
+    if width_hint and canvas_w > width_hint * 1.05:
+        zoom = width_hint / canvas_w
+
+    fragment = _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, direction, zoom)
 
     # Wrap with metadata chip (type + title) and auto-legend
     directive, _ = _detect_directive(src)
