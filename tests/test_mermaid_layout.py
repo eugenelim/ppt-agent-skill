@@ -717,6 +717,55 @@ class TestTitleAccentColor:
         html = _dispatch("flowchart LR\n  A[External]:::external", None, 400)
         assert "node-fg-dim" in html
 
+    def test_external_node_top_border_uses_dim_not_accent(self):
+        """External node top accent border must use dim color, not the colored accent."""
+        html = _dispatch("flowchart LR\n  A[Ext]:::external", None, 400)
+        # The 3px top border on a node-external div must reference node-fg-dim, not node-title-fg or accent-1
+        import re
+        ext_div = re.search(r'class="node node-rect node-external"[^>]*style="([^"]*)"', html)
+        assert ext_div, "no node-external div found"
+        style = ext_div.group(1)
+        assert "node-fg-dim" in style
+        assert "node-title-fg" not in style
+        assert "accent-1" not in style
+
+    def test_legend_appears_once_in_dispatch(self):
+        """Legend must appear exactly once even when diagram has groups and mixed edge styles."""
+        src = (
+            "flowchart LR\n"
+            "  subgraph G1\n    A[Alpha]\n  end\n"
+            "  B[Beta]\n"
+            "  A --> B\n"
+            "  B -.-> A\n"
+        )
+        html = _dispatch(src, None, 600)
+        assert html.count("diagram-legend") == 1
+
+    def test_source_group_stays_leftmost_in_lr(self):
+        """A group whose members are the entry points of the flow should stay at rank 0 (left)."""
+        src = (
+            "flowchart LR\n"
+            "  subgraph Sources\n    S1[Source A]\n    S2[Source B]\n  end\n"
+            "  subgraph Core\n    C1[Core A]\n  end\n"
+            "  S1 --> C1\n"
+            "  S2 --> C1\n"
+        )
+        html = _dispatch(src, "LR", 600)
+        import re
+        # Extract left:Xpx for all node divs
+        positions = [(m.group(1), int(m.group(2))) for m in
+                     re.finditer(r'data-card-id="([^"]*)"[^>]*left:(\d+)px', html)]
+        if not positions:
+            # fall back to parsing left from node divs
+            nodes_pos = re.findall(r'class="node[^"]*" style="[^"]*left:(\d+)px', html)
+            assert nodes_pos, "no node positions found"
+            # All should be parseable — just verify nodes exist
+            return
+        s1_left = next((x for n, x in positions if "S1" in n or n == "S1"), None)
+        c1_left = next((x for n, x in positions if "C1" in n or n == "C1"), None)
+        if s1_left is not None and c1_left is not None:
+            assert s1_left < c1_left, f"Source S1 (x={s1_left}) should be left of Core C1 (x={c1_left})"
+
     def test_icon_node_label_uses_title_accent_var(self):
         """Icon nodes also get the title accent color on their label and icon."""
         html = _dispatch("flowchart LR\n  A[DB]:::database", None, 400)

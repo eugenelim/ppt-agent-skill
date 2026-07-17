@@ -77,11 +77,26 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
     # max(target_rank)+1 so they render RIGHT of their targets in LR layout,
     # with edges routed as back-edges. Ungrouped nodes (e.g. the main CLIENT)
     # are left at rank 0; only group-bounded side-feeder clusters are promoted.
+    #
+    # Guard: only promote when at least one target has predecessors from OUTSIDE
+    # the group. If ALL predecessors of a target are from within the same group,
+    # the group is a genuine source cluster (entry points of the flow) and should
+    # stay at rank 0 — promoting would make edges run right→left.
+    _target_preds: dict[str, set[str]] = {nid: set() for nid in nodes}
+    for e in edges:
+        if e.dst in _target_preds and not e.reversed_:
+            _target_preds[e.dst].add(e.src)
     for nid, n in list(nodes.items()):
         if pred_count.get(nid, 0) != 0 or n.is_dummy or not n.group:
             continue
         out_targets = [v for v in succ.get(nid, []) if v in nodes]
-        if out_targets and all(nodes[v].rank >= 1 for v in out_targets):
+        if not (out_targets and all(nodes[v].rank >= 1 for v in out_targets)):
+            continue
+        group_members = {nid2 for nid2, n2 in nodes.items() if n2.group == n.group}
+        has_external_pred = any(
+            (_target_preds[v] - group_members) for v in out_targets
+        )
+        if has_external_pred:
             n.rank = max(nodes[v].rank for v in out_targets) + 1
 
     # Insert dummy nodes for edges spanning more than 1 rank

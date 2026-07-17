@@ -118,6 +118,7 @@ def _layout_graph_topology(
     fragment = _render_graph_fragment(
         nodes, edges, groups, canvas_w, canvas_h, direction, zoom,
         style_overrides=style_overrides,
+        show_legend=False,
     )
 
     # Wrap with metadata chip (type + title) and auto-legend

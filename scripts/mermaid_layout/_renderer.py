@@ -150,10 +150,12 @@ def _render_graph_fragment(
         main_html = "<br>".join(_nh(ln) for ln in main_lines)
 
         # Accent color comes from group membership; used for top border + icon.
-        # All label text is uniform node-fg so it reads correctly on any theme.
+        # External nodes get no accent (greyscale treatment) — dim top border matches dim body.
         fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
         border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
-        if nid in _node_grp_idx:
+        if is_external:
+            accent_color = "var(--node-fg-dim,var(--text-secondary))"
+        elif nid in _node_grp_idx:
             accent_color = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
         else:
             accent_color = "var(--node-title-fg,var(--accent-1))"
@@ -413,10 +415,10 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10" style="overflow:visible;">'
             '<line x1="0" y1="5" x2="20" y2="5" '
-            'stroke="var(--edge,var(--card-border))" stroke-width="1.5" '
+            'stroke="var(--accent-4,var(--amber,#E8924A))" stroke-width="1.5" '
             'stroke-dasharray="4 3"/>'
             '<polygon points="20,5 15,2.5 15,7.5" '
-            'fill="var(--edge,var(--card-border))"/>'
+            'fill="var(--accent-4,var(--amber,#E8924A))"/>'
             '</svg>'
             'Async / optional</span>'
         )
