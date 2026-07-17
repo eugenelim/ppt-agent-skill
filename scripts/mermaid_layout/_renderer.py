@@ -45,6 +45,15 @@ _ACCENT_TINTS = [
     "rgba(123,84,245,0.05)",   # violet  (accent-2)
 ]
 
+# Rank → depth wash colors: subtle per-layer tints for architectural depth (C4-style)
+# rank 0 = client/user layer (warm), rank 1 = neutral, rank 2+ = cool/deep
+_DEPTH_TINTS = [
+    "rgba(232,146,74,0.06)",   # rank 0 — warm amber (client / user layer)
+    "rgba(0,0,0,0)",           # rank 1 — neutral (gateway / edge layer)
+    "rgba(34,211,238,0.06)",   # rank 2 — cool cyan (service layer)
+    "rgba(99,102,241,0.08)",   # rank 3+ — indigo (data / persistence)
+]
+
 
 _LEGEND_H = 44  # px reserved below the diagram canvas for the legend strip
 
@@ -120,6 +129,10 @@ def _render_graph_fragment(
             f'{glabel}</span></div>'
         )
 
+    # Depth wash: rank-to-tint index for architectural layer encoding
+    _real_ranks = [n.rank for n in nodes.values() if not n.is_dummy]
+    _max_rank = max(_real_ranks) if _real_ranks else 0
+
     # Node divs
     for nid, n in nodes.items():
         if n.is_dummy:
@@ -142,6 +155,10 @@ def _render_graph_fragment(
 
         icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
+
+        # Depth wash: subtle rank-based tint for architectural layer encoding
+        _depth_idx = min(n.rank, len(_DEPTH_TINTS) - 1)
+        _depth_wash = _DEPTH_TINTS[_depth_idx]
 
         # Icon-left cards have a narrower text column; use reduced wrap limit so the
         # HTML line breaks match what _node_render_h already assumed for height sizing.
@@ -229,7 +246,7 @@ def _render_graph_fragment(
             f'box-sizing:border-box; overflow:hidden; '
             f'border:1px solid {border_var}; border-top:3px solid {accent_color}; '
             f'{shape_css} '
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
+            f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
             f'box-shadow:var(--node-shadow,none); '
             f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
             f'text-align:left;">'
@@ -252,7 +269,7 @@ def _render_graph_fragment(
         elif style == "dotted":
             stroke_color = "var(--accent-4,var(--amber,#E8924A))"
         else:
-            stroke_color = "var(--edge,var(--card-border))"
+            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
         dash = ' stroke-dasharray="6 4"' if style == "dotted" else ""
         stroke_w = "2" if style == "thick" else "1.5"
         parts.append(
@@ -275,7 +292,7 @@ def _render_graph_fragment(
             parts.append(
                 f'<span class="edge-label" style="'
                 f'position:absolute; left:{lx}px; top:{ly}px; '
-                f'font-size:11px; font-weight:500; '
+                f'font-size:12px; font-weight:500; '
                 f'font-family:var(--label-font,var(--font-primary)); '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
                 f'background:var(--bg-primary,var(--card-bg-from,#0a0a0a)); '
@@ -404,9 +421,9 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10" style="overflow:visible;">'
             '<line x1="0" y1="5" x2="20" y2="5" '
-            'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+            'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
             '<polygon points="20,5 15,2.5 15,7.5" '
-            'fill="var(--edge,var(--card-border))"/>'
+            'fill="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"/>'
             '</svg>'
             'Synchronous</span>'
         )
@@ -438,8 +455,8 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10">'
             '<rect x="0" y="1" width="20" height="8" rx="2" '
-            'fill="none" stroke="var(--group-border,var(--accent-1))" '
-            'stroke-width="1"/>'
+            'fill="none" stroke="var(--node-fg-dim,var(--text-secondary))" '
+            'stroke-dasharray="3 2" stroke-width="1"/>'
             '</svg>'
             'Service boundary</span>'
         )

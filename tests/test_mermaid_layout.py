@@ -154,6 +154,19 @@ class TestParseSpec:
         nid, label, shape = _parse_spec("A((circle))")
         assert shape == "circle"
 
+    def test_stadium_shape_strips_brackets(self):
+        """([Label]) stadium syntax should produce shape=round with label stripped of brackets."""
+        nid, label, shape = _parse_spec("A([Stadium])")
+        assert shape == "round", f"expected round, got {shape}"
+        assert label == "Stadium", f"brackets not stripped: {label!r}"
+
+    def test_stadium_with_class(self):
+        """([Label]):::class should parse correctly with no bracket artifacts."""
+        nid, label, shape, css_class = _parse_spec_and_class("User([Client]):::external")
+        assert label == "Client", f"label should be 'Client', got {label!r}"
+        assert shape == "round"
+        assert css_class == "external"
+
     def test_flag(self):
         nid, label, shape = _parse_spec("A>Flag]")
         assert shape == "flag"
@@ -765,6 +778,45 @@ class TestTitleAccentColor:
         c1_left = next((x for n, x in positions if "C1" in n or n == "C1"), None)
         if s1_left is not None and c1_left is not None:
             assert s1_left < c1_left, f"Source S1 (x={s1_left}) should be left of Core C1 (x={c1_left})"
+
+    def test_rank0_node_has_warm_depth_tint(self):
+        """Rank-0 nodes (client/user layer) get a warm amber depth wash in their background."""
+        # Single node → rank 0
+        html = _dispatch("flowchart LR\n  A[Client]", None, 400)
+        # Depth tint for rank 0 is the warm amber rgba
+        assert "232,146,74" in html, "rank-0 depth tint (warm amber) not found in node background"
+
+    def test_deep_node_has_cool_depth_tint(self):
+        """Nodes deep in the graph (rank 3+) get an indigo depth wash."""
+        # Linear chain: A→B→C→D — D is rank 3
+        src = "flowchart LR\n  A[A] --> B[B] --> C[C] --> D[D]"
+        html = _dispatch(src, "LR", 600)
+        # Depth tint for rank 3 is indigo
+        assert "99,102,241" in html, "rank-3+ depth tint (indigo) not found in deep node background"
+
+    def test_rank1_node_has_transparent_depth_tint(self):
+        """Rank-1 nodes get a neutral (transparent) depth wash — no color change."""
+        # A→B: B is rank 1
+        src = "flowchart LR\n  A[A] --> B[B]"
+        html = _dispatch(src, "LR", 400)
+        # Neutral tint is rgba(0,0,0,0) — transparent — should appear in bg of rank-1 node
+        assert "rgba(0,0,0,0)" in html, "rank-1 neutral depth tint not found"
+
+    def test_legend_service_boundary_uses_neutral_not_accent(self):
+        """Legend 'Service boundary' swatch must use neutral dim color, not accent-1."""
+        src = (
+            "flowchart LR\n"
+            "  subgraph G\n    A[Alpha]\n  end\n"
+            "  B[Beta]\n  A --> B\n"
+        )
+        html = _dispatch(src, None, 500)
+        import re
+        legend_match = re.search(r'class="diagram-legend"(.*?)(?=</div>)', html, re.DOTALL)
+        assert legend_match, "no diagram-legend found"
+        legend_html = legend_match.group(1)
+        # Must use dim neutral, must NOT use accent-1 for the service boundary swatch
+        assert "node-fg-dim" in legend_html or "text-secondary" in legend_html
+        assert "group-border" not in legend_html, "legend service boundary still references --group-border"
 
     def test_icon_node_label_uses_title_accent_var(self):
         """Icon nodes also get the title accent color on their label and icon."""

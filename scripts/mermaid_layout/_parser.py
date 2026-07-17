@@ -46,6 +46,7 @@ _SPEC_RE = re.compile(
     r'\[\("(?P<cylinder_q>[^"]*)"\)\]'   # [("quoted cylinder")]
     r'|\[\((?P<cylinder>[^\)]*)\)\]'     # [(unquoted cylinder)]
     r'|\(\((?P<circle>[^\)]*)\)\)'       # ((circle))
+    r'|\(\[(?P<stadium>[^\]]*)\]\)'      # ([stadium]) — pill/capsule shape
     r'|\["(?P<rect_q>[^"]*)"\]'          # ["quoted rect"]
     r'|\[(?P<rect>[^\[\]]*)\]'           # [unquoted rect]
     r'|\("(?P<round_q>[^"]*)"\)'         # ("quoted round")
@@ -59,6 +60,7 @@ _SPEC_RE = re.compile(
 _SPEC_SHAPE_MAP = {
     "cylinder_q": "cylinder", "cylinder": "cylinder",
     "circle": "circle",
+    "stadium": "round",  # ([text]) → same rendering as (text) round/pill shape
     "rect_q": "rect", "rect": "rect",
     "round_q": "round", "round": "round",
     "diamond": "diamond",
