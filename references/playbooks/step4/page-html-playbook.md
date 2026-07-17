@@ -190,12 +190,19 @@ body {
 
 > **为什么**：LLM 单遍同时"定拓扑 + 手排坐标"是它最弱的一环（坐标算术错误约占一半、多空间约束整合 <50%、随节点数崩塌）。把"先定结构、再由结构派生坐标"固化成步骤，第一遍就更可能画对，而不是留给 Review 收拾。
 
+> **【绝对红线 — 违反即 P0】**：
+> 1. **严禁手算像素坐标布局节点**：无论是否有 `mermaid_layout.py` 输出，diagram 卡布局**必须**走 CSS Grid / Flex，**绝不**用 `position:absolute; left:NNpx; top:NNpx` 给节点定位——这条在 ad-hoc 路径下同样生效。
+> 2. **节点字号下限**：主标签 ≥ **14px**、副标签（tech sub-label、说明行）≥ **12px**、连线标注 ≥ **11px**。此下限**优先于** `density_contract.min_body_font_px`，在 mermaid_layout.py 路径和 ad-hoc 路径中均强制执行。
+> 3. **节点防溢出与文字留白**：每个节点盒子必须写 `min-width` + `min-height` + `box-sizing:border-box`，禁止依赖 `overflow:hidden` 裁掉节点文字——文字消失不是溢出防护，是渲染错误。内边距至少 **14px 上下 / 20px 左右**，`line-height` ≥ **1.4**——文字不得紧贴节点边框。节点宽应满足 `文本长度 × 字宽 + padding × 2`；多行标签用 `white-space:normal; word-break:break-word` 让节点自然撑高，不得硬设固定高度截断内容。
+
 本页若含 `card_type:diagram` 卡（family 配方已由 `block_refs` 注入），**先声明结构，再落 HTML**：
 
 1. **先写结构清单（不落坐标）**：节点列表（含所属 zone / 分组）+ 连线列表（源→目标 + 方向）。这一步只在对话里想清楚，不写进 HTML。
-2. **分层/网格指派**：按数据流方向做拓扑分层（源在前、汇在后），每层一列/一行；用 **CSS Grid 按层排布**（`display:grid; grid-template-columns/rows` + `gap` 取 8 的倍数），让节点落在网格线上——**不要手摆自由 SVG 坐标**。
+2. **分层/网格指派**：按数据流方向做拓扑分层（源在前、汇在后），每层一列/一行；用 **CSS Grid 按层排布**（`display:grid; grid-template-columns/rows` + `gap` 取 8 的倍数），让节点落在网格线上——**不要手摆自由 SVG 坐标**。Grid `gap` 最小 **32px**（连线需要这个空间穿过而不贴边）。
 3. **几何用变量、不用漂移字面量**：`--grid-unit` / `--node-w` / `--node-h` 定义一次，连线锚点用它们**算出来**（如中点 `--node-w/2`），换算全程代数化，避免每个节点各写一套会漂移的数字。
-4. 连线拓扑严格照 `blocks/diagram.md` §3.1：终点**夹进目标节点包围盒**（禁止照抄源 center-y）、多对一 fan-in 沿目标边 `a+(b−a)·i/(N+1)` 均匀铺开、稠密同组多对多改**总线**。
+4. **分组容器内边距**：zone / subgraph 容器内边距至少 `20px`（水平）和 `28px`（顶部，留标签行） + `20px`（底部）。节点绝不应贴着分组边框——贴边的节点会让连线与边框叠压。
+5. **连线间距**：多条平行连线（fan-in / fan-out）在同一节点边沿的间隔不小于 **12px**；若连线太多导致 12px 无法满足，改用**总线**（汇集成一根，再在目标侧分叉）。如果水平宽度放不下所有列，**缩小节点（`--node-w`）而非压缩列间距**——列间距优先保证 32px。
+6. 连线拓扑严格照 `blocks/diagram.md` §3.1：终点**夹进目标节点包围盒**（禁止照抄源 center-y）、多对一 fan-in 沿目标边 `a+(b−a)·i/(N+1)` 均匀铺开、稠密同组多对多改**总线**。
 
 ## Phase 8：完成条件
 
@@ -206,8 +213,10 @@ body {
 - 没有明显乱码或缺失的 CSS 变量引用
 - `planning.cards[]` 全部能在 HTML 中找到对应的 `data-card-id`
 - **【图解首过静态自检 —— 仅本页含 diagram 卡时】**（对着代码/结构核对，不截图，属本阶段边界内）：
+  - **布局方式**：节点用 CSS Grid / Flex 布局，**没有** `position:absolute; left:NNpx; top:NNpx` 给节点定位（连线 SVG 的 `<line>`/`<path>` 例外）。
+  - **字号合规**：在代码中确认实际声明值（非继承推算）：主标签 ≥ 14px、副标签 ≥ 12px、连线标注 ≥ 11px。
+  - **节点防溢出**：每个节点都有 `min-width`/`min-height` + `box-sizing:border-box`；无 `overflow:hidden` 截断文字；多行文本用 `white-space:normal; word-break:break-word` 自然撑高。
   - 每条连线终点都**落在目标节点包围盒内**（无 overshoot、无照抄源 center-y）；fan-in 已沿目标边均匀分布；稠密同组多对多用了总线而非 N×M 斜线（依据 `blocks/diagram.md` §3.1）。
-  - 无节点内容溢出 / 标签被裁：估算 `文本长度 × 字宽 ≤ 节点宽 − padding`；节点用 `min-width/min-height` + `box-sizing:border-box` 防坍缩。
   - 同层节点无相互重叠（成对包围盒不相交）。
   - 管线安全自检通过（`blocks/diagram.md`「管线安全自检」全绿：无 SVG `<text>`、箭头为 `<polygon>`、连线为真实 `<div>`/`<line>`/`<path>`、颜色全走主题变量）。
   - 任一项不过 → 就地修，别指望 Review 兜底。

@@ -201,6 +201,8 @@ def _assemble_card(spec: dict, slide_number: int, index: int, max_lines: int,
     }
     if spec.get("argument_role"):
         card["argument_role"] = spec["argument_role"]
+    if card_type == "diagram" and spec.get("diagram_source"):
+        card["diagram_source"] = spec["diagram_source"]
     return card
 
 

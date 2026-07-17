@@ -252,6 +252,22 @@ page_template  : cover toc section section-marker reference end
 
   例：一页用 `diagram_type:architecture-deployment` → `"block_refs": ["diagram-architecture"]`。`timeline` 卡走 `card_type:timeline`（自动加载 `blocks/timeline.md`），不需要 family ref。
 
+  > **`diagram_source` 必须放在卡片级，不是页顶层**：若来源文档含 Mermaid fence，把 `diagram_source` 对象放在 **diagram 卡本身**（`cards[i].diagram_source`），不要放在 JSON 顶层。页顶层放置会导致 HTML 阶段的 `mermaid_layout.py` 预处理优先级降低（仍可回退检测，但不是规范路径）。正确写法：
+  > ```json
+  > {
+  >   "cards": [{
+  >     "card_type": "diagram",
+  >     "diagram_source": {
+  >       "mermaid_source": "flowchart LR\n    A --> B",
+  >       "origin": "<来源文件路径>",
+  >       "source_ref": "<章节/fence标题>",
+  >       "fence_index": 0
+  >     }
+  >   }]
+  > }
+  > ```
+  > 用装配器路径时，`diagram_source` 直接写在 payload 的对应卡片对象里——装配器会原样透传。
+
 ### principle_refs 指导（重要：设计原则文件按场景选用）
 
 `resources.principle_refs[]` 字段决定 HTML 阶段能否收到设计原则正文。按以下规则填写：
