@@ -10,7 +10,7 @@ from ._constants import (
     NODE_CAP, EDGE_CAP, GROUP_CAP,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
-    _ARCH_ICON_MAP, _C4_ICON_MAP,
+    _ARCH_ICON_MAP, _C4_ICON_MAP, _LABEL_ICON_KEYWORDS,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
     _node_render_h,
 )
@@ -24,6 +24,30 @@ from ._renderer import (
     _separate_groups_tb,
     _push_nonmembers_out_of_groups_lr,
 )
+
+# ── label-based icon inference ────────────────────────────────────────────────
+
+def _infer_label_icons(nodes: "dict[str, _Node]") -> None:
+    """Assign icons from node labels when no explicit icon or matching css_class is set.
+
+    Checks each node's label (lowercased) against _LABEL_ICON_KEYWORDS in order;
+    first match wins. Skips nodes that already have an icon, have a css_class that
+    resolves to an icon, or are marked :::external (which should stay visually subdued).
+    """
+    from ._constants import _load_icon
+    for n in nodes.values():
+        if n.icon:
+            continue
+        if n.css_class == "external":
+            continue
+        if n.css_class and _load_icon(n.css_class):
+            continue
+        label_lower = n.label.lower()
+        for keywords, icon_name in _LABEL_ICON_KEYWORDS:
+            if any(kw in label_lower for kw in keywords):
+                n.icon = icon_name
+                break
+
 
 # ── graph topology strategy ──────────────────────────────────────────────────
 
@@ -42,6 +66,7 @@ def _layout_graph_topology(
     content_lines = lines[directive_index + 1:]
 
     nodes, edges, groups = _parse_graph_source(content_lines)
+    _infer_label_icons(nodes)
 
     if len(nodes) > NODE_CAP:
         raise ValueError(

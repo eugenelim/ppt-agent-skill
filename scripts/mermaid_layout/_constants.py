@@ -64,6 +64,43 @@ _C4_ICON_MAP: dict[str, str] = {
     "component": "bolt",
 }
 
+# Flowchart label keyword → icon name (ordered: first match wins; longer phrases before substrings).
+# Used by _infer_label_icons to auto-assign icons when no explicit :::icon-name class is set.
+# Keep entries specific — generic terms ("server", "service") are excluded to avoid false matches.
+_LABEL_ICON_KEYWORDS: list[tuple[list[str], str]] = [
+    (["end user", "web user", "mobile user", "user", "person", "actor", "customer", "client", "principal"], "users"),
+    (["web app", "webapp", "web portal", "spa", "frontend", "browser", "web ui"], "browser"),
+    (["admin", "administrator", "operator", "superuser"], "admin"),
+    (["mobile app", "ios app", "android app", "native app", "mobile device"], "mobile"),
+    (["vector store", "vector db", "vector index", "embedding store", "rag index", "vector"], "vector-store"),
+    (["language model", "llm", "gpt", "claude", "gemini", "ai engine", "ai model", "ai inference", "ml model"], "model"),
+    (["model api", "inference api", "openai api", "anthropic api"], "model-api"),
+    (["search engine", "elasticsearch", "opensearch", "full-text search", "knowledge search", "search index"], "search"),
+    (["message broker", "rabbitmq", "activemq", "kafka broker"], "message-broker"),
+    (["event bus", "event-bus", "pub/sub", "pubsub", "eventbridge"], "event-bus"),
+    (["job queue", "work queue", "task queue", "sqs queue", "queue"], "queue"),
+    (["data pipeline", "etl pipeline", "ingestion pipeline"], "pipeline"),
+    (["data lake", "data warehouse", "snowflake", "redshift", "bigquery"], "data-warehouse"),
+    (["cache", "redis", "memcache", "memcached"], "cache"),
+    (["identity provider", "idp", "sso", "saml", "oidc", "keycloak", "auth0", "auth service", "iam"], "iam"),
+    (["vault", "secrets manager", "keyvault", "secret store"], "vault"),
+    (["api gateway", "gateway", "reverse proxy", "ingress controller", "api"], "api"),
+    (["load balancer", "load-balancer", "nginx", "haproxy"], "load-balancer"),
+    (["cdn", "cloudfront", "akamai", "edge network"], "cdn"),
+    (["kubernetes", "k8s", "eks cluster", "aks cluster", "gke cluster"], "kubernetes"),
+    (["ci/cd", "ci-cd", "github actions", "jenkins", "build pipeline"], "ci-cd"),
+    (["scheduler", "cron job", "airflow", "dagster", "prefect"], "scheduler"),
+    (["workflow engine", "step function", "temporal", "bpmn engine"], "workflow"),
+    (["email", "sendgrid", "ses ", "mailgun", "smtp"], "email"),
+    (["push notification", "fcm", "apns", "sns notification"], "notification"),
+    (["object store", "s3 bucket", "gcs bucket", "blob storage"], "object-store"),
+    (["database", "postgresql", "mysql", "mongodb", "dynamodb", "aurora", "cosmos db", "rds"], "database"),
+    (["ai agent", "autonomous agent", "reasoning agent"], "agent"),
+    (["cloud platform", "aws ", "azure ", "gcp ", "saas platform"], "cloud"),
+    (["log store", "log stream", "cloudwatch logs", "datadog logs", "splunk"], "logs"),
+    (["metrics store", "prometheus", "grafana", "monitoring platform"], "metrics"),
+]
+
 
 # ── caps ──────────────────────────────────────────────────────────────────────
 NODE_CAP = 64

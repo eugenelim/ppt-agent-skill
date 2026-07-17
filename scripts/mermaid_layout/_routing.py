@@ -339,6 +339,14 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             in_idx = in_list.index(e.src) if e.src in in_list else 0
             in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
 
+            # Stagger parallel edges (same src→dst) so they don't share the same path
+            _par_nudge = int(
+                (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((e.src, e.dst), 1) - 1) / 2)
+                * MIN_FAN_STEP
+            )
+            out_offset += _par_nudge
+            in_offset += _par_nudge
+
             x1 = s.x + NODE_W
             y1 = s.y + out_offset
             x2 = d.x
@@ -394,6 +402,14 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         in_list = fan_in[e.dst]
         in_idx = in_list.index(e.src) if e.src in in_list else 0
         in_offset = _fan_offset(in_idx, len(in_list))
+
+        # Stagger parallel edges (same src→dst) so they don't share the same path
+        _par_nudge = int(
+            (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((e.src, e.dst), 1) - 1) / 2)
+            * MIN_FAN_STEP
+        )
+        out_offset += _par_nudge
+        in_offset += _par_nudge
 
         x1 = s.x + out_offset
         y1 = s.y + _node_render_h(s)
