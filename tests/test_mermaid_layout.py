@@ -461,6 +461,22 @@ class TestRenderGraphFragment:
         html = _render_graph_fragment(nodes, [], {}, 200, 160)
         assert "node-fg-dim" in html
 
+    def test_external_node_has_dashed_border(self):
+        nodes = {"A": _Node(id="A", label="Ext", x=40, y=40, css_class="external")}
+        html = _render_graph_fragment(nodes, [], {}, 200, 160)
+        assert "border:1px dashed" in html
+
+    def test_internal_node_has_solid_border(self):
+        nodes = {"A": _Node(id="A", label="Int", x=40, y=40)}
+        html = _render_graph_fragment(nodes, [], {}, 200, 160)
+        assert "border:1px solid" in html
+
+    def test_external_node_has_no_depth_tint(self):
+        nodes = {"A": _Node(id="A", label="Ext", x=40, y=40, rank=0, css_class="external")}
+        html = _render_graph_fragment(nodes, [], {}, 200, 160)
+        # Rank 0 warm tint must NOT appear — external nodes bypass depth wash
+        assert "232,146,74" not in html
+
     def test_dummy_node_renders_hidden(self):
         nodes = {"D": _Node(id="D", label="", x=40, y=40, is_dummy=True)}
         html = _render_graph_fragment(nodes, [], {}, 200, 160)
@@ -641,6 +657,21 @@ class TestDirectiveStrategies:
     def test_c4_context(self):
         self._ok("C4Context\n  Person(user, \"User\")\n  System(sys, \"System\")\n  Rel(user, sys, \"Uses\")")
 
+    def test_c4_ext_elements_get_external_class(self):
+        """C4 _ext element types must render with dashed border (css_class='external')."""
+        src = (
+            "C4Context\n"
+            "  Person_Ext(extuser, \"External User\")\n"
+            "  System(sys, \"System\")\n"
+            "  System_Ext(extsys, \"External System\")\n"
+            "  Rel(extuser, sys, \"Uses\")\n"
+            "  Rel(sys, extsys, \"Calls\")\n"
+        )
+        html = _dispatch_ok(src)
+        assert "border:1px dashed" in html, "external C4 elements must have dashed border"
+        # Internal element should not have dashed border
+        assert "border:1px solid" in html, "internal C4 elements must have solid border"
+
 
 # ── TestArrowhead ─────────────────────────────────────────────────────────────
 
@@ -802,8 +833,8 @@ class TestTitleAccentColor:
         # Neutral tint is rgba(0,0,0,0) — transparent — should appear in bg of rank-1 node
         assert "rgba(0,0,0,0)" in html, "rank-1 neutral depth tint not found"
 
-    def test_legend_service_boundary_uses_neutral_not_accent(self):
-        """Legend 'Service boundary' swatch must use neutral dim color, not accent-1."""
+    def test_legend_service_boundary_uses_accent_color(self):
+        """Legend 'Service boundary' swatch must use accent-1 to match actual group box borders."""
         src = (
             "flowchart LR\n"
             "  subgraph G\n    A[Alpha]\n  end\n"
@@ -814,9 +845,9 @@ class TestTitleAccentColor:
         legend_match = re.search(r'class="diagram-legend"(.*?)(?=</div>)', html, re.DOTALL)
         assert legend_match, "no diagram-legend found"
         legend_html = legend_match.group(1)
-        # Must use dim neutral, must NOT use accent-1 for the service boundary swatch
-        assert "node-fg-dim" in legend_html or "text-secondary" in legend_html
-        assert "group-border" not in legend_html, "legend service boundary still references --group-border"
+        # Must use accent-1 to match the actual group box border color
+        assert "accent-1" in legend_html, "legend service boundary swatch must use --accent-1"
+        assert "group-border" not in legend_html, "legend service boundary must not reference --group-border"
 
     def test_icon_node_label_uses_title_accent_var(self):
         """Icon nodes also get the title accent color on their label and icon."""
@@ -1397,3 +1428,61 @@ class TestAutoDirectionSelect:
         # We just verify the call doesn't error; direction enforcement is a best-effort check
         assert fragment_lr
         assert fragment_auto
+
+
+# ── TestGroupBboxMemberSafety ─────────────────────────────────────────────────
+
+class TestGroupBboxMemberSafety:
+    """_compute_group_bboxes must not shrink a group edge past its own members.
+
+    Regression guard for the case where a non-member node shares the same
+    rank/column as a group member: the old code would shrink the group bbox
+    edge to exclude the non-member, but in doing so pushed the edge past
+    the group member that was in the same position.  The fix: if no safe
+    shrink direction exists, accept the overlap instead.
+    """
+
+    def test_group_bbox_encloses_all_members(self):
+        """Group bbox must contain every member node even when a non-member
+        is co-located at the same rank as one of the members."""
+        # Arrange: one group with two members (A at x=40, B at x=280),
+        # plus one non-member (Ext) at exactly x=280 (same column as B).
+        nodes = {
+            "A":   _Node(id="A",   label="A",   x=40,  y=40,  group="_g0"),
+            "B":   _Node(id="B",   label="B",   x=280, y=40,  group="_g0"),
+            "Ext": _Node(id="Ext", label="Ext", x=280, y=160),  # non-member, same x as B
+        }
+        groups = {"_g0": _Group(id="_g0", label="Zone", members=["A", "B"])}
+
+        bboxes = _compute_group_bboxes(nodes, groups, 800, 600)
+
+        b = bboxes["_g0"]
+        # Both A and B must be inside the bbox
+        assert b[0] <= nodes["A"].x, "left edge pushed past member A"
+        assert b[2] >= nodes["A"].x + NODE_W, "right edge pushed past member A"
+        assert b[0] <= nodes["B"].x, "left edge pushed past member B"
+        assert b[2] >= nodes["B"].x + NODE_W, "right edge pushed past member B"
+
+    def test_safe_shrink_excludes_non_member_when_possible(self):
+        """When a non-member intrudes from a side where no group member lives,
+        the bbox should shrink to exclude it.
+
+        Ext is at x=0; its right edge (192) is to the LEFT of member A at x=210.
+        The initial bbox left edge (210 - GROUP_PAD_X = 182) is less than 192,
+        so Ext intrudes slightly into the group padding — but no member is between
+        Ext's right edge and A, so raising b[0] to ext_right + _NM_GAP is safe.
+        """
+        nodes = {
+            "A":   _Node(id="A",   label="A",   x=210, y=40,  group="_g0"),
+            "Ext": _Node(id="Ext", label="Ext", x=0,   y=40),  # non-member, x1=192 < A.x=210
+        }
+        groups = {"_g0": _Group(id="_g0", label="Zone", members=["A"])}
+
+        bboxes = _compute_group_bboxes(nodes, groups, 800, 600)
+        b = bboxes["_g0"]
+
+        # After safe shrink, the bbox left edge must exclude Ext
+        ext_right = nodes["Ext"].x + NODE_W  # = 0 + 192 = 192
+        assert b[0] >= ext_right, "bbox still contains non-member Ext"
+        # …while still containing the member
+        assert b[2] >= nodes["A"].x + NODE_W, "right edge pushed past member A"

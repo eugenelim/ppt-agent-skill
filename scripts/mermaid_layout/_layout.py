@@ -199,7 +199,8 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
         for n in nodes.values():
             n.x = CANVAS_PAD + n.col * col_pitch
 
-        # Variable rank heights: accumulate Y positions by actual max node height per rank
+        # Variable rank heights: accumulate Y positions by actual max node height per rank.
+        # Nodes shorter than rank_h are centered vertically within the row.
         rank_to_nodes: dict[int, list] = {}
         for n in nodes.values():
             rank_to_nodes.setdefault(n.rank, []).append(n)
@@ -207,7 +208,7 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
         for rank in sorted(rank_to_nodes):
             rank_h = max(_node_render_h(n) for n in rank_to_nodes[rank])
             for n in rank_to_nodes[rank]:
-                n.y = y_cursor
+                n.y = y_cursor + (rank_h - _node_render_h(n)) // 2
             y_cursor += rank_h + RANK_GAP
 
         canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
@@ -219,7 +220,8 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
     for n in nodes.values():
         n.x = CANVAS_PAD + n.rank * rank_pitch
 
-    # Group nodes by col, accumulate Y positions top-to-bottom
+    # Group nodes by col, accumulate Y positions top-to-bottom.
+    # Nodes shorter than col_h are centered vertically within the band.
     col_to_nodes: dict[int, list] = {}
     for n in nodes.values():
         col_to_nodes.setdefault(n.col, []).append(n)
@@ -227,7 +229,7 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
     for col in sorted(col_to_nodes):
         col_h = max(_node_render_h(n) for n in col_to_nodes[col])
         for n in col_to_nodes[col]:
-            n.y = y_cursor
+            n.y = y_cursor + (col_h - _node_render_h(n)) // 2
         y_cursor += col_h + COL_GAP
 
     canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - RANK_GAP

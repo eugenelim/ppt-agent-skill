@@ -39,11 +39,13 @@ _NODE_CSS = {
 
 # Accent colors in RGBA for group background tints (matches CSS --accent-1/3/4/2 order)
 _ACCENT_CYCLE = ["var(--accent-1)", "var(--accent-3)", "var(--accent-4)", "var(--accent-2)"]
+# Tints match the default accent-1/3/4/2 palette (#60a5fa blue, #f472b6 pink, #fbbf24 amber, #34d399 green)
+# so the group fill echoes the dashed border color.
 _ACCENT_TINTS = [
-    "rgba(63,200,130,0.05)",   # emerald (accent-1)
-    "rgba(77,184,236,0.05)",   # sky     (accent-3)
-    "rgba(232,146,74,0.05)",   # amber   (accent-4)
-    "rgba(123,84,245,0.05)",   # violet  (accent-2)
+    "rgba(96,165,250,0.05)",   # accent-1 — blue
+    "rgba(244,114,182,0.05)",  # accent-3 — pink
+    "rgba(251,191,36,0.05)",   # accent-4 — amber
+    "rgba(52,211,153,0.05)",   # accent-2 — green
 ]
 
 # Rank → depth wash colors: subtle per-layer tints for architectural depth (C4-style)
@@ -122,10 +124,11 @@ def _render_graph_fragment(
             f'border-radius:var(--group-radius,12px); '
             f'box-sizing:border-box; overflow:visible;">'
             f'<span class="group-label" style="'
-            f'position:absolute; top:4px; left:8px; '
-            f'font-size:10px; color:{_accent}; '
-            f'font-weight:600; letter-spacing:0.06em; text-transform:uppercase; '
-            f'max-width:{max(60, gw - 16)}px; line-height:1.3; '
+            f'position:absolute; top:8px; left:10px; '
+            f'font-size:11px; color:{_accent}; '
+            f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
+            f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
+            f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
             f'font-family:var(--label-font,var(--font-primary));">'
             f'{glabel}</span></div>'
         )
@@ -157,9 +160,13 @@ def _render_graph_fragment(
         icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
 
-        # Depth wash: subtle rank-based tint for architectural layer encoding
-        _depth_idx = min(n.rank, len(_DEPTH_TINTS) - 1)
-        _depth_wash = _DEPTH_TINTS[_depth_idx]
+        # Depth wash: subtle rank-based tint for architectural layer encoding.
+        # External nodes are outside the layered system — no tint (fully neutral).
+        if is_external:
+            _depth_wash = "rgba(0,0,0,0)"
+        else:
+            _depth_idx = min(n.rank, len(_DEPTH_TINTS) - 1)
+            _depth_wash = _DEPTH_TINTS[_depth_idx]
 
         # Icon-left cards have a narrower text column; use reduced wrap limit so the
         # HTML line breaks match what _node_render_h already assumed for height sizing.
@@ -252,6 +259,17 @@ def _render_graph_fragment(
                 f'{_nh(n.label)}</span></div>'
             )
         else:
+            # Accent top border only works on shapes without a clip-path.
+            # Diamond and flag nodes clip their top edge to a point/slant —
+            # the 3px accent stripe is invisible. Use a full 2px accent border
+            # for those shapes instead.
+            _uses_clip = n.shape in ("diamond", "flag")
+            if is_external:
+                _border_css = f'border:1px dashed {border_var};'
+            elif _uses_clip:
+                _border_css = f'border:2px solid {accent_color};'
+            else:
+                _border_css = f'border:1px solid {border_var}; border-top:3px solid {accent_color};'
             parts.append(
                 f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
                 f'position:absolute; left:{n.x}px; top:{n.y}px; '
@@ -259,7 +277,7 @@ def _render_graph_fragment(
                 f'min-width:{NODE_W}px; '
                 f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
                 f'box-sizing:border-box; overflow:hidden; '
-                f'border:1px solid {border_var}; border-top:3px solid {accent_color}; '
+                f'{_border_css} '
                 f'{shape_css} '
                 f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
                 f'box-shadow:var(--node-shadow,none); '
@@ -470,7 +488,7 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10">'
             '<rect x="0" y="1" width="20" height="8" rx="2" '
-            'fill="none" stroke="var(--node-fg-dim,var(--text-secondary))" '
+            'fill="none" stroke="var(--accent-1)" '
             'stroke-dasharray="3 2" stroke-width="1"/>'
             '</svg>'
             'Service boundary</span>'
@@ -627,28 +645,86 @@ def _compute_group_bboxes(
     member_ids = {nid for grp in groups.values() for nid in grp.members}
     _NM_GAP = 4.0  # minimum gap between group edge and intruding non-member
 
-    # Step 2: non-member node exclusion
+    # Pre-compute member coordinate extremes per group for shrink-safety checks.
+    # A shrink is "safe" only if no group member falls outside the new edge position.
+    _grp_mc: dict[str, dict] = {}
+    for gid, grp in groups.items():
+        mbrs = [nodes[m] for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        if mbrs:
+            _grp_mc[gid] = {
+                "x0": min(m.x for m in mbrs),
+                "x1": max(m.x + NODE_W for m in mbrs),
+                "y0": min(m.y for m in mbrs),
+                "y1": max(m.y + _node_render_h(m) for m in mbrs),
+            }
+
+    # Step 2: non-member node exclusion — shrink the closest group edge, but only
+    # when the shrink won't exclude any group member. If no safe direction exists,
+    # accept the visual overlap rather than corrupting the group bbox.
     for nid, nd in nodes.items():
         if nd.is_dummy or nid in member_ids:
             continue
         nx0, ny0 = float(nd.x), float(nd.y)
         nx1, ny1 = float(nd.x + NODE_W), float(nd.y + _node_render_h(nd))
-        for b in bboxes.values():
+        for gid, b in bboxes.items():
             if not (b[0] < nx1 and nx0 < b[2] and b[1] < ny1 and ny0 < b[3]):
                 continue
-            # Intrusion detected — shrink closest edge
+            mc = _grp_mc.get(gid, {})
+            # A shrink is safe if it doesn't push the edge past any member coord
+            def _safe(axis: str, new_val: float) -> bool:
+                if not mc:
+                    return True
+                if axis == "x0":  # raise left edge
+                    return mc["x0"] >= new_val
+                if axis == "x1":  # lower right edge
+                    return mc["x1"] <= new_val
+                if axis == "y0":  # raise top edge
+                    return mc["y0"] >= new_val
+                if axis == "y1":  # lower bottom edge
+                    return mc["y1"] <= new_val
+                return True
             x_intrude = min(nx1 - b[0], b[2] - nx0)
             y_intrude = min(ny1 - b[1], b[3] - ny0)
+            # Try directions in order of preference (closest intrusion first,
+            # then opposite axis). Accept overlap if no direction is safe.
             if x_intrude <= y_intrude:
                 if nx0 < (b[0] + b[2]) / 2:
-                    b[0] = nx1 + _NM_GAP
+                    new_x0 = nx1 + _NM_GAP
+                    if _safe("x0", new_x0):
+                        b[0] = new_x0
+                    elif _safe("y0", ny1 + _NM_GAP):
+                        b[1] = ny1 + _NM_GAP
+                    elif _safe("y1", ny0 - _NM_GAP):
+                        b[3] = ny0 - _NM_GAP
+                    # else: accept overlap
                 else:
-                    b[2] = nx0 - _NM_GAP
+                    new_x1 = nx0 - _NM_GAP
+                    if _safe("x1", new_x1):
+                        b[2] = new_x1
+                    elif _safe("y0", ny1 + _NM_GAP):
+                        b[1] = ny1 + _NM_GAP
+                    elif _safe("y1", ny0 - _NM_GAP):
+                        b[3] = ny0 - _NM_GAP
+                    # else: accept overlap
             else:
                 if ny0 < (b[1] + b[3]) / 2:
-                    b[1] = ny1 + _NM_GAP
+                    new_y0 = ny1 + _NM_GAP
+                    if _safe("y0", new_y0):
+                        b[1] = new_y0
+                    elif _safe("x1", nx0 - _NM_GAP):
+                        b[2] = nx0 - _NM_GAP
+                    elif _safe("x0", nx1 + _NM_GAP):
+                        b[0] = nx1 + _NM_GAP
+                    # else: accept overlap
                 else:
-                    b[3] = ny0 - _NM_GAP
+                    new_y1 = ny0 - _NM_GAP
+                    if _safe("y1", new_y1):
+                        b[3] = new_y1
+                    elif _safe("x1", nx0 - _NM_GAP):
+                        b[2] = nx0 - _NM_GAP
+                    elif _safe("x0", nx1 + _NM_GAP):
+                        b[0] = nx1 + _NM_GAP
+                    # else: accept overlap
 
     # Step 3: pairwise overlap resolution (iterative, up to GROUP_CAP passes)
     gids = list(bboxes)

@@ -252,11 +252,12 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
+    _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
     for pid in participants:
         lx = _cx(pid)
         parts.append(
             f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
-            f'stroke="var(--edge,var(--card-border))" stroke-width="1" stroke-dasharray="5 4"/>'
+            f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
         )
     row = 0
     for it in items:
@@ -265,7 +266,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             parts.append(
                 f'<rect x="{PAD_H // 2}" y="{ry}" width="{canvas_w - PAD_H}" height="{ROW_H}" '
                 f'fill="var(--node-bg-from,var(--card-bg-from))" opacity="0.6" '
-                f'stroke="var(--edge,var(--card-border))" stroke-width="1" rx="3"/>'
+                f'stroke="{_seq_edge}" stroke-width="1" rx="3"/>'
             )
             row += 1; continue
         if it["type"] != "msg":
@@ -276,16 +277,16 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if sx == dx2:
             parts.append(
                 f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
-                f'stroke="var(--edge,var(--card-border))" fill="none" stroke-width="1.5"{dash}/>'
+                f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}/>'
             )
             ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
-                f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"{dash}/>'
+                f'stroke="{_seq_edge}" stroke-width="1.5"{dash}/>'
             )
             ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
-        parts.append(f'<polygon points="{ah}" fill="var(--edge,var(--card-border))"/>')
+        parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
         row += 1
     parts.append('</svg>')
     row = 0
@@ -481,7 +482,7 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
             f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
             f'width:{canvas_w - PAD_H * 2}px;height:{SEC_H}px;'
             f'display:flex;align-items:flex-end;'
-            f'border-bottom:1px solid var(--edge,var(--card-border));">'
+            f'border-bottom:1px solid var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)));">'
             f'<span style="font-size:10px;font-weight:700;text-transform:uppercase;'
             f'letter-spacing:.1em;color:var(--node-fg-dim,var(--text-secondary));'
             f'font-family:var(--label-font,var(--font-primary));">'
@@ -568,7 +569,7 @@ def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
     ax2 = canvas_w - PAD_H - ITEM_W // 2
     parts.append(
         f'<line x1="{ax1}" y1="{axis_y}" x2="{ax2}" y2="{axis_y}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
     )
     parts.append('</svg>')
     for i, sec in enumerate(sections):
@@ -654,11 +655,11 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
     )
     parts.append(
         f'<rect x="{gx}" y="{gy}" width="{gw}" height="{gh}" '
-        f'fill="none" stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'fill="none" stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
         f'<line x1="{mx}" y1="{gy}" x2="{mx}" y2="{gy + gh}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1" stroke-dasharray="4 3"/>'
         f'<line x1="{gx}" y1="{my}" x2="{gx + gw}" y2="{my}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1" stroke-dasharray="4 3"/>'
     )
     for pt in points:
         px = gx + int(pt["x"] * gw)
@@ -848,9 +849,9 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
         f'<line x1="{cx_start}" y1="{cy_top}" x2="{cx_start}" y2="{cy_top + ch}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
         f'<line x1="{cx_start}" y1="{cy_top + ch}" x2="{cx_start + cw}" y2="{cy_top + ch}" '
-        f'stroke="var(--edge,var(--card-border))" stroke-width="1.5"/>'
+        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
     )
     if line_data and not bar_data:
         pts_coords = []
@@ -952,7 +953,7 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
                     pnx = PAD_H + flat[j]["depth"] * INDENT_W + 120
                     parts.append(
                         f'<line x1="{pnx}" y1="{y_pos[j]}" x2="{nx}" y2="{ny}" '
-                        f'stroke="var(--edge,var(--card-border))" stroke-width="1"/>'
+                        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1"/>'
                     )
                     break
     parts.append('</svg>')
@@ -1270,9 +1271,10 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
             eid, elbl = m.group(2), m.group(3)
             shape = "circle" if "person" in elem_type else "rect"
             icon_name = _C4_ICON_MAP.get(elem_type, "node")
+            css_class = "external" if elem_type.endswith("_ext") else ""
             gin = boundary_stack[-1] if boundary_stack else None
             nodes[eid] = _Node(id=eid, label=elbl, shape=shape,
-                               group=gin, icon=icon_name)
+                               group=gin, icon=icon_name, css_class=css_class)
             if gin:
                 groups.setdefault(gin, _Group(id=gin, label=gin, members=[]))
                 if eid not in groups[gin].members:
