@@ -2,6 +2,8 @@
 
 Mode: light (no risk trigger fired — security hardening of existing code, no new features, no structural changes)
 
+- **Status:** Shipped <!-- Draft | Approved | Implementing | Shipped | Archived -->
+
 ## Objective
 
 Address the 6 Concerns and 2 Nits from the security-reviewer's OWASP LLM Top 10 / Agentic Skills Top 10 pass. Zero functional changes — only security hardening.

@@ -290,6 +290,28 @@ def make_textbox(sid, name, x, y, cx, cy, paragraphs):
 # -------------------------------------------------------------------
 _PATH_RE = re.compile(r'([mMzZlLhHvVcCsSqQtTaA])|([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)')
 
+# Leaf SVG elements that carry no rendered geometry — exempt from the
+# unhandled-element warning in _walk's else branch.
+_IGNORE_LEAF = frozenset({'title', 'desc', 'metadata'})
+
+_NUM_RE = re.compile(r'[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?')
+
+
+def points_to_path_d(points_str, closed):
+    """SVG polygon/polyline `points` -> a path `d` string.
+
+    Lets <polygon>/<polyline> reuse the <path> -> custGeom codepath. `closed`
+    appends `Z` (polygon); polyline stays open. Returns '' if fewer than two
+    coordinate pairs are present.
+    """
+    nums = _NUM_RE.findall(points_str)
+    pairs = list(zip(nums[0::2], nums[1::2]))
+    if len(pairs) < 2:
+        return ''
+    d = 'M ' + ' L '.join(f'{x} {y}' for x, y in pairs)
+    return d + ' Z' if closed else d
+
+
 def parse_path_to_custgeom(d_str, bbox):
     """SVG path d -> OOXML a:custGeom 元素。bbox=(x,y,w,h) 用于坐标偏移。"""
     bx, by, bw, bh = bbox
@@ -413,7 +435,8 @@ class SvgConverter:
         self.grads = {}
         self.bg_set = False  # 是否已设置幻灯片背景
         self.on_progress = on_progress  # 进度回调 (i, total, filename)
-        self.stats = {'shapes': 0, 'skipped': 0, 'errors': 0}
+        self.stats = {'shapes': 0, 'skipped': 0, 'errors': 0, 'unhandled': 0}
+        self._warned_tags = set()  # warn once per tag per run
 
     def _id(self):
         self.sid += 1
@@ -421,7 +444,7 @@ class SvgConverter:
 
     def convert(self, svg_path, slide):
         self.bg_set = False
-        self.stats = {'shapes': 0, 'skipped': 0, 'errors': 0}
+        self.stats = {'shapes': 0, 'skipped': 0, 'errors': 0, 'unhandled': 0}
         tree = etree.parse(str(svg_path), _SVG_PARSER)
         root = tree.getroot()
         self._parse_grads(root)
@@ -505,6 +528,10 @@ class SvgConverter:
                 self._line(el, sp, ox, oy, scale)
             elif tag == 'path':
                 self._path(el, sp, ox, oy, group_opacity, scale)
+            elif tag == 'polygon':
+                self._poly(el, sp, ox, oy, group_opacity, scale, closed=True)
+            elif tag == 'polyline':
+                self._poly(el, sp, ox, oy, group_opacity, scale, closed=False)
             elif tag == 'image':
                 self._image(el, sp, ox, oy, group_opacity, scale, slide)
             elif tag == 'g':
@@ -522,8 +549,20 @@ class SvgConverter:
                          'stop', 'pattern', 'clipPath', 'filter', 'mask'):
                 pass
             else:
-                for c in el:
-                    self._walk(c, sp, ox, oy, group_opacity, scale, slide)
+                children = list(el)
+                if children:
+                    for c in children:
+                        self._walk(c, sp, ox, oy, group_opacity, scale, slide)
+                elif tag and tag not in _IGNORE_LEAF:
+                    # A leaf element we don't render — surface it instead of
+                    # swallowing it silently (this is how the <polygon> arrowhead
+                    # drop went unnoticed). Non-rendering leaves are exempt above;
+                    # a falsy tag is a comment / PI (non-element node), also exempt.
+                    self.stats['unhandled'] += 1
+                    if tag not in self._warned_tags:
+                        self._warned_tags.add(tag)
+                        print(f"    Warning: unhandled <{tag}> element dropped",
+                              file=sys.stderr)
         except Exception as e:
             self.stats['errors'] += 1
             print(f"    Warning: {tag} element failed: {e}", file=sys.stderr)
@@ -816,9 +855,20 @@ class SvgConverter:
         sp.append(shape)
         self.stats['shapes'] += 1
 
-    def _path(self, el, sp, ox, oy, opacity, scale):
+    def _poly(self, el, sp, ox, oy, opacity, scale, closed):
+        """SVG <polygon>/<polyline> -> reuse the <path> custGeom codepath.
+
+        `el` carries the fill/stroke/opacity attributes _path reads; we only need
+        to hand it the geometry as a path `d`. closed=True for polygon (adds Z).
+        """
+        d = points_to_path_d(el.get('points', ''), closed)
+        if d:
+            self._path(el, sp, ox, oy, opacity, scale, d=d)
+
+    def _path(self, el, sp, ox, oy, opacity, scale, d=None):
         """SVG <path> -> OOXML custGeom 形状。"""
-        d = el.get('d', '')
+        if d is None:
+            d = el.get('d', '')
         if not d or 'nan' in d:
             return
         # 计算 bounding box（简化：从 path 数据提取所有数字坐标）
@@ -974,8 +1024,10 @@ def convert(svg_input, output_path, on_progress=None):
         slide = prs.slides.add_slide(blank)
         converter.convert(svg_file, slide)
         s = converter.stats
+        unhandled = f", {s['unhandled']} unhandled" if s.get('unhandled') else ""
         print(f"  [{i+1}/{total}] {svg_file.name} "
-              f"({s['shapes']} shapes, {s['skipped']} skipped, {s['errors']} errors)")
+              f"({s['shapes']} shapes, {s['skipped']} skipped, {s['errors']} errors"
+              f"{unhandled})")
         if on_progress:
             on_progress(i + 1, total, svg_file.name)
 
