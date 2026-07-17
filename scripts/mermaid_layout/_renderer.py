@@ -47,15 +47,14 @@ def _render_graph_fragment(
         f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}">'
     )
 
-    # Group containers (subgraphs)
+    # Group containers (subgraphs) — use overlap-resolved, canvas-clipped bboxes
+    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
     for gid, grp in groups.items():
-        mbrs = [nodes[m] for m in grp.members if m in nodes and not nodes[m].is_dummy]
-        if not mbrs:
+        if gid not in _grp_bboxes:
             continue
-        gx = min(n.x for n in mbrs) - GROUP_PAD_X
-        gy = min(n.y for n in mbrs) - GROUP_PAD_Y_TOP
-        gw = max(n.x + NODE_W for n in mbrs) - gx + GROUP_PAD_X
-        gh = max(n.y + _node_render_h(n) for n in mbrs) - gy + GROUP_PAD_Y_BOT
+        _b = _grp_bboxes[gid]
+        gx, gy = int(_b[0]), int(_b[1])
+        gw, gh = max(1, int(_b[2] - _b[0])), max(1, int(_b[3] - _b[1]))
         glabel = _h(grp.label)
         parts.append(
             f'<div class="diagram-group" style="'
@@ -383,4 +382,156 @@ def _separate_groups_lr(
                 break
         if not moved:
             break
+
+
+def _separate_groups_tb(
+    nodes: dict[str, "_Node"],
+    groups: dict[str, "_Group"],
+    canvas_w: int,
+) -> int:
+    """Iteratively push groups with overlapping X+Y bboxes apart horizontally (TB mode).
+
+    When two groups overlap in both x and y, the right-er group is shifted right by
+    the X overlap + COL_GAP. Returns updated canvas_w (shifted nodes may extend it).
+    Runs up to GROUP_CAP passes; stops early when stable.
+    """
+    def _bbox(gid: str) -> dict | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return {
+            "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
+            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+        }
+
+    for _pass in range(GROUP_CAP):
+        boxes = {gid: _bbox(gid) for gid in groups}
+        boxes = {gid: b for gid, b in boxes.items() if b is not None}
+        if not boxes:
+            break
+        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gx"])
+        moved = False
+        for i, gid1 in enumerate(sorted_gids):
+            b1 = boxes[gid1]
+            for gid2 in sorted_gids[i + 1:]:
+                b2 = boxes[gid2]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
+                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
+                if x_overlap and y_overlap:
+                    shift = int(b1["gx_right"] - b2["gx"] + COL_GAP)
+                    for nid in groups[gid2].members:
+                        if nid in nodes:
+                            nodes[nid].x += shift
+                    moved = True
+                    break
+            if moved:
+                break
+        if not moved:
+            break
+
+    # Recompute canvas_w from the furthest non-dummy node right edge + CANVAS_PAD
+    all_non_dummy = [n for n in nodes.values() if not n.is_dummy]
+    if all_non_dummy:
+        canvas_w = int(max(n.x + NODE_W for n in all_non_dummy) + CANVAS_PAD)
+    return canvas_w
+
+
+def _compute_group_bboxes(
+    nodes: dict[str, "_Node"],
+    groups: dict[str, "_Group"],
+    canvas_w: int,
+    canvas_h: int,
+) -> dict[str, list[float]]:
+    """Compute non-overlapping, canvas-clipped group bounding boxes [x0, y0, x1, y1].
+
+    1. Compute padded bboxes (GROUP_PAD_* outset).
+    2. Exclude non-member node intrusions: shrink the nearest group edge away from
+       each standalone node that falls inside a group's bbox (4px gap min).
+    3. Resolve pairwise bbox overlaps by splitting each overlap at its midpoint.
+    4. Clip all bboxes to [0, canvas_w] × [0, canvas_h].
+    """
+    bboxes: dict[str, list[float]] = {}
+    for gid, grp in groups.items():
+        mbrs = [nodes[m] for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            continue
+        x0 = float(min(n.x for n in mbrs) - GROUP_PAD_X)
+        y0 = float(min(n.y for n in mbrs) - GROUP_PAD_Y_TOP)
+        x1 = float(max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X)
+        y1 = float(max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT)
+        bboxes[gid] = [x0, y0, x1, y1]
+
+    if not bboxes:
+        return bboxes
+
+    member_ids = {nid for grp in groups.values() for nid in grp.members}
+    _NM_GAP = 4.0  # minimum gap between group edge and intruding non-member
+
+    # Step 2: non-member node exclusion
+    for nid, nd in nodes.items():
+        if nd.is_dummy or nid in member_ids:
+            continue
+        nx0, ny0 = float(nd.x), float(nd.y)
+        nx1, ny1 = float(nd.x + NODE_W), float(nd.y + _node_render_h(nd))
+        for b in bboxes.values():
+            if not (b[0] < nx1 and nx0 < b[2] and b[1] < ny1 and ny0 < b[3]):
+                continue
+            # Intrusion detected — shrink closest edge
+            x_intrude = min(nx1 - b[0], b[2] - nx0)
+            y_intrude = min(ny1 - b[1], b[3] - ny0)
+            if x_intrude <= y_intrude:
+                if nx0 < (b[0] + b[2]) / 2:
+                    b[0] = nx1 + _NM_GAP
+                else:
+                    b[2] = nx0 - _NM_GAP
+            else:
+                if ny0 < (b[1] + b[3]) / 2:
+                    b[1] = ny1 + _NM_GAP
+                else:
+                    b[3] = ny0 - _NM_GAP
+
+    # Step 3: pairwise overlap resolution (iterative, up to GROUP_CAP passes)
+    gids = list(bboxes)
+    for _ in range(GROUP_CAP):
+        changed = False
+        for i, g1 in enumerate(gids):
+            b1 = bboxes[g1]
+            for g2 in gids[i + 1:]:
+                b2 = bboxes[g2]
+                ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
+                oy = min(b1[3], b2[3]) - max(b1[1], b2[1])
+                if ox > 0 and oy > 0:
+                    if ox <= oy:
+                        mid = (max(b1[0], b2[0]) + min(b1[2], b2[2])) / 2
+                        if b1[0] < b2[0]:
+                            b1[2] = mid
+                            b2[0] = mid
+                        else:
+                            b2[2] = mid
+                            b1[0] = mid
+                    else:
+                        mid = (max(b1[1], b2[1]) + min(b1[3], b2[3])) / 2
+                        if b1[1] < b2[1]:
+                            b1[3] = mid
+                            b2[1] = mid
+                        else:
+                            b2[3] = mid
+                            b1[1] = mid
+                    changed = True
+                    break
+            if changed:
+                break
+        if not changed:
+            break
+
+    # Step 4: clip to canvas bounds
+    for b in bboxes.values():
+        b[0] = max(0.0, b[0])
+        b[1] = max(0.0, b[1])
+        b[2] = min(float(canvas_w), b[2])
+        b[3] = min(float(canvas_h), b[3])
+
+    return bboxes
 

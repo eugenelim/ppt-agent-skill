@@ -15,12 +15,13 @@ from ._constants import (
     _node_render_h,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter
-from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates
+from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns
 from ._routing import _route_edges, _arrowhead
 from ._renderer import (
     _render_graph_fragment,
     _extract_diagram_title, _render_metadata_chip, _render_legend,
     _separate_groups_lr,
+    _separate_groups_tb,
 )
 
 # ── graph topology strategy ──────────────────────────────────────────────────
@@ -59,11 +60,16 @@ def _layout_graph_topology(src: str, direction: str, width_hint: int) -> str:
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
+    # Compact group column ranges before coordinate assignment (dagre-inspired)
+    if groups:
+        _compact_group_columns(nodes, groups)
     canvas_w, canvas_h = _assign_coordinates(nodes, direction)
 
-    # For LR diagrams with groups: push overlapping group bounding boxes apart vertically
+    # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:
         _separate_groups_lr(nodes, groups)
+    elif direction.upper() in ("TB", "TD") and groups:
+        canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
 
     # Recompute canvas dimensions using actual rendered node heights after any group shifts
     real_nodes = [n for n in nodes.values() if not n.is_dummy]
