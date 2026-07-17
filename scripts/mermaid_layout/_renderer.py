@@ -37,15 +37,15 @@ _NODE_CSS = {
 }
 
 
-# Accent colors in RGBA for group background tints (matches CSS --accent-1/3/4/2 order)
-_ACCENT_CYCLE = ["var(--accent-1,#60a5fa)", "var(--accent-3,#f472b6)", "var(--accent-4,#fbbf24)", "var(--accent-2,#34d399)"]
-# Tints match the default accent-1/3/4/2 palette (#60a5fa blue, #f472b6 pink, #fbbf24 amber, #34d399 green)
-# so the group fill echoes the dashed border color.
+# Accent colors for group borders (matches THEME_LIGHT accent-1/3/4/2 cycle order)
+# Warm earth-tone palette: emerald, amber, sky, violet — cycles across subgraph groups.
+_ACCENT_CYCLE = ["var(--accent-1,#3F7D5A)", "var(--accent-3,#B7791F)", "var(--accent-4,#1F3A5F)", "var(--accent-2,#6B4A7A)"]
+# Tints echo the border color at low opacity for group fill.
 _ACCENT_TINTS = [
-    "rgba(96,165,250,0.05)",   # accent-1 — blue
-    "rgba(244,114,182,0.05)",  # accent-3 — pink
-    "rgba(251,191,36,0.05)",   # accent-4 — amber
-    "rgba(52,211,153,0.05)",   # accent-2 — green
+    "rgba(63,125,90,0.05)",    # group 0 → accent-1 (emerald)
+    "rgba(183,121,31,0.05)",   # group 1 → accent-3 (amber)
+    "rgba(31,58,95,0.05)",     # group 2 → accent-4 (sky)
+    "rgba(107,74,122,0.05)",   # group 3 → accent-2 (violet)
 ]
 
 # Rank → depth wash colors: subtle per-layer tints for architectural depth (C4-style)
@@ -176,10 +176,10 @@ def _render_graph_fragment(
 
         # Accent color comes from group membership; used for top border + icon.
         # External nodes get no accent (greyscale treatment) — dim top border matches dim body.
-        fg_var = "var(--node-fg-dim,var(--text-secondary,#94a3b8))" if is_external else "var(--node-fg,var(--text-primary,#e8eef7))"
-        border_var = "var(--node-fg-dim,var(--text-secondary,#94a3b8))" if is_external else "var(--node-border,var(--card-border,#2a3447))"
+        fg_var = "var(--node-fg-dim,var(--text-secondary,#75736C))" if is_external else "var(--node-fg,var(--text-primary,#191A17))"
+        border_var = "var(--node-fg-dim,var(--text-secondary,#75736C))" if is_external else "var(--node-border,var(--card-border,#DAD7CE))"
         if is_external:
-            accent_color = "var(--node-fg-dim,var(--text-secondary,#94a3b8))"
+            accent_color = "var(--node-fg-dim,var(--text-secondary,#75736C))"
         elif nid in _node_grp_idx:
             accent_color = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
         else:
@@ -209,7 +209,7 @@ def _render_graph_fragment(
                 f'color:{text_color}; opacity:0.6; '
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
                 f'line-height:1.3; margin-top:7px; padding-top:7px; '
-                f'border-top:1px solid var(--node-border,var(--card-border,#2a3447)); '
+                f'border-top:1px solid var(--node-border,var(--card-border,#DAD7CE)); '
                 f'text-align:left; width:100%;">'
                 f'{_h(tech_label)}</span>'
             )
@@ -253,7 +253,7 @@ def _render_graph_fragment(
                 f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
                 f'border-radius:50%; box-sizing:border-box; '
                 f'border:2px solid {accent_color}; '
-                f'background:{_depth_wash},linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),var(--node-bg-to,var(--card-bg-to,#0f1422))); '
+                f'background:{_depth_wash},linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
                 f'display:flex; align-items:center; justify-content:center;">'
                 f'<span style="color:{accent_color}; font-size:14px; line-height:1;">'
                 f'{_nh(n.label)}</span></div>'
@@ -279,18 +279,20 @@ def _render_graph_fragment(
                 f'box-sizing:border-box; overflow:hidden; '
                 f'{_border_css} '
                 f'{shape_css} '
-                f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#161d2e)),var(--node-bg-to,var(--card-bg-to,#0f1422))); '
-                f'box-shadow:var(--node-shadow,none); '
+                f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
+                f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
                 f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
                 f'text-align:left;">'
                 f'{inner}</div>'
             )
 
-    # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below
+    # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
+    # clip-path:inset(0) keeps edges inside the diagram area so they cannot
+    # bleed down into the legend strip when overflow:visible is set.
     parts.append(
         f'<svg style="position:absolute; inset:0; '
         f'width:{canvas_w}px; height:{canvas_h}px; '
-        f'overflow:visible; pointer-events:none;">'
+        f'overflow:visible; clip-path:inset(-400px 0 0 0); pointer-events:none;">'
     )
 
     routed = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
@@ -327,8 +329,8 @@ def _render_graph_fragment(
                 f'position:absolute; left:{lx}px; top:{ly}px; '
                 f'font-size:12px; font-weight:500; '
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
-                f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8)); '
-                f'background:var(--edge-label-bg,var(--card-bg-from,#f1f5f9)); '
+                f'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
+                f'background:var(--edge-label-bg,#F7F6F2); '
                 f'padding:1px 4px; border-radius:3px; '
                 f'max-width:450px; overflow:hidden; '
                 f'white-space:nowrap; text-overflow:ellipsis; pointer-events:none; z-index:2; '
@@ -392,17 +394,20 @@ THEME_DARK: dict[str, str] = {
 
 THEME_LIGHT: dict[str, str] = {
     "--card-bg-from":   "#ffffff",
-    "--card-bg-to":     "#f8fafc",
-    "--card-border":    "#cbd5e1",
-    "--text-primary":   "#1e293b",
-    "--text-secondary": "#64748b",
-    "--accent-1":       "#3b82f6",
-    "--accent-2":       "#10b981",
-    "--accent-3":       "#ec4899",
-    "--accent-4":       "#f59e0b",
-    "--bg-primary":     "#f8fafc",
-    "--edge-label-bg":  "#f1f5f9",
+    "--card-bg-to":     "#F7F6F2",
+    "--card-border":    "#DAD7CE",
+    "--text-primary":   "#191A17",
+    "--text-secondary": "#75736C",
+    "--accent-1":       "#3F7D5A",   # emerald — primary group
+    "--accent-2":       "#6B4A7A",   # violet  — secondary group
+    "--accent-3":       "#B7791F",   # amber   — tertiary group
+    "--accent-4":       "#1F3A5F",   # sky     — quaternary group
+    "--bg-primary":     "#F7F6F2",
+    "--edge-label-bg":  "#F7F6F2",
     "--font-primary":   "-apple-system,Inter,sans-serif",
+    "--node-shadow":    "0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)",
+    "--node-radius":    "10px",
+    "--group-radius":   "10px",
 }
 """CSS variable values for the light theme."""
 
@@ -437,7 +442,7 @@ def make_page(fragment: str, theme: str = "auto") -> str:
         "<style>\n"
         f"  {root_css}\n"
         "  body { margin: 0; padding: 24px;\n"
-        "    background: var(--bg-primary, #0d1117);\n"
+        "    background: var(--bg-primary, #F7F6F2);\n"
         "    font-family: var(--font-primary, -apple-system, Inter, sans-serif); }\n"
         "</style>\n"
         "</head>\n"
@@ -494,18 +499,18 @@ def _render_metadata_chip(directive: str, title: str) -> str:
     if type_label:
         parts.append(
             f'<span class="diagram-type-chip" style="'
-            f'border:1px solid var(--node-fg-dim,var(--text-secondary,#94a3b8)); '
+            f'border:1px solid var(--node-fg-dim,var(--text-secondary,#75736C)); '
             f'border-radius:4px; padding:1px 6px; '
             f'font-size:9px; font-weight:700; letter-spacing:0.07em; '
             f'text-transform:uppercase; '
-            f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));">'
+            f'color:var(--node-fg-dim,var(--text-secondary,#75736C));">'
             f'{_h(type_label)}</span>'
         )
     if title:
         parts.append(
             f'<span class="diagram-title" style="'
             f'font-size:11px; font-weight:600; '
-            f'color:var(--node-fg,var(--text-primary,#e8eef7));">'
+            f'color:var(--node-fg,var(--text-primary,#191A17));">'
             f'{_h(title)}</span>'
         )
     parts.append('</div>')
@@ -577,10 +582,10 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
         '<div class="diagram-legend" style="'
         'display:flex; flex-wrap:wrap; gap:12px; '
         'padding-top:8px; '
-        'border-top:1px solid var(--node-fg-dim,var(--card-border,#2a3447)); '
+        'border-top:1px solid var(--node-fg-dim,var(--card-border,#DAD7CE)); '
         'margin-top:0; '
         'font-size:10px; font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
-        'color:var(--node-fg-dim,var(--text-secondary,#94a3b8));">'
+        'color:var(--node-fg-dim,var(--text-secondary,#75736C));">'
         f'{joined}'
         '</div>'
     )

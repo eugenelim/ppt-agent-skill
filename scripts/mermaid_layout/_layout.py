@@ -90,7 +90,7 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
         if pred_count.get(nid, 0) != 0 or n.is_dummy or not n.group:
             continue
         out_targets = [v for v in succ.get(nid, []) if v in nodes]
-        if not (out_targets and all(nodes[v].rank >= 1 for v in out_targets)):
+        if not (out_targets and all(nodes[v].rank >= 2 for v in out_targets)):
             continue
         group_members = {nid2 for nid2, n2 in nodes.items() if n2.group == n.group}
         has_external_pred = any(

@@ -120,6 +120,7 @@ def _best_label_pos(
     obstacles: list,
     placed: list,
     canvas_w: int,
+    y_range: "tuple[int,int] | None" = None,
 ) -> tuple:
     """Pick the (lx, ly) from candidates with minimum total overlap.
 
@@ -127,6 +128,10 @@ def _best_label_pos(
     label chips so label density is distributed rather than stacked.
     Off-canvas placements (chip_top < 0) are strongly penalised so the
     algorithm never greedily picks clear-but-invisible negative-y positions.
+
+    y_range: (y_lo, y_hi) defines the edge's natural vertical span.  Positions
+    above y_lo are penalised at 200px/px to prevent labels from escaping above
+    group containers; positions below y_hi get a softer 10px/px nudge.
     """
     w = _est_label_w(label)
     all_obs = obstacles + placed
@@ -139,6 +144,18 @@ def _best_label_pos(
         chip_top = ly - _LABEL_CHIP_H
         if chip_top < 0:
             score += (-chip_top) * 5000
+        # Penalise positions that required clamping (raw_lx was off-canvas).
+        clamp_dist = abs(raw_lx - lx)
+        if clamp_dist > 0:
+            score += clamp_dist * 80
+        # Penalise positions outside the edge's natural y span.  Heavy above
+        # (prevents escape above group boundaries) and soft below.
+        if y_range is not None:
+            y_lo, y_hi = y_range
+            if ly < y_lo:
+                score += (y_lo - ly) * 200
+            elif ly > y_hi:
+                score += (ly - y_hi) * 10
         if score < best_score:
             best_score, best_lx, best_ly = score, lx, ly
         if score == 0:
@@ -405,24 +422,51 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 # _vstep > H + 2*margin(8) = 33 guarantees adjacent slots
                 # in the placed_labels list have zero overlap with each other.
                 if x2 - x1 < w + 16:
-                    src_h = _node_render_h(s)
-                    _vstep = H + 24
+                    # On-edge label: place centered on the edge midpoint, above/below
+                    # the exit y. Only avoid other labels (not node bodies) — the
+                    # chip's opaque background makes it readable even when it overlaps
+                    # a card.
+                    # When the vertical span is significant, prefer the alongside-segment
+                    # midpoint over the exit-point cluster so labels spread along the
+                    # edge rather than stacking at the top of the canvas.
                     sg_cands: list[tuple[int, int]] = []
-                    # Below-source: all left-side slots first, then right-side as
-                    # fallback.  Draining the full left column before trying right
-                    # keeps same-source labels in a clean vertical stack instead of
-                    # scattering left-right at the same y level.
-                    for _si in range(8):
-                        sg_cands.append((x1 - w - 12, s.y + src_h + H + 4 + _si * _vstep))
-                    for _si in range(4):
-                        sg_cands.append((x1 + 8, s.y + src_h + H + 4 + _si * _vstep))
-                    # Above-source as last resort (heavily penalised when chip_top < 0)
-                    for _si in range(4):
-                        sg_cands.append((x1 - w - 12, s.y - H - 12 - _si * _vstep))
-                    for _si in range(4):
-                        sg_cands.append((x1 + 8, s.y - H - 12 - _si * _vstep))
-                    cands = sg_cands + cands
-                lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    if abs(y2 - y1) > H + 16:
+                        vert_mid = (int(y1) + int(y2)) // 2
+                        # Alongside the vertical segment — highest priority for long spans
+                        sg_cands += [
+                            (int(bend_x) + 8,      vert_mid),
+                            (int(bend_x) - w - 8,  vert_mid),
+                        ]
+                        # Additional slots at quarter-points of the vertical segment
+                        v_q1 = int(y1) + abs(int(y2) - int(y1)) // 4
+                        v_q3 = int(y1) + 3 * abs(int(y2) - int(y1)) // 4
+                        sg_cands += [
+                            (int(bend_x) + 8,      v_q1),
+                            (int(bend_x) + 8,      v_q3),
+                        ]
+                    sg_cands += [
+                        (int(bend_x) - w // 2,  int(y1) - H - 4),  # above exit, at bend
+                        (int(bend_x) - w // 2,  int(y1) + 4),       # below exit, at bend
+                        (x1 + 4,                int(y1) - H - 4),   # above exit, near src
+                        (x1 + 4,                int(y1) + 4),        # below exit, near src
+                    ]
+                    # Stagger: all DOWN candidates before all UP candidates.
+                    # Separated (not interleaved) so score==0 early-exit fires on a
+                    # below-edge slot before trying above-edge slots — prevents labels
+                    # from escaping to the clear space above the diagram's group boundaries.
+                    vstep = H + 8
+                    extra: list[tuple[int, int]] = []
+                    for base_lx, base_ly in sg_cands[-4:-2]:  # stagger from exit-point bases
+                        for si in range(1, 6):
+                            extra.append((base_lx, base_ly + si * vstep))  # DOWN
+                        for si in range(1, 6):
+                            extra.append((base_lx, base_ly - si * vstep))  # UP (all after all DOWN)
+                    sg_cands += extra
+                    _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
+                    lx, ly = _best_label_pos(sg_cands, e.label, obstacles, placed_labels, canvas_w, y_range=_yr)
+                else:
+                    _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
+                    lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w, y_range=_yr)
             else:
                 lx, ly = x1 + 24, int(y1) - 12
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
@@ -460,7 +504,24 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             H = _LABEL_CHIP_H
             w = _est_label_w(e.label)
             seg_mid_y = int((y1 + mid_y) // 2)
-            cands = [
+            # Horizontal-segment midpoint and quarter-point candidates come first
+            # so wide-span edges (large |x2-x1|) place labels along the horizontal
+            # run rather than clustering near the source exit.
+            h_span = abs(x2 - x1)
+            h_mid = (int(x1) + int(x2)) // 2
+            h_q1 = int(x1) + h_span // 4
+            h_q3 = int(x1) + 3 * h_span // 4
+            cands: list[tuple[int, int]] = []
+            if h_span > 40:
+                cands += [
+                    (h_mid - w // 2,  mid_y - H - 4),   # above horizontal segment
+                    (h_mid - w // 2,  mid_y + 4),         # below horizontal segment
+                    (h_q1 - w // 2,   mid_y - H - 4),
+                    (h_q1 - w // 2,   mid_y + 4),
+                    (h_q3 - w // 2,   mid_y - H - 4),
+                    (h_q3 - w // 2,   mid_y + 4),
+                ]
+            cands += [
                 (int(x1) + _LABEL_PERP,              seg_mid_y),
                 (int(x1) - w - _LABEL_PERP,          seg_mid_y),
                 (int(x1) + _LABEL_PERP,              int(y1) + H + 4),

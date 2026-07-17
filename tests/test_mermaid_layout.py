@@ -899,7 +899,7 @@ class TestEdgeOperators:
         lines = [
             "SEARCH --o|retrieval| VECTOR_DB",
             "SEARCH --o|traversal| GRAPH_DB",
-            "ATLAS --o|direct| ENTERPRISE_IT",
+            "SERVICE_A --o|direct| SERVICE_B",
         ]
         nodes, edges, _ = _parse_graph_source(lines)
         assert len(edges) == 3
@@ -916,16 +916,15 @@ class TestEdgeOperators:
 
     def test_circle_edge_affects_rank_assignment(self):
         """When --o edges are parsed, they affect rank assignment."""
-        # ATLAS --o ENTERPRISE_IT means ENTERPRISE_IT should be rank > ATLAS
         lines = [
-            "CLIENT --> ATLAS",
-            "ATLAS --o ENTERPRISE_IT",
+            "CLIENT --> SERVICE",
+            "SERVICE --o TARGET",
         ]
         nodes, edges, _ = _parse_graph_source(lines)
         _break_cycles(nodes, edges)
         _assign_ranks(nodes, edges)
-        assert nodes["ATLAS"].rank == 1
-        assert nodes["ENTERPRISE_IT"].rank == 2  # after ATLAS via --o
+        assert nodes["SERVICE"].rank == 1
+        assert nodes["TARGET"].rank == 2  # after SERVICE via --o
 
     def test_pipe_label_quoted_double_quotes_stripped(self):
         """A -->|\"quoted text\"| B should produce label without surrounding quotes."""
@@ -982,7 +981,7 @@ class TestLongLabelWrap:
 
     def test_very_long_word_broken_at_char_boundary(self):
         """A single word longer than _WRAP_CHARS should be broken."""
-        word = "express-ai-knowledge-source-enterprise-it"
+        word = "vector-knowledge-source-enterprise-integration"
         lines = _wrap_label(word)
         assert len(lines) > 1, "Long single word should be split across lines"
         for line in lines:
@@ -997,7 +996,7 @@ class TestLongLabelWrap:
 
     def test_hyphenated_long_word_broken(self):
         """A very long hyphenated token exceeding _WRAP_CHARS gets broken."""
-        label = "express-ai-knowledge-source-retirement-services"
+        label = "vector-knowledge-source-retirement-services-platform"
         lines = _wrap_label(label)
         assert len(lines) > 1
 
@@ -1055,17 +1054,17 @@ class TestGroupSeparationLR:
     subgraph CATALOG[Catalogue]
         REGISTRY[Registry]
     end
-    subgraph UKP[Platform]
-        ATLAS[Atlas] --> SEARCH[Search]
+    subgraph PLATFORM[Platform]
+        ROUTER[Router] --> SEARCH[Search]
     end
     subgraph SOURCES[Sources]
         SRC1[Source1]
         SRC2[Source2]
     end
     CLIENT --> REGISTRY
-    CLIENT --o ATLAS
-    SRC1 --> ATLAS
-    SRC2 --> ATLAS"""
+    CLIENT --o ROUTER
+    SRC1 --> ROUTER
+    SRC2 --> ROUTER"""
         html = _dispatch(src, "LR", 800)
         assert "diagram mermaid-layout" in html
         assert "diagram-group" in html
@@ -1263,21 +1262,21 @@ class TestSplitSubLabel:
 
     def test_plain_label_no_sub(self):
         """Label without \\n[...] returns full label as main, empty sub."""
-        main, sub = _split_sub_label("express-ai-atlas")
-        assert main == "express-ai-atlas"
+        main, sub = _split_sub_label("knowledge-service")
+        assert main == "knowledge-service"
         assert sub == ""
 
     def test_newline_bracket_splits_to_sub(self):
         """Label with \\n[...] pattern splits correctly."""
-        main, sub = _split_sub_label("express-ai-atlas\\n[Knowledge MCP server]")
-        assert main == "express-ai-atlas"
-        assert sub == "Knowledge MCP server"
+        main, sub = _split_sub_label("knowledge-service\\n[MCP server]")
+        assert main == "knowledge-service"
+        assert sub == "MCP server"
 
     def test_real_newline_bracket_splits_to_sub(self):
         """Label with actual newline before [...]."""
-        main, sub = _split_sub_label("express-ai-atlas\n[Knowledge MCP server]")
-        assert main == "express-ai-atlas"
-        assert sub == "Knowledge MCP server"
+        main, sub = _split_sub_label("knowledge-service\n[MCP server]")
+        assert main == "knowledge-service"
+        assert sub == "MCP server"
 
     def test_multiple_bracket_lines_join_to_sub(self):
         """All [bracketed] lines after the first are joined as sub."""
@@ -1302,13 +1301,13 @@ class TestWrapLabelHyphenBreak:
         assert _wrap_label("short") == ["short"]
 
     def test_hyphenated_long_breaks_at_hyphens(self):
-        """express-ai-knowledge-source-enterprise-it → breaks on hyphens, not mid-char."""
-        lines = _wrap_label("express-ai-knowledge-source-enterprise-it")
+        """vector-knowledge-source-enterprise-it → breaks on hyphens, not mid-char."""
+        lines = _wrap_label("vector-knowledge-source-enterprise-it")
         for ln in lines:
             assert len(ln) <= 22, f"Line too long: {ln!r}"
         # No line should split in the middle of a hyphenated segment
         joined = "".join(lines)
-        assert "expressai" not in joined  # no char-boundary break inside word
+        assert "vectorknowledge" not in joined  # no char-boundary break inside word
 
     def test_hyphen_break_produces_valid_trailing_hyphen(self):
         """A fragment that ends with a hyphen is valid (the break point IS a hyphen)."""
@@ -1780,10 +1779,10 @@ class TestInferLabelIcons:
         assert self._icon("IDE tool") == "ide"
 
     def test_cli(self):
-        assert self._icon("express-ai-dev-kit installer\\n[CLI]") == "terminal"
+        assert self._icon("toolkit installer\\n[CLI]") == "terminal"
 
     def test_mcp_server(self):
-        assert self._icon("express-ai-atlas\\n[Knowledge MCP server]") == "mcp-server"
+        assert self._icon("knowledge-router\\n[Knowledge MCP server]") == "mcp-server"
 
     def test_graphrag_search(self):
         assert self._icon("GraphRAG search / knowledge layer\\n[Retrieval service]") == "graphrag-search"
@@ -1792,7 +1791,7 @@ class TestInferLabelIcons:
         assert self._icon("Agent Skills / Coding Subagents catalogue\\n[Artifact registry; versioned packs]") == "coding-subagent"
 
     def test_knowledge_source_hyphenated(self):
-        assert self._icon("express-ai-knowledge-source-enterprise-it\\n[Git repo; IT standards, architecture patterns]") == "knowledge-corpus"
+        assert self._icon("knowledge-source-enterprise-it\\n[Git repo; IT standards, architecture patterns]") == "knowledge-corpus"
 
     def test_knowledge_source_space(self):
         assert self._icon("Governed knowledge source repository") == "knowledge-corpus"
@@ -1833,7 +1832,7 @@ class TestInferLabelIcons:
 
     def test_knowledge_corpus_beats_pipeline_for_source_repos(self):
         # knowledge-source repos should get knowledge-corpus, not pipeline
-        assert self._icon("express-ai-knowledge-source-retirement-services\\n[Git repo; business-domain knowledge]") == "knowledge-corpus"
+        assert self._icon("knowledge-source-retirement-services\\n[Git repo; business-domain knowledge]") == "knowledge-corpus"
 
     def test_ingestion_pipeline_not_wrongly_knowledge_corpus(self):
         # "Knowledge-corpus ingestion pipeline" should get pipeline, not knowledge-corpus
@@ -1849,7 +1848,7 @@ class TestInferLabelIcons:
     def test_cli_does_not_match_client(self):
         # "cli" is a prefix of "client" — word boundary must block it
         # "client" itself matches "users" — verify it doesn't become terminal
-        assert self._icon("Express AI client surfaces") == "users"
+        assert self._icon("Platform client surfaces") == "users"
 
     def test_ses_does_not_match_processes(self):
         # "ses" is a suffix of "processes" — must NOT trigger email icon
@@ -1880,3 +1879,298 @@ class TestInferLabelIcons:
         _infer_label_icons({"X": n})
         # database css_class resolves to an icon — icon should remain unset
         assert n.icon == ""
+
+
+# ── TestIsolatedSourcePromotion ───────────────────────────────────────────────
+
+class TestIsolatedSourcePromotion:
+    """Isolated-source rank promotion guard: only promote when target rank >= 2.
+
+    Regression guard for the D2 INSTALL_REGISTRY bug: a grouped source node
+    whose single edge leads to a rank-1 target was being wrongly promoted to
+    rank 2, making its edge route backward (right-to-left) in LR mode.
+    """
+
+    def test_no_promotion_when_target_is_rank_1(self):
+        """INSTALL_REGISTRY (rank-0, grouped) → rank-1 INSTALLER must NOT be promoted.
+
+        INSTALL_USER also sends to INSTALLER (external predecessor present), which
+        used to trigger the promotion path when the guard was 'rank >= 1'.
+        """
+        nodes = {
+            "INSTALL_REGISTRY": _Node(id="INSTALL_REGISTRY", label="Registry",
+                                      group="INSTALL_CATALOG"),
+            "INSTALLER":        _Node(id="INSTALLER",        label="Installer"),
+            "INSTALL_USER":     _Node(id="INSTALL_USER",     label="User"),
+        }
+        groups = {
+            "INSTALL_CATALOG": _Group(id="INSTALL_CATALOG", label="Catalog",
+                                      members=["INSTALL_REGISTRY"]),
+        }
+        edges = [
+            _Edge(src="INSTALL_REGISTRY", dst="INSTALLER"),
+            _Edge(src="INSTALL_USER",     dst="INSTALLER"),  # external predecessor
+        ]
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        # INSTALLER is rank 1 (one hop from INSTALL_USER at rank 0).
+        assert nodes["INSTALLER"].rank == 1, (
+            f"INSTALLER should be rank 1, got {nodes['INSTALLER'].rank}"
+        )
+        # INSTALL_REGISTRY must stay at rank 0 — target rank 1 is below the guard of 2.
+        assert nodes["INSTALL_REGISTRY"].rank == 0, (
+            f"INSTALL_REGISTRY was promoted to rank {nodes['INSTALL_REGISTRY'].rank}; "
+            "should stay at rank 0 (target rank 1 < promotion guard of 2)"
+        )
+
+    def test_promotion_when_target_is_rank_2(self):
+        """INSTALL_REGISTRY targeting a rank-2+ node IS promoted (guard satisfied).
+
+        When INSTALLER is at rank 2 (reachable via MIDDLE from INSTALL_USER),
+        INSTALL_REGISTRY's edge to it spans a large flow gap — promotion is correct.
+        """
+        nodes = {
+            "INSTALL_REGISTRY": _Node(id="INSTALL_REGISTRY", label="Registry",
+                                      group="INSTALL_CATALOG"),
+            "MIDDLE":           _Node(id="MIDDLE",           label="Middle"),
+            "INSTALLER":        _Node(id="INSTALLER",        label="Installer"),
+            "INSTALL_USER":     _Node(id="INSTALL_USER",     label="User"),
+        }
+        groups = {
+            "INSTALL_CATALOG": _Group(id="INSTALL_CATALOG", label="Catalog",
+                                      members=["INSTALL_REGISTRY"]),
+        }
+        edges = [
+            _Edge(src="INSTALL_REGISTRY", dst="INSTALLER"),
+            _Edge(src="INSTALL_USER",     dst="MIDDLE"),
+            _Edge(src="MIDDLE",           dst="INSTALLER"),  # pushes INSTALLER to rank 2
+        ]
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        # INSTALLER is rank 2 (two hops from INSTALL_USER via MIDDLE).
+        assert nodes["INSTALLER"].rank == 2, (
+            f"INSTALLER should be rank 2, got {nodes['INSTALLER'].rank}"
+        )
+        # INSTALL_REGISTRY has an external predecessor on its target and the target
+        # is rank 2 → promotion guard (rank >= 2) satisfied → should be promoted.
+        assert nodes["INSTALL_REGISTRY"].rank > 0, (
+            f"INSTALL_REGISTRY should be promoted (target rank=2 >= 2 guard), "
+            f"got rank {nodes['INSTALL_REGISTRY'].rank}"
+        )
+
+
+# ── TestShortGapLabelPlacement ────────────────────────────────────────────────
+
+class TestShortGapLabelPlacement:
+    """Short-gap LR edge labels must appear ON the edge, not far below the source.
+
+    Regression guard for the placement bug where labels wider than the rank gap
+    were floated far below/above the source node, losing their visual connection
+    to the edge they annotate.  The fix places them centered over the edge path.
+    """
+
+    def _route_short_gap(self, label: str):
+        """One LR edge whose label is wider than the rank gap (short-gap case)."""
+        from mermaid_layout._routing import _est_label_w
+        rank_pitch = NODE_W + RANK_GAP
+        A = _Node(id="A", label="Src", x=CANVAS_PAD,              y=CANVAS_PAD, rank=0, col=0)
+        B = _Node(id="B", label="Dst", x=CANVAS_PAD + rank_pitch,  y=CANVAS_PAD, rank=1, col=0)
+        nodes = {"A": A, "B": B}
+        edges = [_Edge(src="A", dst="B", label=label, style="solid", arrow=True)]
+        w = _est_label_w(label)
+        x1 = A.x + NODE_W   # right edge of source
+        gap = B.x - x1      # RANK_GAP
+        assert gap < w + 16, (
+            f"Test precondition failed: not a short-gap case (gap={gap}, w+16={w+16}). "
+            "Use a longer label."
+        )
+        specs = _route_edges(nodes, edges, 900, "LR")
+        return specs, x1, gap, w
+
+    def test_short_gap_label_x_near_edge(self):
+        """Short-gap label lx must be within [x1-w, x1+gap+w] — centered on the edge,
+        not placed at x1-w-12 (old left-stagger) which is outside the near-edge zone.
+        """
+        # RANK_GAP=120; w>104 triggers short-gap (w+16 > 120).
+        # "a very long edge annotation" → ~26 chars → w ≈ 176px → w+16=192 > 120.
+        label = "a very long edge annotation"
+        specs, x1, gap, w = self._route_short_gap(label)
+        labeled = [s for s in specs if s.get("label")]
+        assert labeled, "No labeled edge spec returned"
+        lx = labeled[0]["lx"]
+        assert x1 - w <= lx <= x1 + gap + w, (
+            f"Short-gap label lx={lx} is not near the edge; "
+            f"expected [{x1 - w}, {x1 + gap + w}]. "
+            f"Old behavior placed labels at x1-w-12={x1-w-12} (outside range)."
+        )
+
+    def test_short_gap_multiple_labels_stack_cleanly(self):
+        """Multiple short-gap labels from different sources must not share the same lx/ly."""
+        from mermaid_layout._routing import _est_label_w
+        label = "a very long edge annotation"
+        rank_pitch = NODE_W + RANK_GAP
+        A = _Node(id="A", label="A", x=CANVAS_PAD,                y=CANVAS_PAD,           rank=0, col=0)
+        B = _Node(id="B", label="B", x=CANVAS_PAD,                y=CANVAS_PAD + NODE_H + COL_GAP, rank=0, col=1)
+        C = _Node(id="C", label="C", x=CANVAS_PAD + rank_pitch,   y=CANVAS_PAD,           rank=1, col=0)
+        nodes = {"A": A, "B": B, "C": C}
+        edges = [
+            _Edge(src="A", dst="C", label=label, style="solid", arrow=True),
+            _Edge(src="B", dst="C", label=label, style="solid", arrow=True),
+        ]
+        specs = _route_edges(nodes, edges, 900, "LR")
+        labeled = [s for s in specs if s.get("label")]
+        assert len(labeled) == 2, f"Expected 2 labeled specs, got {len(labeled)}"
+        # Two labels must not share the exact same (lx, ly) position
+        pos0 = (labeled[0]["lx"], labeled[0]["ly"])
+        pos1 = (labeled[1]["lx"], labeled[1]["ly"])
+        assert pos0 != pos1, (
+            f"Both short-gap labels landed at the same position {pos0}"
+        )
+
+
+# ── D4 corpus: architecture-beta + C4Context stress tests ────────────────────
+
+class TestD4ArchitectureBeta:
+    """Smoke tests for architecture-beta diagrams from AWS mermaid examples.
+
+    These exercise nested-group parsing, junction nodes, numbered edges, and
+    cardinal-direction edge syntax. The diagrams are structurally complex and
+    catch regressions in how the layout engine handles unfamiliar diagram types.
+    """
+
+    def _ok(self, src: str) -> str:
+        html = _dispatch(src, None, 1200)
+        assert "diagram mermaid-layout" in html
+        return html
+
+    def test_aws_arch_beta_simple(self):
+        """architecture-beta with group + 4 services, cardinal edge syntax."""
+        self._ok(
+            "architecture-beta\n"
+            "   group api(cloud)[API]\n"
+            "\n"
+            "  service db(database)[Database] in api\n"
+            "  service disk1(disk)[Storage] in api\n"
+            "  service disk2(disk)[Storage] in api\n"
+            "  service server(server)[Server] in api\n"
+            "\n"
+            "  db:L -- R:server\n"
+            "  disk1:T -- B:server\n"
+            "  disk2:T -- B:db"
+        )
+
+    def test_aws_arch_beta_vpc_az(self):
+        """architecture-beta with doubly-nested groups (AWS VPC + Availability Zones)."""
+        self._ok(
+            "architecture-beta\n"
+            "  group awscloud(aws:aws-cloud)[AWS Cloud]\n"
+            "  group vpc(aws:vpc)[Virtual private cloud] in awscloud\n"
+            "\n"
+            "  group az2[Availability Zone 2] in vpc\n"
+            "    service nat2(aws:vpc-nat-gateway)[NAT gateway] in az2\n"
+            "    service instance21(aws:ec2-instance)[Instance] in az2\n"
+            "    service instance22(aws:ec2-instance)[Instance] in az2\n"
+            "\n"
+            "  group az1[Availability Zone 1] in vpc\n"
+            "    service nat1(aws:vpc-nat-gateway)[NAT gateway] in az1\n"
+            "    service instance11(aws:ec2-instance)[Instance] in az1\n"
+            "    service instance12(aws:ec2-instance)[Instance] in az1\n"
+            "\n"
+            "  instance21:L -- R:nat2\n"
+            "  instance11:R -- L:nat1"
+        )
+
+    def test_aws_arch_beta_lambda_dynamodb(self):
+        """architecture-beta with junction nodes and numbered labeled edges."""
+        self._ok(
+            "architecture-beta\n"
+            "  service client(aws:client)[Client]\n"
+            "  group awscloud(aws:aws-cloud)[AWS Cloud]\n"
+            "    service api(aws:api-gateway)[Amazon API Gateway] in awscloud\n"
+            "    service lambda1(aws:lambda)[AWS Lambda] in awscloud\n"
+            "    service dynamodb(aws:dynamodb)[Amazon DynamoDB] in awscloud\n"
+            "\n"
+            "    client:R -[1]-> L:api\n"
+            "    api:R -[2]-> L:lambda1\n"
+            "    lambda1:R -[3]-> L:dynamodb\n"
+            "\n"
+            "    junction junctionLeft\n"
+            "    service s3(aws:simple-storage-service)[Amazon S3] in awscloud\n"
+            "    service lambda2(aws:lambda)[AWS Lambda] in awscloud\n"
+            "    junction junctionRight\n"
+            "\n"
+            "    client:B -- T:junctionLeft\n"
+            "    junctionLeft:R -[4]-> L:s3\n"
+            "    s3:R -[5]-> L:lambda2"
+        )
+
+    def test_aws_arch_beta_codepipeline(self):
+        """architecture-beta with many services in one group + directional arrows."""
+        self._ok(
+            "architecture-beta\n"
+            "  group cp(aws:codepipeline)[AWS CodePipeline]\n"
+            "\n"
+            "    service gr(aws:git-repository)[Git Repository] in cp\n"
+            "    service cb(aws:codebuild)[AWS CodeBuild] in cp\n"
+            "    service cd1(aws:codedeploy)[AWS CodeDeploy] in cp\n"
+            "    service s3(aws:simple-storage-service)[Amazon S3 artifact store] in cp\n"
+            "    service user(aws:user)[Human Approval] in cp\n"
+            "    service dev(aws:ec2)[Amazon EC2 dev] in cp\n"
+            "    service cd2(aws:codedeploy)[AWS CodeDeploy] in cp\n"
+            "    service prod(aws:ec2)[Amazon EC2 prod] in cp\n"
+            "    service sns(aws:simple-notification-service)[SNS Notification] in cp\n"
+            "\n"
+            "    gr:R --> L:cb\n"
+            "    cb:R --> L:cd1\n"
+            "    cb:B --> T:s3\n"
+            "    cd1:R --> L:user\n"
+            "    cd1:B --> T:dev\n"
+            "    user:R --> L:cd2\n"
+            "    cd2:B --> T:prod\n"
+            "    cd2:R --> L:sns"
+        )
+
+
+class TestD4C4Context:
+    """Smoke tests for C4Context diagrams (Mermaid-native C4 syntax).
+
+    Exercises the big bank internet banking context diagram — the canonical
+    C4 example with internal + external systems, persons, and relationships.
+    """
+
+    def _ok(self, src: str) -> str:
+        html = _dispatch(src, None, 1200)
+        assert "diagram mermaid-layout" in html
+        return html
+
+    def test_c4_bigbank_context(self):
+        """Full C4Context diagram with Persons, Systems, System_Ext, and Rel variants."""
+        self._ok(
+            "C4Context\n"
+            '  title System Context diagram for Internet Banking System\n'
+            "\n"
+            '  Person(customerA, "Personal Banking Customer", "A customer of the bank, with personal bank accounts.")\n'
+            "\n"
+            '  System(banking, "Internet Banking System", "Allows customers to view information about their bank accounts, and make payments.")\n'
+            '  System_Ext(mail, "E-mail system", "The internal Microsoft Exchange e-mail system.")\n'
+            '  System_Ext(mainframe, "Mainframe Banking System", "Stores all of the core banking information about customers, accounts, transactions, etc.")\n'
+            "\n"
+            '  Rel(customerA, banking, "Uses")\n'
+            '  Rel_Back(customerA, mail, "Sends e-mails to")\n'
+            '  Rel(banking, mail, "Sends e-mails", "SMTP")\n'
+            '  Rel(banking, mainframe, "Uses")\n'
+        )
+
+    def test_c4_bigbank_external_border(self):
+        """External C4 elements (Person_Ext, System_Ext) render with dashed border."""
+        src = (
+            "C4Context\n"
+            '  Person_Ext(extuser, "External User", "Outside the boundary")\n'
+            '  System(sys, "Internet Banking System", "Core system")\n'
+            '  System_Ext(extsys, "Mainframe", "Legacy system outside boundary")\n'
+            '  Rel(extuser, sys, "Uses")\n'
+            '  Rel(sys, extsys, "Calls")\n'
+        )
+        html = _dispatch(src, None, 1200)
+        assert "border:1px dashed" in html, "external C4 elements must have dashed border"
+        assert "border:1px solid" in html, "internal C4 elements must have solid border"

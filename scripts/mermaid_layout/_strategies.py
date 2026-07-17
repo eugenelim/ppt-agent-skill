@@ -126,6 +126,31 @@ def _layout_graph_topology(
     # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:
         _separate_groups_lr(nodes, groups)
+        # Snap dummy node y-positions to match their non-dummy chain-source so
+        # the horizontal routing segment stays in the source's y band instead of
+        # cutting across intermediate groups after _separate_groups_lr shifts them.
+        _pred: dict[str, str] = {}
+        for _e in edges:
+            if _e.src in nodes and _e.dst in nodes:
+                _pred[_e.dst] = _e.src
+
+        def _chain_src_y(nid: str) -> int:
+            """Walk predecessor chain to first non-dummy node; return its y."""
+            visited: set[str] = set()
+            cur = nid
+            while cur in _pred and nodes.get(cur) is not None:
+                cur = _pred[cur]
+                if cur in visited:
+                    break
+                visited.add(cur)
+                if not nodes[cur].is_dummy:
+                    return nodes[cur].y
+            return nodes[nid].y  # fallback: keep original
+
+        for _nid, _n in nodes.items():
+            if _n.is_dummy:
+                _n.y = _chain_src_y(_nid)
+
         # Also push non-member nodes that visually land inside a group bbox downward
         _push_nonmembers_out_of_groups_lr(nodes, groups)
     elif direction.upper() in ("TB", "TD") and groups:
