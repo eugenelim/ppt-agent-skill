@@ -48,16 +48,18 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
             succ[e.src].append(e.dst)
             pred_count[e.dst] += 1
 
-    # Topological order (Kahn's algorithm on the forward DAG)
+    # Topological order (Kahn's algorithm on the forward DAG).
+    # Use a scratch copy so pred_count stays intact for the isolation check below.
     from collections import deque
-    queue: deque[str] = deque(nid for nid in nodes if pred_count[nid] == 0)
+    _pc_kahn: dict[str, int] = dict(pred_count)
+    queue: deque[str] = deque(nid for nid in nodes if _pc_kahn[nid] == 0)
     topo: list[str] = []
     while queue:
         u = queue.popleft()
         topo.append(u)
         for v in succ[u]:
-            pred_count[v] -= 1
-            if pred_count[v] == 0:
+            _pc_kahn[v] -= 1
+            if _pc_kahn[v] == 0:
                 queue.append(v)
     # Any node not yet in topo (cycle residue) gets appended in stable id order
     remaining = [nid for nid in nodes if nid not in set(topo)]
@@ -69,6 +71,18 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
     for u in topo:
         for v in succ[u]:
             nodes[v].rank = max(nodes[v].rank, nodes[u].rank + 1)
+
+    # Isolated-source promotion: grouped nodes with no predecessors whose
+    # outgoing edges ALL go to interior nodes (rank ≥ 1). Promote to
+    # max(target_rank)+1 so they render RIGHT of their targets in LR layout,
+    # with edges routed as back-edges. Ungrouped nodes (e.g. the main CLIENT)
+    # are left at rank 0; only group-bounded side-feeder clusters are promoted.
+    for nid, n in list(nodes.items()):
+        if pred_count.get(nid, 0) != 0 or n.is_dummy or not n.group:
+            continue
+        out_targets = [v for v in succ.get(nid, []) if v in nodes]
+        if out_targets and all(nodes[v].rank >= 1 for v in out_targets):
+            n.rank = max(nodes[v].rank for v in out_targets) + 1
 
     # Insert dummy nodes for edges spanning more than 1 rank
     new_nodes: dict[str, _Node] = {}

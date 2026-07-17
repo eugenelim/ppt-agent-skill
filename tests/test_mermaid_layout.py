@@ -723,10 +723,10 @@ class TestTitleAccentColor:
         assert "node-title-fg" in html
 
     def test_accent_color_not_on_tech_sublabel(self):
-        """Tech sub-label (below the title) should use dim color, not accent."""
+        """Tech sub-label should use dimmed text (opacity or dim var), not raw accent."""
         html = _dispatch("flowchart LR\n  A[\"Service|Spring Boot\"]", None, 400)
-        # tech label uses node-fg-dim
-        assert "node-fg-dim" in html
+        # tech label is visually dimmed — check that it uses either node-fg-dim or opacity
+        assert "node-fg-dim" in html or "opacity:0." in html
 
 
 # ── TestEdgeOperators ────────────────────────────────────────────────────────

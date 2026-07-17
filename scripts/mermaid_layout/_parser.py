@@ -153,7 +153,8 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             else:
                 label = rest.strip('"\'')
             gid = f"_g{len(groups)}"
-            groups[gid] = _Group(id=gid, label=label or gid)
+            parent_gid = stack[-1] if stack else None
+            groups[gid] = _Group(id=gid, label=label or gid, parent_group=parent_gid)
             stack.append(gid)
             continue
         if line.lower().strip() in ("end", "end;"):

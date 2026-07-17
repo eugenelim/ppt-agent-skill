@@ -7,7 +7,7 @@ from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
-    _NODE_H_LINE, _NODE_H_ICON, _NODE_H_TECH,
+    _NODE_H_TECH, _WRAP_CHARS, _WRAP_CHARS_ICON,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
 from ._routing import _route_edges
@@ -30,7 +30,7 @@ _NODE_CSS = {
     "round": "border-radius:28px;",
     # diamond uses clip-path to avoid rotating the label
     "diamond": "border-radius:4px; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
-    "cylinder": "border-radius:8px 8px 2px 2px; border-top:2px solid var(--node-border);",
+    "cylinder": "border-radius:8px 8px 2px 2px;",
     "circle": "border-radius:50%;",
     "flag": "border-radius:0 8px 8px 0;",
 }
@@ -46,6 +46,9 @@ _ACCENT_TINTS = [
 ]
 
 
+_LEGEND_H = 44  # px reserved below the diagram canvas for the legend strip
+
+
 def _render_graph_fragment(
     nodes: dict[str, _Node],
     edges: list[_Edge],
@@ -55,7 +58,19 @@ def _render_graph_fragment(
     direction: str = "TB",
     zoom: float = 1.0,
     style_overrides: str = "",
+    group_bboxes: dict[str, tuple[int, int, int, int]] | None = None,
+    show_legend: bool = True,
 ) -> str:
+    """Render an HTML fragment for a positioned graph.
+
+    group_bboxes: optional {gid: (x1, y1, x2, y2)} override — pass ELK's
+    pre-computed compound bboxes to skip _compute_group_bboxes entirely.
+    show_legend: append a legend strip below the diagram when semantic edge styles exist.
+    """
+    # Generate legend early so we know whether to expand height.
+    legend_html = _render_legend(edges, groups) if show_legend else ""
+    effective_h = canvas_h + ((_LEGEND_H) if legend_html else 0)
+
     parts: list[str] = []
 
     # Container — zoom scales the whole diagram proportionally when it exceeds
@@ -64,7 +79,7 @@ def _render_graph_fragment(
     extra_style = (" " + style_overrides.strip()) if style_overrides else ""
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
-        f'position:relative; width:{canvas_w}px; height:{canvas_h}px; '
+        f'position:relative; width:{canvas_w}px; height:{effective_h}px; '
         f'--node-w:{NODE_W}px; --node-h:{NODE_H}px; '
         f'--rank-gap:{RANK_GAP}px; --col-gap:{COL_GAP}px; '
         f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}{extra_style}">'
@@ -78,7 +93,7 @@ def _render_graph_fragment(
             _node_grp_idx[_nid] = _gi
 
     # Group containers (subgraphs) — dashed border + subtle tint per accent slot.
-    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+    _grp_bboxes = group_bboxes if group_bboxes is not None else _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
     for _gi, (gid, grp) in enumerate(groups.items()):
         if gid not in _grp_bboxes:
             continue
@@ -100,7 +115,7 @@ def _render_graph_fragment(
             f'position:absolute; top:4px; left:8px; '
             f'font-size:10px; color:{_accent}; '
             f'font-weight:600; letter-spacing:0.06em; text-transform:uppercase; '
-            f'white-space:nowrap; '
+            f'max-width:{max(60, gw - 16)}px; line-height:1.3; '
             f'font-family:var(--label-font,var(--font-primary));">'
             f'{glabel}</span></div>'
         )
@@ -125,84 +140,97 @@ def _render_graph_fragment(
         # Split [bracketed sub-label] on newline from the main title
         main_label, bracket_sub = _split_sub_label(raw_label)
 
-        main_lines = _wrap_label(main_label)
-        main_html = "<br>".join(_nh(ln) for ln in main_lines)
         icon_svg = _load_icon(n.icon) if n.icon else (_load_icon(n.css_class) if n.css_class else "")
         node_h = _node_render_h(n)
 
-        # Color tokens: dim external nodes; inherit group accent for title color
+        # Icon-left cards have a narrower text column; use reduced wrap limit so the
+        # HTML line breaks match what _node_render_h already assumed for height sizing.
+        _wc = _WRAP_CHARS_ICON if icon_svg else _WRAP_CHARS
+        main_lines = _wrap_label(main_label, max_chars=_wc)
+        main_html = "<br>".join(_nh(ln) for ln in main_lines)
+
+        # Accent color comes from group membership; used for top border + icon.
+        # All label text is uniform node-fg so it reads correctly on any theme.
         fg_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-fg,var(--text-primary))"
         border_var = "var(--node-fg-dim,var(--text-secondary))" if is_external else "var(--node-border,var(--card-border))"
-        if is_external:
-            title_color = fg_var
-        elif nid in _node_grp_idx:
-            title_color = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
+        if nid in _node_grp_idx:
+            accent_color = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
         else:
-            title_color = "var(--node-title-fg,var(--accent-1))"
+            accent_color = "var(--node-title-fg,var(--accent-1))"
+        # All text uses the same fg variable regardless of group
+        text_color = fg_var
 
         sub_span = ""
         if bracket_sub:
-            sub_lines = _wrap_label(bracket_sub)
+            sub_lines = _wrap_label(bracket_sub, max_chars=_wc)
             sub_html = "<br>".join(_nh(ln) for ln in sub_lines)
             sub_span = (
                 f'<span class="node-sub" style="'
                 f'display:block; font-size:var(--node-fs-sub,12px); font-weight:400; '
-                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'color:{text_color}; opacity:0.7; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.3; margin-top:3px;">'
+                f'line-height:1.3; margin-top:2px; text-align:left;">'
                 f'{sub_html}</span>'
             )
 
+        # tech_span: full-width separator line (expanded card body section)
         tech_span = ""
         if tech_label:
             tech_span = (
                 f'<span class="node-tech" style="'
                 f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
-                f'color:var(--node-fg-dim,var(--text-secondary)); '
+                f'color:{text_color}; opacity:0.6; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.2; margin-top:2px;">'
+                f'line-height:1.3; margin-top:7px; padding-top:7px; '
+                f'border-top:1px solid var(--node-border,var(--card-border)); '
+                f'text-align:left; width:100%;">'
                 f'{_h(tech_label)}</span>'
             )
 
         if icon_svg:
-            inner = (
+            # Icon-left, text-right layout for header; tech body below full-width separator.
+            header_row = (
+                f'<div class="node-header" style="display:flex; flex-direction:row; '
+                f'align-items:center; width:100%;">'
                 f'<span class="node-icon" style="'
-                f'display:block;width:24px;height:24px;margin:0 auto 4px;'
-                f'color:{title_color};">'
+                f'display:block; flex-shrink:0; width:24px; height:24px; '
+                f'margin-right:10px; color:{accent_color};">'
                 f'{icon_svg}</span>'
+                f'<div class="node-text" style="min-width:0; flex:1; overflow-wrap:break-word; word-break:break-word;">'
                 f'<span class="node-label" style="'
                 f'font-size:var(--node-fs-title,14px); font-weight:700; '
-                f'color:{title_color}; '
+                f'color:{text_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.4;">{main_html}</span>'
-                f'{sub_span}{tech_span}'
+                f'line-height:1.3; display:block;">{main_html}</span>'
+                f'{sub_span}'
+                f'</div></div>'
             )
-            flex_dir = "column"
+            inner = header_row + tech_span
         else:
             inner = (
                 f'<span class="node-label" style="'
                 f'font-size:var(--node-fs-title,15px); font-weight:700; '
-                f'color:{title_color}; '
+                f'color:{text_color}; '
                 f'font-family:var(--label-font,var(--font-primary)); '
-                f'line-height:1.4;">{main_html}</span>'
+                f'line-height:1.4; display:block;">{main_html}</span>'
                 f'{sub_span}{tech_span}'
             )
-            flex_dir = "column"
 
+        # Accent appears as a 2px colored top border; other borders stay neutral
         extra_cls = f" node-{n.css_class}" if n.css_class else ""
         parts.append(
             f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
             f'position:absolute; left:{n.x}px; top:{n.y}px; '
             f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
             f'min-width:{NODE_W}px; '
-            f'padding:var(--node-pad-v,16px) var(--node-pad-h,20px); '
-            f'box-sizing:border-box; '
-            f'border:1px solid {border_var}; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; overflow:hidden; '
+            f'border:1px solid {border_var}; border-top:3px solid {accent_color}; '
             f'{shape_css} '
             f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from)),var(--node-bg-to,var(--card-bg-to))); '
             f'box-shadow:var(--node-shadow,none); '
-            f'display:flex; flex-direction:{flex_dir}; align-items:center; justify-content:center; '
-            f'text-align:center;">'
+            f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+            f'text-align:left;">'
             f'{inner}</div>'
         )
 
@@ -213,15 +241,21 @@ def _render_graph_fragment(
         f'overflow:visible; pointer-events:none;">'
     )
 
-    routed = _route_edges(nodes, edges, canvas_w, direction)
+    routed = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
     for spec in routed:
         d = spec["d"]
         style = spec["style"]
-        stroke_color = "var(--edge-strong,var(--accent-1))" if style == "thick" else "var(--edge,var(--card-border))"
+        if style == "thick":
+            stroke_color = "var(--edge-strong,var(--accent-1))"
+        elif style == "dotted":
+            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
+        else:
+            stroke_color = "var(--edge,var(--card-border))"
         dash = ' stroke-dasharray="6 4"' if style == "dotted" else ""
+        stroke_w = "2" if style == "thick" else "1.5"
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none" '
-            f'stroke-width="1.5"{dash}/>'
+            f'stroke-width="{stroke_w}"{dash}/>'
         )
         if spec["ah"]:
             parts.append(
@@ -239,15 +273,24 @@ def _render_graph_fragment(
             parts.append(
                 f'<span class="edge-label" style="'
                 f'position:absolute; left:{lx}px; top:{ly}px; '
-                f'font-size:10px; font-family:var(--label-font,var(--font-primary)); '
+                f'font-size:11px; font-weight:500; '
+                f'font-family:var(--label-font,var(--font-primary)); '
                 f'color:var(--node-fg-dim,var(--text-secondary)); '
                 f'background:var(--bg-primary,var(--card-bg-from,#0a0a0a)); '
-                f'padding:1px 5px; border-radius:3px; '
-                f'max-width:200px; overflow:hidden; text-overflow:ellipsis; '
-                f'white-space:nowrap; pointer-events:none; z-index:2; '
-                f'transform:translate(-50%,-50%){rot_part};">'
+                f'padding:1px 4px; border-radius:3px; '
+                f'max-width:300px; overflow:hidden; '
+                f'white-space:nowrap; text-overflow:ellipsis; pointer-events:none; z-index:2; '
+                f'transform:translateY(-100%){rot_part};">'
                 f'{_h(spec["label"])}</span>'
             )
+
+    # Legend strip at bottom of diagram container (only when semantic styles present)
+    if legend_html:
+        parts.append(
+            f'<div style="position:absolute; bottom:0; left:{CANVAS_PAD}px; '
+            f'right:{CANVAS_PAD}px; height:{_LEGEND_H}px; '
+            f'display:flex; align-items:center;">{legend_html}</div>'
+        )
 
     parts.append('</div>')
     return "\n".join(parts)
