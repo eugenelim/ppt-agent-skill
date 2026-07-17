@@ -330,7 +330,7 @@ def _render_graph_fragment(
                 f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8)); '
                 f'background:var(--edge-label-bg,var(--card-bg-from,#f1f5f9)); '
                 f'padding:1px 4px; border-radius:3px; '
-                f'max-width:300px; overflow:hidden; '
+                f'max-width:450px; overflow:hidden; '
                 f'white-space:nowrap; text-overflow:ellipsis; pointer-events:none; z-index:2; '
                 f'transform:translateY(-100%){rot_part};">'
                 f'{_h(spec["label"])}</span>'

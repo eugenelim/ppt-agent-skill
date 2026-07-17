@@ -1365,10 +1365,9 @@ class TestLRCrossRowRouting:
 
         Mimics the Architecture LR case: Auth→DB (row0→row0, same row) and
         PPT→DB (row1→row0, cross row)."""
-        from mermaid_layout import _route_edges, NODE_H, RANK_GAP, NODE_W, CANVAS_PAD
+        from mermaid_layout import _route_edges, NODE_H, RANK_GAP, COL_GAP, NODE_W, CANVAS_PAD
         node_h = NODE_H  # 42
-        col_gap = 52
-        row1_y = CANVAS_PAD + node_h + col_gap  # row 1 top-y
+        row1_y = CANVAS_PAD + node_h + COL_GAP  # row 1 top-y
 
         nodes = {
             "src_row0": _Node(id="src_row0", label="Auth", x=320, y=CANVAS_PAD, rank=1, col=0),
@@ -1697,9 +1696,9 @@ class TestGroupCoherentCols:
 class TestLRLabelCentering:
     """LR forward edge labels must not cluster at the same position.
 
-    With standard RANK_GAP=80, labeled edges always enter "short-gap" mode
-    (RANK_GAP < label_w + 64), so labels float outside the node bounding box
-    rather than sitting at the midpoint. The fix ensures:
+    Short labels (< ~16 chars, w < ~104px) fit between nodes at RANK_GAP=120;
+    longer labels enter "short-gap" mode (RANK_GAP < label_w + 16) and float
+    below the source node with vertical stagger. The fix ensures:
     1. Each label gets zero overlap with node obstacles (score=0 placement).
     2. Sequential labeled edges land at distinct x positions (no horizontal bar).
     """

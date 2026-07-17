@@ -5,6 +5,7 @@ import math
 from ._constants import (
     _Node, _Edge,
     NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
+    GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
 )
 
@@ -94,7 +95,7 @@ _LABEL_CHAR_W = 6.8   # average char width at 12px Inter regular (empirical)
 
 
 def _est_label_w(text: str) -> int:
-    return min(300, max(30, int(len(text) * _LABEL_CHAR_W)))
+    return min(450, max(30, int(len(text) * _LABEL_CHAR_W)))
 
 
 def _label_chip_bbox(lx: int, ly: int, text: str) -> tuple:
@@ -155,16 +156,19 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             fan_in[e.dst].append(e.src)
             fan_out[e.src].append(e.dst)
 
-    # Obstacle bboxes for label placement: every node card + every group container.
-    # Group bboxes come from ELK when available; otherwise they're omitted (labels
-    # still avoid nodes, which is the most common collision source).
+    # Obstacle bboxes for label placement: node cards + group title strips.
+    # Full group bboxes push labels above all groups (clear y < CANVAS_PAD area),
+    # so only the title strip (top GROUP_PAD_Y_TOP px) is an obstacle — enough to
+    # prevent edge labels from landing on group label text.
     obstacles: list = [
         (n.x, n.y, n.x + _node_render_w(n), n.y + _node_render_h(n))
         for n in nodes.values() if not n.is_dummy
     ]
     if group_bboxes:
-        obstacles += [(int(x1), int(y1), int(x2), int(y2))
-                      for x1, y1, x2, y2 in group_bboxes.values()]
+        obstacles += [
+            (int(x1), int(y1), int(x2), int(y1) + GROUP_PAD_Y_TOP)
+            for x1, y1, x2, _y2 in group_bboxes.values()
+        ]
     placed_labels: list = []  # accumulates placed chip bboxes to prevent inter-label collision
 
     # Right-lane x: always clears the rightmost node + group container border
@@ -385,19 +389,35 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     (int(x2) - w - 24,  int(y2) - 12),
                     (int(x2) - w - 24,  int(y2) + H + 4),
                 ]
-                # For short-gap edges (label wider than gap), float the label
-                # just below the source card in the open space between nodes.
-                # src_buf adds 20% clearance above the bottom to absorb CSS
-                # rendering discrepancies (actual char width > char-based estimate).
-                if x2 - x1 < w + 64:
-                    src_buf = int(_node_render_h(s) * 1.2)
-                    src_clear = s.y + src_buf
-                    cands += [
-                        (x1 - w - 12, src_clear + H + 4),
-                        (x1 - w - 12, s.y - H - 12),
-                        (x1 + 8,      src_clear + H + 4),
-                        (x1 + 8,      s.y - H - 12),
-                    ]
+                # For short-gap edges (label wider than the gap), float the
+                # label below or above the source node.  Generate a vertical
+                # ladder of candidates so _best_label_pos can pick a clear
+                # slot even when multiple edges leave the same source.
+                # Short-gap candidates are PREPENDED so they have priority over
+                # the midpoint candidates above — without this, (x1+32, y1-12)
+                # lands above the source with zero overlap and gets picked,
+                # crowding all labels at the top of the canvas.
+                # _vstep > H + 2*margin(8) = 33 guarantees adjacent slots
+                # in the placed_labels list have zero overlap with each other.
+                if x2 - x1 < w + 16:
+                    src_h = _node_render_h(s)
+                    _vstep = H + 24
+                    sg_cands: list[tuple[int, int]] = []
+                    # Below-source ladder first (positive y, no canvas-top overflow)
+                    for _si in range(6):
+                        _dy = _si * _vstep
+                        sg_cands += [
+                            (x1 - w - 12, s.y + src_h + H + 4 + _dy),
+                            (x1 + 8,      s.y + src_h + H + 4 + _dy),
+                        ]
+                    # Above-source ladder as last resort
+                    for _si in range(4):
+                        _dy = _si * _vstep
+                        sg_cands += [
+                            (x1 - w - 12, s.y - H - 12 - _dy),
+                            (x1 + 8,      s.y - H - 12 - _dy),
+                        ]
+                    cands = sg_cands + cands
                 lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
             else:
                 lx, ly = x1 + 24, int(y1) - 12
@@ -444,6 +464,16 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 (int(x2) + _LABEL_PERP,              int((mid_y + y2) // 2)),
                 (int(x2) - w - _LABEL_PERP,          int((mid_y + y2) // 2)),
             ]
+            # Stagger for multiple edges from same source: ladder above/below
+            _vstep = H + 24
+            for _si in range(1, 5):
+                _dy = _si * _vstep
+                cands += [
+                    (int(x1) + _LABEL_PERP,     int(y1) + H + 4 + _dy),
+                    (int(x1) - w - _LABEL_PERP, int(y1) + H + 4 + _dy),
+                    (int(x1) + _LABEL_PERP,     int(mid_y) - H - 4 - _dy),
+                    (int(x1) - w - _LABEL_PERP, int(mid_y) - H - 4 - _dy),
+                ]
             lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
         else:
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)

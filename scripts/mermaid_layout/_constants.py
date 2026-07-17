@@ -111,8 +111,8 @@ CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 # ── default geometry (px) ────────────────────────────────────────────────────
 NODE_W = 192
 NODE_H = 42       # minimum card height (2×pad_v + icon_h = 20+24=44 triggers icon bump above 42)
-RANK_GAP = 80    # gap in flow direction (vertical in TB, horizontal in LR)
-COL_GAP = 52     # gap perpendicular to flow (horizontal in TB, vertical in LR)
+RANK_GAP = 120   # gap in flow direction (vertical in TB, horizontal in LR)
+COL_GAP = 80     # gap perpendicular to flow (horizontal in TB, vertical in LR)
 CANVAS_PAD = 48  # outer inset on all sides
 GROUP_PAD_X = 28  # group container horizontal inner padding
 GROUP_PAD_Y_TOP = 36  # group container top inner padding (room for label)
