@@ -54,6 +54,9 @@ from ._renderer import (
     _push_nonmembers_out_of_groups_lr,
     STYLE_COMPACT,
     STYLE_LARGE,
+    THEME_DARK,
+    THEME_LIGHT,
+    make_page,
 )
 from ._strategies import _dispatch
 
@@ -71,5 +74,6 @@ __all__ = [
     "_render_legend", "_separate_groups_lr", "_separate_groups_tb", "_compute_group_bboxes",
     "_push_nonmembers_out_of_groups_lr",
     "STYLE_COMPACT", "STYLE_LARGE",
+    "THEME_DARK", "THEME_LIGHT", "make_page",
     "_dispatch",
 ]

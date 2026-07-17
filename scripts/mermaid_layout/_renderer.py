@@ -38,7 +38,7 @@ _NODE_CSS = {
 
 
 # Accent colors in RGBA for group background tints (matches CSS --accent-1/3/4/2 order)
-_ACCENT_CYCLE = ["var(--accent-1,#60a5fa)", "var(--accent-3,#f472b6)", "var(--accent-4)", "var(--accent-2,#34d399)"]
+_ACCENT_CYCLE = ["var(--accent-1,#60a5fa)", "var(--accent-3,#f472b6)", "var(--accent-4,#fbbf24)", "var(--accent-2,#34d399)"]
 # Tints match the default accent-1/3/4/2 palette (#60a5fa blue, #f472b6 pink, #fbbf24 amber, #34d399 green)
 # so the group fill echoes the dashed border color.
 _ACCENT_TINTS = [
@@ -128,7 +128,7 @@ def _render_graph_fragment(
             f'font-size:11px; color:{_accent}; '
             f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
             f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
-            f'white-space:nowrap; overflow:hidden; text-overflow:ellipsis; '
+            f'display:block; overflow-wrap:break-word; word-break:break-word; '
             f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
             f'{glabel}</span></div>'
         )
@@ -328,7 +328,7 @@ def _render_graph_fragment(
                 f'font-size:12px; font-weight:500; '
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
                 f'color:var(--node-fg-dim,var(--text-secondary,#94a3b8)); '
-                f'background:var(--bg-primary,var(--card-bg-from,#0a0a0a)); '
+                f'background:var(--edge-label-bg,var(--card-bg-from,#f1f5f9)); '
                 f'padding:1px 4px; border-radius:3px; '
                 f'max-width:300px; overflow:hidden; '
                 f'white-space:nowrap; text-overflow:ellipsis; pointer-events:none; z-index:2; '
@@ -370,6 +370,82 @@ STYLE_LARGE = (
     "--node-pad-h:24px;"
 )
 """Large style for hero/title slides with fewer nodes."""
+
+
+# ── theme system ──────────────────────────────────────────────────────────────
+
+THEME_DARK: dict[str, str] = {
+    "--card-bg-from":   "#161d2e",
+    "--card-bg-to":     "#0f1422",
+    "--card-border":    "#2a3447",
+    "--text-primary":   "#e8eef7",
+    "--text-secondary": "#94a3b8",
+    "--accent-1":       "#60a5fa",
+    "--accent-2":       "#34d399",
+    "--accent-3":       "#f472b6",
+    "--accent-4":       "#fbbf24",
+    "--bg-primary":     "#0d1117",
+    "--edge-label-bg":  "#1a2235",
+    "--font-primary":   "-apple-system,Inter,sans-serif",
+}
+"""CSS variable values for the dark theme."""
+
+THEME_LIGHT: dict[str, str] = {
+    "--card-bg-from":   "#ffffff",
+    "--card-bg-to":     "#f8fafc",
+    "--card-border":    "#cbd5e1",
+    "--text-primary":   "#1e293b",
+    "--text-secondary": "#64748b",
+    "--accent-1":       "#3b82f6",
+    "--accent-2":       "#10b981",
+    "--accent-3":       "#ec4899",
+    "--accent-4":       "#f59e0b",
+    "--bg-primary":     "#f8fafc",
+    "--edge-label-bg":  "#f1f5f9",
+    "--font-primary":   "-apple-system,Inter,sans-serif",
+}
+"""CSS variable values for the light theme."""
+
+
+def make_page(fragment: str, theme: str = "auto") -> str:
+    """Wrap a diagram HTML fragment in a full standalone HTML page with CSS variables.
+
+    theme: 'dark' | 'light' | 'auto'
+    'auto' defaults to dark and switches to light via prefers-color-scheme media query.
+    """
+    def _vars(d: dict[str, str]) -> str:
+        return "\n".join(f"    {k}: {v};" for k, v in d.items())
+
+    if theme == "light":
+        root_css = f":root {{\n{_vars(THEME_LIGHT)}\n  }}"
+    elif theme == "dark":
+        root_css = f":root {{\n{_vars(THEME_DARK)}\n  }}"
+    else:
+        root_css = (
+            f":root {{\n{_vars(THEME_DARK)}\n  }}\n"
+            f"  @media (prefers-color-scheme: light) {{\n"
+            f"    :root {{\n{_vars(THEME_LIGHT)}\n    }}\n"
+            f"  }}"
+        )
+
+    return (
+        "<!DOCTYPE html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        "<style>\n"
+        f"  {root_css}\n"
+        "  body { margin: 0; padding: 24px;\n"
+        "    background: var(--bg-primary, #0d1117);\n"
+        "    font-family: var(--font-primary, -apple-system, Inter, sans-serif); }\n"
+        "</style>\n"
+        "</head>\n"
+        "<body>\n"
+        f"{fragment}\n"
+        "</body>\n"
+        "</html>"
+    )
 
 
 # ── diagram metadata + legend helpers ────────────────────────────────────────
