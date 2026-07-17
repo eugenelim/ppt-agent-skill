@@ -166,7 +166,7 @@ def build_index_html(grouped: dict) -> str:
             cards.append(f"""
         <div class="card{' has-both' if has_both else ''}" data-cover="{cover_url}" data-detail="{detail_url}">
           <div class="frame">
-            <iframe src="{default_src}" loading="lazy" sandbox="allow-same-origin" scrolling="no" tabindex="-1"></iframe>
+            <iframe src="{default_src}" title="{name} 预览" loading="lazy" sandbox="allow-same-origin" tabindex="-1"></iframe>
           </div>
           <div class="meta">
             <div class="row1">
@@ -381,7 +381,8 @@ def build_index_html(grouped: dict) -> str:
     cursor: pointer;
     transition: color 0.15s;
   }}
-  .row1 .open:hover {{ color: #22D3EE; }}
+  .row1 .open:hover,
+  .row1 .open:focus-visible {{ color: #22D3EE; }}
   .row2 {{
     display: flex; gap: 6px; align-items: center;
     font-size: 11px;
@@ -421,7 +422,8 @@ def build_index_html(grouped: dict) -> str:
     transition: background 0.15s, color 0.15s;
   }}
   .tier-toggle button + button {{ border-left: 1px solid rgba(255,255,255,0.12); }}
-  .tier-toggle button:hover {{ color: #fff; }}
+  .tier-toggle button:hover,
+  .tier-toggle button:focus-visible {{ color: #fff; }}
   .tier-toggle button.active {{ background: #22D3EE; color: #06121a; font-weight: 700; }}
 
   /* global cover/detail switch (header) */
@@ -443,7 +445,8 @@ def build_index_html(grouped: dict) -> str:
     transition: background 0.15s, color 0.15s;
   }}
   .tierswitch button + button {{ border-left: 1px solid rgba(255,255,255,0.14); }}
-  .tierswitch button:hover {{ color: #fff; }}
+  .tierswitch button:hover,
+  .tierswitch button:focus-visible {{ color: #fff; }}
   .tierswitch button.active {{ background: #22D3EE; color: #06121a; }}
 
   .footer {{
@@ -459,7 +462,17 @@ def build_index_html(grouped: dict) -> str:
     text-decoration: none;
     transition: color 0.15s;
   }}
-  .footer a:hover {{ color: #22D3EE; }}
+  .footer a:hover,
+  .footer a:focus-visible {{ color: #22D3EE; }}
+
+  @media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }}
+  }}
 </style>
 </head>
 <body>
