@@ -364,6 +364,8 @@ def _node_render_h(n: "_Node") -> int:
         return _TERMINAL_NODE_SIZE
     if n.shape == "doublecircle":
         return max(NODE_W, NODE_H) + 8
+    if n.shape in ("diamond", "hexagon"):
+        return NODE_W  # clip-path shapes need square aspect ratio
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)

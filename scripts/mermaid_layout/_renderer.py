@@ -360,6 +360,11 @@ def _render_graph_fragment(
                     f'</div>'
                 )
             else:
+                # Diamond/hexagon use clip-path: center text so it sits in the
+                # widest part of the polygon and doesn't touch the clipped edges.
+                _center_shapes = n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt")
+                _align = "center" if _center_shapes else "flex-start"
+                _text_align = "center" if _center_shapes else "left"
                 parts.append(
                     f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
@@ -371,8 +376,8 @@ def _render_graph_fragment(
                     f'{shape_css} '
                     f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
                     f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                    f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
-                    f'text-align:left;">'
+                    f'display:flex; flex-direction:column; align-items:{_align}; justify-content:center; '
+                    f'text-align:{_text_align};">'
                     f'{inner}</div>'
                 )
 

@@ -24,7 +24,8 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
-SNAPSHOTS_DIR = REPO_ROOT / "tests" / "snapshots"
+SNAPSHOTS_LIGHT_DIR = REPO_ROOT / "tests" / "snapshots" / "light"
+SNAPSHOTS_DARK_DIR = REPO_ROOT / "tests" / "snapshots" / "dark"
 HTML2PNG = REPO_ROOT / "scripts" / "html2png.py"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -47,58 +48,73 @@ _FIXTURES = sorted(FIXTURES_DIR.glob("*.mmd"))
 _PPT_OUT = REPO_ROOT / "ppt-output"
 
 
-def _render_to_png(mmd_path: Path, tmp_dir: Path) -> Path:
-    from mermaid_layout import _dispatch
+def _render_to_png(mmd_path: Path, tmp_dir: Path, theme: str) -> Path:
+    from mermaid_layout import _dispatch, make_page
 
     src = mmd_path.read_text()
-    html = _dispatch(src, None, 800)
+    html = make_page(_dispatch(src, None, 800), theme=theme)
     # Place the HTML inside ppt-output so html2png.py's get_dep_dir() resolves
     # node_modules relative to the project's ppt-output (not a random tmp path).
     _PPT_OUT.mkdir(exist_ok=True)
-    html_path = _PPT_OUT / (mmd_path.stem + ".html")
+    html_path = _PPT_OUT / (mmd_path.stem + f"-{theme}.html")
     html_path.write_text(html, encoding="utf-8")
     try:
         png_dir = tmp_dir / "png"
         png_dir.mkdir(exist_ok=True)
         subprocess.run(
-            [sys.executable, str(HTML2PNG), str(html_path), "-o", str(png_dir), "--scale", "1"],
+            [sys.executable, str(HTML2PNG), str(html_path), "-o", str(png_dir),
+             "--scale", "1", "--fullpage"],
             check=True,
             capture_output=True,
         )
     finally:
         html_path.unlink(missing_ok=True)
-    return png_dir / (mmd_path.stem + ".png")
+    return png_dir / (mmd_path.stem + f"-{theme}.png")
+
+
+def _compare_or_capture(rendered: Path, baseline: Path, stem: str, capture: bool) -> None:
+    if capture:
+        baseline.parent.mkdir(parents=True, exist_ok=True)
+        import shutil as _sh
+        _sh.copy2(rendered, baseline)
+        return
+
+    if not baseline.exists():
+        pytest.skip(f"no baseline for {stem} — run with --snapshot-capture first")
+
+    from PIL import Image, ImageChops
+    import numpy as np
+    img_new = Image.open(rendered).convert("RGB")
+    img_base = Image.open(baseline).convert("RGB")
+    if img_new.size != img_base.size:
+        img_new = img_new.resize(img_base.size, Image.LANCZOS)
+    diff = ImageChops.difference(img_new, img_base)
+    arr = np.array(diff)
+    nonzero = int((arr > 0).any(axis=-1).sum())
+    total = img_base.width * img_base.height
+    pct = nonzero / total
+    assert pct <= 0.005, (
+        f"{stem}: {pct:.1%} pixels differ (threshold 0.5%)"
+    )
 
 
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=lambda p: p.stem)
-def test_snapshot(fixture: Path, request):
+def test_snapshot_light(fixture: Path, request):
     capture = request.config.getoption("--snapshot-capture")
-    baseline = SNAPSHOTS_DIR / (fixture.stem + ".png")
+    baseline = SNAPSHOTS_LIGHT_DIR / (fixture.stem + ".png")
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        rendered = _render_to_png(fixture, tmp_path)
+        rendered = _render_to_png(fixture, tmp_path, "light")
+        _compare_or_capture(rendered, baseline, fixture.stem + " [light]", capture)
 
-        if capture:
-            SNAPSHOTS_DIR.mkdir(exist_ok=True)
-            import shutil as _sh
-            _sh.copy2(rendered, baseline)
-            return
 
-        if not baseline.exists():
-            pytest.skip(f"no baseline for {fixture.stem} — run with --snapshot-capture first")
+@pytest.mark.parametrize("fixture", _FIXTURES, ids=lambda p: p.stem)
+def test_snapshot_dark(fixture: Path, request):
+    capture = request.config.getoption("--snapshot-capture")
+    baseline = SNAPSHOTS_DARK_DIR / (fixture.stem + ".png")
 
-        from PIL import Image, ImageChops
-        img_new = Image.open(rendered).convert("RGB")
-        img_base = Image.open(baseline).convert("RGB")
-        if img_new.size != img_base.size:
-            img_new = img_new.resize(img_base.size, Image.LANCZOS)
-        diff = ImageChops.difference(img_new, img_base)
-        import numpy as np
-        arr = np.array(diff)
-        nonzero = int((arr > 0).any(axis=-1).sum())
-        total = img_base.width * img_base.height
-        pct = nonzero / total
-        assert pct <= 0.005, (
-            f"{fixture.stem}: {pct:.1%} pixels differ (threshold 0.5%)"
-        )
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        rendered = _render_to_png(fixture, tmp_path, "dark")
+        _compare_or_capture(rendered, baseline, fixture.stem + " [dark]", capture)

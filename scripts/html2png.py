@@ -65,12 +65,16 @@ const path = require('path');
             }));
         });
 
-        await page.screenshot({
-            path: item.png,
-            type: 'png',
-            fullPage: false,
-            clip: { x: 0, y: 0, width: 1280, height: 720 }
-        });
+        if (config.fullPage) {
+            await page.screenshot({ path: item.png, type: 'png', fullPage: true });
+        } else {
+            await page.screenshot({
+                path: item.png,
+                type: 'png',
+                fullPage: false,
+                clip: { x: 0, y: 0, width: 1280, height: 720 }
+            });
+        }
         console.log('PNG: ' + path.basename(item.html) + ' -> ' + path.basename(item.png));
         await page.close();
     }
@@ -129,7 +133,7 @@ def ensure_puppeteer(work_dir: Path) -> bool:
         return False
 
 
-def convert(html_dir: Path, output_dir: Path, scale: float = 1.0) -> bool:
+def convert(html_dir: Path, output_dir: Path, scale: float = 1.0, full_page: bool = False) -> bool:
     """主转换入口。"""
     if html_dir.is_file():
         html_files = [html_dir]
@@ -150,6 +154,7 @@ def convert(html_dir: Path, output_dir: Path, scale: float = 1.0) -> bool:
 
     config = {
         "scale": scale,
+        "fullPage": full_page,
         "files": [
             {"html": str(f), "png": str(output_dir / (f.stem + ".png"))}
             for f in html_files
@@ -189,13 +194,14 @@ def convert(html_dir: Path, output_dir: Path, scale: float = 1.0) -> bool:
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
-        print("Usage: python3 scripts/html2png.py <html_dir_or_file> [-o output_dir] [--scale 1]")
+        print("Usage: python3 scripts/html2png.py <html_dir_or_file> [-o output_dir] [--scale 1] [--fullpage]")
         sys.exit(0 if len(sys.argv) >= 2 else 1)
 
     html_path = Path(sys.argv[1]).resolve()
 
     output_dir = None
     scale = 1.0
+    full_page = False
 
     args = sys.argv[2:]
     i = 0
@@ -206,13 +212,16 @@ def main():
         elif args[i] == "--scale" and i + 1 < len(args):
             scale = float(args[i + 1])
             i += 2
+        elif args[i] == "--fullpage":
+            full_page = True
+            i += 1
         else:
             i += 1
 
     if output_dir is None:
         output_dir = (html_path.parent if html_path.is_file() else html_path.parent) / "png"
 
-    success = convert(html_path, output_dir, scale)
+    success = convert(html_path, output_dir, scale, full_page)
     sys.exit(0 if success else 1)
 
 

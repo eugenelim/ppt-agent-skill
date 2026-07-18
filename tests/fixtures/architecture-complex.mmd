@@ -1,0 +1,13 @@
+architecture-beta
+  group cloud(cloud)[Cloud Platform]
+
+  service lb(gateway)[Load Balancer] in cloud
+  service api(server)[API Server] in cloud
+  service db(database)[Database] in cloud
+  service cache(server)[Cache] in cloud
+  service queue(pipeline)[Message Queue] in cloud
+
+  lb:R --> L:api
+  api:R --> L:db
+  api:B --> T:cache
+  api:R --> L:queue
