@@ -77,7 +77,7 @@ _NODE_CSS = {
     "stadium": "border-radius:50px;",
     # diamond uses clip-path to avoid rotating the label
     "diamond": "border-radius:4px; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
-    "hexagon": "clip-path:polygon(15% 0%,85% 0%,100% 50%,85% 100%,15% 100%,0% 50%); border-radius:4px; overflow:visible;",
+    "hexagon": "clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); border-radius:4px; overflow:visible;",
     "subroutine": "border-radius:4px;",
     "trapezoid": "clip-path:polygon(10% 0%,90% 0%,100% 100%,0% 100%); border-radius:4px;",
     "trapezoid-alt": "clip-path:polygon(0% 0%,100% 0%,90% 100%,10% 100%); border-radius:4px;",

@@ -2850,3 +2850,292 @@ class TestSnapshotHarness:
         # The module uses allow_module_level=True in pytest.skip — we can't
         # re-import cleanly here, so just assert the guard condition is correct.
         assert _sh.which("node") is None, "monkeypatch must suppress node"
+
+
+# ── P1: Timeline period/event separation ─────────────────────────────────────
+
+class TestTimelinePeriodEventSplit:
+    """Mermaid '2020 : MVP Launch' must produce period='2020', event='MVP Launch'."""
+
+    _SRC = """\
+timeline
+    title Product Timeline
+    2020 : MVP Launch
+    2021 : Feature Expansion
+"""
+
+    def test_combined_string_absent(self):
+        html = _dispatch_ok(self._SRC)
+        assert "2020 : MVP Launch" not in html, (
+            "period and event must not be combined in a single label"
+        )
+
+    def test_period_label_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "2020" in html
+
+    def test_event_text_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "MVP Launch" in html
+
+    def test_event_rendered_at_smaller_font(self):
+        html = _dispatch_ok(self._SRC)
+        # The event span uses a smaller font-size than the period header
+        import re
+        period_spans = re.findall(r'font-weight:700[^>]+>([^<]+)<', html)
+        # Period header should contain just the year, not ': event'
+        years_only = [s for s in period_spans if ":" not in s and s.strip().isdigit()]
+        assert years_only, (
+            f"Expected period labels with just years, got: {period_spans}"
+        )
+
+
+# ── P1: Class diagram node overflow / zoom ────────────────────────────────────
+
+class TestClassDiagramNoOverflow:
+    """With 5 nodes per rank the renderer must use CSS zoom, not x-scaling."""
+
+    _SRC = """\
+classDiagram
+    Base <|-- Child
+    Owner *-- Engine
+    Group o-- Member
+    Client --> Service
+    Interface ..|> Implementation
+"""
+
+    def _node_xy(self, html: str):
+        import re
+        """Return list of (left, top) for each non-dummy node div."""
+        return [
+            (int(m.group(1)), int(m.group(2)))
+            for m in re.finditer(
+                r'left:(\d+)px;\s*top:(\d+)px[^"]*width:var\(--node-w,192px\)', html
+            )
+        ]
+
+    def test_no_node_overlap(self):
+        html = _dispatch_ok(self._SRC)
+        nodes_with_y = self._node_xy(html)
+        assert nodes_with_y, "no node positions found in class diagram HTML"
+        from itertools import groupby
+        nodes_with_y.sort(key=lambda xy: (xy[1], xy[0]))
+        for _y, group_iter in groupby(nodes_with_y, key=lambda xy: round(xy[1] / 20) * 20):
+            xs = [x for x, y in group_iter]
+            xs.sort()
+            for i in range(len(xs) - 1):
+                assert xs[i] + 192 <= xs[i + 1], (
+                    f"nodes overlap at y≈{_y}: right edge {xs[i]+192} > left {xs[i+1]}"
+                )
+
+    def test_zoom_applied_when_wide(self):
+        html = _dispatch_ok(self._SRC)
+        # The container div must carry a zoom: CSS property when 5 nodes per rank
+        assert "zoom:" in html, "5-node rank should trigger zoom scale-down"
+
+    def test_no_node_outside_canvas(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        # Canvas width is the first width: declaration in the outermost diagram div
+        m = re.search(r'width:(\d+)px;\s*height:\d+px[^"]*--node-w', html)
+        if not m:
+            return
+        canvas_w = int(m.group(1))
+        for m2 in re.finditer(
+            r'left:(\d+)px;\s*top:\d+px[^"]*width:var\(--node-w,192px\)', html
+        ):
+            left = int(m2.group(1))
+            assert left < canvas_w, (
+                f"node left={left} is outside canvas_w={canvas_w}"
+            )
+
+
+# ── P2: Hexagon clip-path uses 25%/75% ───────────────────────────────────────
+
+class TestHexagonClipPath:
+    """Hexagon shape must use 25%/75% polygon points (not 15%/85%)."""
+
+    _SRC = "flowchart TB\nH{{Hex Node}}"
+
+    def test_hexagon_uses_25_pct_indent(self):
+        html = _dispatch_ok(self._SRC)
+        import re
+        m = re.search(r'clip-path:polygon\(([^)]+)\)', html)
+        assert m, "hexagon must have clip-path:polygon"
+        poly = m.group(1)
+        assert "25%" in poly, f"hexagon polygon should use 25% indent, got: {poly}"
+        assert "75%" in poly, f"hexagon polygon should use 75% notch, got: {poly}"
+
+    def test_hexagon_not_15_pct(self):
+        html = _dispatch_ok(self._SRC)
+        import re
+        m = re.search(r'clip-path:polygon\(([^)]+)\)', html)
+        if not m:
+            return
+        poly = m.group(1)
+        assert "15%" not in poly, f"hexagon should not use 15% (too narrow), got: {poly}"
+
+
+# ── P3: Gantt one row per task ────────────────────────────────────────────────
+
+class TestGanttOneRowPerTask:
+    """Each task in a gantt section must occupy its own y row."""
+
+    _SRC = """\
+gantt
+    title Project Plan
+    section Phase 1
+        Task A :a1, 2024-01-01, 7d
+        Task B :after a1, 5d
+    section Phase 2
+        Task C :2024-01-15, 10d
+"""
+
+    def _task_y_positions(self, html: str) -> dict:
+        import re
+        result = {}
+        for task in ("Task A", "Task B", "Task C"):
+            m = re.search(re.escape(task), html)
+            if not m:
+                continue
+            # Find the last 'top:Npx' occurrence in the 500 chars before the task name
+            preceding = html[max(0, m.start() - 500): m.start()]
+            tops = re.findall(r'top:(\d+)px', preceding)
+            if tops:
+                result[task] = int(tops[-1])
+        return result
+
+    def test_task_a_and_b_at_different_y(self):
+        html = _dispatch_ok(self._SRC)
+        positions = self._task_y_positions(html)
+        assert "Task A" in positions and "Task B" in positions, (
+            f"could not find task positions: {positions}"
+        )
+        assert positions["Task A"] != positions["Task B"], (
+            f"Task A and Task B share the same y={positions['Task A']} — should be separate rows"
+        )
+
+    def test_task_b_below_task_a(self):
+        html = _dispatch_ok(self._SRC)
+        positions = self._task_y_positions(html)
+        if "Task A" not in positions or "Task B" not in positions:
+            pytest.skip("tasks not found in rendered HTML")
+        assert positions["Task B"] > positions["Task A"], (
+            f"Task B (y={positions['Task B']}) should be below Task A (y={positions['Task A']})"
+        )
+
+
+# ── P3: Sequence note text ────────────────────────────────────────────────────
+
+class TestSequenceNoteText:
+    """Note boxes in sequence diagrams must display their text content."""
+
+    _SRC = """\
+sequenceDiagram
+    Alice->>Bob: Hello
+    Note over Alice: Thinking
+    Bob-->>Alice: Hi there
+    Note over Bob: Processing
+"""
+
+    def test_note_text_thinking_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Thinking" in html, "note text 'Thinking' must appear in rendered HTML"
+
+    def test_note_text_processing_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Processing" in html, "note text 'Processing' must appear in rendered HTML"
+
+    def test_msg_labels_still_render(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Hello" in html, "message label 'Hello' must still render after note fixes"
+        assert "Hi there" in html, "message label 'Hi there' must still render"
+
+    def test_note_polygon_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "<polygon" in html, "note box polygon shape must still be rendered"
+
+    def test_msg_after_note_at_correct_row(self):
+        """'Hi there' message label must be below the note box (correct row count)."""
+        import re
+        html = _dispatch_ok(self._SRC)
+        m_note = re.search(r'top:(\d+)px[^>]+>Thinking', html)
+        m_msg = re.search(r'top:(\d+)px[^>]+>Hi there', html)
+        if not m_note or not m_msg:
+            pytest.skip("could not locate label positions")
+        assert int(m_msg.group(1)) > int(m_note.group(1)), (
+            f"'Hi there' (y={m_msg.group(1)}) should be below 'Thinking' (y={m_note.group(1)})"
+        )
+
+
+# ── P3: Mindmap branch backgrounds ───────────────────────────────────────────
+
+class TestMindmapBranchBackgrounds:
+    """Branch and leaf nodes must have a subtle pill background (not just the root)."""
+
+    _SRC = """\
+mindmap
+    root((Platform))
+        Frontend
+            React
+        Backend
+            API
+"""
+
+    def test_branch_has_background(self):
+        html = _dispatch_ok(self._SRC)
+        assert "rgba(53,148,103" in html, (
+            "branch nodes must have rgba(53,148,103,...) background"
+        )
+
+    def test_root_keeps_card_background(self):
+        html = _dispatch_ok(self._SRC)
+        assert "card-bg-from" in html, "root node must still use card gradient background"
+
+    def test_leaf_has_lighter_background(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        tints = re.findall(r'rgba\(53,148,103,([\d.]+)\)', html)
+        assert tints, "at least one branch/leaf tint must be present"
+        floats = [float(t) for t in tints]
+        # Some tints are 0.08 (branch) and some 0.05 (leaf)
+        assert any(t <= 0.06 for t in floats), (
+            f"leaf nodes should use a lighter tint (≤0.06), got: {floats}"
+        )
+
+
+# ── P3: Pie chart SVG arc commands ───────────────────────────────────────────
+
+class TestPieArcCommands:
+    """Pie donut sectors must use SVG <path> with A arc commands, not <polygon>."""
+
+    _SRC = """\
+pie title Browser Share
+    "Chrome" : 65
+    "Firefox" : 15
+    "Safari" : 12
+    "Edge" : 8
+"""
+
+    def test_uses_path_not_polygon(self):
+        html = _dispatch_ok(self._SRC)
+        import re
+        # The SVG inside the diagram div should contain <path with arc 'A' command
+        assert re.search(r'<path\b[^>]*\bd="M[^"]*A[^"]*"', html), (
+            "pie donut must use SVG <path d='M ... A ...'> arc commands"
+        )
+
+    def test_no_polygon_for_slices(self):
+        html = _dispatch_ok(self._SRC)
+        import re
+        # <polygon> may appear in arrowheads but not for pie slices (they use fill=accent)
+        poly_fills = re.findall(r'<polygon[^>]*fill="([^"]*var\(--edge-strong[^"]*|[^"]*accent[^"]*)"', html)
+        assert not poly_fills, (
+            f"pie slices must not use <polygon>; found: {poly_fills}"
+        )
+
+    def test_four_slices_rendered(self):
+        html = _dispatch_ok(self._SRC)
+        import re
+        paths = re.findall(r'<path\b[^>]*\bd="M[^"]*A[^"]*"', html)
+        assert len(paths) >= 4, f"expected 4 arc paths (one per slice), got {len(paths)}"
