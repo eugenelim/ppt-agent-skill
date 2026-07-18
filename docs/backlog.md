@@ -168,6 +168,8 @@ is available in the repo.
 
 ## diagram-polish
 
+### recipe-example-updates
+
 - **AC-9 (deferred: recipe-example-updates):** Update `references/blocks/diagram-architecture.md`
   recipe examples to use `:::external` on external system nodes and `|` separator on
   tech-annotated nodes. Not blocking — conventions are documented in `diagram.md`; recipe
