@@ -1,0 +1,9 @@
+flowchart TB
+  Start([Start]) --> Check{Valid Input?}
+  Check -->|Yes| Process[Process Data]
+  Check -->|No| Error[Show Error]
+  Process --> Notify[Send Notification]
+  Error --> Retry{Retry?}
+  Retry -->|Yes| Check
+  Retry -->|No| Done([Done])
+  Notify --> Done

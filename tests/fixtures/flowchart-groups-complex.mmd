@@ -1,0 +1,22 @@
+flowchart TB
+  subgraph Frontend["Frontend"]
+    UI[Web App]
+    Cache[Redis Cache]
+  end
+  subgraph Backend["Backend Services"]
+    API[REST API]
+    Auth[Auth Service]
+    Worker[Job Worker]
+  end
+  subgraph DataLayer["Data Layer"]
+    DB[(PostgreSQL)]
+    Queue[(Message Queue)]
+  end
+  UI -->|request| API
+  UI -.->|cached read| Cache
+  API --> Auth
+  API --> Worker
+  Worker --> Queue
+  API --> DB
+  Queue --> DB
+  Cache -.->|invalidate| DB
