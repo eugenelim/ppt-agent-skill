@@ -237,6 +237,19 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
         for n in nodes.values():
             n.x = CANVAS_PAD + n.col * col_pitch
 
+        # Pull dummy nodes (routing waypoints) tightly against their sibling column.
+        # Without this, a dummy assigned to col 1 sits ~290px from col-0 nodes,
+        # creating very wide horizontal sweeps in the rendered edge paths.
+        # Strategy: move each dummy to just right of the rightmost non-dummy at the same rank.
+        _DUMMY_MARGIN = 20
+        for n in nodes.values():
+            if not n.is_dummy:
+                continue
+            _siblings = [nn for nn in nodes.values() if nn.rank == n.rank and not nn.is_dummy]
+            if _siblings:
+                _rightmost = max(nn.x + NODE_W for nn in _siblings)
+                n.x = _rightmost + _DUMMY_MARGIN
+
         # Variable rank heights: accumulate Y positions by actual max node height per rank.
         # Nodes shorter than rank_h are centered vertically within the row.
         rank_to_nodes: dict[int, list] = {}
@@ -249,7 +262,9 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
                 n.y = y_cursor + (rank_h - _node_render_h(n)) // 2
             y_cursor += rank_h + RANK_GAP
 
-        canvas_w = CANVAS_PAD * 2 + (max_col + 1) * col_pitch - COL_GAP
+        # Recompute canvas_w using actual node x positions (dummies may have shifted)
+        max_x_right = max(n.x + NODE_W for n in nodes.values())
+        canvas_w = max_x_right + CANVAS_PAD
         canvas_h = y_cursor + CANVAS_PAD - RANK_GAP
         return canvas_w, canvas_h
 

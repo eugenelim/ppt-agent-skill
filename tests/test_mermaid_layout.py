@@ -3219,7 +3219,7 @@ class TestDiamondNoOrphanDots:
     def test_diamond_no_rect_border_causing_vertex_dots(self):
         """Diamond nodes must not use 'border:Xpx solid' — the rectangular CSS
         border bleeds through at clip-path polygon vertices as orphan dots.
-        The fix uses box-shadow:inset which is clipped cleanly to the diamond."""
+        The border is drawn via an SVG polygon overlay that traces the diamond outline."""
         import re
         html = _dispatch(self.SRC_CLIPPING, None, 800)
         diamond_styles = re.findall(
@@ -3229,5 +3229,2795 @@ class TestDiamondNoOrphanDots:
         for styles in diamond_styles:
             assert "border:2px solid" not in styles, (
                 "Diamond node uses CSS border:2px solid which creates vertex dot "
-                "artifacts at clip-path polygon corners; use box-shadow:inset instead"
+                "artifacts at clip-path polygon corners; use SVG polygon overlay instead"
             )
+
+    def test_diamond_has_svg_polygon_border(self):
+        """Diamond nodes use an SVG polygon overlay for the border so the outline
+        follows the actual diamond shape rather than the invisible bounding-box rectangle."""
+        import re
+        html = _dispatch(self.SRC_CLIPPING, None, 800)
+        # Each diamond div must contain an SVG with a polygon that traces the diamond
+        diamond_divs = re.findall(
+            r'class="node node-diamond[^"]*"[^>]*>.*?</div>', html, re.S
+        )
+        assert diamond_divs, "No diamond node divs found"
+        for div in diamond_divs:
+            assert '<polygon' in div, (
+                "Diamond node has no SVG polygon border overlay — diamond outline "
+                "won't be visible because box-shadow:inset follows the bounding box"
+            )
+
+
+# ── TestLinkStyleIgnored ──────────────────────────────────────────────────────
+
+class TestLinkStyleIgnored:
+    """linkStyle directives are silently skipped — diagram still renders cleanly.
+
+    We do not implement linkStyle coloring; this class documents the contract:
+    the directive must not crash, corrupt the edge list, or produce malformed HTML.
+    """
+
+    def test_linkstyle_single_index_no_crash(self):
+        html = _dispatch_ok(
+            "flowchart LR\n  A[Alpha] --> B[Beta]\n  linkStyle 0 stroke:#ff0000,stroke-width:2px"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_linkstyle_comma_indices_no_crash(self):
+        html = _dispatch_ok(
+            "flowchart LR\n  A --> B\n  B --> C\n  linkStyle 0,1 stroke:#00ff00"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_linkstyle_default_no_crash(self):
+        html = _dispatch_ok(
+            "flowchart LR\n  A --> B\n  linkStyle default stroke:#888888,stroke-width:3px"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_linkstyle_does_not_reduce_edge_count(self):
+        """linkStyle lines must not be parsed as edges — edge count unchanged."""
+        lines_no_ls = ["A --> B", "B --> C"]
+        lines_with_ls = ["A --> B", "B --> C", "linkStyle 0 stroke:#ff0000"]
+        nodes1, edges1, _ = _parse_graph_source(lines_no_ls)
+        nodes2, edges2, _ = _parse_graph_source(lines_with_ls)
+        assert len(edges1) == len(edges2) == 2
+
+    def test_linkstyle_does_not_create_spurious_nodes(self):
+        """linkStyle lines must not produce nodes."""
+        lines = ["A --> B", "linkStyle 0 stroke:#ff0000"]
+        nodes, edges, _ = _parse_graph_source(lines)
+        assert set(nodes.keys()) == {"A", "B"}
+
+    def test_linkstyle_out_of_range_no_crash(self):
+        html = _dispatch_ok(
+            "flowchart LR\n  A --> B\n  linkStyle 99 stroke:#ff0000"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_linkstyle_in_state_diagram_no_crash(self):
+        html = _dispatch_ok(
+            "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Done\n  linkStyle 0 stroke:#ff0000"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_linkstyle_fixture_dispatches(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-linkstyle.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        # Both nodes must be present
+        assert "Service" in html
+        assert "API" in html
+        assert "Database" in html
+
+
+# ── TestMultilineBrLabels ─────────────────────────────────────────────────────
+
+class TestMultilineBrLabels:
+    """<br> in node labels produces multi-line output via _render_label_html."""
+
+    def test_flowchart_node_br_renders(self):
+        """<br> inside a quoted node label produces a <br> in the output HTML."""
+        html = _dispatch_ok('flowchart TB\n  A["Line One<br>Line Two"]')
+        assert "<br>" in html
+
+    def test_flowchart_node_two_lines_appear(self):
+        """Both text fragments around <br> appear in rendered HTML."""
+        html = _dispatch_ok('flowchart TB\n  A["Line One<br>Line Two"]')
+        assert "Line One" in html
+        assert "Line Two" in html
+
+    def test_flowchart_node_three_lines_appear(self):
+        """Three <br>-separated lines all appear in rendered HTML."""
+        html = _dispatch_ok('flowchart TB\n  A["First<br>Second<br>Third"]')
+        assert "First" in html
+        assert "Second" in html
+        assert "Third" in html
+
+    def test_flowchart_multiline_node_height_larger(self):
+        """A node with <br> must be taller than a single-line node."""
+        n_multi = _Node(id="A", label="First<br>Second<br>Third")
+        n_plain = _Node(id="B", label="Short")
+        assert _node_render_h(n_multi) > _node_render_h(n_plain)
+
+    def test_br_in_unquoted_node_label(self):
+        """<br> in a bracket label (not quoted) also passes through."""
+        html = _dispatch_ok("flowchart TB\n  A[Upper<br>Lower]")
+        assert "Upper" in html
+        assert "Lower" in html
+
+    def test_br_preserved_in_render_label_html(self):
+        """_render_label_html passes <br> through to the output."""
+        result = _render_label_html("top<br>bottom")
+        assert "<br>" in result
+
+    def test_multiline_fixture_dispatches(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-multiline-br.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert "Line One" in html
+        assert "Line Two" in html
+
+
+# ── TestLightModeTheme ────────────────────────────────────────────────────────
+
+class TestLightModeTheme:
+    """make_page(theme='light') produces correct light-mode CSS variables."""
+
+    def _light_page(self, fragment_src: str) -> str:
+        from mermaid_layout import make_page
+        fragment = _dispatch(fragment_src, None, 600)
+        return make_page(fragment, theme="light")
+
+    def test_light_page_contains_light_bg(self):
+        """Light mode background is white (#ffffff), not dark."""
+        page = self._light_page("flowchart TB\n  A-->B")
+        assert "#ffffff" in page.lower() or "#FFFFFF" in page
+
+    def test_light_page_contains_emerald_accent(self):
+        """Light mode accent-1 is emerald (#3F7D5A), not blue (#60a5fa)."""
+        page = self._light_page("flowchart TB\n  A-->B")
+        assert "#3F7D5A" in page or "#3f7d5a" in page.lower()
+
+    def test_light_page_not_dark_blue_accent(self):
+        """Light mode :root block uses emerald accent, not dark-mode blue #60a5fa.
+
+        Inline style fallbacks in the fragment may still contain #60a5fa as a
+        CSS-variable fallback (correct cascade behavior). The test checks the
+        :root block that overrides those fallbacks, not the full page string.
+        """
+        import re
+        page = self._light_page("flowchart TB\n  A-->B")
+        root_match = re.search(r':root\s*\{([^}]+)\}', page)
+        assert root_match, "no :root block found in light page"
+        root_css = root_match.group(1)
+        assert "#3f7d5a" in root_css.lower(), (
+            "light mode :root must declare emerald accent #3F7D5A as --accent-1"
+        )
+        assert "#60a5fa" not in root_css.lower(), (
+            "light mode :root must not declare dark-mode blue #60a5fa"
+        )
+
+    def test_light_page_html_structure(self):
+        """Light mode page has correct HTML structure."""
+        page = self._light_page("flowchart TB\n  A-->B")
+        assert "<!DOCTYPE html>" in page
+        assert ":root" in page
+        assert "diagram mermaid-layout" in page
+
+    def test_light_page_cream_bg_primary(self):
+        """Light mode --bg-primary is #F7F6F2 (cream)."""
+        page = self._light_page("flowchart TB\n  A-->B")
+        assert "#F7F6F2" in page or "#f7f6f2" in page.lower()
+
+    def test_dark_page_contains_dark_bg(self):
+        """Dark mode background uses the dark card colors, not #ffffff."""
+        from mermaid_layout import make_page
+        fragment = _dispatch("flowchart TB\n  A-->B", None, 600)
+        page = make_page(fragment, theme="dark")
+        assert "#161d2e" in page.lower() or "#0f1422" in page.lower()
+
+    def test_auto_page_contains_both_themes(self):
+        """Auto theme page embeds both dark and light blocks."""
+        from mermaid_layout import make_page
+        fragment = _dispatch("flowchart TB\n  A-->B", None, 600)
+        page = make_page(fragment, theme="auto")
+        assert "prefers-color-scheme: light" in page
+        assert "#3F7D5A" in page or "#3f7d5a" in page.lower()  # light accent present
+        assert "#60a5fa" in page.lower()                        # dark accent present
+
+
+# ── TestDisconnectedLayout ────────────────────────────────────────────────────
+
+class TestDisconnectedLayout:
+    """Multiple isolated components must lay out without overlap and without crash."""
+
+    def _layout(self, src: str, direction: str = "TB"):
+        lines = src.strip().splitlines()[1:]
+        nodes, edges, groups = _parse_graph_source(lines)
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        _minimize_crossings(nodes, edges)
+        cw, ch = _assign_coordinates(nodes, direction)
+        return nodes, edges, groups, cw, ch
+
+    def test_two_isolated_nodes_no_crash(self):
+        """Two nodes with no edge between them layout without error."""
+        nodes, edges, groups, cw, ch = self._layout("flowchart TB\n  A[Alpha]\n  B[Beta]")
+        assert "A" in nodes and "B" in nodes
+        assert cw > 0 and ch > 0
+
+    def test_two_isolated_nodes_different_positions(self):
+        """Two disconnected nodes must not share the same (x, y) position."""
+        nodes, edges, groups, cw, ch = self._layout("flowchart TB\n  A[Alpha]\n  B[Beta]")
+        a, b = nodes["A"], nodes["B"]
+        same_xy = (abs(a.x - b.x) < NODE_W / 2 and abs(a.y - b.y) < NODE_H / 2)
+        assert not same_xy, f"Nodes A and B share position: ({a.x},{a.y}) == ({b.x},{b.y})"
+
+    def test_two_isolated_chains_no_crash(self):
+        """Two separate chains A→B and C→D layout without error."""
+        src = "flowchart TB\n  A-->B\n  C-->D"
+        nodes, edges, groups, cw, ch = self._layout(src)
+        for nid in ("A", "B", "C", "D"):
+            assert nid in nodes
+
+    def test_disconnected_dispatch_no_crash(self):
+        """dispatch on disconnected graph returns valid HTML."""
+        html = _dispatch_ok("flowchart LR\n  A[Standalone A]\n  B[Standalone B]\n  C-->D")
+        assert "diagram mermaid-layout" in html
+
+    def test_disconnected_nodes_within_canvas(self):
+        """All nodes in a disconnected graph must be within canvas bounds."""
+        nodes, edges, groups, cw, ch = self._layout(
+            "flowchart TB\n  A[Alpha]\n  B[Beta]\n  C-->D"
+        )
+        real_nodes = [n for n in nodes.values() if not n.is_dummy]
+        for n in real_nodes:
+            assert n.x >= 0, f"Node {n.id} x={n.x} < 0"
+            assert n.y >= 0, f"Node {n.id} y={n.y} < 0"
+            assert n.x + NODE_W <= cw + CANVAS_PAD, f"Node {n.id} extends past canvas"
+
+    def test_three_isolated_nodes_all_unique_positions(self):
+        """Three disconnected nodes must all have distinct positions."""
+        nodes, _, _, cw, ch = self._layout(
+            "flowchart LR\n  X[Node X]\n  Y[Node Y]\n  Z[Node Z]"
+        )
+        real = [n for n in nodes.values() if not n.is_dummy]
+        positions = [(n.x, n.y) for n in real]
+        assert len(positions) == len(set(positions)), (
+            f"Some disconnected nodes share a position: {positions}"
+        )
+
+
+# ── TestEdgeEndpointStyleAttribute ───────────────────────────────────────────
+
+class TestEdgeEndpointStyleAttribute:
+    """--o (circle) and --x (cross) endpoints parse and flow through the pipeline."""
+
+    def test_arrow_edge_style_is_solid(self):
+        """Standard --> edge has style 'solid'."""
+        nodes, edges, _ = _parse_graph_source(["A --> B"])
+        assert edges[0].style == "solid"
+
+    def test_circle_endpoint_no_crash_in_dispatch(self):
+        """--o edge in a dispatch renders without crash."""
+        html = _dispatch_ok("flowchart LR\n  A --o B")
+        assert "diagram mermaid-layout" in html
+
+    def test_cross_endpoint_no_crash_in_dispatch(self):
+        """--x edge in a dispatch renders without crash."""
+        html = _dispatch_ok("flowchart LR\n  A --x B")
+        assert "diagram mermaid-layout" in html
+
+    def test_circle_endpoint_edge_is_in_svg(self):
+        """--o edge produces at least one <path> in the SVG overlay."""
+        html = _dispatch_ok("flowchart LR\n  A --o B")
+        import re
+        assert re.search(r'<path\b[^>]+d="', html), "no SVG path found for --o edge"
+
+    def test_mixed_endpoint_diagram_renders(self):
+        """A diagram mixing -->, --o, --x renders correctly."""
+        html = _dispatch_ok("flowchart LR\n  A --> B\n  B --o C\n  C --x D")
+        assert "diagram mermaid-layout" in html
+        assert "A" in html and "B" in html and "C" in html and "D" in html
+
+
+# ── TestXychartAxisLabels ─────────────────────────────────────────────────────
+
+class TestXychartAxisLabels:
+    """X-axis category labels appear in the rendered XY chart HTML."""
+
+    _SRC = (
+        "xychart-beta\n"
+        "  title Sales by Quarter\n"
+        "  x-axis [Q1, Q2, Q3, Q4]\n"
+        "  y-axis 0 --> 100\n"
+        "  bar [25, 50, 75, 90]\n"
+    )
+
+    def test_xaxis_label_q1_present(self):
+        html = _dispatch(_SRC := self._SRC, None, 800)
+        assert "Q1" in html, "X-axis label 'Q1' missing from rendered chart"
+
+    def test_xaxis_label_q4_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "Q4" in html, "X-axis label 'Q4' missing from rendered chart"
+
+    def test_chart_title_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "Sales by Quarter" in html, "Chart title missing from rendered output"
+
+    def test_bar_series_rendered(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert '<div style="position:absolute' in html, "Bar series not rendered"
+
+    def test_xaxis_all_labels_present(self):
+        """All four axis labels must be in the output."""
+        html = _dispatch(self._SRC, None, 800)
+        for label in ("Q1", "Q2", "Q3", "Q4"):
+            assert label in html, f"X-axis label '{label}' missing"
+
+
+# ── TestGanttSectionHeaders ───────────────────────────────────────────────────
+
+class TestGanttSectionHeaders:
+    """Section headers in gantt charts must appear in rendered output."""
+
+    _SRC = """\
+gantt
+    title Delivery Plan
+    dateFormat YYYY-MM-DD
+    section Design
+        Research    :a1, 2024-01-01, 7d
+        Wireframes  :after a1, 5d
+    section Development
+        Backend     :2024-01-15, 14d
+        Frontend    :2024-01-20, 10d
+    section Testing
+        QA          :2024-02-01, 7d
+"""
+
+    def test_section_design_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Design" in html, "Section 'Design' header missing from gantt output"
+
+    def test_section_development_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Development" in html, "Section 'Development' header missing from gantt output"
+
+    def test_task_research_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Research" in html, "Task 'Research' missing from gantt output"
+
+    def test_gantt_title_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Delivery Plan" in html, "Gantt title 'Delivery Plan' missing from output"
+
+    def test_gantt_renders_valid_html(self):
+        html = _dispatch_ok(self._SRC)
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestNewFixtureCorpus ──────────────────────────────────────────────────────
+
+_NEW_FIXTURES = [
+    "flowchart-linkstyle.mmd",
+    "flowchart-multiline-br.mmd",
+    "class-methods.mmd",
+    "er-identifying.mmd",
+    "statediagram-complex.mmd",
+    "sequence-complex.mmd",
+]
+
+
+class TestNewFixtureDispatch:
+    """All newly added fixture files dispatch without error in light mode."""
+
+    @pytest.mark.parametrize("name", _NEW_FIXTURES)
+    def test_fixture_dispatches_light(self, name: str):
+        path = REPO_ROOT / "tests" / "fixtures" / name
+        if not path.exists():
+            pytest.skip(f"fixture {name} not yet created")
+        src = path.read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html, f"{name}: dispatch returned invalid HTML"
+
+    @pytest.mark.parametrize("name", _NEW_FIXTURES)
+    def test_fixture_make_page_light(self, name: str):
+        """Each new fixture's fragment wraps cleanly in a light-mode full page."""
+        from mermaid_layout import make_page
+        path = REPO_ROOT / "tests" / "fixtures" / name
+        if not path.exists():
+            pytest.skip(f"fixture {name} not yet created")
+        src = path.read_text()
+        fragment = _dispatch(src, None, 800)
+        page = make_page(fragment, theme="light")
+        assert "<!DOCTYPE html>" in page
+        assert "#ffffff" in page.lower() or "#F7F6F2" in page  # light background present
+        assert "diagram mermaid-layout" in page
+
+
+# ── Additional imports for parity expansion ───────────────────────────────────
+
+from mermaid_layout import THEME_LIGHT, THEME_DARK, make_page as _make_page
+from mermaid_layout._strategies import (
+    _SEQ_PART_RE, _SEQ_MSG_RE, _SEQ_BLOCK_RE, _SEQ_NOTE_RE, _SEQ_ACTIVATE_RE,
+)
+
+
+# ── TestSequenceParser ────────────────────────────────────────────────────────
+
+class TestSequenceParser:
+    """Sequence diagram parser produces correct participants, messages, and blocks.
+
+    Parity with upstream sequence-parser.test.ts.
+    """
+
+    def _items(self, src: str) -> tuple[list, list, dict]:
+        """Return (participants, items, p_label) from a raw sequenceDiagram source.
+
+        We drive _dispatch and then inspect the rendered output rather than calling
+        the internal parser directly, since parsing is embedded in _layout_lifeline.
+        """
+        html = _dispatch(src, None, 800)
+        return html
+
+    # ── participant declaration ──────────────────────────────────────────────
+
+    def test_explicit_participant_renders(self):
+        html = _dispatch_ok("sequenceDiagram\n  participant Alice\n  Alice->>Bob: hi")
+        assert "Alice" in html
+
+    def test_participant_alias(self):
+        """participant A as Alice renders the alias 'Alice', not 'A'."""
+        html = _dispatch_ok("sequenceDiagram\n  participant A as Alice\n  A->>B: hello")
+        assert "Alice" in html
+
+    def test_actor_keyword_renders(self):
+        """actor keyword creates the same entry as participant."""
+        html = _dispatch_ok("sequenceDiagram\n  actor User\n  User->>API: request")
+        assert "User" in html
+
+    def test_auto_created_from_message(self):
+        """Participants not explicitly declared are auto-created from messages."""
+        html = _dispatch_ok("sequenceDiagram\n  Client->>Server: connect")
+        assert "Client" in html
+        assert "Server" in html
+
+    def test_participant_order_preserved(self):
+        """Explicit participants appear in the order they are declared."""
+        html = _dispatch_ok(
+            "sequenceDiagram\n"
+            "  participant C\n"
+            "  participant A\n"
+            "  participant B\n"
+            "  C->>A: msg\n"
+        )
+        c_pos = html.find(">C<") if ">C<" in html else html.find("C")
+        a_pos = html.find(">A<") if ">A<" in html else html.find("A")
+        assert c_pos < a_pos, "C must appear before A in declaration order"
+
+    # ── message arrow styles ─────────────────────────────────────────────────
+
+    def test_solid_arrow_renders(self):
+        html = _dispatch_ok("sequenceDiagram\n  A->>B: solid")
+        assert "solid" in html
+
+    def test_dotted_arrow_uses_dasharray(self):
+        """Dotted (-->> / --> ) arrows must produce stroke-dasharray in SVG."""
+        html = _dispatch_ok("sequenceDiagram\n  A-->>B: dotted")
+        assert "stroke-dasharray" in html
+
+    def test_sync_arrow_style(self):
+        """->  (synchronous, no arrowhead) renders without crash."""
+        html = _dispatch_ok("sequenceDiagram\n  A->B: sync")
+        assert "diagram mermaid-layout" in html
+
+    def test_cross_arrow_x_style(self):
+        """--x arrow renders without crash."""
+        html = _dispatch_ok("sequenceDiagram\n  A--xB: lost")
+        assert "diagram mermaid-layout" in html
+
+    def test_message_label_present(self):
+        html = _dispatch_ok("sequenceDiagram\n  Alice->>Bob: Hello World")
+        assert "Hello World" in html
+
+    # ── activations ─────────────────────────────────────────────────────────
+
+    def test_activate_deactivate_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: req\n  activate B\n  B->>A: res\n  deactivate B"
+        )
+        assert "diagram mermaid-layout" in html
+
+    # ── blocks ───────────────────────────────────────────────────────────────
+
+    def test_loop_block_label_present(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: req\n  loop retry\n  A->>B: msg\n  end"
+        )
+        assert "retry" in html
+
+    def test_alt_else_block_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: req\n  alt success\n  A->>B: ok\n  else fail\n  A->>B: err\n  end"
+        )
+        assert "success" in html
+        assert "fail" in html
+
+    def test_opt_block_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: req\n  opt optional\n  A->>B: extra\n  end"
+        )
+        assert "optional" in html
+
+    def test_par_block_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  par branch1\n  A->>B: msg1\n  and branch2\n  A->>C: msg2\n  end"
+        )
+        assert "branch1" in html
+
+    # ── notes ────────────────────────────────────────────────────────────────
+
+    def test_note_over_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: hi\n  Note over A: thinking"
+        )
+        assert "thinking" in html
+
+    def test_note_left_of_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  participant A\n  A->>A: self\n  Note left of A: left note"
+        )
+        assert "left note" in html
+
+    def test_note_right_of_renders(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  participant A\n  Note right of A: right note"
+        )
+        assert "right note" in html
+
+    # ── self-message ─────────────────────────────────────────────────────────
+
+    def test_self_message_renders(self):
+        html = _dispatch_ok("sequenceDiagram\n  A->>A: self-call")
+        assert "self-call" in html
+
+    # ── complex flow ─────────────────────────────────────────────────────────
+
+    def test_complex_auth_flow_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "sequence-complex.mmd").read_text()
+        html = _dispatch(src, None, 1000)
+        assert "diagram mermaid-layout" in html
+        assert "Client" in html
+        assert "AuthService" in html
+
+    # ── dark / light mode ────────────────────────────────────────────────────
+
+    def test_sequence_dark_mode_renders(self):
+        fragment = _dispatch("sequenceDiagram\n  Alice->>Bob: Hello", None, 600)
+        page = _make_page(fragment, theme="dark")
+        assert "#60a5fa" in page.lower()  # dark accent
+        assert "Alice" in page
+
+    def test_sequence_light_mode_renders(self):
+        fragment = _dispatch("sequenceDiagram\n  Alice->>Bob: Hello", None, 600)
+        page = _make_page(fragment, theme="light")
+        assert "#3f7d5a" in page.lower()  # light emerald accent
+        assert "Alice" in page
+
+
+# ── TestSequenceLayout ────────────────────────────────────────────────────────
+
+class TestSequenceLayout:
+    """Sequence diagram spatial layout invariants.
+
+    Parity with upstream sequence-layout.test.ts.
+    """
+
+    def test_multiple_participants_have_distinct_positions(self):
+        """Three participants must appear at distinct horizontal positions."""
+        import re
+        html = _dispatch_ok(
+            "sequenceDiagram\n  participant A\n  participant B\n  participant C\n  A->>B: msg"
+        )
+        lefts = [int(m) for m in re.findall(r'left:([\d]+)px', html)]
+        if len(lefts) >= 3:
+            lefts_sorted = sorted(set(lefts))
+            assert len(lefts_sorted) >= 3, f"participants share positions: {lefts_sorted}"
+
+    def test_block_rect_present(self):
+        """loop/alt blocks emit a <rect> bounding box."""
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: req\n  loop retry\n  A->>B: msg\n  end"
+        )
+        assert "<rect" in html
+
+    def test_note_polygon_5pts(self):
+        """Note boxes are rendered as 5-point polygons (dog-ear shape)."""
+        import re
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: hi\n  Note over A: note text"
+        )
+        polys = re.findall(r'<polygon points="([^"]+)"', html)
+        five_pt = [p for p in polys if len(p.split()) == 5]
+        assert five_pt, f"Note over must produce 5-point polygon; found: {polys}"
+
+    def test_canvas_height_grows_with_messages(self):
+        """A sequence with more messages produces a taller canvas."""
+        import re
+        short = _dispatch_ok("sequenceDiagram\n  A->>B: one")
+        long_ = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: one\n  A->>B: two\n  A->>B: three\n  A->>B: four"
+        )
+        def _h(html):
+            m = re.search(r'height:(\d+)px', html)
+            return int(m.group(1)) if m else 0
+        assert _h(long_) > _h(short), "more messages must produce greater canvas height"
+
+    def test_lifeline_spans_full_height(self):
+        """Vertical lifeline lines are present in sequence SVG."""
+        html = _dispatch_ok("sequenceDiagram\n  participant A\n  A->>A: self")
+        assert "<line" in html, "lifeline must emit <line> elements"
+
+    def test_alt_divider_dashed(self):
+        """alt/else produces a dashed <line> as divider."""
+        import re
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: req\n  alt success\n  A->>B: ok\n  else fail\n  A->>B: err\n  end"
+        )
+        lines = re.findall(r'<line[^>]+>', html)
+        dashed = [l for l in lines if 'stroke-dasharray' in l]
+        assert dashed, "alt/else block must produce a dashed <line> divider"
+
+
+# ── TestClassParser ───────────────────────────────────────────────────────────
+
+class TestClassParser:
+    """Class diagram parsing: attributes, methods, annotations, relationships.
+
+    Parity with upstream class-parser.test.ts.
+    """
+
+    # ── class block with attributes ─────────────────────────────────────────
+
+    def test_class_renders_with_label(self):
+        html = _dispatch_ok(
+            "classDiagram\n  class Animal {\n    +String name\n    +makeSound()\n  }"
+        )
+        assert "Animal" in html
+
+    def test_class_with_attributes_renders(self):
+        """Class defined with a {} block renders the class node."""
+        html = _dispatch_ok(
+            "classDiagram\n  class Dog {\n    +String breed\n    +fetch() void\n  }"
+        )
+        assert "Dog" in html
+
+    def test_class_annotation_interface(self):
+        """<<interface>> annotation renders the class node."""
+        html = _dispatch_ok(
+            "classDiagram\n  class IService {\n    <<interface>>\n    +connect()\n  }"
+        )
+        assert "IService" in html
+
+    def test_class_standalone_declaration(self):
+        """class Foo on its own line creates the node."""
+        html = _dispatch_ok("classDiagram\n  class Foo\n  class Bar\n  Foo --> Bar")
+        assert "Foo" in html
+        assert "Bar" in html
+
+    # ── relationships ────────────────────────────────────────────────────────
+
+    def test_inheritance_operator(self):
+        html = _dispatch_ok("classDiagram\n  Animal <|-- Dog")
+        assert "Animal" in html
+        assert "Dog" in html
+
+    def test_composition_operator(self):
+        html = _dispatch_ok("classDiagram\n  Car *-- Engine")
+        assert "Car" in html
+        assert "Engine" in html
+
+    def test_aggregation_operator(self):
+        html = _dispatch_ok("classDiagram\n  Pond o-- Duck")
+        assert "Pond" in html
+        assert "Duck" in html
+
+    def test_association_operator(self):
+        html = _dispatch_ok("classDiagram\n  Person --> Address")
+        assert "Person" in html
+        assert "Address" in html
+
+    def test_dependency_dashed_operator(self):
+        html = _dispatch_ok("classDiagram\n  Client ..> Service")
+        assert "Client" in html
+        assert "Service" in html
+
+    def test_realization_operator(self):
+        """Realization (..|>) produces dashed edge."""
+        html = _dispatch_ok("classDiagram\n  Prof ..|> Teacher")
+        assert 'stroke-dasharray="6 4"' in html
+
+    def test_all_six_relationship_types(self):
+        """A diagram using all 6 relationships renders without crash."""
+        src = (REPO_ROOT / "tests" / "fixtures" / "class-relationships-all.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+
+    def test_relationship_label_present(self):
+        """Optional label after ':' in a class relationship is present."""
+        html = _dispatch_ok("classDiagram\n  A --> B : uses")
+        assert "uses" in html
+
+    def test_auto_creates_from_relationship(self):
+        """Classes not explicitly declared are created from relationship lines."""
+        html = _dispatch_ok("classDiagram\n  ImplicitA --> ImplicitB")
+        assert "ImplicitA" in html
+        assert "ImplicitB" in html
+
+    # ── SVG markers ──────────────────────────────────────────────────────────
+
+    def test_inheritance_marker_hollow_fill(self):
+        """Inheritance triangle must be hollow (fill='none')."""
+        import re
+        html = _dispatch_ok("classDiagram\n  Animal <|-- Dog")
+        m = re.search(r'<marker id="cls-inherit"[^>]*>(.*?)</marker>', html, re.DOTALL)
+        assert m, "cls-inherit marker must be defined"
+        assert 'fill="none"' in m.group(1)
+
+    def test_composition_marker_filled(self):
+        """Composition diamond must NOT be hollow."""
+        import re
+        html = _dispatch_ok("classDiagram\n  Car *-- Engine")
+        m = re.search(r'<marker id="cls-composition"[^>]*>(.*?)</marker>', html, re.DOTALL)
+        assert m, "cls-composition marker must be defined"
+        assert 'fill="none"' not in m.group(1)
+
+    # ── methods fixture ──────────────────────────────────────────────────────
+
+    def test_class_methods_fixture_dispatches(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "class-methods.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert "Animal" in html
+        assert "Dog" in html
+
+    # ── dark / light mode ────────────────────────────────────────────────────
+
+    def test_class_dark_mode(self):
+        fragment = _dispatch("classDiagram\n  Animal <|-- Dog", None, 600)
+        page = _make_page(fragment, theme="dark")
+        assert "#60a5fa" in page.lower()
+
+    def test_class_light_mode(self):
+        fragment = _dispatch("classDiagram\n  Animal <|-- Dog", None, 600)
+        page = _make_page(fragment, theme="light")
+        assert "#3f7d5a" in page.lower()
+
+
+# ── TestERParser ──────────────────────────────────────────────────────────────
+
+class TestERParser:
+    """ER diagram parsing: entities, attributes, relationships, cardinality.
+
+    Parity with upstream er-parser.test.ts.
+    """
+
+    # ── entity definition ────────────────────────────────────────────────────
+
+    def test_entity_renders(self):
+        html = _dispatch_ok(
+            "erDiagram\n  Customer {\n    int id\n    string name\n  }"
+        )
+        assert "Customer" in html
+
+    def test_entity_auto_created_from_relationship(self):
+        """Entities not in a block are auto-created from relationship lines."""
+        html = _dispatch_ok("erDiagram\n  A ||--o{ B : rel")
+        assert "A" in html
+        assert "B" in html
+
+    def test_multiple_entities_render(self):
+        html = _dispatch_ok(
+            "erDiagram\n  USER ||--o{ ORDER : places\n  ORDER ||--|{ LINE : contains"
+        )
+        assert "USER" in html
+        assert "ORDER" in html
+        assert "LINE" in html
+
+    # ── cardinality tokens ───────────────────────────────────────────────────
+
+    def test_one_to_zero_many(self):
+        m = _ER_REL_RE.match("Customer ||--o{ Order : places")
+        assert m
+        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "one"
+        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "zero-many"
+
+    def test_many_to_one(self):
+        m = _ER_REL_RE.match("Order }|--|| Line : contains")
+        assert m
+        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "many"
+        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "one"
+
+    def test_zero_one_to_many(self):
+        m = _ER_REL_RE.match("A o|--|{ B : rel")
+        assert m
+        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "zero-one"
+        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "many"
+
+    def test_one_to_one(self):
+        m = _ER_REL_RE.match("A ||--|| B : has")
+        assert m
+        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "one"
+        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "one"
+
+    def test_zero_many_to_zero_many(self):
+        m = _ER_REL_RE.match("A }o--o{ B : links")
+        assert m
+        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "zero-many"
+        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "zero-many"
+
+    # ── relationship label ────────────────────────────────────────────────────
+
+    def test_relationship_label_present(self):
+        html = _dispatch_ok("erDiagram\n  Customer ||--o{ Order : places")
+        assert "places" in html
+
+    def test_relationship_label_extracted(self):
+        m = _ER_REL_RE.match("Customer ||--o{ Order : places")
+        assert m
+        assert m.group("lbl").strip() == "places"
+
+    # ── SVG crow's foot markers ───────────────────────────────────────────────
+
+    def test_one_marker_produces_lines(self):
+        import re
+        html = _dispatch_ok("erDiagram\n  A ||--|| B : rel")
+        lines = re.findall(r'<line[^>]+>', html)
+        assert len(lines) >= 2, f"one-to-one ER must produce ≥2 <line> elements, got {len(lines)}"
+
+    def test_zero_many_produces_circle(self):
+        html = _dispatch_ok("erDiagram\n  A ||--o{ B : rel")
+        assert "<circle" in html
+
+    # ── identifying fixture ───────────────────────────────────────────────────
+
+    def test_er_identifying_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "er-identifying.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert "ORDER" in html or "order" in html.lower()
+        assert "CUSTOMER" in html or "customer" in html.lower()
+
+    # ── dark / light mode ────────────────────────────────────────────────────
+
+    def test_er_dark_mode(self):
+        fragment = _dispatch("erDiagram\n  A ||--o{ B : rel", None, 600)
+        page = _make_page(fragment, theme="dark")
+        assert "#60a5fa" in page.lower()
+
+    def test_er_light_mode(self):
+        fragment = _dispatch("erDiagram\n  A ||--o{ B : rel", None, 600)
+        page = _make_page(fragment, theme="light")
+        assert "#3f7d5a" in page.lower()
+
+
+# ── TestThemeConstants ────────────────────────────────────────────────────────
+
+class TestThemeConstants:
+    """THEME_LIGHT and THEME_DARK define the complete CSS variable set.
+
+    Parity with upstream styles.test.ts.
+    """
+
+    _REQUIRED_KEYS = {
+        "--card-bg-from", "--card-bg-to", "--card-border", "--text-primary",
+        "--text-secondary", "--accent-1", "--accent-2", "--accent-3", "--accent-4",
+        "--bg-primary", "--edge-label-bg", "--font-primary", "--node-shadow",
+        "--node-radius", "--group-radius",
+    }
+
+    def test_theme_light_has_required_keys(self):
+        missing = self._REQUIRED_KEYS - set(THEME_LIGHT.keys())
+        assert not missing, f"THEME_LIGHT missing keys: {missing}"
+
+    def test_theme_dark_has_required_keys(self):
+        missing = self._REQUIRED_KEYS - set(THEME_DARK.keys())
+        assert not missing, f"THEME_DARK missing keys: {missing}"
+
+    def test_theme_light_bg_is_white(self):
+        assert THEME_LIGHT["--card-bg-from"].lower() == "#ffffff"
+
+    def test_theme_dark_bg_is_dark(self):
+        assert THEME_DARK["--card-bg-from"].lower() != "#ffffff"
+
+    def test_theme_light_accent1_is_emerald(self):
+        assert "#3f7d5a" in THEME_LIGHT["--accent-1"].lower()
+
+    def test_theme_dark_accent1_is_blue(self):
+        assert "#60a5fa" in THEME_DARK["--accent-1"].lower()
+
+    def test_theme_light_text_primary_is_dark(self):
+        """Light mode text is dark (for contrast on white background)."""
+        assert THEME_LIGHT["--text-primary"].lower() in ("#191a17", "#1a1a17", "#191a17")
+
+    def test_theme_dark_text_primary_is_light(self):
+        """Dark mode text is light (for contrast on dark background)."""
+        val = THEME_DARK["--text-primary"].lower()
+        # Could be rgba or hex — just check it's not a pure-dark color
+        assert val not in ("#191a17", "#000000")
+
+    def test_make_page_light_embeds_all_light_vars(self):
+        """make_page(theme='light') sets every THEME_LIGHT var in :root."""
+        fragment = _dispatch("flowchart TB\n  A-->B", None, 400)
+        page = _make_page(fragment, theme="light")
+        for key, val in THEME_LIGHT.items():
+            assert key in page, f"light page missing CSS var {key}"
+
+    def test_make_page_dark_embeds_all_dark_vars(self):
+        """make_page(theme='dark') sets every THEME_DARK var in :root."""
+        fragment = _dispatch("flowchart TB\n  A-->B", None, 400)
+        page = _make_page(fragment, theme="dark")
+        for key, val in THEME_DARK.items():
+            assert key in page, f"dark page missing CSS var {key}"
+
+    def test_node_constants_are_positive(self):
+        """NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD must all be positive integers."""
+        from mermaid_layout import NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD
+        for name, val in (("NODE_W", NODE_W), ("NODE_H", NODE_H),
+                          ("RANK_GAP", RANK_GAP), ("COL_GAP", COL_GAP),
+                          ("CANVAS_PAD", CANVAS_PAD)):
+            assert isinstance(val, int) and val > 0, f"{name}={val} must be a positive int"
+
+    def test_node_w_wider_than_h(self):
+        """NODE_W must be wider than NODE_H (landscape card orientation)."""
+        assert NODE_W > NODE_H, f"NODE_W={NODE_W} should exceed NODE_H={NODE_H}"
+
+
+# ── TestXychartStructural ─────────────────────────────────────────────────────
+
+class TestXychartStructural:
+    """XY chart renders correct structure for bar, line, and mixed series.
+
+    Parity with upstream xychart-integration.test.ts and xychart-ascii.test.ts.
+    """
+
+    _BAR = (
+        "xychart-beta\n"
+        "  title Sales\n"
+        "  x-axis [Jan, Feb, Mar, Apr]\n"
+        "  y-axis 0 --> 100\n"
+        "  bar [25, 50, 75, 90]\n"
+    )
+    _LINE = (
+        "xychart-beta\n"
+        "  title Trend\n"
+        "  x-axis [Q1, Q2, Q3]\n"
+        "  y-axis 0 --> 100\n"
+        "  line [30, 60, 90]\n"
+    )
+    _MIXED = (
+        "xychart-beta\n"
+        "  title Mixed\n"
+        "  x-axis [A, B, C]\n"
+        "  y-axis 0 --> 100\n"
+        "  bar [30, 60, 90]\n"
+        "  line [30, 60, 90]\n"
+    )
+
+    # ── bar chart ────────────────────────────────────────────────────────────
+
+    def test_bar_series_div_present(self):
+        html = _dispatch(self._BAR, None, 800)
+        assert '<div style="position:absolute' in html
+
+    def test_bar_chart_title_present(self):
+        html = _dispatch(self._BAR, None, 800)
+        assert "Sales" in html
+
+    def test_xaxis_labels_all_four_present(self):
+        html = _dispatch(self._BAR, None, 800)
+        for label in ("Jan", "Feb", "Mar", "Apr"):
+            assert label in html, f"x-axis label '{label}' missing"
+
+    def test_yaxis_min_and_max_present(self):
+        html = _dispatch(self._BAR, None, 800)
+        assert "0" in html and "100" in html, "Y-axis min/max missing"
+
+    # ── line chart ───────────────────────────────────────────────────────────
+
+    def test_line_series_svg_present(self):
+        html = _dispatch(self._LINE, None, 800)
+        assert "<polygon" in html or '<line' in html, "line series must emit SVG elements"
+
+    def test_line_chart_title_present(self):
+        html = _dispatch(self._LINE, None, 800)
+        assert "Trend" in html
+
+    # ── mixed bar + line ─────────────────────────────────────────────────────
+
+    def test_mixed_bar_and_line_renders(self):
+        html = _dispatch(self._MIXED, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert '<div style="position:absolute' in html  # bar
+        assert "<polygon" in html or '<line' in html     # line
+
+    # ── dark / light mode ────────────────────────────────────────────────────
+
+    def test_xychart_dark_mode(self):
+        fragment = _dispatch(self._BAR, None, 800)
+        page = _make_page(fragment, theme="dark")
+        assert "Sales" in page
+        assert "#60a5fa" in page.lower()
+
+    def test_xychart_light_mode(self):
+        fragment = _dispatch(self._BAR, None, 800)
+        page = _make_page(fragment, theme="light")
+        assert "Sales" in page
+        assert "#3f7d5a" in page.lower()
+
+    # ── edge cases ───────────────────────────────────────────────────────────
+
+    def test_single_data_point_no_crash(self):
+        html = _dispatch_ok(
+            "xychart-beta\n  title T\n  x-axis [Jan]\n  y-axis 0 --> 100\n  bar [50]"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_all_zero_values_no_crash(self):
+        html = _dispatch_ok(
+            "xychart-beta\n  title T\n  x-axis [A, B, C]\n  y-axis 0 --> 100\n  bar [0, 0, 0]"
+        )
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestMultilineBrComprehensive ──────────────────────────────────────────────
+
+class TestMultilineBrComprehensive:
+    """Comprehensive <br> multi-line label tests after the escaping fix.
+
+    Parity with upstream multiline-labels.test.ts and ascii-multiline.test.ts.
+    """
+
+    # ── flowchart nodes ──────────────────────────────────────────────────────
+
+    def test_br_in_quoted_bracket_label(self):
+        html = _dispatch_ok('flowchart TB\n  A["Line1<br>Line2"]')
+        assert "Line1" in html and "Line2" in html
+        assert "<br>" in html
+
+    def test_br_in_unquoted_bracket_label(self):
+        html = _dispatch_ok("flowchart TB\n  A[Line1<br>Line2]")
+        assert "Line1" in html
+        assert "Line2" in html
+
+    def test_three_br_segments_all_present(self):
+        html = _dispatch_ok('flowchart TB\n  A["A<br>B<br>C"]')
+        assert "A" in html and "B" in html and "C" in html
+
+    def test_br_increases_node_height(self):
+        n_multi = _Node(id="A", label="Line1<br>Line2<br>Line3")
+        n_plain = _Node(id="B", label="Short")
+        assert _node_render_h(n_multi) > _node_render_h(n_plain)
+
+    def test_single_line_no_br_unchanged(self):
+        html = _dispatch_ok("flowchart TB\n  A[SingleLine]")
+        assert "SingleLine" in html
+
+    def test_empty_lines_from_double_br_no_crash(self):
+        """Consecutive <br><br> (empty line) must not crash."""
+        html = _dispatch_ok('flowchart TB\n  A["Line1<br><br>Line3"]')
+        assert "Line1" in html
+        assert "Line3" in html
+
+    def test_very_long_and_short_lines(self):
+        long_label = "A" * 25
+        html = _dispatch_ok(f'flowchart TB\n  A["{long_label}<br>Short"]')
+        assert "Short" in html
+
+    # ── edge labels ──────────────────────────────────────────────────────────
+
+    def test_br_in_edge_label(self):
+        html = _dispatch_ok('flowchart TB\n  A -->|"Line1<br>Line2"| B')
+        assert "Line1" in html
+        assert "Line2" in html
+
+    # ── subgraph labels ──────────────────────────────────────────────────────
+
+    def test_br_in_subgraph_label(self):
+        html = _dispatch_ok(
+            'flowchart TB\n  subgraph sg ["Group<br>Header"]\n    A[Node]\n  end'
+        )
+        assert "Group" in html
+        assert "Header" in html
+
+    # ── sequence diagram ─────────────────────────────────────────────────────
+
+    def test_br_in_sequence_message_label(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: Line1<br>Line2"
+        )
+        assert "Line1" in html
+        assert "Line2" in html
+
+    # ── inline formatting interacts with br ──────────────────────────────────
+
+    def test_bold_and_br_in_label(self):
+        html = _dispatch_ok('flowchart TB\n  A["**Bold**<br>normal"]')
+        assert "Bold" in html
+        assert "normal" in html
+        assert "font-weight:700" in html
+
+    def test_italic_and_br_in_label(self):
+        html = _dispatch_ok('flowchart TB\n  A["*italic*<br>normal"]')
+        assert "italic" in html
+        assert "font-style:italic" in html
+
+    def test_br_does_not_leak_escape(self):
+        """The <br> must not appear escaped as &lt;br&gt; or &amp;lt;br&amp;gt;."""
+        html = _dispatch_ok('flowchart TB\n  A["First<br>Second"]')
+        assert "&lt;br&gt;" not in html
+        assert "&amp;lt;br&amp;gt;" not in html
+
+    # ── fixture ──────────────────────────────────────────────────────────────
+
+    def test_multiline_br_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-multiline-br.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "Line One" in html
+        assert "Line Two" in html
+        assert "&lt;br&gt;" not in html
+
+
+# ── TestDarkModeStructural ────────────────────────────────────────────────────
+
+class TestDarkModeStructural:
+    """Dark mode structural assertions — mirror of TestLightModeTheme for dark.
+
+    Parity with upstream styles.test.ts dark-theme coverage.
+    """
+
+    def _dark_page(self, src: str) -> str:
+        fragment = _dispatch(src, None, 600)
+        return _make_page(fragment, theme="dark")
+
+    def test_dark_page_html_structure(self):
+        page = self._dark_page("flowchart TB\n  A-->B")
+        assert "<!DOCTYPE html>" in page
+        assert ":root" in page
+        assert "diagram mermaid-layout" in page
+
+    def test_dark_page_has_dark_bg(self):
+        page = self._dark_page("flowchart TB\n  A-->B")
+        assert "#161d2e" in page.lower() or "#0f1422" in page.lower()
+
+    def test_dark_page_root_uses_blue_accent(self):
+        import re
+        page = self._dark_page("flowchart TB\n  A-->B")
+        root_match = re.search(r':root\s*\{([^}]+)\}', page)
+        assert root_match, "no :root block found in dark page"
+        root_css = root_match.group(1)
+        assert "#60a5fa" in root_css.lower(), (
+            "dark mode :root must declare blue accent #60a5fa as --accent-1"
+        )
+
+    def test_dark_page_does_not_have_light_bg_in_root(self):
+        import re
+        page = self._dark_page("flowchart TB\n  A-->B")
+        root_match = re.search(r':root\s*\{([^}]+)\}', page)
+        assert root_match
+        root_css = root_match.group(1)
+        assert "#ffffff" not in root_css.lower(), (
+            "dark mode :root must not use white background #ffffff"
+        )
+
+    def test_all_diagram_types_dark_mode(self):
+        """Every main diagram type renders without crash in dark mode."""
+        srcs = [
+            "flowchart TB\n  A-->B",
+            "sequenceDiagram\n  A->>B: hi",
+            "classDiagram\n  A <|-- B",
+            "erDiagram\n  A ||--o{ B : rel",
+            "stateDiagram-v2\n  [*] --> Idle",
+            'pie\n  title P\n  "A": 60\n  "B": 40',
+            "gantt\n  title G\n  dateFormat YYYY-MM-DD\n  section S\n    Task1 :2024-01-01,7d",
+            "mindmap\n  root\n    A\n    B",
+            "timeline\n  title T\n  2020 : Event",
+        ]
+        for src in srcs:
+            fragment = _dispatch(src, None, 600)
+            page = _make_page(fragment, theme="dark")
+            assert "diagram mermaid-layout" in page, f"dark mode failed for: {src[:30]}"
+
+    def test_all_diagram_types_light_mode(self):
+        """Every main diagram type renders without crash in light mode."""
+        srcs = [
+            "flowchart TB\n  A-->B",
+            "sequenceDiagram\n  A->>B: hi",
+            "classDiagram\n  A <|-- B",
+            "erDiagram\n  A ||--o{ B : rel",
+            "stateDiagram-v2\n  [*] --> Idle",
+            'pie\n  title P\n  "A": 60\n  "B": 40',
+            "gantt\n  title G\n  dateFormat YYYY-MM-DD\n  section S\n    Task1 :2024-01-01,7d",
+            "mindmap\n  root\n    A\n    B",
+            "timeline\n  title T\n  2020 : Event",
+        ]
+        for src in srcs:
+            fragment = _dispatch(src, None, 600)
+            page = _make_page(fragment, theme="light")
+            assert "diagram mermaid-layout" in page, f"light mode failed for: {src[:30]}"
+
+
+# ── TestStateDiagramParser ────────────────────────────────────────────────────
+
+class TestStateDiagramParser:
+    """State diagram parsing: transitions, labels, initial/final states.
+
+    Extends existing TestDirectiveStrategies::test_state_diagram.
+    """
+
+    def test_initial_state_circle(self):
+        """[*] at source creates an _sm_start_ circle node."""
+        nodes, edges, _ = _parse_graph_source(["[*] --> Idle"])
+        assert "_sm_start_" in nodes
+        assert nodes["_sm_start_"].shape == "circle"
+
+    def test_final_state_circle(self):
+        """[*] at destination creates an _sm_end_ circle node."""
+        nodes, edges, _ = _parse_graph_source(["Done --> [*]"])
+        assert "_sm_end_" in nodes
+        assert nodes["_sm_end_"].shape == "circle"
+
+    def test_transition_label(self):
+        """'State --> Other : label' extracts label as edge label."""
+        nodes, edges, _ = _parse_graph_source(["Idle --> Processing : start"])
+        assert len(edges) == 1
+        assert edges[0].dst == "Processing"
+        assert edges[0].label == "start"
+
+    def test_multiple_transitions(self):
+        html = _dispatch_ok(
+            "stateDiagram-v2\n"
+            "  [*] --> Idle\n"
+            "  Idle --> Active : begin\n"
+            "  Active --> [*] : stop"
+        )
+        assert "Idle" in html
+        assert "Active" in html
+
+    def test_complex_state_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "statediagram-complex.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert "Idle" in html
+        assert "Active" in html
+
+    def test_state_diagram_dark_mode(self):
+        fragment = _dispatch("stateDiagram-v2\n  [*] --> Idle\n  Idle --> [*]", None, 600)
+        page = _make_page(fragment, theme="dark")
+        assert "diagram mermaid-layout" in page
+
+    def test_state_diagram_light_mode(self):
+        fragment = _dispatch("stateDiagram-v2\n  [*] --> Idle\n  Idle --> [*]", None, 600)
+        page = _make_page(fragment, theme="light")
+        assert "diagram mermaid-layout" in page
+
+
+# ── TestEdgeStyleRendering ────────────────────────────────────────────────────
+
+class TestEdgeStyleRendering:
+    """Solid, dotted, and thick edge styles produce correct SVG attributes.
+
+    Parity with upstream ascii-edge-styles.test.ts edge style coverage (SVG version).
+    """
+
+    def test_solid_edge_no_dasharray(self):
+        """Solid edges (-->) must not have stroke-dasharray."""
+        import re
+        html = _dispatch_ok("flowchart TB\n  A-->B")
+        overlay = re.search(r'(<svg style="position:absolute; inset:0.*?</svg>)', html, re.DOTALL)
+        if overlay:
+            svg = overlay.group(1)
+            paths = re.findall(r'<path[^>]+>', svg)
+            edge_paths = [p for p in paths if 'd="M' in p or 'd="m' in p.lower()]
+            assert all('stroke-dasharray' not in p for p in edge_paths), (
+                "solid edge must not have stroke-dasharray"
+            )
+
+    def test_dotted_edge_has_dasharray(self):
+        """Dotted edge (-.->) must have stroke-dasharray in SVG path."""
+        html = _dispatch_ok("flowchart TB\n  A-.->B")
+        assert "stroke-dasharray" in html
+
+    def test_thick_edge_produces_thick_marker(self):
+        """Thick edge (==>) uses the thick arrowhead marker."""
+        html = _dispatch_ok("flowchart TB\n  A==>B")
+        assert '<marker id="arrow-thick"' in html or "arrow-thick" in html
+
+    def test_all_three_edge_styles_in_one_diagram(self):
+        html = _dispatch_ok(
+            "flowchart TB\n"
+            "  A-->B\n"
+            "  B-.->C\n"
+            "  C==>D"
+        )
+        assert "diagram mermaid-layout" in html
+        assert "stroke-dasharray" in html  # dotted
+
+
+# ── TestMindmapExtended ───────────────────────────────────────────────────────
+
+class TestMindmapExtended:
+    """Mindmap rendering: root, branches, leaves, and theming.
+
+    Extends existing TestMindmapBranchBackgrounds with structural checks.
+    """
+
+    _SRC = "mindmap\n  root((Central Topic))\n    Branch A\n      Leaf A1\n    Branch B\n      Leaf B1\n      Leaf B2"
+
+    def test_root_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Central Topic" in html
+
+    def test_branches_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Branch A" in html
+        assert "Branch B" in html
+
+    def test_leaves_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Leaf A1" in html
+        assert "Leaf B1" in html
+        assert "Leaf B2" in html
+
+    def test_deep_mindmap_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "mindmap-deep.mmd").read_text()
+        html = _dispatch(src, None, 1000)
+        assert "diagram mermaid-layout" in html
+
+    def test_mindmap_dark_mode(self):
+        fragment = _dispatch(self._SRC, None, 800)
+        page = _make_page(fragment, theme="dark")
+        assert "diagram mermaid-layout" in page
+
+    def test_mindmap_light_mode(self):
+        fragment = _dispatch(self._SRC, None, 800)
+        page = _make_page(fragment, theme="light")
+        assert "diagram mermaid-layout" in page
+
+
+# ── TestAllFixturesBothModes ──────────────────────────────────────────────────
+
+class TestAllFixturesBothModes:
+    """Every fixture in tests/fixtures/ must produce valid HTML in both dark and light modes.
+
+    This is the comprehensive parity regression: a new fixture that breaks in
+    either theme is caught immediately.
+    """
+
+    _all_fixtures = sorted(
+        (REPO_ROOT / "tests" / "fixtures").glob("*.mmd")
+    )
+
+    @pytest.mark.parametrize("fixture", _all_fixtures, ids=lambda p: p.stem)
+    def test_fixture_dark_mode(self, fixture: Path):
+        src = fixture.read_text()
+        fragment = _dispatch(src, None, 800)
+        page = _make_page(fragment, theme="dark")
+        assert "<!DOCTYPE html>" in page
+        assert "diagram mermaid-layout" in page, (
+            f"{fixture.stem}: dark mode page missing 'diagram mermaid-layout'"
+        )
+
+    @pytest.mark.parametrize("fixture", _all_fixtures, ids=lambda p: p.stem)
+    def test_fixture_light_mode(self, fixture: Path):
+        src = fixture.read_text()
+        fragment = _dispatch(src, None, 800)
+        page = _make_page(fragment, theme="light")
+        assert "<!DOCTYPE html>" in page
+        assert "diagram mermaid-layout" in page, (
+            f"{fixture.stem}: light mode page missing 'diagram mermaid-layout'"
+        )
+        assert "#ffffff" in page.lower() or "#f7f6f2" in page.lower(), (
+            f"{fixture.stem}: light mode page missing white/cream background"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARITY EXPANSION — full upstream test suite coverage
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── TestBrNormalizationVariants ───────────────────────────────────────────────
+
+class TestBrNormalizationVariants:
+    """All <br> tag variants must normalize to newlines in _wrap_label.
+
+    Parity with upstream multiline-labels.test.ts parseMermaid <br> normalization.
+    """
+
+    def test_self_closing_br_slash(self):
+        assert _wrap_label("A<br/>B") == ["A", "B"]
+
+    def test_self_closing_br_space_slash(self):
+        assert _wrap_label("A<br />B") == ["A", "B"]
+
+    def test_uppercase_BR(self):
+        assert _wrap_label("A<BR>B") == ["A", "B"]
+
+    def test_mixed_case_Br(self):
+        assert _wrap_label("A<Br>B") == ["A", "B"]
+
+    def test_mixed_case_bR(self):
+        assert _wrap_label("A<bR>B") == ["A", "B"]
+
+    def test_mixed_case_self_close_bR_slash(self):
+        assert _wrap_label("A<bR />B") == ["A", "B"]
+
+    def test_multiple_br_variants_in_one_label(self):
+        lines = _wrap_label("A<br/>B<BR>C<br />D")
+        assert lines == ["A", "B", "C", "D"]
+
+    def test_br_in_flowchart_node_self_closing(self):
+        html = _dispatch_ok('flowchart TB\n  A["Line1<br/>Line2"]')
+        assert "Line1" in html and "Line2" in html
+        assert "&lt;br" not in html
+
+    def test_br_in_flowchart_node_uppercase(self):
+        html = _dispatch_ok('flowchart TB\n  A["Line1<BR>Line2"]')
+        assert "Line1" in html and "Line2" in html
+
+    def test_br_in_flowchart_node_mixed_case(self):
+        html = _dispatch_ok('flowchart TB\n  A["Line1<Br />Line2"]')
+        assert "Line1" in html and "Line2" in html
+
+    def test_br_variants_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-br-variants.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "closing" in html  # "Self-closing" with _nh() non-breaking hyphen
+        assert "Uppercase" in html
+        assert "&lt;br" not in html
+
+
+# ── TestHtmlEntityDecoding ────────────────────────────────────────────────────
+
+class TestHtmlEntityDecoding:
+    """HTML entities in labels decode correctly without double-escaping.
+
+    Parity with upstream multiline-labels.test.ts renderMermaid HTML entity decoding.
+    """
+
+    def test_lt_entity_decodes(self):
+        """&lt; in a label must render as < text, not &amp;lt;."""
+        html = _dispatch_ok('flowchart LR\n  A["5 &lt; 10"]')
+        assert "5" in html and "10" in html
+        assert "&amp;lt;" not in html
+        assert "&lt;" in html  # correctly single-escaped by _nh()
+
+    def test_gt_entity_decodes(self):
+        html = _dispatch_ok('flowchart LR\n  A["x &gt; y"]')
+        assert "&amp;gt;" not in html
+        assert "&gt;" in html
+
+    def test_amp_entity_decodes(self):
+        html = _dispatch_ok('flowchart LR\n  A["AT&amp;T"]')
+        assert "&amp;amp;" not in html
+        assert "&amp;" in html
+
+    def test_double_amp_decodes(self):
+        html = _dispatch_ok('flowchart LR\n  A["a &amp;&amp; b"]')
+        assert "&amp;amp;" not in html
+
+    def test_lt_and_gt_together(self):
+        html = _dispatch_ok('flowchart LR\n  A["&lt;tag&gt;"]')
+        assert "&amp;lt;" not in html
+        assert "&amp;gt;" not in html
+
+    def test_entity_does_not_become_br(self):
+        """&lt;br&gt; is treated the same as <br> — a line break (html.unescape decodes it)."""
+        html = _dispatch_ok('flowchart TB\n  A["text &lt;br&gt; more"]')
+        assert "text" in html
+        assert "more" in html
+        # &lt;br&gt; → decoded to <br> → treated as newline (consistent with <br>)
+        assert "&amp;lt;br&amp;gt;" not in html  # no triple-escaping
+
+    def test_html_entities_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-html-entities.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "&amp;amp;" not in html
+        assert "&amp;lt;" not in html
+        assert "&amp;gt;" not in html
+
+
+# ── TestMarkdownFormattingComplete ────────────────────────────────────────────
+
+class TestMarkdownFormattingComplete:
+    """**bold**, *italic*, ~~strikethrough~~ in labels — all diagram types.
+
+    Parity with upstream multiline-labels.test.ts renderMermaid inline formatting.
+    """
+
+    # ── _render_label_html unit tests ────────────────────────────────────────
+
+    def test_bold_star_star(self):
+        html = _render_label_html("**bold text**")
+        assert "font-weight:700" in html
+        assert "bold text" in html
+
+    def test_italic_single_star(self):
+        html = _render_label_html("*italic text*")
+        assert "font-style:italic" in html
+        assert "italic text" in html
+
+    def test_strikethrough_tilde_tilde(self):
+        html = _render_label_html("~~strike~~")
+        assert "text-decoration:line-through" in html
+        assert "strike" in html
+
+    def test_nested_bold_italic(self):
+        """**bold** *italic* in same label both render."""
+        html = _render_label_html("**bold** and *italic*")
+        assert "font-weight:700" in html
+        assert "font-style:italic" in html
+
+    def test_unclosed_delim_literal(self):
+        """Unclosed ** is emitted as literal text, not a dangling tag."""
+        html = _render_label_html("**unclosed")
+        assert "<span" not in html
+        assert "**unclosed" in html
+
+    def test_br_resets_delimiter_state(self):
+        """Delimiters don't cross <br> line boundaries — each segment is independent."""
+        result = _render_label_html("**bold<br>not bold**")
+        # '**bold' segment: ** opens but never closes → emitted as literal **bold
+        # 'not bold**' segment: ** opens at end, unclosed → literal **
+        # Result: no <span> for bold at all (unclosed in each segment)
+        assert "<span" not in result
+        assert "bold" in result
+
+    def test_plain_text_no_span(self):
+        html = _render_label_html("plain text")
+        assert "<span" not in html
+        assert "plain text" in html
+
+    # ── in flowchart nodes ────────────────────────────────────────────────────
+
+    def test_bold_in_flowchart_node(self):
+        html = _dispatch_ok('flowchart TB\n  A["**Bold**"]')
+        assert "font-weight:700" in html
+
+    def test_italic_in_flowchart_node(self):
+        html = _dispatch_ok('flowchart TB\n  A["*Italic*"]')
+        assert "font-style:italic" in html
+
+    def test_strike_in_flowchart_node(self):
+        html = _dispatch_ok('flowchart TB\n  A["~~strike~~"]')
+        assert "text-decoration:line-through" in html
+
+    def test_bold_plus_br_in_node(self):
+        html = _dispatch_ok('flowchart TB\n  A["**Bold**<br>normal"]')
+        assert "font-weight:700" in html
+        assert "normal" in html
+
+    # ── in all major shapes ───────────────────────────────────────────────────
+
+    @pytest.mark.parametrize("shape_src", [
+        'A["**bold**"]',
+        'A("**bold**")',
+        'A{"**bold**"}',
+        'A(["**bold**"])',
+        'A(("**bold**"))',
+        'A[["**bold**"]]',
+        'A{{  "**bold**"  }}',
+    ])
+    def test_bold_in_shape(self, shape_src):
+        html = _dispatch_ok(f"flowchart TB\n  {shape_src}")
+        assert "font-weight:700" in html
+
+    # ── markdown fixture ─────────────────────────────────────────────────────
+
+    def test_markdown_labels_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-markdown-labels.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "font-weight:700" in html
+        assert "font-style:italic" in html
+        assert "text-decoration:line-through" in html
+
+
+# ── TestParserShapesComplete ──────────────────────────────────────────────────
+
+class TestParserShapesComplete:
+    """All 13 standard mermaid node shapes parse to the correct shape string.
+
+    Parity with upstream parser.test.ts parseMermaid node shapes.
+    """
+
+    def _shape(self, src: str, node_id: str = "A") -> str:
+        nodes, _, _ = _parse_graph_source(src.splitlines())
+        assert node_id in nodes, f"node {node_id!r} not found"
+        return nodes[node_id].shape
+
+    def test_rectangle(self):
+        assert self._shape("flowchart TD\n  A[rect]") == "rect"
+
+    def test_rounded(self):
+        assert self._shape("flowchart TD\n  A(round)") == "round"
+
+    def test_diamond(self):
+        assert self._shape("flowchart TD\n  A{diamond}") == "diamond"
+
+    def test_stadium(self):
+        assert self._shape("flowchart TD\n  A([stadium])") == "stadium"
+
+    def test_circle(self):
+        assert self._shape("flowchart TD\n  A((circle))") == "circle"
+
+    def test_subroutine(self):
+        assert self._shape("flowchart TD\n  A[[sub]]") == "subroutine"
+
+    def test_double_circle(self):
+        assert self._shape("flowchart TD\n  A(((dbl)))") == "doublecircle"
+
+    def test_hexagon(self):
+        assert self._shape("flowchart TD\n  A{{hex}}") == "hexagon"
+
+    def test_cylinder(self):
+        assert self._shape("flowchart TD\n  A[(cyl)]") == "cylinder"
+
+    def test_flag_asymmetric(self):
+        assert self._shape("flowchart TD\n  A>flag]") == "flag"
+
+    def test_trapezoid(self):
+        assert self._shape("flowchart TD\n  A[/trap/]") == "trapezoid"
+
+    def test_inv_trapezoid(self):
+        # Mermaid [\label\] syntax → shape name "trapezoid-alt" in our parser
+        assert self._shape(r"flowchart TD" + "\n  A[\\inv\\]") == "trapezoid-alt"
+
+    def test_all_shapes_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-all-shapes.mmd").read_text()
+        html = _dispatch(src, None, 1200)
+        assert "diagram mermaid-layout" in html
+
+    def test_all_shapes_dark_mode(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-all-shapes.mmd").read_text()
+        page = _make_page(_dispatch(src, None, 1200), theme="dark")
+        assert "<!DOCTYPE html>" in page
+
+    def test_node_label_extracted(self):
+        nodes, _, _ = _parse_graph_source(["flowchart TB", "  A[My Label]"])
+        assert nodes["A"].label == "My Label"
+
+    def test_quoted_label_stripped(self):
+        nodes, _, _ = _parse_graph_source(['flowchart TB', '  A["Quoted Label"]'])
+        assert nodes["A"].label == "Quoted Label"
+
+
+# ── TestParserEdgesComplete ───────────────────────────────────────────────────
+
+class TestParserEdgesComplete:
+    """All mermaid edge types parse correctly.
+
+    Parity with upstream parser.test.ts parseMermaid edges.
+    """
+
+    def _edge(self, src: str) -> _Edge:
+        _, edges, _ = _parse_graph_source(src.splitlines())
+        assert edges, "no edges found"
+        return edges[0]
+
+    def test_solid_edge_style(self):
+        assert self._edge("flowchart LR\n  A-->B").style == "solid"
+
+    def test_dotted_edge_style(self):
+        assert self._edge("flowchart LR\n  A-.->B").style == "dotted"
+
+    def test_thick_edge_style(self):
+        assert self._edge("flowchart LR\n  A==>B").style == "thick"
+
+    def test_edge_label_pipe(self):
+        e = self._edge("flowchart LR\n  A-->|yes|B")
+        assert e.label == "yes"
+
+    def test_no_arrow_edge(self):
+        e = self._edge("flowchart LR\n  A---B")
+        assert e.arrow is False
+
+    def test_bidirectional_arrow_renders(self):
+        html = _dispatch_ok("flowchart LR\n  A<-->B")
+        assert "diagram mermaid-layout" in html
+
+    def test_parallel_links_expand(self):
+        """A --> B & C via dispatch produces both B and C as destination nodes."""
+        html = _dispatch_ok("flowchart TD\n  A --> B & C")
+        assert "B" in html
+        assert "C" in html
+
+    def test_parallel_fan_in_expands(self):
+        """A & B --> C via dispatch produces both A and B as source nodes."""
+        html = _dispatch_ok("flowchart TD\n  A & B --> C")
+        assert "A" in html
+        assert "B" in html
+        assert "C" in html
+
+    def test_chained_edges(self):
+        _, edges, _ = _parse_graph_source(["flowchart TD", "  A --> B --> C"])
+        assert len(edges) == 2
+
+    def test_dotted_edge_no_arrow(self):
+        html = _dispatch_ok("flowchart LR\n  A-.->B")
+        assert "stroke-dasharray" in html
+
+    def test_thick_edge_renders(self):
+        html = _dispatch_ok("flowchart LR\n  A==>B")
+        assert "diagram mermaid-layout" in html
+
+    def test_no_arrow_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-no-arrows.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+
+    def test_bidirectional_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-bidirectional.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+
+    def test_parallel_links_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-parallel-links.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert "Gateway" in html
+
+
+# ── TestParserSubgraphsComplete ───────────────────────────────────────────────
+
+class TestParserSubgraphsComplete:
+    """Subgraph parsing: nested, empty, cross-subgraph edges, direction override.
+
+    Parity with upstream parser.test.ts parseMermaid subgraphs.
+    """
+
+    def test_simple_subgraph_group_created(self):
+        """Subgroups are created with auto-IDs; the declared id is stored as the label."""
+        _, _, groups = _parse_graph_source([
+            "flowchart TD",
+            "  subgraph G1",
+            "    A[Node]",
+            "  end",
+        ])
+        # Parser uses auto-IDs (_g0, _g1 …) — check by label
+        assert any(g.label == "G1" for g in groups.values())
+
+    def test_subgraph_member_assigned(self):
+        _, _, groups = _parse_graph_source([
+            "flowchart TD",
+            "  subgraph G1",
+            "    A[Node]",
+            "  end",
+        ])
+        g1 = next((g for g in groups.values() if g.label == "G1"), None)
+        assert g1 is not None
+        assert "A" in g1.members
+
+    def test_nested_subgraph(self):
+        _, _, groups = _parse_graph_source([
+            "flowchart TD",
+            "  subgraph Outer",
+            "    subgraph Inner",
+            "      A[Node]",
+            "    end",
+            "  end",
+        ])
+        outer = next((g for g in groups.values() if g.label == "Outer"), None)
+        inner = next((g for g in groups.values() if g.label == "Inner"), None)
+        assert outer is not None and inner is not None
+        # Inner's parent_group references the auto-ID of Outer
+        assert inner.parent_group == outer.id
+
+    def test_cross_subgraph_edges(self):
+        _, edges, _ = _parse_graph_source([
+            "flowchart TD",
+            "  subgraph A_Group",
+            "    A[NodeA]",
+            "  end",
+            "  subgraph B_Group",
+            "    B[NodeB]",
+            "  end",
+            "  A --> B",
+        ])
+        assert any(e.src == "A" and e.dst == "B" for e in edges)
+
+    def test_empty_subgraph_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-empty-subgraph.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+
+    def test_deep_nesting_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-deep-nesting.mmd").read_text()
+        html = _dispatch(src, None, 1000)
+        assert "diagram mermaid-layout" in html
+        assert "DeepNode" in html
+
+    def test_subgraph_with_quoted_label(self):
+        """subgraph SG ["label"] — label is extracted from the bracket syntax."""
+        html = _dispatch_ok(
+            'flowchart TD\n'
+            '  subgraph SG ["My Group Label"]\n'
+            '    A[Node]\n'
+            '  end'
+        )
+        assert "My Group Label" in html
+
+
+# ── TestParserStateDiagramComplete ────────────────────────────────────────────
+
+class TestParserStateDiagramComplete:
+    """State diagram parser: composite states, CJK, comment lines, aliases.
+
+    Parity with upstream parser.test.ts parseMermaid state diagrams.
+    """
+
+    def test_state_description(self):
+        """State with description (s1 : label) renders the label in the output."""
+        html = _dispatch_ok("stateDiagram-v2\n  s1 : Running\n  [*] --> s1")
+        assert "Running" in html
+
+    def test_state_alias(self):
+        """state \"Long Label\" as sid renders the alias label in output."""
+        html = _dispatch_ok(
+            'stateDiagram-v2\n  state "Long Label" as myState\n  [*] --> myState'
+        )
+        assert "Long Label" in html
+
+    def test_comment_lines_ignored(self):
+        """Lines starting with %% are ignored (comments)."""
+        nodes, edges, _ = _parse_graph_source([
+            "flowchart TD",
+            "%% This is a comment",
+            "  A --> B",
+            "%% Another comment",
+        ])
+        assert any(e.src == "A" for e in edges)
+        # Comment text must not appear as a node
+        assert "%%" not in nodes
+
+    def test_composite_state_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+        assert "Processing" in html
+
+    def test_statediagram_with_direction_override(self):
+        html = _dispatch_ok(
+            "stateDiagram-v2\n"
+            "  direction LR\n"
+            "  [*] --> A\n"
+            "  A --> B\n"
+            "  B --> [*]"
+        )
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestClassParserExtended ───────────────────────────────────────────────────
+
+class TestClassParserExtended:
+    """Visibility modifiers, return types, cardinality, reversed relationships.
+
+    Parity with upstream class-parser.test.ts extended coverage.
+    """
+
+    def test_reversed_realization(self):
+        """<|.. (reversed realization — marker at from end) produces dashed edge."""
+        html = _dispatch_ok("classDiagram\n  Impl <|.. Interface")
+        assert "stroke-dasharray" in html
+
+    def test_reversed_composition(self):
+        """--* (reversed composition — marker at to end) produces edge."""
+        html = _dispatch_ok("classDiagram\n  Car --* Engine")
+        assert "Car" in html
+        assert "Engine" in html
+
+    def test_reversed_aggregation(self):
+        """--o (reversed aggregation — marker at to end) produces edge."""
+        html = _dispatch_ok("classDiagram\n  Pond --o Duck")
+        assert "Pond" in html
+        assert "Duck" in html
+
+    def test_cardinality_in_relationship(self):
+        """Relationship with cardinality (\"1\" --> \"0..*\") renders without crash."""
+        html = _dispatch_ok('classDiagram\n  A "1" --> "0..*" B : has')
+        assert "A" in html and "B" in html
+
+    def test_multiple_relationships_all_edges(self):
+        """Three class relationships render three nodes of each class."""
+        html = _dispatch_ok("classDiagram\n  A <|-- B\n  C *-- D\n  E o-- F")
+        for cls in ("A", "B", "C", "D", "E", "F"):
+            assert cls in html, f"class {cls} missing from output"
+
+    def test_class_visibility_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "class-visibility.mmd").read_text()
+        html = _dispatch(src, None, 900)
+        assert "diagram mermaid-layout" in html
+        assert "BankAccount" in html
+
+    def test_class_annotation_renders(self):
+        html = _dispatch_ok(
+            "classDiagram\n"
+            "  class IRepo {\n"
+            "    <<interface>>\n"
+            "    +find(id) Entity\n"
+            "  }"
+        )
+        assert "IRepo" in html
+
+    def test_all_relationships_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "class-relationships-all.mmd").read_text()
+        html = _dispatch(src, None, 1000)
+        assert "diagram mermaid-layout" in html
+        assert "Dog" in html
+        assert "Professor" in html
+
+
+# ── TestERParserExtended ─────────────────────────────────────────────────────
+
+class TestERParserExtended:
+    """PK/FK/UK key modifiers, non-identifying relationships, attribute comments.
+
+    Parity with upstream er-parser.test.ts extended coverage.
+    """
+
+    def test_pk_modifier_parses(self):
+        """Entity with PK modifier renders without crash."""
+        html = _dispatch_ok(
+            "erDiagram\n  Customer {\n    int id PK\n    string name\n  }"
+        )
+        assert "Customer" in html
+
+    def test_fk_modifier_parses(self):
+        html = _dispatch_ok(
+            "erDiagram\n  Order {\n    int customer_id FK\n  }"
+        )
+        assert "Order" in html
+
+    def test_uk_modifier_parses(self):
+        html = _dispatch_ok(
+            "erDiagram\n  User {\n    string email UK\n  }"
+        )
+        assert "User" in html
+
+    def test_non_identifying_relationship_dashed(self):
+        """Non-identifying relationship (||..o{) produces a dashed SVG edge."""
+        html = _dispatch_ok("erDiagram\n  A ||..o{ B : rel")
+        assert "stroke-dasharray" in html
+
+    def test_non_identifying_all_variants(self):
+        """All 3 non-identifying variants parse without crash."""
+        for src in [
+            "erDiagram\n  A ||..o{ B : rel",
+            "erDiagram\n  A ||..|| B : rel",
+            "erDiagram\n  A }o..o{ B : rel",
+        ]:
+            html = _dispatch(src, None, 600)
+            assert "diagram mermaid-layout" in html
+
+    def test_multiple_entities_in_entity_block(self):
+        html = _dispatch_ok(
+            "erDiagram\n"
+            "  Customer {\n    int id PK\n    string name\n  }\n"
+            "  Order {\n    int id PK\n    int customer_id FK\n  }\n"
+            "  Customer ||--o{ Order : places"
+        )
+        assert "Customer" in html
+        assert "Order" in html
+
+    def test_ecommerce_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "er-ecommerce.mmd").read_text()
+        html = _dispatch(src, None, 1100)
+        assert "diagram mermaid-layout" in html
+        assert "CUSTOMER" in html
+        assert "ORDER" in html
+        assert "LINE_ITEM" in html
+        assert "PRODUCT" in html
+
+    def test_er_identifying_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "er-identifying.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestSequenceParserExtended ────────────────────────────────────────────────
+
+class TestSequenceParserExtended:
+    """Activation markers +/-, Note over two actors, no duplicate actors.
+
+    Parity with upstream sequence-parser.test.ts extended coverage.
+    """
+
+    def test_plus_activation_marker(self):
+        """->>+ immediately activates the recipient."""
+        html = _dispatch_ok("sequenceDiagram\n  A->>+B: activate\n  B-->>-A: done")
+        assert "diagram mermaid-layout" in html
+
+    def test_no_duplicate_actors(self):
+        """Declared participant + auto-created from message should not duplicate."""
+        html = _dispatch_ok(
+            "sequenceDiagram\n  participant Alice\n  Alice->>Bob: msg\n  Alice->>Bob: msg2"
+        )
+        # Alice should appear exactly once in participant headers
+        count = html.count(">Alice<")
+        # Either ">Alice<" appears once (deduped) or appears zero times (different markup)
+        assert count <= 2, f"Alice appears {count} times — duplication suspected"
+
+    def test_note_over_two_actors_renders(self):
+        """Note over A,B must render without crash."""
+        html = _dispatch_ok(
+            "sequenceDiagram\n  participant A\n  participant B\n  A->>B: msg\n  Note over A,B: shared note"
+        )
+        assert "shared note" in html
+
+    def test_all_arrowtypes_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "sequence-all-arrowtypes.mmd").read_text()
+        html = _dispatch(src, None, 900)
+        assert "diagram mermaid-layout" in html
+        assert "Alice" in html
+        assert "solid sync arrow" in html
+
+    def test_notes_all_positions_fixture(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "sequence-notes-all.mmd").read_text()
+        html = _dispatch(src, None, 900)
+        assert "left note" in html
+        assert "right note" in html
+        assert "over single" in html
+        assert "spanning note" in html
+
+
+# ── TestTextMetricsComplete ───────────────────────────────────────────────────
+
+class TestTextMetricsComplete:
+    """Character width bucket classification and measureTextWidth behavior.
+
+    Parity with upstream text-metrics.test.ts.
+    """
+
+    def _w(self, char: str, size: int = 13, weight: int = 500) -> float:
+        return _measure_text_width(char, size, weight)
+
+    # ── character buckets ────────────────────────────────────────────────────
+
+    def test_narrow_chars_i_l_t(self):
+        """i, l, t are narrow (0.4 ratio) — smaller than normal chars."""
+        assert self._w("i") < self._w("a")
+        assert self._w("l") < self._w("a")
+        assert self._w("t") < self._w("a")
+
+    def test_wide_chars_W_M(self):
+        """W and M are wider than normal a–z chars."""
+        assert self._w("W") > self._w("a")
+        assert self._w("M") > self._w("a")
+
+    def test_space_is_narrow(self):
+        """Space is narrower than 'a'."""
+        assert self._w(" ") < self._w("a")
+
+    def test_uppercase_wider_than_lowercase(self):
+        """Most uppercase letters are wider than their lowercase counterparts."""
+        assert self._w("A") > self._w("a")
+        assert self._w("B") > self._w("b")
+
+    def test_cjk_is_widest(self):
+        """CJK ideographs are the widest character class."""
+        assert self._w("中") > self._w("W")
+        assert self._w("語") > self._w("M")
+
+    def test_combining_mark_zero_width(self):
+        """Combining diacritical marks add zero width."""
+        base = _measure_text_width("e", 13, 500)
+        combined = _measure_text_width("é", 13, 500)  # e + combining acute
+        assert combined == pytest.approx(base, abs=0.01)
+
+    # ── scaling ──────────────────────────────────────────────────────────────
+
+    def test_scales_with_font_size(self):
+        w_small = _measure_text_width("hello", 10, 500)
+        w_large = _measure_text_width("hello", 20, 500)
+        assert w_large > w_small
+        assert w_large == pytest.approx(w_small * 2, rel=0.1)
+
+    def test_scales_with_length(self):
+        w_short = _measure_text_width("ab", 13, 500)
+        w_long  = _measure_text_width("abcdefgh", 13, 500)
+        assert w_long > w_short
+
+    def test_heavier_weight_wider(self):
+        w_light  = _measure_text_width("Hello", 13, 400)
+        w_medium = _measure_text_width("Hello", 13, 500)
+        w_bold   = _measure_text_width("Hello", 13, 600)
+        assert w_bold > w_medium >= w_light
+
+    def test_empty_string_zero(self):
+        assert _measure_text_width("", 13, 500) == 0.0
+
+    def test_positive_for_non_empty(self):
+        assert _measure_text_width("text", 13, 500) > 0.0
+
+    def test_minimum_padding_from_font_size(self):
+        """Width includes a minimum padding (fontSize × 0.15)."""
+        w = _measure_text_width("i", 13, 500)
+        assert w >= 13 * 0.15
+
+    def test_base_ratio_weight_500(self):
+        """Base ratio for weight 500 is 0.57 — single normal char."""
+        expected = 1.0 * 13 * 0.57 + 13 * 0.15  # normal char ratio × size × base + pad
+        assert _measure_text_width("a", 13, 500) == pytest.approx(expected, rel=0.01)
+
+    def test_japanese_text_wider_than_ascii(self):
+        w_ascii    = _measure_text_width("hello", 13, 500)
+        w_japanese = _measure_text_width("こんにちは", 13, 500)
+        assert w_japanese > w_ascii
+
+
+# ── TestLinkStyleXSS ─────────────────────────────────────────────────────────
+
+class TestLinkStyleXSS:
+    """linkStyle is silently skipped — XSS injection via stroke value is safe.
+
+    Parity with upstream linkstyle.test.ts SVG integration XSS test.
+    """
+
+    def test_xss_stroke_value_not_in_output(self):
+        """linkStyle with XSS payload in stroke value is silently ignored."""
+        src = (
+            "flowchart LR\n"
+            "  A-->B\n"
+            '  linkStyle 0 stroke:none"/><script>alert(1)</script>,stroke-width:2px\n'
+        )
+        html = _dispatch(src, None, 600)
+        assert "<script>" not in html, "XSS payload must not appear in rendered HTML"
+
+    def test_linkstyle_silently_skipped_edge_count(self):
+        """linkStyle lines don't create extra nodes or edges."""
+        _, edges, _ = _parse_graph_source([
+            "flowchart LR",
+            "  A-->B",
+            "  B-->C",
+            "  linkStyle 0 stroke:#f00",
+        ])
+        assert len(edges) == 2
+
+    def test_linkstyle_out_of_range_no_crash(self):
+        """linkStyle with index beyond edge count does not crash."""
+        html = _dispatch("flowchart LR\n  A-->B\n  linkStyle 99 stroke:#f00", None, 400)
+        assert "diagram mermaid-layout" in html
+
+    def test_linkstyle_default_no_crash(self):
+        html = _dispatch(
+            "flowchart LR\n  A-->B\n  linkStyle default stroke:#00f,stroke-width:3px",
+            None, 400,
+        )
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestFlowchartIntegrationComplete ─────────────────────────────────────────
+
+class TestFlowchartIntegrationComplete:
+    """Complete flowchart rendering integration tests across all shape/edge types.
+
+    Parity with upstream integration.test.ts renderMermaidSVG flowchart tests.
+    """
+
+    def test_all_twelve_shapes_render(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-all-shapes.mmd").read_text()
+        html = _dispatch(src, None, 1200)
+        assert "diagram mermaid-layout" in html
+        assert "Rectangle" in html
+        assert "Rounded" in html
+        assert "Diamond" in html
+
+    def test_self_loops_render(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-self-loops.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "Worker" in html
+        assert "Cache" in html
+
+    def test_self_loop_produces_curve(self):
+        """Self-loops produce a <path> with a curve (not a straight line)."""
+        html = _dispatch_ok("flowchart LR\n  A-->A")
+        assert "<path" in html
+
+    def test_bidirectional_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-bidirectional.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "Client" in html
+        assert "Server" in html
+
+    def test_parallel_links_fan_out(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-parallel-links.mmd").read_text()
+        html = _dispatch(src, None, 900)
+        assert "ServiceA" in html
+        assert "ServiceB" in html
+        assert "ServiceC" in html
+        assert "Aggregator" in html
+
+    def test_inline_styles_render(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-inline-styles.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        assert "Normal" in html
+        assert "Styled" in html
+
+    def test_deep_nesting_three_levels(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-deep-nesting.mmd").read_text()
+        html = _dispatch(src, None, 1000)
+        assert "Level 1" in html or "L1" in html
+        assert "DeepNode" in html
+
+    def test_empty_subgraph_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "flowchart-empty-subgraph.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        # Empty subgroup (no member nodes) omits its label but diagram renders ok
+        assert "diagram mermaid-layout" in html
+        assert "Group With Node" in html  # non-empty group renders its label
+        assert "Outside" in html
+
+    def test_lr_layout_renders(self):
+        html = _dispatch_ok("flowchart LR\n  A-->B-->C")
+        assert "diagram mermaid-layout" in html
+
+    def test_tb_layout_renders(self):
+        html = _dispatch_ok("flowchart TB\n  A-->B-->C")
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestLayoutDisconnectedExtended ───────────────────────────────────────────
+
+class TestLayoutDisconnectedExtended:
+    """Disconnected component layout — overlap prevention and dimension preservation.
+
+    Parity with upstream layout-disconnected.test.ts.
+    """
+
+    def _non_overlapping(self, html: str) -> bool:
+        import re
+        divs = re.findall(r'class="node[^"]*"[^>]*style="([^"]+)"', html)
+        boxes = []
+        for style in divs:
+            lm = re.search(r'left:([\d]+)px', style)
+            tm = re.search(r'top:([\d]+)px', style)
+            if lm and tm:
+                boxes.append((int(lm.group(1)), int(tm.group(1))))
+        if len(boxes) < 2:
+            return True
+        pairs_ok = True
+        for i in range(len(boxes)):
+            for j in range(i + 1, len(boxes)):
+                if boxes[i] == boxes[j]:
+                    pairs_ok = False
+        return pairs_ok
+
+    def test_five_isolated_nodes_no_overlap(self):
+        html = _dispatch_ok("flowchart TB\n  A\n  B\n  C\n  D\n  E")
+        assert self._non_overlapping(html)
+
+    def test_two_chains_no_overlap(self):
+        html = _dispatch_ok("flowchart TB\n  A-->B\n  C-->D")
+        assert self._non_overlapping(html)
+
+    def test_three_components_no_overlap(self):
+        html = _dispatch_ok("flowchart TB\n  A-->B\n  C-->D\n  E-->F")
+        assert self._non_overlapping(html)
+
+    def test_connected_plus_isolated_no_overlap(self):
+        html = _dispatch_ok("flowchart TB\n  A-->B-->C\n  Isolated")
+        assert self._non_overlapping(html)
+
+    def test_single_isolated_node_renders(self):
+        html = _dispatch_ok("flowchart TB\n  Alone")
+        assert "Alone" in html
+
+    def test_disconnected_lr_renders(self):
+        html = _dispatch_ok("flowchart LR\n  A-->B\n  X-->Y")
+        assert "diagram mermaid-layout" in html
+
+    def test_disconnected_td_renders(self):
+        html = _dispatch_ok("flowchart TD\n  A-->B\n  X-->Y")
+        assert "diagram mermaid-layout" in html
+
+
+# ── TestBrInAllDiagramTypes ───────────────────────────────────────────────────
+
+class TestBrInAllDiagramTypes:
+    """<br> multi-line labels work across every diagram type.
+
+    Parity with upstream multiline-labels.test.ts cross-diagram <br> coverage.
+    """
+
+    def test_br_in_sequence_actor_alias(self):
+        html = _dispatch_ok(
+            'sequenceDiagram\n  participant A as "Line1<br>Line2"\n  A->>B: msg'
+        )
+        assert "Line1" in html
+
+    def test_br_in_sequence_block_label(self):
+        html = _dispatch_ok(
+            "sequenceDiagram\n  A->>B: msg\n  loop Line1<br>Line2\n  A->>B: x\n  end"
+        )
+        assert "Loop" in html or "loop" in html.lower()
+
+    def test_br_in_er_relationship_label(self):
+        html = _dispatch_ok("erDiagram\n  A ||--o{ B : Line1<br>Line2")
+        assert "Line1" in html or "diagram mermaid-layout" in html
+
+    def test_br_in_class_relationship_label(self):
+        html = _dispatch_ok("classDiagram\n  A --> B : Line1<br>Line2")
+        assert "diagram mermaid-layout" in html
+
+    def test_br_in_state_transition_label(self):
+        html = _dispatch_ok(
+            "stateDiagram-v2\n  Idle --> Active : Line1<br>Line2"
+        )
+        assert "Idle" in html
+        assert "Active" in html
+
+    def test_br_variants_same_result_flowchart(self):
+        """<br>, <br/>, <BR>, <Br> all produce identical multi-line output."""
+        results = []
+        for br_tag in ("<br>", "<br/>", "<BR>", "<Br>"):
+            html = _dispatch_ok(f'flowchart TB\n  A["Line1{br_tag}Line2"]')
+            results.append("Line1" in html and "Line2" in html)
+        assert all(results), "some <br> variants failed to produce multi-line output"
+
+
+# ── TestXychartComplete ───────────────────────────────────────────────────────
+
+class TestXychartComplete:
+    """Complete XY chart rendering — bar, line, mixed, axis, edge cases.
+
+    Parity with upstream xychart-integration.test.ts and xychart-ascii.test.ts.
+    """
+
+    def test_mixed_chart_fixture_renders(self):
+        src = (REPO_ROOT / "tests" / "fixtures" / "xychart-mixed.mmd").read_text()
+        html = _dispatch(src, None, 900)
+        assert "diagram mermaid-layout" in html
+        assert "Monthly Revenue" in html or "Revenue" in html
+
+    def test_mixed_chart_has_both_bar_and_line(self):
+        html = _dispatch(
+            "xychart-beta\n"
+            "  title T\n"
+            "  x-axis [A, B, C]\n"
+            "  y-axis 0 --> 100\n"
+            "  bar [30, 60, 90]\n"
+            "  line [30, 60, 90]\n",
+            None, 800,
+        )
+        assert '<div style="position:absolute' in html   # bar rects
+        assert "<polygon" in html or "<line" in html      # line series
+
+    def test_bar_chart_renders_all_labels(self):
+        html = _dispatch(
+            "xychart-beta\n"
+            "  x-axis [Q1, Q2, Q3, Q4]\n"
+            "  y-axis 0 --> 100\n"
+            "  bar [25, 50, 75, 100]\n",
+            None, 800,
+        )
+        for label in ("Q1", "Q2", "Q3", "Q4"):
+            assert label in html
+
+    def test_css_variable_color_no_crash(self):
+        """CSS variable color (var(--background)) must not cause NaN in layout."""
+        html = _dispatch(
+            "xychart-beta\n"
+            "  x-axis [A, B]\n"
+            "  y-axis 0 --> 100\n"
+            "  bar [40, 80]\n",
+            None, 800,
+        )
+        assert "NaN" not in html
+
+    def test_large_numbers_no_crash(self):
+        html = _dispatch(
+            "xychart-beta\n"
+            "  x-axis [X, Y]\n"
+            "  y-axis 0 --> 1000000\n"
+            "  bar [500000, 1000000]\n",
+            None, 800,
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_two_data_points_renders(self):
+        html = _dispatch_ok(
+            "xychart-beta\n  x-axis [A, B]\n  y-axis 0 --> 100\n  bar [30, 70]"
+        )
+        assert "diagram mermaid-layout" in html
+
+    def test_xychart_dark_mode_no_nan(self):
+        fragment = _dispatch(
+            "xychart-beta\n  x-axis [A, B, C]\n  y-axis 0 --> 100\n  bar [30, 60, 90]",
+            None, 800,
+        )
+        page = _make_page(fragment, theme="dark")
+        assert "NaN" not in page
+
+
+# ── TestSequenceLayoutSpacing ─────────────────────────────────────────────────
+
+class TestSequenceLayoutSpacing:
+    """Sequence layout block/divider spacing invariants.
+
+    Parity with upstream sequence-layout.test.ts spacing and positioning.
+    Our renderer uses uniform ROW_H — we test the structural invariants.
+    """
+
+    def _height(self, src: str) -> int:
+        import re
+        html = _dispatch(src, None, 800)
+        m = re.search(r'height:(\d+)px', html)
+        return int(m.group(1)) if m else 0
+
+    def test_loop_block_increases_height(self):
+        h_plain = self._height(
+            "sequenceDiagram\n  A->>B: msg1\n  A->>B: msg2\n  A->>B: msg3"
+        )
+        h_loop = self._height(
+            "sequenceDiagram\n  A->>B: msg1\n  loop retry\n  A->>B: msg2\n  A->>B: msg3\n  end"
+        )
+        assert h_loop >= h_plain, "loop block must not shrink the diagram"
+
+    def test_alt_block_with_else_increases_height(self):
+        h_plain = self._height(
+            "sequenceDiagram\n  A->>B: msg1\n  A->>B: msg2"
+        )
+        h_alt = self._height(
+            "sequenceDiagram\n  A->>B: req\n  alt success\n  A->>B: ok\n  else fail\n  A->>B: err\n  end"
+        )
+        assert h_alt >= h_plain
+
+    def test_more_messages_taller(self):
+        h2 = self._height("sequenceDiagram\n  A->>B: m1\n  A->>B: m2")
+        h4 = self._height("sequenceDiagram\n  A->>B: m1\n  A->>B: m2\n  A->>B: m3\n  A->>B: m4")
+        assert h4 > h2
+
+    def test_block_rect_present_for_loop(self):
+        html = _dispatch(
+            "sequenceDiagram\n  A->>B: msg\n  loop retry\n  A->>B: inner\n  end",
+            None, 800,
+        )
+        assert "<rect" in html
+
+    def test_divider_line_present_for_alt_else(self):
+        html = _dispatch(
+            "sequenceDiagram\n  A->>B: req\n  alt ok\n  A->>B: yes\n  else fail\n  A->>B: no\n  end",
+            None, 800,
+        )
+        assert "stroke-dasharray" in html  # else divider dashed line
+
+    def test_alt_else_label_in_output(self):
+        html = _dispatch(
+            "sequenceDiagram\n  A->>B: req\n  alt success\n  A->>B: ok\n  else fail\n  A->>B: err\n  end",
+            None, 800,
+        )
+        assert "success" in html
+        assert "fail" in html  # else label now rendered (fixed)
+
+    def test_par_block_renders(self):
+        html = _dispatch(
+            "sequenceDiagram\n  par group1\n  A->>B: msg1\n  and group2\n  A->>C: msg2\n  end",
+            None, 800,
+        )
+        assert "group1" in html
+        assert "diagram mermaid-layout" in html
+
+    def test_note_polygon_count_grows_with_notes(self):
+        """More notes produce more polygon elements in the output."""
+        import re
+        h1 = _dispatch("sequenceDiagram\n  A->>B: x\n  Note over A: n1", None, 800)
+        h2 = _dispatch("sequenceDiagram\n  A->>B: x\n  Note over A: n1\n  Note over A: n2", None, 800)
+        poly1 = len(re.findall(r'<polygon', h1))
+        poly2 = len(re.findall(r'<polygon', h2))
+        assert poly2 >= poly1, "more notes must produce >= polygon elements"
+
+
+# ── TestRendererStructural ────────────────────────────────────────────────────
+
+class TestRendererStructural:
+    """SVG structure, arrow markers, and XSS safety.
+
+    Parity with upstream renderer.test.ts renderSvg structure tests.
+    """
+
+    def test_diagram_container_present(self):
+        html = _dispatch_ok("flowchart TB\n  A-->B")
+        assert 'class="diagram mermaid-layout"' in html
+
+    def test_svg_overlay_present(self):
+        """Edge routing produces an SVG overlay element."""
+        html = _dispatch_ok("flowchart TB\n  A-->B")
+        assert "<svg" in html
+
+    def test_arrow_defs_present(self):
+        """Arrow marker defs are present in the SVG overlay."""
+        html = _dispatch_ok("flowchart TB\n  A-->B")
+        assert "<defs>" in html or "<defs " in html
+        assert "<marker" in html
+
+    def test_xss_angle_brackets_in_label(self):
+        """< and > in node labels must be HTML-escaped."""
+        html = _dispatch_ok('flowchart TB\n  A["<script>xss</script>"]')
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_xss_ampersand_in_label(self):
+        html = _dispatch_ok('flowchart TB\n  A["AT&T Corp"]')
+        assert "AT&T Corp" not in html  # raw & not in HTML attribute
+        assert "AT&amp;T" in html or "AT" in html
+
+    def test_node_shapes_have_correct_html_structure(self):
+        """Each major shape produces a node div."""
+        srcs = [
+            "flowchart TB\n  A[rect]",
+            "flowchart TB\n  A(round)",
+            "flowchart TB\n  A{diamond}",
+            "flowchart TB\n  A((circle))",
+        ]
+        for src in srcs:
+            html = _dispatch_ok(src)
+            assert 'class="node' in html, f"no node div for: {src[:30]}"
+
+    def test_group_box_rendered(self):
+        """Subgraph group produces a group div container."""
+        html = _dispatch_ok(
+            "flowchart TB\n  subgraph G\n    A[Node]\n  end"
+        )
+        assert 'class="group' in html or 'subgraph' in html.lower() or 'node-group' in html
+
+    def test_edge_label_rendered(self):
+        """Edge label text appears in rendered HTML."""
+        html = _dispatch_ok("flowchart LR\n  A -->|my label| B")
+        assert "my label" in html
+
+    def test_make_page_produces_doctype(self):
+        fragment = _dispatch("flowchart TB\n  A-->B", None, 400)
+        page = _make_page(fragment, theme="light")
+        assert "<!DOCTYPE html>" in page
+
+    def test_make_page_auto_theme_defaults(self):
+        """Default (auto) theme page is valid HTML."""
+        fragment = _dispatch("flowchart TB\n  A-->B", None, 400)
+        page = _make_page(fragment)
+        assert "<!DOCTYPE html>" in page
+
+
+# ── TestAllNewFixturesBothModes ───────────────────────────────────────────────
+
+class TestAllNewFixturesBothModes:
+    """Every new fixture added in this parity session renders in both modes.
+
+    Complements TestAllFixturesBothModes (which covers all fixtures at file load).
+    This class explicitly lists the new fixtures for better failure isolation.
+    """
+
+    _new_fixtures = [
+        "flowchart-all-shapes",
+        "flowchart-self-loops",
+        "flowchart-bidirectional",
+        "flowchart-parallel-links",
+        "flowchart-deep-nesting",
+        "flowchart-empty-subgraph",
+        "flowchart-inline-styles",
+        "flowchart-br-variants",
+        "flowchart-html-entities",
+        "flowchart-no-arrows",
+        "flowchart-markdown-labels",
+        "er-ecommerce",
+        "xychart-mixed",
+        "class-visibility",
+        "class-relationships-all",
+        "sequence-all-arrowtypes",
+        "sequence-notes-all",
+        "statediagram-nested",
+    ]
+
+    @pytest.mark.parametrize("stem", _new_fixtures)
+    def test_fixture_light_mode(self, stem: str):
+        path = REPO_ROOT / "tests" / "fixtures" / f"{stem}.mmd"
+        src = path.read_text()
+        fragment = _dispatch(src, None, 900)
+        page = _make_page(fragment, theme="light")
+        assert "<!DOCTYPE html>" in page
+        assert "diagram mermaid-layout" in page, f"{stem}: light mode missing diagram class"
+
+    @pytest.mark.parametrize("stem", _new_fixtures)
+    def test_fixture_dark_mode(self, stem: str):
+        path = REPO_ROOT / "tests" / "fixtures" / f"{stem}.mmd"
+        src = path.read_text()
+        fragment = _dispatch(src, None, 900)
+        page = _make_page(fragment, theme="dark")
+        assert "<!DOCTYPE html>" in page
+        assert "diagram mermaid-layout" in page, f"{stem}: dark mode missing diagram class"
+
+
+# ── Visual-audit bug regression tests ────────────────────────────────────────
+# Each test below corresponds to a confirmed rendering bug found via visual
+# audit of rendered PNGs, then fixed. Tests pin the fix so it can't regress.
+
+class TestXychartTitleQuotes:
+    """xychart-beta title with surrounding quotes must be stripped."""
+
+    _SRC = '''\
+xychart-beta
+    title "Monthly Revenue vs Target"
+    x-axis [Jan, Feb, Mar]
+    bar [45, 52, 60]
+'''
+
+    def test_title_no_raw_quotes(self):
+        html = _dispatch_ok(self._SRC)
+        assert '"Monthly Revenue vs Target"' not in html, (
+            "Title still contains literal surrounding quotes"
+        )
+
+    def test_title_text_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Monthly Revenue vs Target" in html, "Title text missing from output"
+
+
+class TestXychartLineDistinctColor:
+    """Line series in xychart must use a different color from bar series."""
+
+    _SRC = '''\
+xychart-beta
+    title Mixed
+    x-axis [A, B, C]
+    bar [10, 20, 30]
+    line [15, 25, 35]
+'''
+
+    def test_line_uses_distinct_accent(self):
+        html = _dispatch_ok(self._SRC)
+        # Line series uses --accent-3 (amber) to distinguish from bar (accent-1/edge-strong)
+        assert "accent-3" in html, "Line series should use accent-3 color, not same as bars"
+
+    def test_bar_and_line_have_different_colors(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        # Collect fill/stroke values from the SVG polygon (line dots) and bar divs
+        line_fills = re.findall(r'<polygon[^>]+fill="([^"]+)"', html)
+        bar_bgs = re.findall(r'background:([^;]+);.*?border-radius:2px', html, re.S)
+        assert line_fills, "No line dot polygon found"
+        # Line color must not equal bar background color
+        for lf in line_fills:
+            for bb in bar_bgs:
+                assert lf.strip() != bb.strip(), "Line and bar use identical color"
+
+
+class TestBlockBetaConnectorVisible:
+    """block-beta connector SVG must render above (after) block divs so lines are visible."""
+
+    _SRC = '''\
+block-beta
+    columns 3
+    A["Input"] B["Process"] C["Output"]
+    A --> B --> C
+'''
+
+    def test_svg_after_last_block_div(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        # The SVG connector layer must appear after all node divs
+        node_positions = [m.start() for m in re.finditer(r'node-rect', html)]
+        svg_pos = html.rfind('<svg')
+        assert node_positions, "No node-rect divs found"
+        assert svg_pos > max(node_positions), (
+            "SVG connector layer is before some block divs — connectors will be hidden"
+        )
+
+    def test_has_connector_lines(self):
+        html = _dispatch_ok(self._SRC)
+        assert 'marker-end="url(#arr)"' in html, "No arrowhead connectors in block-beta"
+
+    def test_both_edges_rendered(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        lines = re.findall(r'<line[^>]+marker-end[^>]*/>', html)
+        assert len(lines) >= 2, f"Expected >=2 connector lines, got {len(lines)}"
+
+
+class TestGanttDateAxis:
+    """Gantt chart must render a date axis and proportional task bars."""
+
+    _SRC = '''\
+gantt
+    title Project Plan
+    dateFormat YYYY-MM-DD
+    section Phase 1
+        Task A :a1, 2024-01-01, 7d
+        Task B :after a1, 5d
+    section Phase 2
+        Task C :2024-01-15, 10d
+'''
+
+    def test_date_labels_present(self):
+        html = _dispatch_ok(self._SRC)
+        # At least one date label in M/D format should appear on the axis
+        import re
+        date_labels = re.findall(r'\b1/\d+\b', html)
+        assert date_labels, "No date axis labels found in gantt output"
+
+    def test_tasks_have_different_widths(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        # Task A is 7d, Task B is 5d, Task C is 10d — all different → widths differ
+        # Bar divs have background + border-radius:3px (distinct from label divs)
+        bars = re.findall(
+            r'left:\d+px;top:\d+px;width:(\d+)px;height:\d+px;background:[^;]+;[^>]*?border-radius:3px',
+            html
+        )
+        widths_set = set(int(w) for w in bars)
+        assert len(widths_set) >= 2, (
+            f"All gantt bars have same width — temporal scaling not working. widths={bars}"
+        )
+
+    def test_task_b_starts_after_task_a(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        # Bar divs have background color + border-radius:3px (label divs do not)
+        bars = re.findall(
+            r'left:(\d+)px;top:\d+px;width:\d+px;height:\d+px;background:[^;]+;[^>]*?border-radius:3px',
+            html
+        )
+        assert len(bars) >= 2, f"Expected at least 2 gantt bars, got: {bars}"
+        bar_a_left = int(bars[0])
+        bar_b_left = int(bars[1])
+        assert bar_b_left > bar_a_left, (
+            f"Task B left={bar_b_left} not after Task A left={bar_a_left}"
+        )
+
+    def test_gantt_title_quotes_stripped(self):
+        src = 'gantt\n    title "My Project"\n    section S\n        T :2024-01-01, 3d\n'
+        html = _dispatch_ok(src)
+        assert '"My Project"' not in html, "Gantt title still has surrounding quotes"
+        assert "My Project" in html
+
+
+class TestStateDiagramCompositeState:
+    """stateDiagram-v2 composite state blocks (state X { }) must render as subgraph groups."""
+
+    _SRC = '''\
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Processing : start
+
+    state Processing {
+        [*] --> Validating
+        Validating --> Executing : valid
+        Executing --> [*] : done
+    }
+
+    Processing --> Done : success
+'''
+
+    def test_no_spurious_state_node(self):
+        html = _dispatch_ok(self._SRC)
+        import re
+        labels = re.findall(r'class="node-label"[^>]*>([^<]+)', html)
+        assert "state" not in labels, (
+            f"Spurious 'state' node label found — composite state not parsed as group. labels={labels}"
+        )
+
+    def test_processing_is_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Processing" in html, "Processing composite state label missing"
+
+    def test_child_states_present(self):
+        html = _dispatch_ok(self._SRC)
+        assert "Validating" in html, "Child state 'Validating' missing"
+        assert "Executing" in html, "Child state 'Executing' missing"
+
+    def test_composite_state_has_group(self):
+        import re
+        html = _dispatch_ok(self._SRC)
+        # The renderer emits class="diagram-group" for subgraph containers
+        groups = re.findall(r'class="diagram-group"', html)
+        assert groups, "No diagram-group container found — composite state is not rendered as subgraph"

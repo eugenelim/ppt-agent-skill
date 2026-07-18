@@ -1,0 +1,14 @@
+classDiagram
+    class Animal {
+        +String name
+        -int age
+        #String species
+        +makeSound() String
+        -sleep() void
+    }
+    class Dog {
+        +String breed
+        +fetch() void
+        +bark() void
+    }
+    Animal <|-- Dog

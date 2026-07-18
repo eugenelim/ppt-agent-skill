@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant Alice
+    participant Bob
+    participant Carol
+
+    Alice->>Bob: solid sync arrow
+    Bob-->>Alice: dashed return
+    Alice->Bob: open arrow (no head)
+    Bob--xAlice: cross terminated
+    Alice->>+Bob: activate on receive
+    Bob-->>-Alice: deactivate on send
+    Alice->>Carol: parallel message
+    Carol-->>Alice: parallel return

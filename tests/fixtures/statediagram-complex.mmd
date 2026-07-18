@@ -1,0 +1,9 @@
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> Authenticating : login
+    Authenticating --> Active : success
+    Authenticating --> Idle : failure
+    Active --> Processing : submit
+    Processing --> Active : done
+    Active --> [*] : logout
+    Processing --> [*] : timeout

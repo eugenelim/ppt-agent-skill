@@ -1,6 +1,22 @@
 classDiagram
-    Base <|-- Child
-    Owner *-- Engine
-    Group o-- Member
-    Client --> Service
-    Interface ..|> Implementation
+    class Animal
+    class Dog
+    class Cat
+    class Engine
+    class Car
+    class Pond
+    class Duck
+    class Person
+    class Address
+    class IFlyable
+    class Bird
+    class Teacher
+    class Professor
+
+    Animal <|-- Dog : inherits
+    Animal <|-- Cat : inherits
+    Car *-- Engine : composed of
+    Pond o-- Duck : aggregates
+    Person --> Address : has
+    IFlyable ..> Bird : dependency
+    Teacher ..|> Professor : realization

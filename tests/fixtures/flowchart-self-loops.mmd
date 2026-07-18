@@ -1,0 +1,5 @@
+flowchart LR
+    A[Worker] -->|retry| A
+    B[Cache] -->|refresh| B
+    A --> B
+    B --> C[Storage]

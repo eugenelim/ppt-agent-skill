@@ -153,10 +153,46 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
         if line.startswith(("style ", "classDef ", "class ", "linkStyle ", "click ")):
             continue
         # stateDiagram-v2: [*] is the initial/terminal state marker; map to a
-        # renderable node id. src position → _sm_start_; dst position → _sm_end_.
-        # Replace before any further parsing so _parse_line sees valid identifiers.
-        line = re.sub(r'^\[\*\]\s*(?=-->|--)', '_sm_start_', line)
-        line = re.sub(r'(?<=-->)\s*\[\*\]', ' _sm_end_', line)
+        # renderable node id. Inside a composite state (stack non-empty), use a
+        # scoped id so inner start/end don't collide with the outer [*] markers.
+        _sm_scope = stack[-1] if stack else ""
+        _sm_s = f"{_sm_scope}_sm_start_" if _sm_scope else "_sm_start_"
+        _sm_e = f"{_sm_scope}_sm_end_" if _sm_scope else "_sm_end_"
+        line = re.sub(r'^\[\*\]\s*(?=-->|--)', _sm_s + ' ', line).strip()
+        line = re.sub(r'(?<=-->)\s*\[\*\]', f' {_sm_e}', line)
+
+        # stateDiagram-v2 state alias: state "Long Label" as id
+        _alias_m = re.match(r'^state\s+"([^"]+)"\s+as\s+(\w+)', line)
+        if _alias_m:
+            _ensure(_alias_m.group(2), _alias_m.group(1), "rect", "")
+            continue
+
+        # stateDiagram-v2 composite state: state ID { (opens a nested group)
+        _composite_m = re.match(r'^state\s+(\w+)\s*\{', line)
+        if _composite_m:
+            _cs_id = _composite_m.group(1)
+            gid = f"_g{len(groups)}"
+            parent_gid = stack[-1] if stack else None
+            groups[gid] = _Group(id=gid, label=_cs_id, parent_group=parent_gid)
+            _ensure(_cs_id, _cs_id, "rect", "")
+            nodes[_cs_id].group = parent_gid
+            stack.append(gid)
+            continue
+
+        # stateDiagram-v2: standalone closing brace ends composite state
+        if line.strip() == "}":
+            if stack:
+                stack.pop()
+            continue
+
+        # stateDiagram-v2 state description: id : label (standalone, no edge operator)
+        if re.match(r'^\w+\s*:\s*\S', line) and '--' not in line and not line.startswith('http'):
+            _sd_parts = line.split(':', 1)
+            _sd_id = _sd_parts[0].strip()
+            _sd_label = _sd_parts[1].strip()
+            if re.match(r'^[A-Za-z_]\w*$', _sd_id) and _sd_label:
+                _ensure(_sd_id, _sd_label, "rect", "")
+                continue
 
         # Subgraph start
         if line.lower().startswith("subgraph"):
@@ -182,14 +218,14 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
         # Try to match as edge chain; a line can chain: A --> B --> C
         _parse_line(line, edges, _ensure)
 
-    # Post-process: stateDiagram terminal nodes get circle shape and empty label
-    for _sm_id, _sm_label, _sm_shape in [
-        ("_sm_start_", "●", "circle"),
-        ("_sm_end_", "◎", "circle"),
-    ]:
-        if _sm_id in nodes:
-            nodes[_sm_id].shape = _sm_shape
-            nodes[_sm_id].label = _sm_label
+    # Post-process: all _sm_start_ / _sm_end_ nodes (global and scoped) get circle shape
+    for _sm_id in list(nodes.keys()):
+        if _sm_id.endswith("_sm_start_"):
+            nodes[_sm_id].shape = "circle"
+            nodes[_sm_id].label = "●"
+        elif _sm_id.endswith("_sm_end_"):
+            nodes[_sm_id].shape = "circle"
+            nodes[_sm_id].label = "◎"
 
     return nodes, edges, groups
 
@@ -208,6 +244,32 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     dst_raw = m.group("dst_raw").strip()
     arrow = m.group("arrow_long") or m.group("arrow_short") or "-->"
     edge_label = (m.group("mid_label") or m.group("pipe_label") or "").strip().strip('"\'')  # strip mermaid |"..."|  quotes
+
+    # Expand parallel `&` notation: "A & B --> C & D" → all (src, dst) pairs.
+    # Split only when & appears outside brackets to avoid splitting node labels.
+    def _split_parallel(raw: str) -> list[str]:
+        parts, buf, depth = [], [], 0
+        for ch in raw:
+            if ch in "([{":
+                depth += 1; buf.append(ch)
+            elif ch in ")]}":
+                depth -= 1; buf.append(ch)
+            elif ch == "&" and depth == 0:
+                parts.append("".join(buf).strip())
+                buf = []
+            else:
+                buf.append(ch)
+        if buf:
+            parts.append("".join(buf).strip())
+        return [p for p in parts if p]
+
+    srcs = _split_parallel(src_raw)
+    dsts = _split_parallel(dst_raw)
+    if len(srcs) > 1 or len(dsts) > 1:
+        for _s in srcs:
+            for _d in dsts:
+                _parse_line(f"{_s} {arrow} {_d}", edges, ensure_fn)
+        return
 
     # stateDiagram-v2 uses ": transition_label" appended to the destination node.
     # Only extract it when the dst has no bracket/paren spec (stateDiagram nodes are

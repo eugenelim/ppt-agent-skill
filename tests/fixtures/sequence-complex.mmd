@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant Client
+    participant AuthService
+    participant API
+    participant DB
+    Client->>AuthService: login(user, pass)
+    activate AuthService
+    AuthService->>DB: lookup(user)
+    DB-->>AuthService: user record
+    alt valid credentials
+        AuthService-->>Client: JWT token
+    else invalid
+        AuthService-->>Client: 401 Unauthorized
+    end
+    deactivate AuthService
+    Client->>API: GET /data
+    Note over API: validates JWT
+    API->>DB: query(user_id)
+    DB-->>API: results
+    API-->>Client: 200 OK

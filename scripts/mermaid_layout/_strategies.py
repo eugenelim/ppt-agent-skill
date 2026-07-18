@@ -429,6 +429,15 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             )
             row += 1; continue
         if it["type"] == "else":
+            ry = ll_top + row * ROW_H
+            if it["label"]:
+                parts.append(
+                    f'<span style="position:absolute;left:{PAD_H + 4}px;top:{ry + 3}px;'
+                    f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
+                    f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                    f'else {_h(it["label"])}</span>'
+                )
             row += 1; continue
         if it["type"] == "note":
             pid = it["pid"]
@@ -468,7 +477,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
 _ER_REL_RE = re.compile(
     r'^(?P<e1>\w+)\s+'
     r'(?P<card_src>[|o}{]{1,2})'
-    r'-{1,2}'
+    r'(?P<line>-{1,2}|\.{1,2})'
     r'(?P<card_dst>[|o}{]{1,2})'
     r'\s+(?P<e2>\w+)\s*:\s*(?P<lbl>.*)$'
 )
@@ -550,8 +559,9 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
             lbl = m.group("lbl").strip()
             for eid in (e1, e2):
                 nodes.setdefault(eid, _Node(id=eid, label=eid, shape="rect"))
+            er_style = "dotted" if m.group("line").startswith(".") else "solid"
             edges.append(_Edge(
-                src=e1, dst=e2, label=lbl, style="solid", arrow=True,
+                src=e1, dst=e2, label=lbl, style=er_style, arrow=True,
                 cardinality_src=_ER_CARD_SRC_MAP.get(card_src_tok),
                 cardinality_dst=_ER_CARD_DST_MAP.get(card_dst_tok),
             ))
@@ -623,7 +633,7 @@ def _graph_from_content_nodes(
 
 _CLASS_REL_RE = re.compile(
     r'^(\w+)\s*(?:"[^"]*"\s*)?'
-    r'(<\|--|<\|\.\.|\.\.>\||\.\.\|>|\|>|\*--|o--|-->|\.\.>|\.\.|\|\|)'
+    r'(<\|--|<\|\.\.|\.\.>\||\.\.\|>|\|>|\*--|--\*|o--|--o|-->|\.\.>|\.\.|\|\|)'
     r'\s*(?:"[^"]*"\s*)?(\w+)(?:\s*:\s*(.*))?$'
 )
 
@@ -691,30 +701,104 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
             continue
         low = line.lower()
         if low.startswith("title "):
-            title = line[6:].strip(); continue
+            title = line[6:].strip().strip('"\''); continue
         if low.startswith(("dateformat", "axisformat", "excludes", "todaymarker")):
             continue
         if low.startswith("section "):
             sections.append({"name": line[8:].strip(), "tasks": []}); continue
         if ":" in line:
             name, meta = line.split(":", 1)
-            flags = {f.strip().lower() for f in meta.split(",")}
+            _meta_parts = [p.strip() for p in meta.split(",")]
+            _flags = {"crit", "done", "active", "milestone"}
+            task_flags: set[str] = set()
+            task_id: str = ""
+            task_start_str: str = ""
+            task_dur_str: str = ""
+            for _p in _meta_parts:
+                _pl = _p.lower()
+                if _pl in _flags:
+                    task_flags.add(_pl)
+                elif re.match(r'\d{4}-\d{2}-\d{2}', _p):
+                    if not task_start_str:
+                        task_start_str = _p
+                    else:
+                        task_dur_str = _p
+                elif _pl.startswith("after "):
+                    task_start_str = _pl
+                elif re.match(r'^\d+[dwm]$', _pl):
+                    task_dur_str = _p
+                elif re.match(r'^[a-z_]\w*$', _pl) and not task_id:
+                    task_id = _pl
             sections[-1]["tasks"].append({
                 "name": name.strip(),
-                "crit": "crit" in flags, "done": "done" in flags,
+                "crit": "crit" in task_flags, "done": "done" in task_flags,
+                "id": task_id,
+                "start_str": task_start_str,
+                "dur_str": task_dur_str,
             })
     sections = [s for s in sections if s["tasks"]]
     if not sections:
         raise ValueError("No tasks found in gantt.")
 
+    # ── Date resolution ──
+    from datetime import date as _date, timedelta as _td
+    _GANTT_DATE_RE = re.compile(r'(\d{4})-(\d{2})-(\d{2})')
+    def _parse_date(s: str) -> Optional[_date]:
+        m = _GANTT_DATE_RE.match(s)
+        return _date(int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
+
+    def _parse_dur(s: str) -> int:
+        if not s:
+            return 7
+        m = re.match(r'^(\d+)([dwm])$', s.lower())
+        if not m:
+            return 7
+        n, unit = int(m.group(1)), m.group(2)
+        return n * (1 if unit == 'd' else 7 if unit == 'w' else 30)
+
+    id_end_date: dict[str, _date] = {}
+    all_tasks_flat: list[dict] = []
+    for sec in sections:
+        for task in sec["tasks"]:
+            all_tasks_flat.append(task)
+
+    # First pass: compute absolute dates for each task
+    earliest = _date(2100, 1, 1)
+    latest = _date(2000, 1, 1)
+    for task in all_tasks_flat:
+        ss = task["start_str"]
+        ds = task["dur_str"]
+        if ss.startswith("after "):
+            ref_id = ss[6:].strip()
+            t_start = id_end_date.get(ref_id) or _date(2024, 1, 1)
+        else:
+            t_start = _parse_date(ss) or _date(2024, 1, 1)
+        dur = _parse_dur(ds)
+        t_end = t_start + _td(days=dur)
+        task["t_start"] = t_start
+        task["t_end"] = t_end
+        if task["id"]:
+            id_end_date[task["id"]] = t_end
+        if t_start < earliest:
+            earliest = t_start
+        if t_end > latest:
+            latest = t_end
+
+    total_days = max(1, (latest - earliest).days)
+
     PAD_H, PAD_V = 40, 24
-    LABEL_W, BAR_H, ROW_GAP = 120, 28, 6
-    SEC_H = 24
+    LABEL_W, BAR_H, ROW_GAP = 140, 24, 5
+    SEC_H, AXIS_H = 22, 28
     total_rows = sum(len(s["tasks"]) for s in sections)
     canvas_w = width_hint or 720
-    canvas_h = PAD_V * 2 + (24 if title else 0) + len(sections) * (SEC_H + 4) + total_rows * (BAR_H + ROW_GAP)
-    bar_x = PAD_H + LABEL_W + 8
+    canvas_h = (PAD_V * 2 + (22 if title else 0) + AXIS_H
+                + len(sections) * (SEC_H + 4) + total_rows * (BAR_H + ROW_GAP))
+    bar_x = PAD_H + LABEL_W + 4
     bar_w_total = canvas_w - bar_x - PAD_H
+
+    _lc = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    _ec = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
 
     parts: list[str] = []
     parts.append(
@@ -726,41 +810,74 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
             f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
+            f'font-family:{_lf};">{_h(title)}</div>'
         )
-        y += 28
+        y += 22
+
+    # Date axis (top)
+    _tick_count = min(6, total_days)
+    _tick_days = max(1, total_days // _tick_count)
+    parts.append(
+        f'<div style="position:absolute;left:{bar_x}px;top:{y}px;'
+        f'width:{bar_w_total}px;height:{AXIS_H}px;overflow:hidden;">'
+    )
+    for _ti in range(_tick_count + 1):
+        _td_off = _ti * _tick_days
+        if _td_off > total_days:
+            break
+        _tx = int(_td_off / total_days * bar_w_total)
+        _tick_d = earliest + _td(days=_td_off)
+        _label = f"{_tick_d.month}/{_tick_d.day}"
+        parts.append(
+            f'<span style="position:absolute;left:{_tx}px;top:2px;'
+            f'font-size:9px;color:{_lc};font-family:{_lf};white-space:nowrap;">'
+            f'{_label}</span>'
+            f'<div style="position:absolute;left:{_tx}px;top:18px;'
+            f'width:1px;height:10px;background:{_ec};"></div>'
+        )
+    parts.append('</div>')
+    # Axis baseline
+    parts.append(
+        f'<div style="position:absolute;left:{bar_x}px;top:{y + AXIS_H - 1}px;'
+        f'width:{bar_w_total}px;height:1px;background:{_ec};"></div>'
+    )
+    y += AXIS_H
+
     for sec in sections:
         parts.append(
             f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
             f'width:{canvas_w - PAD_H * 2}px;height:{SEC_H}px;'
             f'display:flex;align-items:flex-end;'
-            f'border-bottom:1px solid var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)));">'
+            f'border-bottom:1px solid {_ec};">'
             f'<span style="font-size:10px;font-weight:700;text-transform:uppercase;'
-            f'letter-spacing:.1em;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+            f'letter-spacing:.1em;color:{_lc};font-family:{_lf};">'
             f'{_h(sec["name"])}</span></div>'
         )
         y += SEC_H + 4
         for task in sec["tasks"]:
             bar_color = (
-                "var(--edge-strong,rgba(96,165,250,0.7))" if task["crit"]
+                "var(--accent-4,rgba(31,58,95,0.7))" if task["crit"]
                 else "var(--node-border,rgba(100,116,139,0.25))" if task["done"]
-                else "rgba(53,148,103,0.18)"
+                else "rgba(53,148,103,0.25)"
             )
+            t_off = (task["t_start"] - earliest).days
+            t_len = (task["t_end"] - task["t_start"]).days
+            bx = bar_x + int(t_off / total_days * bar_w_total)
+            bw = max(4, int(t_len / total_days * bar_w_total))
             parts.append(
                 f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
                 f'width:{LABEL_W}px;height:{BAR_H}px;'
                 f'display:flex;align-items:center;overflow:hidden;">'
                 f'<span style="font-size:11px;color:var(--node-fg,var(--text-primary,#191A17));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+                f'font-family:{_lf};'
                 f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
                 f'{_h(task["name"])}</span></div>'
             )
             parts.append(
-                f'<div style="position:absolute;left:{bar_x}px;top:{y}px;'
-                f'width:{bar_w_total}px;height:{BAR_H}px;background:{bar_color};'
+                f'<div style="position:absolute;left:{bx}px;top:{y + 1}px;'
+                f'width:{bw}px;height:{BAR_H - 2}px;background:{bar_color};'
                 f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-                f'border-radius:4px;box-sizing:border-box;"></div>'
+                f'border-radius:3px;box-sizing:border-box;"></div>'
             )
             y += BAR_H + ROW_GAP
     parts.append('</div>')
@@ -1068,7 +1185,7 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
             continue
         low = line.lower()
         if low.startswith("title "):
-            title = line[6:].strip(); continue
+            title = line[6:].strip().strip('"\''); continue
         m = re.match(r'x-axis\s+(?:\[(.+)\]|"(.+)")', line, re.I)
         if m:
             cats = m.group(1) or m.group(2) or ""
@@ -1103,38 +1220,17 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
+    # Axes-only SVG (bottom layer — behind bars)
+    _tick_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    _tick_count = 5
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
         f'<line x1="{cx_start}" y1="{cy_top}" x2="{cx_start}" y2="{cy_top + ch}" '
-        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
+        f'stroke="{_tick_color}" stroke-width="1.5"/>'
         f'<line x1="{cx_start}" y1="{cy_top + ch}" x2="{cx_start + cw}" y2="{cy_top + ch}" '
-        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
+        f'stroke="{_tick_color}" stroke-width="1.5"/>'
     )
-    # Bug fix: render line series regardless of whether bar data is also present
-    if line_data:
-        pts_coords = []
-        for i, v in enumerate(line_data):
-            bx = cx_start + i * bar_unit + bar_unit // 2
-            by = cy_top + ch - int(max(0.0, min(1.0, (v - y_min) / y_span)) * ch)
-            pts_coords.append((bx, by))
-        for i in range(len(pts_coords) - 1):
-            x1, y1a = pts_coords[i]; x2, y2a = pts_coords[i + 1]
-            parts.append(
-                f'<line x1="{x1}" y1="{y1a}" x2="{x2}" y2="{y2a}" '
-                f'stroke="var(--edge-strong,var(--accent-1,#60a5fa))" stroke-width="2"/>'
-            )
-        for bx, by in pts_coords:
-            r = 4
-            poly = " ".join(
-                f"{bx + int(r * math.cos(math.pi * k / 3))},"
-                f"{by + int(r * math.sin(math.pi * k / 3))}"
-                for k in range(6)
-            )
-            parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1,#60a5fa))"/>')
-    # Y-axis tick marks (inside SVG)
-    _tick_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-    _tick_count = 5
     for _i in range(_tick_count + 1):
         _tv = y_min + (y_span * _i / _tick_count)
         _ty = cy_top + ch - int((_tv - y_min) / y_span * ch)
@@ -1143,7 +1239,7 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
             f'stroke="{_tick_color}" stroke-width="1"/>'
         )
     parts.append('</svg>')
-    # Y-axis tick labels (HTML spans, positioned to the left of the Y-axis)
+    # Y-axis tick labels
     _label_color = "var(--node-fg-dim,var(--text-secondary,#75736C))"
     _label_font = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
     for _i in range(_tick_count + 1):
@@ -1177,6 +1273,33 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
                 f'{_h(cat)}</span>'
             )
+    # Line series SVG overlay — rendered after bars so line appears on top
+    _line_color = "var(--accent-3,#B7791F)"
+    if line_data:
+        pts_coords = []
+        for i, v in enumerate(line_data):
+            bx = cx_start + i * bar_unit + bar_unit // 2
+            by = cy_top + ch - int(max(0.0, min(1.0, (v - y_min) / y_span)) * ch)
+            pts_coords.append((bx, by))
+        parts.append(
+            f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
+            f'overflow:visible;pointer-events:none;">'
+        )
+        for i in range(len(pts_coords) - 1):
+            x1, y1a = pts_coords[i]; x2, y2a = pts_coords[i + 1]
+            parts.append(
+                f'<line x1="{x1}" y1="{y1a}" x2="{x2}" y2="{y2a}" '
+                f'stroke="{_line_color}" stroke-width="2.5"/>'
+            )
+        for bx, by in pts_coords:
+            r = 4
+            poly = " ".join(
+                f"{bx + int(r * math.cos(math.pi * k / 3))},"
+                f"{by + int(r * math.sin(math.pi * k / 3))}"
+                for k in range(6)
+            )
+            parts.append(f'<polygon points="{poly}" fill="{_line_color}"/>')
+        parts.append('</svg>')
     if title:
         parts.append(
             f'<div style="position:absolute;left:{cx_start}px;top:{PAD_V}px;'
@@ -1296,9 +1419,11 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         if m:
             n_cols = int(m.group(1)); continue
         # Edge lines contain --> or <-->
+        # Split on operators to handle chaining: A --> B --> C → [(A,B),(B,C)]
         if '-->' in line or '<-->' in line or '---' in line:
-            for em in _BLOCK_EDGE_RE.finditer(line):
-                edges.append((em.group(1), em.group(2)))
+            _ids = re.findall(r'\b(\w+)\b', line)
+            for _i in range(len(_ids) - 1):
+                edges.append((_ids[_i], _ids[_i + 1]))
             continue
         for token in line.split():
             m2 = _BLOCK_ID_RE.match(token)
@@ -1315,7 +1440,7 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
     if not rows:
         raise ValueError("No blocks found in block-beta.")
 
-    PAD_H, PAD_V, CELL_H, CELL_GAP = 40, 24, 56, 8
+    PAD_H, PAD_V, CELL_H, CELL_GAP = 40, 24, 56, 24
     canvas_w = width_hint or PAD_H * 2 + n_cols * 120 + (n_cols - 1) * CELL_GAP
     # Compute responsive cell width so blocks fill the canvas
     available = canvas_w - 2 * PAD_H - (n_cols - 1) * CELL_GAP
@@ -1358,14 +1483,7 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
-    # SVG layer for edges
-    if svg_edges:
-        parts.append(
-            f'<svg style="position:absolute;top:0;left:0;width:{canvas_w}px;height:{canvas_h}px;overflow:visible;">'
-            f'<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">'
-            f'<path d="M0,0 L0,6 L8,3 z" fill="{edge_color}"/></marker></defs>'
-            + "".join(svg_edges) + '</svg>'
-        )
+    # Block nodes first, SVG edges on top (later in DOM = higher stacking order)
     for ri, row in enumerate(rows):
         ry = PAD_V + ri * (CELL_H + CELL_GAP)
         cx_cur = PAD_H
@@ -1384,6 +1502,15 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
                 f'{_h(blk["label"])}</span></div>'
             )
             cx_cur += bw + CELL_GAP
+    # SVG edge layer last so connectors appear above block backgrounds
+    if svg_edges:
+        parts.append(
+            f'<svg style="position:absolute;top:0;left:0;width:{canvas_w}px;height:{canvas_h}px;'
+            f'overflow:visible;pointer-events:none;">'
+            f'<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">'
+            f'<path d="M0,0 L0,6 L8,3 z" fill="{edge_color}"/></marker></defs>'
+            + "".join(svg_edges) + '</svg>'
+        )
     parts.append('</div>')
     return "\n".join(parts)
 
