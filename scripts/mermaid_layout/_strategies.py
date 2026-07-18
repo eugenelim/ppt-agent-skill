@@ -428,7 +428,22 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'{_h(it["kw"])}{" " + _h(it["label"]) if it["label"] else ""}</span>'
             )
             row += 1; continue
-        if it["type"] != "msg":
+        if it["type"] == "else":
+            row += 1; continue
+        if it["type"] == "note":
+            pid = it["pid"]
+            note_x = _cx(pid) - col_w // 2
+            note_y = ll_top + row * ROW_H + 4
+            note_w = col_w
+            parts.append(
+                f'<span style="position:absolute;left:{note_x}px;top:{note_y + 4}px;'
+                f'width:{note_w}px;font-size:10px;text-align:center;overflow:hidden;'
+                f'color:var(--node-fg,var(--text-primary,#191A17));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                f'{_h(it["text"])}</span>'
+            )
+            row += 1; continue
+        if it["type"] not in ("msg",):
             continue
         sx, dx2 = _cx(it["src"]), _cx(it["dst"])
         ry = ll_top + row * ROW_H + ROW_H // 2
@@ -598,12 +613,10 @@ def _graph_from_content_nodes(
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
     canvas_w, canvas_h = _assign_coordinates(nodes)
-    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
-        scale = width_hint / canvas_w
-        for n in nodes.values():
-            n.x = int(n.x * scale)
-        canvas_w = width_hint
-    return _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h)
+    zoom = 1.0
+    if width_hint and canvas_w > 0 and canvas_w > width_hint:
+        zoom = width_hint / canvas_w
+    return _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h, zoom=zoom)
 
 
 # ── T2: classDiagram ──────────────────────────────────────────────────────────
@@ -728,10 +741,7 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
             f'{_h(sec["name"])}</span></div>'
         )
         y += SEC_H + 4
-        n = len(sec["tasks"])
-        each_w = max(32, (bar_w_total - (n - 1) * 4) // n)
-        for i, task in enumerate(sec["tasks"]):
-            tx = bar_x + i * (each_w + 4)
+        for task in sec["tasks"]:
             bar_color = (
                 "var(--edge-strong,rgba(96,165,250,0.7))" if task["crit"]
                 else "var(--node-border,rgba(100,116,139,0.25))" if task["done"]
@@ -747,12 +757,12 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
                 f'{_h(task["name"])}</span></div>'
             )
             parts.append(
-                f'<div style="position:absolute;left:{tx}px;top:{y}px;'
-                f'width:{each_w}px;height:{BAR_H}px;background:{bar_color};'
+                f'<div style="position:absolute;left:{bar_x}px;top:{y}px;'
+                f'width:{bar_w_total}px;height:{BAR_H}px;background:{bar_color};'
                 f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
                 f'border-radius:4px;box-sizing:border-box;"></div>'
             )
-        y += BAR_H + ROW_GAP
+            y += BAR_H + ROW_GAP
     parts.append('</div>')
     return "\n".join(parts)
 
@@ -773,7 +783,11 @@ def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
             title = line[6:].strip(); continue
         if line.lower().startswith("section "):
             continue
-        current = {"period": line, "events": []}
+        if ' : ' in line:
+            period_name, first_event = line.split(' : ', 1)
+            current = {"period": period_name.strip(), "events": [first_event.strip()]}
+        else:
+            current = {"period": line, "events": []}
         sections.append(current)
     if not sections:
         raise ValueError("No periods found in timeline.")
@@ -989,16 +1003,24 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
         sweep = (sl["value"] / total) * 2 * math.pi
         end_a = angle + sweep
         color = accents[i % len(accents)]
-        n_steps = max(3, int(16 * sweep / (2 * math.pi)))
-        pts: list[str] = []
-        for k in range(n_steps + 1):
-            a = end_a - k * sweep / n_steps
-            pts.append(f"{cx + int(r_in * math.cos(a))},{cy + int(r_in * math.sin(a))}")
-        for k in range(n_steps + 1):
-            a = angle + k * sweep / n_steps
-            pts.append(f"{cx + int(r_out * math.cos(a))},{cy + int(r_out * math.sin(a))}")
+        large_arc = 1 if sweep > math.pi else 0
+        ox0 = cx + r_out * math.cos(angle)
+        oy0 = cy + r_out * math.sin(angle)
+        ox1 = cx + r_out * math.cos(end_a)
+        oy1 = cy + r_out * math.sin(end_a)
+        ix0 = cx + r_in * math.cos(angle)
+        iy0 = cy + r_in * math.sin(angle)
+        ix1 = cx + r_in * math.cos(end_a)
+        iy1 = cy + r_in * math.sin(end_a)
+        d = (
+            f"M {ox0:.2f},{oy0:.2f} "
+            f"A {r_out},{r_out} 0 {large_arc},1 {ox1:.2f},{oy1:.2f} "
+            f"L {ix1:.2f},{iy1:.2f} "
+            f"A {r_in},{r_in} 0 {large_arc},0 {ix0:.2f},{iy0:.2f} "
+            f"Z"
+        )
         parts.append(
-            f'<polygon points="{" ".join(pts)}" fill="{color}" '
+            f'<path d="{d}" fill="{color}" '
             f'stroke="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke-width="2"/>'
         )
         angle = end_a
@@ -1205,9 +1227,16 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
         ny = PAD_V + i * (NODE_H_MM + NODE_GAP)
         nx = PAD_H + n["depth"] * INDENT_W
         bold = "font-weight:700;" if n["depth"] == 0 else ""
-        bg = (f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-              f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
-              f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));') if n["depth"] == 0 else ""
+        if n["depth"] == 0:
+            bg = (
+                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+                f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+            )
+        elif n["depth"] == 1:
+            bg = 'background:rgba(53,148,103,0.08);'
+        else:
+            bg = 'background:rgba(53,148,103,0.05);'
         parts.append(
             f'<div class="node" style="position:absolute;left:{nx}px;top:{ny}px;'
             f'min-width:120px;height:{NODE_H_MM}px;display:flex;align-items:center;'
