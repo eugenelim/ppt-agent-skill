@@ -312,13 +312,17 @@ def _render_graph_fragment(
         else:
             # Accent top border only works on shapes without a clip-path.
             # Diamond and flag nodes clip their top edge to a point/slant —
-            # the 3px accent stripe is invisible. Use a full 2px accent border
-            # for those shapes instead.
+            # the 3px accent stripe is invisible.
+            # For clip-path shapes, CSS border:2px solid creates orphan dot
+            # artifacts at the polygon vertices (the rectangular border bleeds
+            # through where the clip edge meets the bounding-box corner).
+            # Use box-shadow:inset 0 0 0 2px instead — it renders inside the
+            # element and is cleanly clipped to the polygon shape.
             _uses_clip = n.shape in ("diamond", "flag", "hexagon", "trapezoid", "trapezoid-alt")
             if is_external:
                 _border_css = f'border:1px dashed {border_var};'
             elif _uses_clip:
-                _border_css = f'border:2px solid {accent_color};'
+                _border_css = f'box-shadow:inset 0 0 0 2px {accent_color};'
             else:
                 _border_css = f'border:1px solid {border_var}; border-top:3px solid {accent_color};'
 

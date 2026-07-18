@@ -3139,3 +3139,95 @@ pie title Browser Share
         import re
         paths = re.findall(r'<path\b[^>]*\bd="M[^"]*A[^"]*"', html)
         assert len(paths) >= 4, f"expected 4 arc paths (one per slice), got {len(paths)}"
+
+
+# ── TestXychartYAxisTicks ─────────────────────────────────────────────────────
+
+class TestXychartYAxisTicks:
+    SRC = "xychart-beta\n  title T\n  x-axis [Jan,Feb]\n  y-axis 0 --> 100\n  bar [25, 75]"
+
+    def test_yaxis_tick_labels_present(self):
+        html = _dispatch(self.SRC, None, 800)
+        # Y-axis ticks must include at least the min (0) and max (100) labels
+        assert "0" in html and "100" in html, "Y-axis tick labels missing"
+
+    def test_yaxis_tick_count(self):
+        import re
+        html = _dispatch(self.SRC, None, 800)
+        # Tick labels are <span> elements with numeric content inside the chart
+        # Find spans that appear to be tick labels (positioned to the left of the Y-axis)
+        ticks = re.findall(r'right:[0-9]+px[^"]*">\s*(\d+)\s*<', html)
+        assert len(ticks) >= 3, (
+            f"Expected ≥3 Y-axis tick labels, got {len(ticks)}"
+        )
+
+
+# ── TestXychartLineBarCorender ────────────────────────────────────────────────
+
+class TestXychartLineBarCorender:
+    SRC = (
+        "xychart-beta\n"
+        "  title T\n"
+        "  x-axis [Jan,Feb,Mar]\n"
+        "  y-axis 0 --> 100\n"
+        "  bar [30, 60, 90]\n"
+        "  line [30, 60, 90]"
+    )
+
+    def test_line_rendered_with_bar(self):
+        html = _dispatch(self.SRC, None, 800)
+        # Bars render as <div> blocks; line renders as SVG <line> or <polygon> elements
+        assert '<div style="position:absolute' in html, "Bar series missing"
+        assert (
+            '<polygon' in html
+            or ('<line' in html and 'stroke-width="2"' in html)
+        ), "Line series missing when bar is also present"
+
+
+# ── TestBlockBetaCellScaling ──────────────────────────────────────────────────
+
+class TestBlockBetaCellScaling:
+    SRC = 'block-beta\n  columns 3\n  A["Input"] B["Process"] C["Output"]\n  A --> B --> C'
+
+    def test_rightmost_block_near_canvas_right(self):
+        import re
+        html = _dispatch(self.SRC, None, 800)
+        # With 3 columns and width=800, the last block (C) left edge must be >500px
+        lefts = [int(m) for m in re.findall(r'left:(\d+)px', html)]
+        assert lefts, "No left: positions found in HTML"
+        assert max(lefts) > 500, (
+            f"Rightmost block too far left: max left={max(lefts)}px "
+            f"(expected >500 in 800px canvas)"
+        )
+
+    def test_cell_width_fills_canvas(self):
+        import re
+        html = _dispatch(self.SRC, None, 800)
+        # Rendered cell widths should be >150px (not the fixed 120px default)
+        widths = [int(m) for m in re.findall(r'width:(\d+)px', html)]
+        node_widths = [w for w in widths if 100 < w < 400]
+        assert any(w > 150 for w in node_widths), (
+            f"Cell widths still at fixed 120px: {node_widths}"
+        )
+
+
+# ── TestDiamondNoOrphanDots ───────────────────────────────────────────────────
+
+class TestDiamondNoOrphanDots:
+    SRC_CLIPPING = (Path(__file__).parent / "fixtures/flowchart-diamond-clipping.mmd").read_text()
+
+    def test_diamond_no_rect_border_causing_vertex_dots(self):
+        """Diamond nodes must not use 'border:Xpx solid' — the rectangular CSS
+        border bleeds through at clip-path polygon vertices as orphan dots.
+        The fix uses box-shadow:inset which is clipped cleanly to the diamond."""
+        import re
+        html = _dispatch(self.SRC_CLIPPING, None, 800)
+        diamond_styles = re.findall(
+            r'class="node node-diamond[^"]*"[^>]*style="([^"]+)"', html
+        )
+        assert diamond_styles, "No diamond nodes found in rendered HTML"
+        for styles in diamond_styles:
+            assert "border:2px solid" not in styles, (
+                "Diamond node uses CSS border:2px solid which creates vertex dot "
+                "artifacts at clip-path polygon corners; use box-shadow:inset instead"
+            )

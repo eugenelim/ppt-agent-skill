@@ -1111,7 +1111,8 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
         f'<line x1="{cx_start}" y1="{cy_top + ch}" x2="{cx_start + cw}" y2="{cy_top + ch}" '
         f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
     )
-    if line_data and not bar_data:
+    # Bug fix: render line series regardless of whether bar data is also present
+    if line_data:
         pts_coords = []
         for i, v in enumerate(line_data):
             bx = cx_start + i * bar_unit + bar_unit // 2
@@ -1131,7 +1132,29 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
                 for k in range(6)
             )
             parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1,#60a5fa))"/>')
+    # Y-axis tick marks (inside SVG)
+    _tick_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    _tick_count = 5
+    for _i in range(_tick_count + 1):
+        _tv = y_min + (y_span * _i / _tick_count)
+        _ty = cy_top + ch - int((_tv - y_min) / y_span * ch)
+        parts.append(
+            f'<line x1="{cx_start - 4}" y1="{_ty}" x2="{cx_start}" y2="{_ty}" '
+            f'stroke="{_tick_color}" stroke-width="1"/>'
+        )
     parts.append('</svg>')
+    # Y-axis tick labels (HTML spans, positioned to the left of the Y-axis)
+    _label_color = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+    _label_font = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    for _i in range(_tick_count + 1):
+        _tv = y_min + (y_span * _i / _tick_count)
+        _ty = cy_top + ch - int((_tv - y_min) / y_span * ch)
+        parts.append(
+            f'<span style="position:absolute;right:{canvas_w - cx_start + 6}px;'
+            f'top:{_ty - 6}px;font-size:9px;line-height:1;'
+            f'color:{_label_color};font-family:{_label_font};">'
+            f'{int(_tv)}</span>'
+        )
     if bar_data:
         bar_w = max(8, bar_unit - 8)
         for i, v in enumerate(bar_data):
@@ -1292,8 +1315,11 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
     if not rows:
         raise ValueError("No blocks found in block-beta.")
 
-    PAD_H, PAD_V, CELL_W, CELL_H, CELL_GAP = 40, 24, 120, 56, 8
-    canvas_w = width_hint or PAD_H * 2 + n_cols * CELL_W + (n_cols - 1) * CELL_GAP
+    PAD_H, PAD_V, CELL_H, CELL_GAP = 40, 24, 56, 8
+    canvas_w = width_hint or PAD_H * 2 + n_cols * 120 + (n_cols - 1) * CELL_GAP
+    # Compute responsive cell width so blocks fill the canvas
+    available = canvas_w - 2 * PAD_H - (n_cols - 1) * CELL_GAP
+    cell_w = max(80, available // n_cols)
     canvas_h = PAD_V * 2 + len(rows) * (CELL_H + CELL_GAP) - CELL_GAP
 
     # Build block positions for edge routing
@@ -1302,7 +1328,7 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         ry = PAD_V + ri * (CELL_H + CELL_GAP)
         cx_cur = PAD_H
         for blk in row:
-            bw = CELL_W * blk["span"] + CELL_GAP * (blk["span"] - 1)
+            bw = cell_w * blk["span"] + CELL_GAP * (blk["span"] - 1)
             block_pos[blk["id"]] = {"x": cx_cur, "y": ry, "w": bw, "h": CELL_H}
             cx_cur += bw + CELL_GAP
 
@@ -1344,7 +1370,7 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         ry = PAD_V + ri * (CELL_H + CELL_GAP)
         cx_cur = PAD_H
         for blk in row:
-            bw = CELL_W * blk["span"] + CELL_GAP * (blk["span"] - 1)
+            bw = cell_w * blk["span"] + CELL_GAP * (blk["span"] - 1)
             parts.append(
                 f'<div class="node node-rect" style="position:absolute;'
                 f'left:{cx_cur}px;top:{ry}px;width:{bw}px;height:{CELL_H}px;'
