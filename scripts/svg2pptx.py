@@ -206,14 +206,55 @@ def _make_grad(gdef):
         lin = _el('a:lin', {'ang': str(ang), 'scaled': '0'})
         return _el('a:gradFill', children=[gs_lst, lin])
 
-def make_line(stroke_str, stroke_w=1):
+def dash_preset(dasharray, stroke_w=1.0):
+    """SVG stroke-dasharray -> closest OOXML a:prstDash `val` (or None for solid).
+
+    prstDash (a named preset) is used over custDash for renderer robustness. The
+    first dash length decides dot vs dash: a dash no longer than the stroke is a
+    dot, otherwise a dash. Empty / 'none' -> solid (None)."""
+    if not dasharray or dasharray.strip() in ('none', ''):
+        return None
+    parts = []
+    for p in dasharray.replace(',', ' ').split():
+        try:                       # skip non-numeric tokens (e.g. 'inherit') -> solid
+            parts.append(float(strip_unit(p)))
+        except ValueError:
+            continue
+    if not parts or not any(parts):  # empty or all-zero dash array is solid
+        return None
+    dash = parts[0]
+    return 'sysDot' if dash <= max(2.0, float(stroke_w) * 1.5) else 'dash'
+
+
+_LINECAP_OOXML = {'round': 'rnd', 'square': 'sq', 'butt': 'flat'}
+_LINEJOIN_OOXML = {'round': 'a:round', 'bevel': 'a:bevel', 'miter': 'a:miter'}
+
+
+def make_line(stroke_str, stroke_w=1, dasharray='', linecap='', linejoin=''):
     c = parse_color(stroke_str)
     if not c or c[0] == 'grad':
         return None
     hex6, alpha = c
-    w = max(1, int(float(strip_unit(stroke_w)) * 12700))
-    return _el('a:ln', {'w': str(w)},
-               children=[_el('a:solidFill', children=[_srgb(hex6, alpha)])])
+    sw = float(strip_unit(stroke_w))
+    # line weight uses EMU_PX (the px scale the geometry is placed at), not the
+    # 1pt=12700 EMU point scale — otherwise every stroke reads ~1.33x too heavy.
+    w = max(1, int(sw * EMU_PX))
+    attrs = {'w': str(w)}
+    # stroke-linecap=round is what makes Lucide dot-grid icons (drawn as
+    # near-zero-length `h.01` segments) render as visible round dots, and gives
+    # the icons their rounded ends; default (flat) matches SVG butt caps.
+    cap = _LINECAP_OOXML.get((linecap or '').strip())
+    if cap and cap != 'flat':
+        attrs['cap'] = cap
+    children = [_el('a:solidFill', children=[_srgb(hex6, alpha)])]
+    preset = dash_preset(dasharray, sw)
+    if preset:  # a:prstDash follows the fill in the a:ln child order
+        children.append(_el('a:prstDash', {'val': preset}))
+    # line join (after prstDash in the a:ln child order); round matches Lucide
+    join = _LINEJOIN_OOXML.get((linejoin or '').strip())
+    if join:
+        children.append(_el(join))
+    return _el('a:ln', attrs, children=children)
 
 def make_shape(sid, name, x, y, cx, cy, preset='rect',
                fill_el=None, line_el=None, rx=0, geom_el=None):
@@ -349,6 +390,185 @@ def _transform_path_d(d_str, fn):
     return None if not flush() else ' '.join(out)
 
 
+def _arc_to_cubics(x0, y0, rx, ry, phi_deg, large_arc, sweep, x1, y1):
+    """SVG elliptical arc (endpoint form) -> list of absolute cubic segments
+    [(c1x, c1y, c2x, c2y, ex, ey), ...].
+
+    Standard endpoint->center conversion (SVG impl notes F.6), then split into
+    <=90° pieces each approximated by one cubic bézier. Lucide icons build their
+    rounded corners and circular bodies from `a`; without this they render as
+    fragments. Degenerate (zero radius or coincident endpoints) -> a straight
+    segment so the pen still reaches the endpoint."""
+    if (x0, y0) == (x1, y1):
+        return []
+    rx, ry = abs(rx), abs(ry)
+    if rx == 0 or ry == 0:
+        return [(x0, y0, x1, y1, x1, y1)]  # line, expressed as a cubic
+    phi = math.radians(phi_deg % 360.0)
+    cos_p, sin_p = math.cos(phi), math.sin(phi)
+    dx2, dy2 = (x0 - x1) / 2.0, (y0 - y1) / 2.0
+    x0p = cos_p * dx2 + sin_p * dy2
+    y0p = -sin_p * dx2 + cos_p * dy2
+    # scale radii up if they can't span the endpoints
+    lam = (x0p * x0p) / (rx * rx) + (y0p * y0p) / (ry * ry)
+    if lam > 1:
+        s = math.sqrt(lam)
+        rx *= s; ry *= s
+    num = rx * rx * ry * ry - rx * rx * y0p * y0p - ry * ry * x0p * x0p
+    den = rx * rx * y0p * y0p + ry * ry * x0p * x0p
+    co = math.sqrt(max(0.0, num / den)) if den else 0.0
+    if large_arc == sweep:
+        co = -co
+    cxp = co * rx * y0p / ry
+    cyp = -co * ry * x0p / rx
+    cx = cos_p * cxp - sin_p * cyp + (x0 + x1) / 2.0
+    cy = sin_p * cxp + cos_p * cyp + (y0 + y1) / 2.0
+
+    def _angle(ux, uy, vx, vy):
+        dot = ux * vx + uy * vy
+        ln = math.hypot(ux, uy) * math.hypot(vx, vy)
+        a = math.acos(max(-1.0, min(1.0, dot / ln))) if ln else 0.0
+        return -a if (ux * vy - uy * vx) < 0 else a
+
+    ux, uy = (x0p - cxp) / rx, (y0p - cyp) / ry
+    vx, vy = (-x0p - cxp) / rx, (-y0p - cyp) / ry
+    theta1 = _angle(1.0, 0.0, ux, uy)
+    dtheta = _angle(ux, uy, vx, vy)
+    if not sweep and dtheta > 0:
+        dtheta -= 2 * math.pi
+    elif sweep and dtheta < 0:
+        dtheta += 2 * math.pi
+
+    n = max(1, int(math.ceil(abs(dtheta) / (math.pi / 2))))
+    seg = dtheta / n
+    k = 4.0 / 3.0 * math.tan(seg / 4.0)
+
+    def _pt(t):
+        return (cx + rx * math.cos(t) * cos_p - ry * math.sin(t) * sin_p,
+                cy + rx * math.cos(t) * sin_p + ry * math.sin(t) * cos_p)
+
+    def _der(t):
+        return (-rx * math.sin(t) * cos_p - ry * math.cos(t) * sin_p,
+                -rx * math.sin(t) * sin_p + ry * math.cos(t) * cos_p)
+
+    out = []
+    px_, py_ = x0, y0
+    th = theta1
+    for _ in range(n):
+        th2 = th + seg
+        ex, ey = _pt(th2)
+        d1x, d1y = _der(th)
+        d2x, d2y = _der(th2)
+        out.append((px_ + k * d1x, py_ + k * d1y,
+                    ex - k * d2x, ey - k * d2y, ex, ey))
+        px_, py_ = ex, ey
+        th = th2
+    return out
+
+
+def _path_points(d_str):
+    """Absolute on-path points a <path> d visits — for bounding-box + the
+    drop-empty decision in _path.
+
+    Mirrors parse_path_to_custgeom's command handling (M/L/H/V/C tracked with a
+    running current point; S/Q/T/A skipped, exactly as the geometry builder does
+    not draw them). Cubic control points are included so the bbox
+    over-approximates the curve, matching the old all-numbers bbox.
+
+    The old code computed the bbox by pairing *every* number in `d`
+    (xs=coords[0::2]), which is only correct for all-pair commands: a lone H or V
+    carries a single number, so pairing transposes and mis-sizes the box, and a
+    single-segment H/V path (3 numbers) was dropped outright by `len(nums) < 4`.
+    """
+    tokens = _PATH_RE.findall(d_str)
+    items = []
+    for cmd_match, num_match in tokens:
+        if cmd_match:
+            items.append(cmd_match)
+        elif num_match:
+            items.append(float(num_match))
+
+    pts = []
+    i = 0
+    cx_p = cy_p = 0.0      # current point (absolute)
+    start = None          # subpath start, for Z
+    cmd = None
+    rel = False
+    while i < len(items):
+        if isinstance(items[i], str):
+            cmd = items[i].lower()
+            rel = items[i].islower()
+            i += 1
+            if cmd == 'z':
+                if start is not None:
+                    cx_p, cy_p = start
+                continue
+        if cmd is None:
+            i += 1
+            continue
+        try:
+            if cmd == 'm':
+                x, y = items[i], items[i + 1]
+                if rel:
+                    x += cx_p; y += cy_p
+                cx_p, cy_p = x, y
+                start = (x, y)
+                pts.append((x, y))
+                i += 2
+                cmd = 'l'  # implicit lineTo after moveTo
+            elif cmd == 'l':
+                x, y = items[i], items[i + 1]
+                if rel:
+                    x += cx_p; y += cy_p
+                cx_p, cy_p = x, y
+                pts.append((x, y))
+                i += 2
+            elif cmd == 'h':
+                x = items[i]
+                if rel:
+                    x += cx_p
+                cx_p = x
+                pts.append((cx_p, cy_p))
+                i += 1
+            elif cmd == 'v':
+                y = items[i]
+                if rel:
+                    y += cy_p
+                cy_p = y
+                pts.append((cx_p, cy_p))
+                i += 1
+            elif cmd == 'c':
+                x1, y1, x2, y2, x, y = items[i:i + 6]
+                if rel:
+                    x1 += cx_p; y1 += cy_p
+                    x2 += cx_p; y2 += cy_p
+                    x += cx_p; y += cy_p
+                pts.extend([(x1, y1), (x2, y2), (x, y)])
+                cx_p, cy_p = x, y
+                i += 6
+            elif cmd == 'a':
+                rx, ry, rot = items[i], items[i + 1], items[i + 2]
+                large, sweep = items[i + 3], items[i + 4]
+                x, y = items[i + 5], items[i + 6]
+                if rel:
+                    x += cx_p; y += cy_p
+                # bound the béziers the builder actually draws (control pts too)
+                for c1x, c1y, c2x, c2y, ex, ey in _arc_to_cubics(
+                        cx_p, cy_p, rx, ry, rot, int(large), int(sweep), x, y):
+                    pts.extend([(c1x, c1y), (c2x, c2y), (ex, ey)])
+                cx_p, cy_p = x, y
+                i += 7
+            elif cmd in ('s', 'q', 't'):
+                # still skipped without advancing (none occur in the corpus);
+                # the builder skips them identically, so the walks stay consistent.
+                i += {'s': 4, 'q': 4, 't': 2}.get(cmd, 2)
+            else:
+                i += 1
+        except (IndexError, ValueError):
+            i += 1
+    return pts
+
+
 def parse_path_to_custgeom(d_str, bbox):
     """SVG path d -> OOXML a:custGeom 元素。bbox=(x,y,w,h) 用于坐标偏移。"""
     bx, by, bw, bh = bbox
@@ -372,6 +592,7 @@ def parse_path_to_custgeom(d_str, bbox):
     path_el = _el('a:path', {'w': str(scale), 'h': str(scale)})
     i = 0
     cx_p, cy_p = 0, 0  # current point (absolute)
+    start = None       # subpath start, for Z (must match _path_points)
     cmd = None
     rel = False
 
@@ -382,6 +603,11 @@ def parse_path_to_custgeom(d_str, bbox):
             i += 1
             if cmd == 'z':
                 path_el.append(_el('a:close'))
+                # SVG: close returns the pen to the subpath start; a following
+                # relative command must measure from there (keeps this builder in
+                # lockstep with _path_points, so the bbox and geometry agree).
+                if start is not None:
+                    cx_p, cy_p = start
                 continue
 
         if cmd is None:
@@ -394,6 +620,7 @@ def parse_path_to_custgeom(d_str, bbox):
                 if rel:
                     x += cx_p; y += cy_p
                 cx_p, cy_p = x, y
+                start = (x, y)
                 path_el.append(_el('a:moveTo', children=[
                     _el('a:pt', {'x': str(coord(x, True)), 'y': str(coord(y, False))})
                 ]))
@@ -446,9 +673,26 @@ def parse_path_to_custgeom(d_str, bbox):
                 ]))
                 i += 6
 
-            elif cmd in ('s', 'q', 't', 'a'):
-                # 简化处理：跳过复杂曲线
-                skip = {'s': 4, 'q': 4, 't': 2, 'a': 7}.get(cmd, 2)
+            elif cmd == 'a':
+                # 椭圆弧 -> 三次贝塞尔 (Lucide 图标的圆角/圆形部件靠 a 绘制)
+                rx, ry, rot = items[i], items[i + 1], items[i + 2]
+                large, sweep = int(items[i + 3]), int(items[i + 4])
+                x, y = float(items[i + 5]), float(items[i + 6])
+                if rel:
+                    x += cx_p; y += cy_p
+                for c1x, c1y, c2x, c2y, ex, ey in _arc_to_cubics(
+                        cx_p, cy_p, rx, ry, rot, large, sweep, x, y):
+                    path_el.append(_el('a:cubicBezTo', children=[
+                        _el('a:pt', {'x': str(coord(c1x, True)), 'y': str(coord(c1y, False))}),
+                        _el('a:pt', {'x': str(coord(c2x, True)), 'y': str(coord(c2y, False))}),
+                        _el('a:pt', {'x': str(coord(ex, True)), 'y': str(coord(ey, False))}),
+                    ]))
+                cx_p, cy_p = x, y
+                i += 7
+
+            elif cmd in ('s', 'q', 't'):
+                # 简化处理：跳过复杂曲线 (语料中不出现)
+                skip = {'s': 4, 'q': 4, 't': 2}.get(cmd, 2)
                 i += skip
             else:
                 i += 1
@@ -686,7 +930,10 @@ class SvgConverter:
         r = max(float(el.get('rx', 0)), float(el.get('ry', 0)))
         preset = 'roundRect' if r > 0 else 'rect'
         fill_el = make_fill(fill_s, self.grads, el_opacity)
-        line_el = make_line(stroke_s, el.get('stroke-width', '1')) if stroke_s else None
+        line_el = make_line(stroke_s, el.get('stroke-width', '1'),
+                            el.get('stroke-dasharray', ''),
+                            el.get('stroke-linecap', ''),
+                            el.get('stroke-linejoin', '')) if stroke_s else None
         shape = make_shape(self._id(), f'R{self.sid}',
                            px(x), px(y), px(w), px(h),
                            preset=preset, fill_el=fill_el, line_el=line_el, rx=px(r))
@@ -734,7 +981,12 @@ class SvgConverter:
                 elif anchor == 'end':
                     x -= cx_v / EMU_PX
                 run = {
-                    'text': txt.strip(), 'sz': font_sz(ts_fsz),
+                    # keep a leading space: inline-continuation tspans (a bold word
+                    # then " — rest") position the continuation right after the word
+                    # and rely on the leading space for the gap. strip() dropped it,
+                    # collapsing "TEMPORARY — Atlas" to "TEMPORARY—Atlas". rstrip
+                    # still trims trailing padding.
+                    'text': txt.rstrip(), 'sz': font_sz(ts_fsz),
                     'bold': ts_fw in ('bold', '700', '800', '900'),
                     'hex': hex6, 'alpha': alpha,
                     'font': resolve_font(ts_ff),
@@ -780,7 +1032,9 @@ class SvgConverter:
         cx_v = float(el.get('cx', 0)) * scale + ox
         cy_v = float(el.get('cy', 0)) * scale + oy
         r = float(el.get('r', 0)) * scale
-        if r <= 0 or r < 2:
+        # Icon nodes (network dots, map pins, gauge centres) scale to ~1px; the old
+        # 2px floor dropped nearly all of them. Keep anything >=0.5px on-slide.
+        if r < 0.5:
             self.stats['skipped'] += 1
             return
 
@@ -847,7 +1101,7 @@ class SvgConverter:
                         _srgb(stroke_color[0], int(stroke_color[1] * el_opacity))
                     ]))
                 ln_children.append(_el('a:round'))
-                line_el = _el('a:ln', {'w': str(int(sw * 12700))}, children=ln_children)
+                line_el = _el('a:ln', {'w': str(int(sw * EMU_PX))}, children=ln_children)
 
                 shape = _el('p:sp')
                 shape.append(_el('p:nvSpPr', children=[
@@ -879,7 +1133,7 @@ class SvgConverter:
                     _srgb(stroke_color[0], int(stroke_color[1] * el_opacity))
                 ]))
             ln_children.append(_el('a:round'))
-            line_el = _el('a:ln', {'w': str(int(sw * 12700))}, children=ln_children)
+            line_el = _el('a:ln', {'w': str(int(sw * EMU_PX))}, children=ln_children)
 
             sp.append(make_shape(self._id(), f'C{self.sid}',
                                  px(cx_v - r), px(cy_v - r), px(2*r), px(2*r),
@@ -891,7 +1145,9 @@ class SvgConverter:
 
         # 普通圆形
         fill_el = make_fill(fill_s, self.grads, el_opacity)
-        line_el = make_line(stroke_s, stroke_w_s) if stroke_s and stroke_s != 'none' else None
+        line_el = make_line(stroke_s, stroke_w_s, dasharray,
+                            el.get('stroke-linecap', ''),
+                            el.get('stroke-linejoin', '')) if stroke_s and stroke_s != 'none' else None
         sp.append(make_shape(self._id(), f'C{self.sid}',
                              px(cx_v - r), px(cy_v - r), px(2*r), px(2*r),
                              preset='ellipse', fill_el=fill_el, line_el=line_el))
@@ -916,11 +1172,18 @@ class SvgConverter:
         y1 = float(el.get('y1', 0)) * scale + oy
         x2 = float(el.get('x2', 0)) * scale + ox
         y2 = float(el.get('y2', 0)) * scale + oy
-        line_el = make_line(el.get('stroke', '#000'), el.get('stroke-width', '1'))
+        line_el = make_line(el.get('stroke', '#000'), el.get('stroke-width', '1'),
+                            el.get('stroke-dasharray', ''),
+                            el.get('stroke-linecap', ''),
+                            el.get('stroke-linejoin', ''))
         if line_el is None:
             return
         mx, my = min(x1, x2), min(y1, y2)
-        w, h = abs(x2 - x1) or 1, abs(y2 - y1) or 1
+        w, h = abs(x2 - x1), abs(y2 - y1)
+        if w < 1e-6 and h < 1e-6:
+            return  # degenerate point
+        # Keep the true 0 for a horizontal/vertical line: the `line` preset draws
+        # corner-to-corner, so forcing a 1px minor dimension slants the line.
         shape = make_shape(self._id(), f'L{self.sid}',
                            px(mx), px(my), px(w), px(h),
                            preset='line', fill_el=_el('a:noFill'), line_el=line_el)
@@ -1058,30 +1321,43 @@ class SvgConverter:
             d = el.get('d', '')
         if not d or 'nan' in d:
             return
-        # 计算 bounding box（简化：从 path 数据提取所有数字坐标）
-        nums = re.findall(r'[+-]?(?:\d+\.?\d*|\.\d+)', d)
-        if len(nums) < 4:
+        # 计算 bounding box：按命令语义走一遍路径取真实坐标点
+        # (不能简单地把所有数字两两配对——H/V 每个命令只带一个数字，配对会错位)
+        pts = _path_points(d)
+        if len(pts) < 2:
+            # 少于两个点画不出线/形状（如仅 moveTo 或被跳过的孤立曲线）
+            self.stats['skipped'] += 1
             return
-        coords = [float(n) for n in nums]
-        xs = coords[0::2]
-        ys = coords[1::2] if len(coords) > 1 else [0]
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
         bx, by = min(xs), min(ys)
-        bw = max(xs) - bx or 1
-        bh = max(ys) - by or 1
+        bw = (max(xs) - bx) or 1  # 直线的一个维度为 0 -> 最小 1 (与 _line 一致)
+        bh = (max(ys) - by) or 1
 
-        # 过滤极小路径
-        if bw < 4 and bh < 4:
+        # 过滤极小的纯填充装饰元素 (<4px)；带描边的小路径 (图标细节、刻度、
+        # 连接线) 是有意的线条，保留。旧代码靠 bbox 计算错误把这些误当作
+        # 大图形放行，修正 bbox 后需在此显式保留描边小路径。
+        stroke_s = el.get('stroke', '')
+        has_stroke = bool(stroke_s) and stroke_s != 'none'
+        if bw < 4 and bh < 4 and not has_stroke:
             self.stats['skipped'] += 1
             return
 
         geom_el = parse_path_to_custgeom(d, (bx, by, bw, bh))
         el_opacity = float(el.get('opacity', '1')) * opacity
         fill_el = make_fill(el.get('fill', ''), self.grads, el_opacity)
-        line_el = make_line(el.get('stroke', ''), el.get('stroke-width', '1')) if el.get('stroke') else None
+        line_el = make_line(el.get('stroke', ''), el.get('stroke-width', '1'),
+                            el.get('stroke-dasharray', ''),
+                            el.get('stroke-linecap', ''),
+                            el.get('stroke-linejoin', '')) if el.get('stroke') else None
 
+        # Position matches _rect/_line: local coord * current scale, then add the
+        # already-accumulated (pre-scaled) group offset. The old
+        # `(bx + ox) * scale` double-applied scale to ox, scattering the sub-paths
+        # of any icon inside a scaled <g> (e.g. matrix(1.08333 … 450 503)).
         shape = make_shape(self._id(), f'P{self.sid}',
-                           px((bx + ox) * scale) if scale != 1.0 else px(bx + ox),
-                           px((by + oy) * scale) if scale != 1.0 else px(by + oy),
+                           px(bx * scale + ox),
+                           px(by * scale + oy),
                            px(bw * scale), px(bh * scale),
                            fill_el=fill_el, line_el=line_el, geom_el=geom_el)
         sp.append(shape)

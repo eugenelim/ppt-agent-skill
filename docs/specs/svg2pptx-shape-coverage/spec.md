@@ -91,13 +91,25 @@ what the reused `<path>` codepath already supports is out of scope — noted bel
 
 ## Declined patterns
 
-- Tempted to fix `_path`'s `(bx+ox)*scale` vs `_line`'s `coord*scale+ox`
-  transform inconsistency — declining; path triangles convert correctly at
-  scale=1 in production and touching it risks regressing the working path
-  codepath. Noted in `notes/`.
-- Tempted to add a full SVG **attribute** completeness pass (dasharray/linecap on
+> **Amendment (connector/icon-fidelity follow-up, post-Shipped).** Two patterns
+> declined below were later **reversed** by dedicated follow-up work (fixing
+> missing/misplaced connectors and low-fidelity Lucide icons in real-PowerPoint
+> renders). They are struck through and annotated so this register stops
+> contradicting the code. Reversed items: the `_path` transform fix and the SVG
+> stroke-attribute pass (dasharray/linecap/linejoin), plus arc→bézier geometry
+> and a corrected line-preset (0 minor dimension for H/V lines).
+
+- ~~Tempted to fix `_path`'s `(bx+ox)*scale` vs `_line`'s `coord*scale+ox`
+  transform inconsistency — declining.~~ **Reversed:** `_path` now uses
+  `bx*scale+ox` (matches `_line`/`_rect`). The old form double-applied the group
+  scale to the offset, scattering the sub-paths of icons inside a scaled `<g>`
+  (`matrix(1.08333 …)`); covered by `test_path_in_scaled_group_positions_correctly`.
+- ~~Tempted to add a full SVG **attribute** completeness pass (dasharray/linecap on
   polygons, `fill-rule`, `<marker>`) — declining; scope is *shape-element*
-  coverage. Reusing `_path` inherits exactly the attribute support paths have.
+  coverage.~~ **Partially reversed:** `stroke-dasharray`→`a:prstDash`,
+  `stroke-linecap`→`cap`, and `stroke-linejoin`→join child are now emitted by
+  `make_line` (dashed connectors + Lucide dot-grid/rounded icons need them);
+  `fill-rule` and `<marker>`-on-polygon remain out of scope.
 - Tempted to fix it renderer-side (emit `<path>` triangles instead of
   `<polygon>`) — declining; user's explicit direction is the sustainable
   single-point fix in svg2pptx, which also covers `html2svg`'s CSS-arrow polygons
