@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Alice
+    participant Bob
+    participant Carol
+
+    Alice->>Bob: request
+    Note left of Alice: left note
+    Note right of Carol: right note
+    Note over Alice: over single
+    Note over Alice,Carol: spanning note
+    Bob-->>Alice: response
+    Note over Bob: thinking

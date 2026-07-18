@@ -60,11 +60,11 @@ def _render_label_html(label: str) -> str:
                     found = True
                     break
             if not found:
-                buf.append(_h(seg[i]))
+                buf.append(_nh(seg[i]))
                 i += 1
         if open_delim:
             # Unclosed — replace the opening span tag with the literal delimiter.
-            buf[open_pos] = _h(open_delim)
+            buf[open_pos] = _nh(open_delim)
         result_parts.append("".join(buf))
     return "<br>".join(result_parts)
 
@@ -223,7 +223,7 @@ def _render_graph_fragment(
         # as _node_render_h so HTML line breaks match the computed height.
         _wbudget = (NODE_W - 40 - ICON_COL_WIDTH) if icon_svg else (NODE_W - 40)
         main_lines = _wrap_label(main_label, width_budget=_wbudget)
-        main_html = _render_label_html("<br>".join(_nh(ln) for ln in main_lines))
+        main_html = _render_label_html("<br>".join(main_lines))
 
         # Accent color comes from group membership; used for top border + icon.
         # External nodes get no accent (greyscale treatment) — dim top border matches dim body.
@@ -319,8 +319,21 @@ def _render_graph_fragment(
             # Use box-shadow:inset 0 0 0 2px instead — it renders inside the
             # element and is cleanly clipped to the polygon shape.
             _uses_clip = n.shape in ("diamond", "flag", "hexagon", "trapezoid", "trapezoid-alt")
+            # Diamond border: box-shadow:inset follows the bounding-box rectangle, so only
+            # 4 tiny accent-colour tips appear at the midpoints — effectively invisible.
+            # Use an SVG polygon overlay instead that traces the actual diamond outline.
+            _diamond_border_svg = ""
             if is_external:
                 _border_css = f'border:1px dashed {border_var};'
+            elif n.shape == "diamond":
+                _border_css = ""  # SVG overlay handles the border (see below)
+                _hw = NODE_W // 2
+                _diamond_border_svg = (
+                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                    f'width="{NODE_W}" height="{node_h}">'
+                    f'<polygon points="{_hw},1 {NODE_W-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
+                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
+                )
             elif _uses_clip:
                 _border_css = f'box-shadow:inset 0 0 0 2px {accent_color};'
             else:
@@ -382,7 +395,7 @@ def _render_graph_fragment(
                     f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
                     f'display:flex; flex-direction:column; align-items:{_align}; justify-content:center; '
                     f'text-align:{_text_align};">'
-                    f'{inner}</div>'
+                    f'{inner}{_diamond_border_svg}</div>'
                 )
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
@@ -543,6 +556,9 @@ THEME_DARK: dict[str, str] = {
     "--bg-primary":     "#0d1117",
     "--edge-label-bg":  "#1a2235",
     "--font-primary":   "-apple-system,Inter,sans-serif",
+    "--node-shadow":    "0 1px 3px rgba(0,0,0,0.4),0 1px 0 rgba(0,0,0,0.2)",
+    "--node-radius":    "10px",
+    "--group-radius":   "10px",
 }
 """CSS variable values for the dark theme."""
 

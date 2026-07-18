@@ -1,0 +1,11 @@
+flowchart TD
+    subgraph L1["Level 1"]
+        subgraph L2["Level 2"]
+            subgraph L3["Level 3"]
+                A[DeepNode]
+            end
+            B[MidNode]
+        end
+        C[OuterNode]
+    end
+    A --> B --> C

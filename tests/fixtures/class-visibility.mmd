@@ -1,0 +1,25 @@
+classDiagram
+    class BankAccount {
+        <<service>>
+        +String owner
+        -int balance
+        #String accountType
+        ~String internalCode
+        +deposit(amount) void
+        -validate(amount) bool
+        #audit() String
+        ~reset() void
+    }
+    class Transaction {
+        +int id
+        +decimal amount
+        +Date timestamp
+        +process() bool
+    }
+    class AuditLog {
+        +int id
+        +String action
+        +Date createdAt
+    }
+    BankAccount "1" --> "0..*" Transaction : initiates
+    BankAccount ..> AuditLog : logs to

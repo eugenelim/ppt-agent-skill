@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html as _html
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -268,7 +269,13 @@ def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
     pixel widths. Treats literal \\n and real newlines as explicit breaks.
     For icon-left cards pass width_budget=NODE_W - 40 - ICON_COL_WIDTH.
     """
-    normalized = label.replace("\\n", "\n")
+    # 1. Normalize <br> variants to \n so they split before _nh() escapes angle brackets.
+    # 2. Decode HTML entities (&lt; → <, &amp; → & etc.) for correct re-escaping by _nh().
+    # 3. Re-normalize any <br> that entity decoding re-introduced (e.g. &lt;br&gt; → <br>).
+    #    Those are treated as explicit line breaks — consistent with actual <br> tags.
+    _br_step1 = re.sub(r'<br\s*/?>', '\n', label, flags=re.IGNORECASE).replace("\\n", "\n")
+    _decoded  = _html.unescape(_br_step1)
+    normalized = re.sub(r'<br\s*/?>', '\n', _decoded, flags=re.IGNORECASE)
     if "\n" in normalized:
         result: list[str] = []
         for chunk in normalized.split("\n"):
