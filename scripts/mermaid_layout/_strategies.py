@@ -733,9 +733,9 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         for i, task in enumerate(sec["tasks"]):
             tx = bar_x + i * (each_w + 4)
             bar_color = (
-                "var(--edge-strong,var(--accent-1,#60a5fa))" if task["crit"]
-                else "var(--node-border,var(--card-border,#DAD7CE))" if task["done"]
-                else "var(--node-bg-from,var(--card-bg-from,#ffffff))"
+                "var(--edge-strong,rgba(96,165,250,0.7))" if task["crit"]
+                else "var(--node-border,rgba(100,116,139,0.25))" if task["done"]
+                else "rgba(53,148,103,0.18)"
             )
             parts.append(
                 f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
@@ -1226,11 +1226,15 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
 _BLOCK_ID_RE = re.compile(r'(\w+)(?:\["([^"]+)"\])?(?::(\d+))?')
 
 
+_BLOCK_EDGE_RE = re.compile(r'(\w+)\s*(?:-->|<-->|---)\s*(\w+)')
+
+
 def _layout_block(src: str, direction: str, width_hint: int) -> str:
-    """block-beta: blocks in declared rows/columns."""
+    """block-beta: blocks in declared rows/columns with arrows."""
     content_lines = _directive_content(src)
     rows: list[list[dict]] = []
     current_row: list[dict] = []
+    edges: list[tuple[str, str]] = []
     n_cols = 3
     for raw in content_lines:
         line = raw.strip()
@@ -1239,6 +1243,11 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         m = re.match(r'columns\s+(\d+)', line, re.I)
         if m:
             n_cols = int(m.group(1)); continue
+        # Edge lines contain --> or <-->
+        if '-->' in line or '<-->' in line or '---' in line:
+            for em in _BLOCK_EDGE_RE.finditer(line):
+                edges.append((em.group(1), em.group(2)))
+            continue
         for token in line.split():
             m2 = _BLOCK_ID_RE.match(token)
             if m2 and m2.group(1) not in ("space", "classDef", "class"):
@@ -1258,11 +1267,50 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
     canvas_w = width_hint or PAD_H * 2 + n_cols * CELL_W + (n_cols - 1) * CELL_GAP
     canvas_h = PAD_V * 2 + len(rows) * (CELL_H + CELL_GAP) - CELL_GAP
 
+    # Build block positions for edge routing
+    block_pos: dict[str, dict] = {}
+    for ri, row in enumerate(rows):
+        ry = PAD_V + ri * (CELL_H + CELL_GAP)
+        cx_cur = PAD_H
+        for blk in row:
+            bw = CELL_W * blk["span"] + CELL_GAP * (blk["span"] - 1)
+            block_pos[blk["id"]] = {"x": cx_cur, "y": ry, "w": bw, "h": CELL_H}
+            cx_cur += bw + CELL_GAP
+
+    edge_color = "var(--edge,rgba(100,116,139,0.7))"
+    svg_edges: list[str] = []
+    for src_id, dst_id in edges:
+        if src_id not in block_pos or dst_id not in block_pos:
+            continue
+        s, d = block_pos[src_id], block_pos[dst_id]
+        # Right-center of source to left-center of dest (same row)
+        # For cross-row, use bottom-center to top-center
+        if abs((s["y"] + s["h"] / 2) - (d["y"] + d["h"] / 2)) < CELL_H:
+            x1 = s["x"] + s["w"]; y1 = s["y"] + s["h"] // 2
+            x2 = d["x"]; y2 = d["y"] + d["h"] // 2
+        else:
+            x1 = s["x"] + s["w"] // 2; y1 = s["y"] + s["h"]
+            x2 = d["x"] + d["w"] // 2; y2 = d["y"]
+        mx = (x1 + x2) // 2
+        svg_edges.append(
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+            f'stroke="{edge_color}" stroke-width="1.5" '
+            f'marker-end="url(#arr)"/>'
+        )
+
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
+    # SVG layer for edges
+    if svg_edges:
+        parts.append(
+            f'<svg style="position:absolute;top:0;left:0;width:{canvas_w}px;height:{canvas_h}px;overflow:visible;">'
+            f'<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">'
+            f'<path d="M0,0 L0,6 L8,3 z" fill="{edge_color}"/></marker></defs>'
+            + "".join(svg_edges) + '</svg>'
+        )
     for ri, row in enumerate(rows):
         ry = PAD_V + ri * (CELL_H + CELL_GAP)
         cx_cur = PAD_H
@@ -1308,7 +1356,7 @@ def _layout_packet(src: str, direction: str, width_hint: int) -> str:
                     f"(start must be ≥ 0, end must be ≥ start)."
                 )
             fields.append({"start": start, "end": end,
-                           "bits": end - start + 1, "label": m.group(3).strip()})
+                           "bits": end - start + 1, "label": m.group(3).strip().strip('"')})
     if not fields:
         raise ValueError("No fields found in packet-beta.")
 
