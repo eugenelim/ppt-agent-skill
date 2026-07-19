@@ -74,8 +74,28 @@ def _slide_number(path: Path) -> int | None:
 def node_available() -> bool:
     """Whether headless-Chrome screenshotting (Stage-3 render) is possible. When
     False the render degrades to HTML/preview only and the visual gate is skipped
-    with an announcement rather than hard-failing."""
-    return shutil.which("node") is not None
+    with an announcement rather than hard-failing.
+
+    Post-playwright-migration: probes playwright + Chromium, not system Node.
+    """
+    try:
+        from playwright.sync_api import sync_playwright  # noqa: F401
+    except ImportError:
+        return False
+    try:
+        import subprocess, sys as _sys
+        # Use the same launch args as _browser.py to avoid a false-positive probe.
+        r = subprocess.run(
+            [_sys.executable, "-c",
+             "from playwright.sync_api import sync_playwright;"
+             "p=sync_playwright().start();"
+             "b=p.chromium.launch(args=['--no-sandbox','--disable-gpu','--font-render-hinting=none']);"
+             "b.close(); p.stop()"],
+            capture_output=True, timeout=15,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def png_freshness_issues(slides_dir: Path, png_dir: Path) -> list[str]:
@@ -323,12 +343,12 @@ class Checker:
 
     def _check_pngs_and_visual(self, slides_dir: Path, png_dir: Path) -> None:
         """PNG-count (+ optional freshness/visual_qa) enforcement, extracted so the
-        node-absent announced-skip branch is behaviorally testable without the full
+        playwright-absent announced-skip branch is behaviorally testable without the full
         check_step4 planning preamble. PNGs are produced only by Stage-3 review; when
-        node/puppeteer is unavailable the render degrades to HTML/preview only, so under
+        playwright/chromium is unavailable the render degrades to HTML/preview only, so under
         the render-done gate we announce-skip rather than hard-fail."""
         if self.with_visual_qa and not node_available():
-            self.echo("[SKIP] visual gate: node/puppeteer unavailable — render degraded "
+            self.echo("[SKIP] visual gate: playwright/chromium unavailable — render degraded "
                       "to HTML/preview only; PNG + visual_qa not enforced")
             return
         self.must_dir(png_dir)
@@ -488,7 +508,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--with-visual-qa",
         action="store_true",
         help="Render-done gate: also enforce PNG-freshness + visual_qa batch (exit != 1). "
-             "Degrades to an announced skip when node/puppeteer is unavailable.",
+             "Degrades to an announced skip when playwright/chromium is unavailable.",
     )
     return parser
 

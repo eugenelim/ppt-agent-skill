@@ -137,7 +137,7 @@ tasks, not most — the work-loop skill covers when it's the right tool.
 <!-- Keep this short. Detailed command reference goes in docs/. -->
 
 ```bash
-pip install python-pptx lxml      # one-time Python deps (Node deps auto-install on first html2svg run)
+pip install -r requirements.txt && playwright install chromium  # one-time setup
 python tools/smoke_test.py      # phased smoke test (accepts --phase N, --style ID)
 python tools/smoke_skill.py     # Step 3/4 end-to-end smoke (validators + visual_qa + resource routing)
 python tools/check_skill.py     # doc↔code contract-drift check — run after editing SKILL.md / prompts / validators

@@ -8,8 +8,8 @@ HTML render**, we screenshot the exact rendered viewport (the proven approach)
 and wrap the PNG into a PDF. Tradeoff: text is raster (not selectable) — the
 right price for guaranteed visual fidelity on a fixed-size slide.
 
-Toolchain (no ad-hoc installs — both already present): **Puppeteer** renders +
-screenshots (same provisioning as gallery.py); **Pillow** wraps PNG→PDF
+Toolchain (no ad-hoc installs — both already present): **Playwright** renders +
+screenshots (shared _browser.py launcher); **Pillow** wraps PNG→PDF
 (`Image.save(..., "PDF")`). Never WeasyPrint, `pdf2svg`, `img2pdf`, or a
 `page.pdf()` print export.
 
@@ -30,58 +30,20 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import json
 import re
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+from _browser import get_browser, new_page
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def _natural_key(p: Path):
-    """Natural sort key so slide-2 precedes slide-10.
-
-    Plain lexicographic sort orders slide-10..slide-19 ahead of slide-2
-    ('1' < '2'), corrupting page order in the exported PDF. Same contract
-    as png2pptx.py / html_packager.py `_natural_key`."""
+    """Natural sort key so slide-2 precedes slide-10."""
     return [int(x) if x.isdigit() else x.lower()
             for x in re.split(r'(\d+)', p.stem)]
-
-# Screenshot the exact rendered viewport → guaranteed 1:1 with the HTML.
-NODE_TEMPLATE = """
-const puppeteer = require('puppeteer');
-const fs = require('fs');
-(async () => {
-  const cfg = JSON.parse(process.argv[2]);
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
-           '--font-render-hinting=none', '--force-color-profile=srgb']
-  });
-  for (const pg of cfg.pages) {
-    if (!fs.existsSync(pg.html)) { console.warn('skip (no HTML): ' + pg.html); continue; }
-    const page = await browser.newPage();
-    await page.setViewport({ width: cfg.width, height: cfg.height, deviceScaleFactor: cfg.scale });
-    // Block outbound HTTP(S) — allow only file:// and data: (LLM01/ASI05).
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const url = req.url();
-      if (url.startsWith('file://') || url.startsWith('data:')) { req.continue(); }
-      else { req.abort('blockedbyresponse'); }
-    });
-    await page.goto('file://' + pg.html, { waitUntil: 'networkidle0', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 600));
-    // clip to the exact page box so output == the rendered viewport, no scrollbars
-    await page.screenshot({ path: pg.png, clip: { x: 0, y: 0, width: cfg.width, height: cfg.height } });
-    console.log('shot: ' + pg.png);
-    await page.close();
-  }
-  await browser.close();
-  console.log('Done: ' + cfg.pages.length + ' screenshot(s)');
-})();
-"""
 
 
 def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> list[dict]:
@@ -89,9 +51,6 @@ def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> li
     is one PDF and its ordered list of absolute source HTML pages."""
     if deck:
         d = Path(deck)
-        # Exclude the combined views that live alongside the slides: the print
-        # shell (index-print.html) and the packaged preview (<deck-slug>-preview.html),
-        # so neither is rendered as a stray page.
         slides = sorted(
             (h for h in d.glob("*.html")
              if h.name != "index-print.html" and not h.name.endswith("preview.html")),
@@ -100,7 +59,6 @@ def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> li
         if not slides:
             ip = d / "index-print.html"
             slides = [ip] if ip.exists() else []
-        # Default name carries the deck-slug (dir name) → <deck-slug>.pdf.
         pdf = Path(out).resolve() if out else (d / f"{d.name}.pdf").resolve()
         return [{"pdf": str(pdf), "pages": [str(s.resolve()) for s in slides]}]
 
@@ -108,26 +66,10 @@ def resolve_documents(paths: list[str], out: str | None, deck: str | None) -> li
     for p in paths:
         pp = Path(p)
         htmls.extend(sorted(pp.glob("*.html"), key=_natural_key) if pp.is_dir() else [pp])
-    htmls = [h.resolve() for h in htmls]  # file:// needs an absolute path
-    if out:  # one multi-page PDF
+    htmls = [h.resolve() for h in htmls]
+    if out:
         return [{"pdf": str(Path(out).resolve()), "pages": [str(h) for h in htmls]}]
     return [{"pdf": str(h.with_suffix(".pdf")), "pages": [str(h)]} for h in htmls]
-
-
-def build_node_script(work_dir: Path) -> Path:
-    sp = work_dir / ".build_pdf.cjs"
-    sp.write_text(NODE_TEMPLATE)
-    return sp
-
-
-def _puppeteer_work_dir() -> Path:
-    for cand in (ROOT, ROOT / "ppt-output" / "e2e-test"):
-        if (cand / "node_modules" / "puppeteer").exists():
-            return cand
-    print("Installing npm dependencies from lockfile (one-time, the sanctioned renderer)...")
-    subprocess.run(["npm", "ci"], capture_output=True, text=True,
-                   timeout=300, cwd=str(ROOT))
-    return ROOT
 
 
 def _pngs_to_pdf(pngs: list[Path], pdf: Path, scale: int) -> None:
@@ -135,33 +77,55 @@ def _pngs_to_pdf(pngs: list[Path], pdf: Path, scale: int) -> None:
     frames = [Image.open(p).convert("RGB") for p in pngs]
     if not frames:
         return
-    # resolution = 96*scale dpi → physical page = css_px/96 inches (a 1280x720
-    # mock → 13.33x7.5in landscape), independent of deviceScaleFactor crispness.
     pdf.parent.mkdir(parents=True, exist_ok=True)
     frames[0].save(str(pdf), "PDF", resolution=96.0 * scale, save_all=True,
                    append_images=frames[1:])
 
 
 def render(documents: list[dict], width: int, height: int, scale: int) -> int:
-    work_dir = _puppeteer_work_dir()
-    script_path = build_node_script(work_dir)
     tmp = Path(tempfile.mkdtemp(prefix="build_pdf_"))
     try:
         pages, i = [], 0
         for doc in documents:
             doc["_pngs"] = []
             for html in doc["pages"]:
-                png = tmp / f"p{i}.png"; i += 1
-                pages.append({"html": html, "png": str(png)})
+                if not Path(html).exists():
+                    print(f"skip (no HTML): {html}", file=sys.stderr)
+                    continue
+                png = tmp / f"p{i}.png"
+                i += 1
+                pages.append({"html": html, "png": png})
                 doc["_pngs"].append(png)
+
         if not pages:
             print("no HTML pages to render", file=sys.stderr)
             return 1
-        cfg = {"pages": pages, "width": width, "height": height, "scale": scale}
-        r = subprocess.run(["node", str(script_path), json.dumps(cfg)],
-                           cwd=str(work_dir), timeout=600)
-        if r.returncode != 0:
-            return r.returncode
+
+        try:
+            with get_browser() as browser:
+                for item in pages:
+                    page = new_page(browser, width=width, height=height, scale=float(scale))
+                    try:
+                        # networkidle fires fast because non-file:// requests are aborted;
+                        # wait_for_timeout below is the actual render-settle guard.
+                        page.goto("file://" + item["html"], wait_until="networkidle", timeout=30000)
+                        page.wait_for_timeout(600)
+                        page.screenshot(
+                            path=str(item["png"]),
+                            clip={"x": 0, "y": 0, "width": width, "height": height},
+                        )
+                        print(f"shot: {item['png'].name}")
+                    except Exception as e:
+                        print(f"[ERROR] build_pdf: {Path(item['html']).name}: {e}", file=sys.stderr)
+                    finally:
+                        try:
+                            page.close()
+                        except Exception:
+                            pass
+        except RuntimeError as e:
+            print(f"[SKIP] build_pdf: {e}", file=sys.stderr)
+            return 1
+
         for doc in documents:
             shot = [p for p in doc["_pngs"] if p.exists()]
             if shot:
@@ -169,14 +133,13 @@ def render(documents: list[dict], width: int, height: int, scale: int) -> int:
                 print(f"PDF: {doc['pdf']} ({len(shot)} page(s))")
         return 0
     finally:
-        script_path.unlink(missing_ok=True)
         for f in tmp.glob("*"):
             f.unlink(missing_ok=True)
         tmp.rmdir()
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Deterministic pixel-1:1 HTML→PDF (puppeteer screenshot + Pillow).")
+    ap = argparse.ArgumentParser(description="Deterministic pixel-1:1 HTML→PDF (Playwright screenshot + Pillow).")
     ap.add_argument("paths", nargs="*", help="HTML file(s) or a directory of *.html")
     ap.add_argument("--deck", help="a deck dir; renders its slide HTMLs into one multi-page PDF")
     ap.add_argument("--out", help="output PDF path (combines all inputs into one multi-page PDF)")

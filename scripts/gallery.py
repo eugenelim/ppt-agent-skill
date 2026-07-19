@@ -3,12 +3,11 @@
 
 读取 references/styles/*.md 中的 29 风格定义，生成：
 - ppt-output/style-gallery/index.html  统一卡片墙索引（按 5 板块分组）
-- 可选：调用 puppeteer 截图每个 mock 为 PNG（--screenshots 选项）
+- 可选：调用 Playwright 截图每个 mock 为 PNG（--screenshots 选项）
 
 用法:
     python3 scripts/gallery.py                    # 生成 index.html
     python3 scripts/gallery.py --screenshots      # + 生成 PNG 截图
-    python3 scripts/gallery.py --serve            # + 启动本地预览服务
 
 输出:
     ppt-output/style-gallery/index.html
@@ -18,9 +17,10 @@
 import argparse
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
+
+from _browser import get_browser, new_page
 
 ROOT = Path(__file__).resolve().parent.parent
 STYLES_DIR = ROOT / "references" / "styles"
@@ -529,68 +529,54 @@ def build_index_html(grouped: dict) -> str:
 
 
 def take_screenshots(styles: list) -> bool:
-    """用 puppeteer 截图每个 mock 为 PNG。"""
-    # 找 puppeteer 安装位置：优先项目根，其次 ppt-output/e2e-test
-    candidates = [ROOT, ROOT / "ppt-output" / "e2e-test"]
-    work_dir = None
-    for cand in candidates:
-        if (cand / "node_modules" / "puppeteer").exists():
-            work_dir = cand
-            break
-    if work_dir is None:
-        # 如果都没装，在项目根装一个
-        work_dir = ROOT
-        print("Installing npm dependencies from lockfile...")
-        subprocess.run(["npm", "ci"],
-                      capture_output=True, text=True, timeout=300, cwd=str(work_dir))
+    """用 Playwright 截图每个 mock 为 PNG。
 
-    script_path = work_dir / ".gallery_screenshot.cjs"
-    files = [{"id": s["style_id"], "html": str(GALLERY_DIR / gallery_face(s["style_id"])), "png": str(GALLERY_DIR / f"{s['style_id']}.png")} for s in styles]
+    Note: _setup_page blocks all non-file:// and non-data: URLs, including
+    https://fonts.googleapis.com. Gallery screenshots render with system fonts
+    (deliberate cosmetic change — gallery is presentational, not pixel-exact).
+    """
+    files = [
+        {
+            "id": s["style_id"],
+            "html": str(GALLERY_DIR / gallery_face(s["style_id"])),
+            "png": str(GALLERY_DIR / f"{s['style_id']}.png"),
+        }
+        for s in styles
+    ]
 
-    js = """
-const puppeteer = require('puppeteer');
-const fs = require('fs');
-
-(async () => {
-  const config = JSON.parse(process.argv[2]);
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
-           '--font-render-hinting=none']
-  });
-  for (const item of config.files) {
-    if (!fs.existsSync(item.html)) {
-      console.warn('skip (no HTML):', item.id);
-      continue;
-    }
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1.5 });
-    await page.goto('file://' + item.html, { waitUntil: 'networkidle0', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 800));
-    await page.screenshot({ path: item.png, fullPage: false });
-    console.log('PNG: ' + item.id);
-    await page.close();
-  }
-  await browser.close();
-  console.log('Done: ' + config.files.length + ' screenshots');
-})();
-"""
-    script_path.write_text(js)
     try:
-        r = subprocess.run(
-            ["node", str(script_path), json.dumps({"files": files})],
-            cwd=str(work_dir), timeout=600
-        )
-        return r.returncode == 0
-    finally:
-        if script_path.exists():
-            script_path.unlink()
+        with get_browser() as browser:
+            ok = 0
+            for item in files:
+                if not Path(item["html"]).exists():
+                    print(f"skip (no HTML): {item['id']}", file=sys.stderr)
+                    continue
+                page = new_page(browser, width=1280, height=720, scale=1.5)
+                try:
+                    # networkidle fires fast because non-file:// requests are aborted;
+                    # wait_for_timeout below is the actual render-settle guard.
+                    page.goto("file://" + item["html"], wait_until="networkidle", timeout=30000)
+                    page.wait_for_timeout(800)
+                    page.screenshot(path=item["png"], full_page=False)
+                    print(f"PNG: {item['id']}")
+                    ok += 1
+                except Exception as e:
+                    print(f"[ERROR] gallery: {item['id']}: {e}", file=sys.stderr)
+                finally:
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+            return ok > 0
+    except RuntimeError as e:
+        print(f"[SKIP] gallery screenshots: {e}", file=sys.stderr)
+        return False
 
 
 def main():
     parser = argparse.ArgumentParser(description="PPT Style Gallery Generator")
     parser.add_argument("--screenshots", action="store_true",
-                       help="Also take PNG screenshots of each mock (requires puppeteer)")
+                       help="Also take PNG screenshots of each mock (requires playwright install chromium)")
     parser.add_argument("--out", default=str(GALLERY_DIR / "index.html"),
                        help="Output index.html path")
     args = parser.parse_args()

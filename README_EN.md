@@ -33,7 +33,7 @@
     <img src="https://img.shields.io/github/repo-size/Akxan/ppt-agent-skill?style=flat-square&color=orange" alt="Repo size" />
     <img src="https://img.shields.io/github/languages/top/Akxan/ppt-agent-skill?style=flat-square&color=8b5cf6" alt="Top language" />
     <img src="https://img.shields.io/badge/python-≥3.8-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
-    <img src="https://img.shields.io/badge/node-≥18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
+    <img src="https://img.shields.io/badge/playwright-1.61-2EAD33?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
     <img src="https://img.shields.io/badge/PPTX-editable-D24726?style=flat-square&logo=microsoftpowerpoint&logoColor=white" alt="PPTX" />
     <img src="https://img.shields.io/badge/Claude%20Code-skill-D97757?style=flat-square" alt="Claude Code Skill" />
   </p>
@@ -108,10 +108,11 @@ All artifacts saved to ppt-output/<deck-name>/ (one folder per deck)
 **Requirements**:
 
 ```bash
-# Python deps
-pip install python-pptx lxml Pillow
+# Python deps (includes Playwright)
+pip install -r requirements.txt
 
-# Node.js >= 18; puppeteer auto-installs on first html2svg.py run
+# One-time Chromium provisioning (managed by Playwright, no system Node.js required)
+playwright install chromium
 ```
 
 ## 🎨 Style Gallery (29 styles)

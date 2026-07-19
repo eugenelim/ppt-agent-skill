@@ -33,7 +33,7 @@
     <img src="https://img.shields.io/github/repo-size/Akxan/ppt-agent-skill?style=flat-square&color=orange" alt="Repo size" />
     <img src="https://img.shields.io/github/languages/top/Akxan/ppt-agent-skill?style=flat-square&color=8b5cf6" alt="Top language" />
     <img src="https://img.shields.io/badge/python-≥3.8-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
-    <img src="https://img.shields.io/badge/node-≥18-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node" />
+    <img src="https://img.shields.io/badge/playwright-1.61-2EAD33?style=flat-square&logo=playwright&logoColor=white" alt="Playwright" />
     <img src="https://img.shields.io/badge/PPTX-editable-D24726?style=flat-square&logo=microsoftpowerpoint&logoColor=white" alt="PPTX" />
     <img src="https://img.shields.io/badge/Claude%20Code-skill-D97757?style=flat-square" alt="Claude Code Skill" />
   </p>
@@ -107,10 +107,11 @@ Agent 提问调研需求（等你回复 7 题）
 **环境依赖**：
 
 ```bash
-# Python 依赖
-pip install python-pptx lxml Pillow
+# Python 依赖（含 Playwright）
+pip install -r requirements.txt
 
-# Node.js >= 18，puppeteer 在首次 html2svg.py 运行时自动安装
+# 一次性 Chromium 配置（Playwright 管理，无需系统 Node.js）
+playwright install chromium
 ```
 
 ## 🎨 29 风格预览画廊

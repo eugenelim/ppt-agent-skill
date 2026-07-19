@@ -19,6 +19,7 @@ docs/specs/<feature>/
 
 | Spec | Status | Constrained by | Notes |
 | --- | --- | --- | --- |
+| [`playwright-export-migration`](playwright-export-migration/spec.md) | Shipped | RFC-0003 | Migrate 4 shipped browser scripts + tools/diagram_render_check.py from Puppeteer/Node to Playwright for Python; ship dom-to-svg prebuilt; remove Node from repo entirely |
 | [`renderer-stable-ids`](renderer-stable-ids/spec.md) | Implementing | `mermaid-source-bridge` | Stable `data-node-id`, `data-src`, `data-dst`, `data-edge-label` attrs on every primary entity and edge element across all 17 covered diagram types |
 | [`diagram-consistency-system`](diagram-consistency-system/spec.md) | Implementing | none | Themed, pipeline-safe per-type diagram/architecture/PM recipes + expanded visual-consistency QA (per-page + deck-level) |
 | [`mermaid-source-bridge`](mermaid-source-bridge/spec.md) | Implementing | `diagram-consistency-system` | Extract Mermaid fences from any source document into planning JSON; native Python layout engine (`mermaid_layout.py`) renders all Mermaid diagram types to pipeline-safe HTML/CSS, bypassing dagre |

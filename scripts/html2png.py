@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """HTML -> PNG 高清截图转换
 
-使用 Puppeteer 在 headless 浏览器中打开 HTML 并截图。
+使用 Playwright 在 headless Chromium 中打开 HTML 并截图。
 - 视口 1280x720，设备像素比 2x -> 输出 2560x1440 PNG
 - 比 SVG 管线兼容性更好（所有 CSS 特性均保留）
 - 缺点：文字不可编辑（成为像素）
@@ -10,137 +10,22 @@
     python3 scripts/html2png.py <html_dir_or_file> [-o output_dir] [--scale 1]
 """
 
-import json
-import os
 import re
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-SCREENSHOT_SCRIPT = r"""
-const puppeteer = require('puppeteer');
-const fs = require('fs');
-const path = require('path');
-
-(async () => {
-    const config = JSON.parse(process.argv[2]);
-    const scale = config.scale || 1;
-    const browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
-               '--font-render-hinting=none']
-    });
-
-    for (const item of config.files) {
-        const page = await browser.newPage();
-        await page.setViewport({
-            width: 1280,
-            height: 720,
-            deviceScaleFactor: scale
-        });
-
-        // Block outbound HTTP(S) — allow only file:// and data: (LLM01/ASI05).
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            const url = req.url();
-            if (url.startsWith('file://') || url.startsWith('data:')) {
-                req.continue();
-            } else {
-                req.abort('blockedbyresponse');
-            }
-        });
-
-        await page.goto('file://' + item.html, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
-        });
-        // 智能等候字体与所有贴图实体装载完成再捕获
-        await page.evaluate(async () => {
-            await document.fonts.ready;
-            const images = Array.from(document.querySelectorAll('img'));
-            await Promise.all(images.map(img => {
-                if (img.complete) return Promise.resolve();
-                return new Promise(r => { img.onload = r; img.onerror = r; });
-            }));
-        });
-
-        if (config.fullPage) {
-            await page.screenshot({ path: item.png, type: 'png', fullPage: true });
-        } else {
-            await page.screenshot({
-                path: item.png,
-                type: 'png',
-                fullPage: false,
-                clip: { x: 0, y: 0, width: 1280, height: 720 }
-            });
-        }
-        console.log('PNG: ' + path.basename(item.html) + ' -> ' + path.basename(item.png));
-        await page.close();
-    }
-
-    await browser.close();
-    console.log('Done: ' + config.files.length + ' PNGs');
-})();
-"""
-
-
-def get_dep_dir(work_dir: Path) -> Path:
-    curr = work_dir.resolve()
-    for _ in range(5):
-        if curr.name == "ppt-output":
-            return curr
-        if curr.parent == curr:
-            break
-        curr = curr.parent
-    return work_dir
-
-
-def node_env(work_dir: Path) -> dict:
-    """Environment for node calls with puppeteer resolvable via an explicit
-    NODE_PATH (<dep_dir>/node_modules), so `require('puppeteer')` resolves
-    regardless of the process cwd or of work_dir sitting under ppt-output."""
-    dep_dir = get_dep_dir(work_dir)
-    env = os.environ.copy()
-    node_modules = str((dep_dir / "node_modules").resolve())
-    existing = env.get("NODE_PATH")
-    env["NODE_PATH"] = node_modules + (os.pathsep + existing if existing else "")
-    return env
-
-
-def ensure_puppeteer(work_dir: Path) -> bool:
-    """确保 Puppeteer 已安装，返回是否可用。"""
-    dep_dir = get_dep_dir(work_dir)
-    try:
-        r = subprocess.run(
-            ["node", "-e", "require('puppeteer')"],
-            capture_output=True, text=True, timeout=10,
-            cwd=str(dep_dir), env=node_env(work_dir)
-        )
-        if r.returncode == 0:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    print(f"Installing puppeteer in {dep_dir}...")
-    try:
-        r = subprocess.run(
-            ["npm", "ci"],
-            capture_output=True, text=True, timeout=300, cwd=str(dep_dir)
-        )
-        return r.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+from _browser import get_browser, new_page
 
 
 def convert(html_dir: Path, output_dir: Path, scale: float = 1.0, full_page: bool = False) -> bool:
     """主转换入口。"""
     if html_dir.is_file():
         html_files = [html_dir]
-        work_dir = html_dir.parent.parent
     else:
-        html_files = sorted(html_dir.glob("*.html"), key=lambda p: [int(x) if x.isdigit() else x.lower() for x in re.split(r'(\d+)', p.stem)])
-        work_dir = html_dir.parent
+        html_files = sorted(
+            html_dir.glob("*.html"),
+            key=lambda p: [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", p.stem)],
+        )
 
     if not html_files:
         print(f"No HTML files in {html_dir}", file=sys.stderr)
@@ -148,48 +33,50 @@ def convert(html_dir: Path, output_dir: Path, scale: float = 1.0, full_page: boo
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if not ensure_puppeteer(work_dir):
-        print("Puppeteer unavailable. Install Node.js and retry.", file=sys.stderr)
-        return False
-
-    config = {
-        "scale": scale,
-        "fullPage": full_page,
-        "files": [
-            {"html": str(f), "png": str(output_dir / (f.stem + ".png"))}
-            for f in html_files
-        ]
-    }
-
-    # Unique temp script (no fixed-name collision across concurrent runs). Prefer
-    # dep_dir (beside node_modules); NODE_PATH drives resolution so the script's
-    # location is otherwise free — fall back to the system temp dir if dep_dir is
-    # not writable (e.g. a read-only mount) rather than crashing.
-    dep_dir = get_dep_dir(work_dir)
     try:
-        fd, tmp_name = tempfile.mkstemp(prefix=".html2png_tmp_", suffix=".js", dir=str(dep_dir))
-    except OSError:
-        fd, tmp_name = tempfile.mkstemp(prefix=".html2png_tmp_", suffix=".js")
-    os.close(fd)
-    script_path = Path(tmp_name)
-    script_path.write_text(SCREENSHOT_SCRIPT)
-
-    try:
-        print(f"Converting {len(html_files)} HTML files -> PNG ({scale}x scale)...")
-        r = subprocess.run(
-            ["node", str(script_path), json.dumps(config)],
-            cwd=str(dep_dir), env=node_env(work_dir), timeout=300
-        )
-        if r.returncode != 0:
-            return False
-        print(f"\nDone! {len(html_files)} PNGs -> {output_dir}")
-        return True
-    except subprocess.TimeoutExpired:
-        print("Timeout: screenshot took too long", file=sys.stderr)
+        with get_browser() as browser:
+            print(f"Converting {len(html_files)} HTML files -> PNG ({scale}x scale)...")
+            ok = 0
+            for f in html_files:
+                page = new_page(browser, width=1280, height=720, scale=scale)
+                try:
+                    # networkidle fires fast because non-file:// requests are aborted;
+                    # the font/image await below is the actual render-settle guard.
+                    page.goto("file://" + str(f), wait_until="networkidle", timeout=30000)
+                    page.evaluate(
+                        """async () => {
+                            await document.fonts.ready;
+                            const imgs = Array.from(document.querySelectorAll('img'));
+                            await Promise.all(imgs.map(img => {
+                                if (img.complete) return Promise.resolve();
+                                return new Promise(r => { img.onload = r; img.onerror = r; });
+                            }));
+                        }"""
+                    )
+                    out_path = output_dir / (f.stem + ".png")
+                    if full_page:
+                        page.screenshot(path=str(out_path), type="png", full_page=True)
+                    else:
+                        page.screenshot(
+                            path=str(out_path),
+                            type="png",
+                            full_page=False,
+                            clip={"x": 0, "y": 0, "width": 1280, "height": 720},
+                        )
+                    print(f"PNG: {f.name} -> {out_path.name}")
+                    ok += 1
+                except Exception as e:
+                    print(f"[ERROR] html2png: {f.name}: {e}", file=sys.stderr)
+                finally:
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
+            print(f"\nDone! {ok}/{len(html_files)} PNGs -> {output_dir}")
+            return ok > 0
+    except RuntimeError as e:
+        print(f"[SKIP] html2png: {e}", file=sys.stderr)
         return False
-    finally:
-        if script_path.exists():
-            script_path.unlink()
 
 
 def main():

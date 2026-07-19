@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """test_build_pdf.py — build_pdf.py resolves inputs deterministically, renders
-via a Puppeteer *screenshot* (guaranteed 1:1 with the HTML), and assembles the
+via a Playwright *screenshot* (guaranteed 1:1 with the HTML), and assembles the
 PDF with Pillow — never WeasyPrint / img2pdf / a `page.pdf()` print export.
 
 No pytest harness; run directly or via smoke_test.py. Exit 0 = pass, 1 = fail.
@@ -21,13 +21,11 @@ import build_pdf as B  # noqa: E402
 if __name__ == "__main__":
     FAILS: list[str] = []
 
-
     def check(cond: bool, msg: str) -> None:
         if not cond:
             FAILS.append(msg)
 
-
-    # --- resolve_documents (pure) ---
+    # --- resolve_documents (pure — unchanged) ---
     d = B.resolve_documents(["a.html"], None, None)
     check(len(d) == 1 and Path(d[0]["pdf"]).name == "a.pdf", "single html → a.pdf")
     check(Path(d[0]["pdf"]).is_absolute() and Path(d[0]["pages"][0]).is_absolute(),
@@ -54,8 +52,6 @@ if __name__ == "__main__":
               "--deck without --out → <deck-slug>.pdf (topic-named)")
 
     # --- --deck collates slides by page NUMBER, not lexicographically ---
-    # Real slide files are un-padded (cli-cheatsheet: slides/slide-1.html); the
-    # old zero-padded fixture masked the mis-sort where slide-10..19 preceded slide-2.
     with tempfile.TemporaryDirectory() as t:
         dd = Path(t) / "big-deck"
         dd.mkdir()
@@ -66,16 +62,19 @@ if __name__ == "__main__":
         check(names == [f"slide-{n}.html" for n in range(1, 13)],
               f"--deck orders slide-1..12 by page number (got {names[:4]}…)")
 
-    # --- node script: screenshot path, not print/page.pdf, no banned tools ---
-    with tempfile.TemporaryDirectory() as t:
-        js = B.build_node_script(Path(t)).read_text()
-        check("screenshot(" in js and "clip:" in js, "renders via clipped screenshot (1:1 viewport)")
-        check("page.pdf(" not in js, "does NOT use page.pdf() print export")
-        check("deviceScaleFactor" in js, "sets deviceScaleFactor for crispness")
-        for banned in ("weasy", "img2pdf", "pdf2svg", "toDataURL"):
-            check(banned.lower() not in js.lower(), f"node script must NOT use {banned}")
+    # --- Playwright-contract assertions (source-level, no browser needed) ---
+    src = (ROOT / "scripts" / "build_pdf.py").read_text()
+    check("build_node_script" not in src, "build_node_script removed")
+    check("NODE_TEMPLATE" not in src, "NODE_TEMPLATE removed")
+    check("_puppeteer_work_dir" not in src, "_puppeteer_work_dir removed")
+    check("from _browser import" in src, "bare import from _browser present")
+    # The docstring mentions `page.pdf()` as the avoided alternative; look for an actual call
+    check("    page.pdf(" not in src, "page.pdf() absent (screenshot-only path)")
+    check("RuntimeError" in src, "RuntimeError catch present in render()")
+    check("except ImportError" not in src, "no ImportError catch (guard is in _browser.py)")
+    check("Playwright" in src, "docstring references Playwright")
 
-    # --- Pillow PNG→PDF assembly (real, browserless) ---
+    # --- Pillow PNG→PDF assembly (real, browserless — unchanged) ---
     try:
         from PIL import Image
         with tempfile.TemporaryDirectory() as t:
@@ -88,10 +87,8 @@ if __name__ == "__main__":
             B._pngs_to_pdf(pngs, out, scale=2)
             data = out.read_bytes()
             check(data[:4] == b"%PDF", "assembled a valid PDF (%PDF header)")
-            # Pillow writes "/Type /Page" (with space); \b after Page excludes "/Pages"
             n_pages = len(re.findall(rb"/Type\s*/Page\b", data))
             check(n_pages == 2, f"multi-page PDF has one page per screenshot (got {n_pages})")
-            # each embedded frame is the exact viewport*scale raster → 1:1 with the HTML
             dims = list(zip(re.findall(rb"/Width\s+(\d+)", data), re.findall(rb"/Height\s+(\d+)", data)))
             check((b"1280", b"720") in dims, "embedded frame is the exact page-box raster (1:1)")
     except ImportError:

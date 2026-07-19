@@ -1,64 +1,57 @@
 #!/usr/bin/env python3
-"""test_html2png_cwd.py — html2png resolves puppeteer via an explicit NODE_PATH
-(module resolution independent of the caller's cwd / of work_dir sitting under
-ppt-output), and writes its temp script to a unique path (no fixed-name collision).
+"""test_html2png_cwd.py — html2png Playwright-contract assertions.
 
-Mirrors test_html2svg_tmp_isolation.py. No pytest harness; run directly or via
-smoke_test.py. Exit 0 = all pass, 1 = a failure.
+Verifies that html2png.py:
+- has no Puppeteer/Node bootstrap code
+- uses an unguarded top-level bare import from _browser
+- wraps get_browser() in a RuntimeError catch (not ImportError)
+- has no subprocess node invocations
+
+No pytest harness; run directly or via smoke_test.py. Exit 0 = all pass, 1 = failure.
 """
 from __future__ import annotations
 
-import os
-import re
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import html2png as H  # noqa: E402
-
 
 if __name__ == "__main__":
     FAILS: list[str] = []
-
 
     def check(name: str, cond: bool) -> None:
         print(f"  [{'OK' if cond else 'XX'}] {name}")
         if not cond:
             FAILS.append(name)
 
-
     def main() -> int:
-        work = Path(tempfile.mkdtemp(prefix="h2png-cwdtest-"))
-        try:
-            dep_dir = H.get_dep_dir(work)
-            env = H.node_env(work)
-            node_path = env.get("NODE_PATH", "")
-            expected_nm = str((dep_dir / "node_modules").resolve())
-            check(f"NODE_PATH includes <dep_dir>/node_modules ({expected_nm!r} in {node_path!r})",
-                  expected_nm in node_path.split(os.pathsep))
-
-            # Resolution must not depend on the process cwd.
-            cur = os.getcwd()
-            try:
-                os.chdir(tempfile.gettempdir())
-                env2 = H.node_env(work)
-                check("NODE_PATH stable regardless of os.getcwd()",
-                      env2.get("NODE_PATH", "").split(os.pathsep)[0] == node_path.split(os.pathsep)[0])
-            finally:
-                os.chdir(cur)
-        finally:
-            import shutil
-            shutil.rmtree(work, ignore_errors=True)
-
-        # Source guard (mirrors html2svg test): the old fixed-name temp at work_dir
-        # is gone — a regression would re-introduce the concurrent-run collision.
         src = (ROOT / "scripts" / "html2png.py").read_text()
-        fixed = re.findall(r'work_dir\s*/\s*"\.html2png_tmp\.js"', src)
-        check("no fixed-name temp written at work_dir", not fixed)
-        check("html2png exposes node_env() helper", "def node_env(" in src)
+
+        # Old Puppeteer helpers must be gone
+        check("get_dep_dir removed", "def get_dep_dir(" not in src)
+        check("node_env removed", "def node_env(" not in src)
+        check("ensure_puppeteer removed", "def ensure_puppeteer(" not in src)
+        check("SCREENSHOT_SCRIPT removed", "SCREENSHOT_SCRIPT" not in src)
+
+        # Bare unguarded top-level import (not inside a try block)
+        check("bare import from _browser present", "from _browser import" in src)
+        # The import line itself must not be preceded by a try: on the same indentation level
+        lines = src.splitlines()
+        import_lines = [l for l in lines if "from _browser import" in l]
+        for il in import_lines:
+            check(f"import line not indented (unguarded): {il.strip()!r}", not il.startswith(" ") and not il.startswith("\t"))
+
+        # RuntimeError catch at call site (not ImportError)
+        check("RuntimeError catch present", "RuntimeError" in src)
+        check("no ImportError catch on import line", "except ImportError" not in src)
+
+        # No node subprocess calls
+        check("no subprocess node call", '"node"' not in src and "'node'" not in src)
+
+        # Docstring updated
+        check("docstring references Playwright", "Playwright" in src)
 
         if FAILS:
             print(f"FAIL: {len(FAILS)} check(s) failed")
@@ -66,6 +59,4 @@ if __name__ == "__main__":
         print("all pass")
         return 0
 
-
-    if __name__ == "__main__":
-        sys.exit(main())
+    sys.exit(main())
