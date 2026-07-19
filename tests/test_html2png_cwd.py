@@ -27,7 +27,7 @@ if __name__ == "__main__":
             FAILS.append(name)
 
     def main() -> int:
-        src = (ROOT / "scripts" / "html2png.py").read_text()
+        src = (ROOT / "scripts" / "mermaid_render" / "png.py").read_text()
 
         # Old Puppeteer helpers must be gone
         check("get_dep_dir removed", "def get_dep_dir(" not in src)
@@ -35,11 +35,11 @@ if __name__ == "__main__":
         check("ensure_puppeteer removed", "def ensure_puppeteer(" not in src)
         check("SCREENSHOT_SCRIPT removed", "SCREENSHOT_SCRIPT" not in src)
 
-        # Bare unguarded top-level import (not inside a try block)
-        check("bare import from _browser present", "from _browser import" in src)
+        # Bare unguarded top-level import (relative, from mermaid_render.png)
+        check("bare import from .browser present", "from .browser import" in src)
         # The import line itself must not be preceded by a try: on the same indentation level
         lines = src.splitlines()
-        import_lines = [l for l in lines if "from _browser import" in l]
+        import_lines = [l for l in lines if "from .browser import" in l]
         for il in import_lines:
             check(f"import line not indented (unguarded): {il.strip()!r}", not il.startswith(" ") and not il.startswith("\t"))
 

@@ -34,6 +34,22 @@ jobs:
       # differential mode actually runs here instead of skipping.
       - run: python3 -m pytest tests/test_oracle.py -q
 
+  mermaid-render-guards:
+    name: mermaid render guards (no playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install pytest
+      # Guards run without playwright installed so the playwright-cleanliness
+      # test is meaningful. Includes sibling-import AST scan, adaptive-theme
+      # unit tests, vendor bundle parity, and the full mermaid_layout shim
+      # regression suite (playwright-free).
+      - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py tests/test_svg2pptx_shapes.py -q
+
   render-scripts:
     name: render scripts (Playwright)
     runs-on: ubuntu-latest

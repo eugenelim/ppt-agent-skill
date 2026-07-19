@@ -37,7 +37,7 @@ if __name__ == "__main__":
             FAILS.append(name)
 
     def main() -> int:
-        src = (ROOT / "scripts" / "html2svg.py").read_text()
+        src = (ROOT / "scripts" / "mermaid_render" / "svg.py").read_text()
 
         # Old Puppeteer helpers must be gone
         check("make_run_tmp removed", "def make_run_tmp(" not in src)
@@ -48,10 +48,10 @@ if __name__ == "__main__":
         check("FALLBACK_SCRIPT removed", "FALLBACK_SCRIPT" not in src)
         check("BUNDLE_ENTRY removed", "BUNDLE_ENTRY" not in src)
 
-        # Bare unguarded top-level import
-        check("bare import from _browser present", "from _browser import" in src)
+        # Bare unguarded top-level import (relative, from mermaid_render.svg)
+        check("bare import from .browser present", "from .browser import" in src)
         lines = src.splitlines()
-        import_lines = [l for l in lines if "from _browser import" in l]
+        import_lines = [l for l in lines if "from .browser import" in l]
         for il in import_lines:
             check(f"import line not indented (unguarded): {il.strip()!r}",
                   not il.startswith(" ") and not il.startswith("\t"))
