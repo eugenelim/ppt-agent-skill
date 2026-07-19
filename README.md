@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.svg" alt="PPT Agent Skill" width="120" />
+  <img src="docs/assets/logo.svg" alt="PPT Agent Skill" width="120" />
 
   <h1>PPT Agent Skill</h1>
 
@@ -47,7 +47,7 @@
 ---
 
 <div align="center">
-  <img src="assets/hero-all.png" alt="29 风格预览" width="100%" />
+  <img src="docs/assets/hero-all.png" alt="29 风格预览" width="100%" />
   <p><sub>29 个世界级风格 · 5 板块覆盖所有商业场景 · 真实 1280×720 标杆 mock</sub></p>
 </div>
 
@@ -123,7 +123,7 @@ hero 拼图统一取封面：
 ### 暗色专业（8 风格 · `references/styles/dark.md`）
 
 <div align="center">
-  <img src="assets/hero-dark-professional.png" alt="暗色专业 8 风格" width="100%" />
+  <img src="docs/assets/hero-dark-professional.png" alt="暗色专业 8 风格" width="100%" />
 </div>
 
 > Linear / Apple Hardware / Tom Ford / Cyberpunk 2077 / Y2K / Magnum 等品牌的实际排版做法
@@ -142,7 +142,7 @@ hero 拼图统一取封面：
 ### 浅色高级（10 风格 · `references/styles/light.md`）
 
 <div align="center">
-  <img src="assets/hero-light-premium.png" alt="浅色高级 10 风格" width="100%" />
+  <img src="docs/assets/hero-light-premium.png" alt="浅色高级 10 风格" width="100%" />
 </div>
 
 > Apple / Anthropic / NYT Magazine / iOS 26 / Mayo Clinic / Suisse Int'l / 婚礼请柬
@@ -163,7 +163,7 @@ hero 拼图统一取封面：
 ### 活力鲜明（4 风格 · `references/styles/vibrant.md`）
 
 <div align="center">
-  <img src="assets/hero-vibrant.png" alt="活力鲜明 4 风格" width="100%" />
+  <img src="docs/assets/hero-vibrant.png" alt="活力鲜明 4 风格" width="100%" />
 </div>
 
 | ID | 灵感 | 适用场景 |
@@ -176,7 +176,7 @@ hero 拼图统一取封面：
 ### 东方文化（3 风格 · `references/styles/cultural.md`）
 
 <div align="center">
-  <img src="assets/hero-cultural-oriental.png" alt="东方文化 3 风格" width="80%" />
+  <img src="docs/assets/hero-cultural-oriental.png" alt="东方文化 3 风格" width="80%" />
 </div>
 
 | ID | 灵感 | 适用场景 |
@@ -188,7 +188,7 @@ hero 拼图统一取封面：
 ### 自然/复古（4 风格 · `references/styles/natural.md`）
 
 <div align="center">
-  <img src="assets/hero-natural-retro.png" alt="自然/复古 4 风格" width="100%" />
+  <img src="docs/assets/hero-natural-retro.png" alt="自然/复古 4 风格" width="100%" />
 </div>
 
 | ID | 灵感 | 适用场景 |
@@ -226,7 +226,7 @@ hero 拼图统一取封面：
 ## 🏗 系统架构
 
 <div align="center">
-  <img src="assets/architecture.png" alt="系统架构图" width="100%" />
+  <img src="docs/assets/architecture.png" alt="系统架构图" width="100%" />
   <p><sub>3 层架构：用户入口 / 6 步 Pipeline / 输出产物 · 5 大 Reference Library 注入到各步</sub></p>
 </div>
 
@@ -278,13 +278,15 @@ ppt-agent-skill/
 │   │   └── complex.md            # 4 种 ECharts 级
 │   └── principles/
 │       └── failure-modes.md      # 8 种 failure modes + 修复顺序
-├── scripts/                      # 后处理 + 工具
+├── scripts/                      # 后处理 + 工具（adopter-facing）
 │   ├── html_packager.py          # 多页 HTML → 翻页预览
 │   ├── html2svg.py               # HTML → SVG（dom-to-svg, 文字可编辑）
 │   ├── svg2pptx.py               # SVG → PPTX（OOXML 原生）
-│   ├── gallery.py                # 生成 29 风格预览画廊 + 截图
-│   ├── build_hero.py             # 生成 README hero 拼图
-│   └── smoke_test.py             # 端到端测试 + pipeline-compat 扫描
+│   └── gallery.py                # 生成 29 风格预览画廊 + 截图
+├── tools/                        # 维护工具（非 adopter payload）
+│   ├── smoke_test.py             # 端到端测试 + pipeline-compat 扫描
+│   ├── check_skill.py            # 文档/代码合同漂移检查
+│   └── build_hero.py             # 生成 README hero 拼图
 ├── ppt-output/                   # 运行时：每个 PPT 一个 <deck 名>/ 目录（gitignore）
 │   └── style-gallery/            # 29 个 1280×720 mock + 29 PNG + index.html（工具产物，与 deck 平级）
 ├── docs/superpowers/specs/       # 设计文档归档
@@ -295,11 +297,11 @@ ppt-agent-skill/
 
 ```bash
 # 风格 JSON 校验 + pipeline-compat 扫描 + 排版自检（29 风格）
-python3 scripts/smoke_test.py --phase 1
+python3 tools/smoke_test.py --phase 1
 # → 52 pass / 0 fail / 0 warn
 
 # 端到端管线（HTML→SVG→PPTX，3 风格代表性测试）
-python3 scripts/smoke_test.py --phase 5
+python3 tools/smoke_test.py --phase 5
 # → 6 pass / 0 fail（preview.html + svg/*.svg + presentation.pptx 三种产物全部生成）
 ```
 
@@ -348,7 +350,7 @@ python3 scripts/smoke_test.py --phase 5
 - **新增图表**：在 `references/charts/<level>.md` 追加 HTML 模板
 - **改进文档**：欢迎 typo 修复、用法说明补充
 
-提交前跑一下 `python3 scripts/smoke_test.py` 确保通过。
+提交前跑一下 `python3 tools/smoke_test.py` 确保通过。
 
 ## 📜 许可证
 

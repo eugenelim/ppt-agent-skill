@@ -58,7 +58,7 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 ### smoke-skill-pre-existing-fixture-drift
 
 **Discovered (not an AC deferral): `smoke_skill.py` pre-existing fixture drift.**
-`scripts/smoke_skill.py` exits non-zero on `main` (independent of the
+`tools/smoke_skill.py` exits non-zero on `main` (independent of the
 reference-runbook page_type work — verified by running it against the pre-change
 tree): its fixtures + the `tpl-style-phase1` invocation reference files that no
 longer exist — `references/charts/kpi.md` / `references/charts/metric-row.md`

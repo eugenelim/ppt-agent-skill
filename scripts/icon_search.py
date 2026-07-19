@@ -36,7 +36,7 @@ CATALOG = ICONS_DIR / "catalog.json"
 
 # Pipeline-unsafe techniques an icon SVG must never contain. Wording tracks
 # references/pipeline-compat.md (the authoritative forbidden-CSS list) and
-# scripts/lint_diagram_recipes.py's FORBIDDEN set.
+# tools/lint_diagram_recipes.py's FORBIDDEN set.
 FORBIDDEN = [
     ("SVG <text> (use HTML overlay, never SVG text)", re.compile(r"<text[\s/>]", re.I)),
     ("mask-image", re.compile(r"-?\bwebkit-?\s*-?mask-image|mask-image", re.I)),

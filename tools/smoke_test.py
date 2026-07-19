@@ -9,9 +9,9 @@
 5. 失败模式扫描（参考 references/principles/failure-modes.md）
 
 用法：
-    python3 scripts/smoke_test.py                   # 跑全部
-    python3 scripts/smoke_test.py --style dark_tech # 只测一个风格
-    python3 scripts/smoke_test.py --phase 1         # 只跑 Phase 1 测试
+    python3 tools/smoke_test.py                   # 跑全部
+    python3 tools/smoke_test.py --style dark_tech # 只测一个风格
+    python3 tools/smoke_test.py --phase 1         # 只跑 Phase 1 测试
 
 输出：
     tests/smoke-results/<timestamp>/report.md
@@ -309,19 +309,19 @@ def phase1_tests(style_filter: str = None) -> dict:
     # 子进程自检：图解配方 lint + QA 自检 + 画廊 Cover|Detail 切换构造检查
     results["diagram_qa"] = {}
     for label, cmd in [
-        ("recipe_lint", [sys.executable, str(ROOT / "scripts" / "lint_diagram_recipes.py"), "--refs-dir", str(ROOT / "references")]),
-        ("qa_selftest", [sys.executable, str(ROOT / "scripts" / "test_diagram_qa.py")]),
-        ("contrast_selftest", [sys.executable, str(ROOT / "scripts" / "test_visual_qa_contrast.py")]),
-        ("gallery_toggle", [sys.executable, str(ROOT / "scripts" / "test_gallery_toggle.py")]),
-        ("proof_worksheet", [sys.executable, str(ROOT / "scripts" / "test_proof_worksheet.py")]),
-        ("proof_gate", [sys.executable, str(ROOT / "scripts" / "test_proof_gate.py")]),
-        ("html_packager", [sys.executable, str(ROOT / "scripts" / "test_html_packager.py")]),
-        ("build_pdf", [sys.executable, str(ROOT / "scripts" / "test_build_pdf.py")]),
-        ("diag_route", [sys.executable, str(ROOT / "scripts" / "test_planning_diag_route.py")]),
-        ("slide_montage", [sys.executable, str(ROOT / "scripts" / "test_slide_montage.py")]),
-        ("html2png_cwd", [sys.executable, str(ROOT / "scripts" / "test_html2png_cwd.py")]),
-        ("render_gate", [sys.executable, str(ROOT / "scripts" / "test_render_gate.py")]),
-        ("diagram_render_check", [sys.executable, str(ROOT / "scripts" / "diagram_render_check.py")]),
+        ("recipe_lint", [sys.executable, str(ROOT / "tools" / "lint_diagram_recipes.py"), "--refs-dir", str(ROOT / "references")]),
+        ("qa_selftest", [sys.executable, str(ROOT / "tests" / "test_diagram_qa.py")]),
+        ("contrast_selftest", [sys.executable, str(ROOT / "tests" / "test_visual_qa_contrast.py")]),
+        ("gallery_toggle", [sys.executable, str(ROOT / "tests" / "test_gallery_toggle.py")]),
+        ("proof_worksheet", [sys.executable, str(ROOT / "tests" / "test_proof_worksheet.py")]),
+        ("proof_gate", [sys.executable, str(ROOT / "tests" / "test_proof_gate.py")]),
+        ("html_packager", [sys.executable, str(ROOT / "tests" / "test_html_packager.py")]),
+        ("build_pdf", [sys.executable, str(ROOT / "tests" / "test_build_pdf.py")]),
+        ("diag_route", [sys.executable, str(ROOT / "tests" / "test_planning_diag_route.py")]),
+        ("slide_montage", [sys.executable, str(ROOT / "tests" / "test_slide_montage.py")]),
+        ("html2png_cwd", [sys.executable, str(ROOT / "tests" / "test_html2png_cwd.py")]),
+        ("render_gate", [sys.executable, str(ROOT / "tests" / "test_render_gate.py")]),
+        ("diagram_render_check", [sys.executable, str(ROOT / "tools" / "diagram_render_check.py")]),
     ]:
         proc = subprocess.run(cmd, capture_output=True, text=True)
         ok = proc.returncode == 0
@@ -342,7 +342,7 @@ def phase0_check_skill() -> dict:
     """Phase 0: 跑 check_skill.py 检查 SKILL.md/cheatsheet/scripts 三方一致性。"""
     results = {"phase": 0, "check_skill": {}, "summary": {"pass": 0, "fail": 0, "warn": 0}}
     cs = subprocess.run(
-        ["python3", str(ROOT / "scripts" / "check_skill.py")],
+        ["python3", str(ROOT / "tools" / "check_skill.py")],
         capture_output=True, text=True, timeout=60
     )
     out = cs.stdout

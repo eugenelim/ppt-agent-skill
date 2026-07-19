@@ -23,6 +23,8 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
 from contract_validator import VALID_ARGUMENT_STRATEGIES  # noqa: E402
 from planning_validator import DENSITY_DEFAULTS  # noqa: E402
 from workflow_versions import (  # noqa: E402

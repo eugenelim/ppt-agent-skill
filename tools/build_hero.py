@@ -17,7 +17,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parent.parent
 GALLERY = ROOT / "ppt-output" / "style-gallery"
-ASSETS = ROOT / "assets"
+ASSETS = ROOT / "docs" / "assets"
 ASSETS.mkdir(exist_ok=True)
 
 CATEGORIES = {

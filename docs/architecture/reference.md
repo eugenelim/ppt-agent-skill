@@ -125,9 +125,9 @@ reinvents.* All executable code lives under `scripts/`; see
   per-spec state under `docs/specs/**/state.json` is gitignored scratch.
 - **Testing standards.** Author-time checks live under `scripts/` and their
   one-liners belong in [`AGENTS.md`](../../AGENTS.md):
-  - `python scripts/check_skill.py` — doc↔code contract-drift check.
-  - `python scripts/smoke_skill.py` — minimal Step 3/4 end-to-end smoke
+  - `python tools/check_skill.py` — doc↔code contract-drift check.
+  - `python tools/smoke_skill.py` — minimal Step 3/4 end-to-end smoke
     (validators + `visual_qa` + `resource_loader` + `prompt_harness`).
-  - `python scripts/smoke_test.py [--phase N] [--style ID]` — phased smoke test.
+  - `python tools/smoke_test.py [--phase N] [--style ID]` — phased smoke test.
   - `scripts/visual_qa.py` provides the dual-layer assertion (planning JSON vs.
     rendered HTML). Smoke artifacts land in `tests/smoke-results/` (gitignored).

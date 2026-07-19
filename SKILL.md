@@ -542,15 +542,15 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 |------|---------|------|
 | Step 4 schema | `scripts/planning_validator.py` | P4 planning Gate |
 | Workflow 版本 | `scripts/workflow_versions.py` | 跨脚本版本号 |
-| Skill 一致性 | `scripts/check_skill.py` | 文档/代码合同漂移检查 |
+| Skill 一致性 | `tools/check_skill.py` | 文档/代码合同漂移检查 |
 
 **自动检查入口**：修改 prompt / playbook / cheatsheet / Step 4 schema 示例后，运行：
 
 ```bash
-python3 scripts/check_skill.py            # 文档与代码合同漂移检查
+python3 tools/check_skill.py            # 文档与代码合同漂移检查
 python3 scripts/planning_validator.py     # 策划稿 schema 校验
 python3 scripts/contract_validator.py     # 各 phase 间 JSON 合同校验
 python3 scripts/visual_qa.py              # 视觉 QA 双层断言（planning + html）
-python3 scripts/smoke_test.py             # 我们简化版端到端冒烟测试
-python3 scripts/smoke_skill.py            # sunbigfly 完整版冒烟测试
+python3 tools/smoke_test.py             # 我们简化版端到端冒烟测试
+python3 tools/smoke_skill.py            # sunbigfly 完整版冒烟测试
 ```

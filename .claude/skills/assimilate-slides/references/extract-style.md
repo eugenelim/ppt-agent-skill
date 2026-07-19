@@ -9,7 +9,7 @@ in the run spec and go to `extract-primitives.md`.
 A style is a fenced ` ```json ` block in a board file
 (`references/styles/{light,dark,vibrant,cultural,natural}.md`) under a numbered
 `## N. <style_id>` heading. `scripts/gallery.py` auto-discovers any ` ```json `
-block containing `style_id`; `scripts/smoke_test.py` enforces these **15 keys**
+block containing `style_id`; `tools/smoke_test.py` enforces these **15 keys**
 (`STYLE_REQUIRED_FIELDS`):
 
 `style_id` · `style_name` · `category` · `inspiration` · `mood_keywords`
@@ -61,7 +61,7 @@ CSS vars complete; 3-tier font stack; ≥3 `forbidden`; valid `font_imports`; mo
 renders at 1280×720; `smoke_test.py --style <id>` passes). The mechanical gate is:
 
 ```bash
-python3 scripts/smoke_test.py --style <style_id>
+python3 tools/smoke_test.py --style <style_id>
 ```
 
 which re-validates the JSON, the mock's pipeline-safety, and typography.

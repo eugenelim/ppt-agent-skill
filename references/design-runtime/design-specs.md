@@ -126,7 +126,7 @@
 
 **破折号确定性回退**（消除"悬空破折号"歧义，保证 N 个 per-page 代理输出一致）：footer 列1 渲染 `<strong>{title}</strong> — {subtitle}`，其中 `subtitle` 作破折号后的释义子句；**若 `subtitle` 不是成句的子句（如只是标题式短语），则丢弃破折号、只渲染 `<strong>{title}</strong>`**（title-only）。masthead 中段直接用 `subtitle` 原文，不加破折号。
 
-**绝不沿用配方里的示例文案**（`SCHEMATIC · DELIVERY RUNBOOK` / `Engineering Delivery Handbook` / `REV 2.4` / `Delivery Runbook` / `— the operating manual for a fixed-length delivery project.` / `Pre-flight · Cadence · Gates` / `2.4 · 2026`）；确无任何来源的槽位才留空省略。此清单与 `blocks/worksheet.md` C 组配方由 `scripts/lint_diagram_recipes.py` 双向校验保持同步。
+**绝不沿用配方里的示例文案**（`SCHEMATIC · DELIVERY RUNBOOK` / `Engineering Delivery Handbook` / `REV 2.4` / `Delivery Runbook` / `— the operating manual for a fixed-length delivery project.` / `Pre-flight · Cadence · Gates` / `2.4 · 2026`）；确无任何来源的槽位才留空省略。此清单与 `blocks/worksheet.md` C 组配方由 `tools/lint_diagram_recipes.py` 双向校验保持同步。
 
 **铁律**：一张页要么走上面的普通统一骨架、要么走这套页框，**二者只居其一，绝不并存**。页框只用真实 `<div>`/`<span>`/`<footer>` 节点、只用契约变量——禁 `::before`/`::after` 装饰、禁硬编码色/字（沿用 C 组配方即天然满足）。
 

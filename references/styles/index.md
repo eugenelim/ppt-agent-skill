@@ -211,4 +211,4 @@
 - [ ] `decoration_dna.forbidden` 明确列出至少 3 个禁用项
 - [ ] `font_imports` Google Fonts URL 正确
 - [ ] 配套 mock HTML 在 1280×720 画布中渲染正确（无控制台错误）
-- [ ] 通过 `scripts/smoke_test.py --style <id>` 校验
+- [ ] 通过 `tools/smoke_test.py --style <id>` 校验

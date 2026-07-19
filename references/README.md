@@ -131,8 +131,8 @@ P2A/P2B/P3/P3.5/P4 均采用渐进式上下文注入：每个节点有 orchestra
 维护时先改真源，再改说明层；改完运行：
 
 ```bash
-python3 scripts/check_skill.py
-python3 scripts/smoke_skill.py
+python3 tools/check_skill.py
+python3 tools/smoke_skill.py
 ```
 
 该检查会至少覆盖：

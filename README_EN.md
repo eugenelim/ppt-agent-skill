@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.svg" alt="PPT Agent Skill" width="120" />
+  <img src="docs/assets/logo.svg" alt="PPT Agent Skill" width="120" />
 
   <h1>PPT Agent Skill</h1>
 
@@ -47,7 +47,7 @@
 ---
 
 <div align="center">
-  <img src="assets/hero-all.png" alt="29 Style Preview Gallery" width="100%" />
+  <img src="docs/assets/hero-all.png" alt="29 Style Preview Gallery" width="100%" />
   <p><sub>29 world-class styles across 5 categories · Real 1280×720 reference mocks</sub></p>
 </div>
 
@@ -121,7 +121,7 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 ### Dark Professional (8 styles · `references/styles/dark.md`)
 
 <div align="center">
-  <img src="assets/hero-dark-professional.png" alt="8 Dark Professional Styles" width="100%" />
+  <img src="docs/assets/hero-dark-professional.png" alt="8 Dark Professional Styles" width="100%" />
 </div>
 
 > Linear / Apple Hardware / Tom Ford / Cyberpunk 2077 / Y2K / Magnum etc.
@@ -139,7 +139,7 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 ### Light Premium (8 styles · `references/styles/light.md`)
 
 <div align="center">
-  <img src="assets/hero-light-premium.png" alt="8 Light Premium Styles" width="100%" />
+  <img src="docs/assets/hero-light-premium.png" alt="8 Light Premium Styles" width="100%" />
 </div>
 
 > Apple / Anthropic / NYT Magazine / iOS 26 / Mayo Clinic / Suisse Int'l / Wedding invitations
@@ -158,7 +158,7 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 ### Vibrant (4 styles · `references/styles/vibrant.md`)
 
 <div align="center">
-  <img src="assets/hero-vibrant.png" alt="4 Vibrant Styles" width="100%" />
+  <img src="docs/assets/hero-vibrant.png" alt="4 Vibrant Styles" width="100%" />
 </div>
 
 | ID | Inspiration | Best for |
@@ -171,7 +171,7 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 ### Cultural Oriental (3 styles · `references/styles/cultural.md`)
 
 <div align="center">
-  <img src="assets/hero-cultural-oriental.png" alt="3 Cultural Oriental Styles" width="80%" />
+  <img src="docs/assets/hero-cultural-oriental.png" alt="3 Cultural Oriental Styles" width="80%" />
 </div>
 
 | ID | Inspiration | Best for |
@@ -183,7 +183,7 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 ### Natural / Retro (4 styles · `references/styles/natural.md`)
 
 <div align="center">
-  <img src="assets/hero-natural-retro.png" alt="4 Natural / Retro Styles" width="100%" />
+  <img src="docs/assets/hero-natural-retro.png" alt="4 Natural / Retro Styles" width="100%" />
 </div>
 
 | ID | Inspiration | Best for |
@@ -221,7 +221,7 @@ Detailed flow in [`SKILL.md`](SKILL.md).
 ## 🏗 System Architecture
 
 <div align="center">
-  <img src="assets/architecture.png" alt="System Architecture" width="100%" />
+  <img src="docs/assets/architecture.png" alt="System Architecture" width="100%" />
   <p><sub>3-tier architecture: User Entry / 6-Step Pipeline / Output Artifacts · 5 Reference Libraries injected at each step</sub></p>
 </div>
 
@@ -265,13 +265,15 @@ ppt-agent-skill/
 │   │   ├── index.md, basic.md, advanced.md, complex.md
 │   └── principles/
 │       └── failure-modes.md      # 8 failure modes + repair order
-├── scripts/                      # Post-processing + tools
+├── scripts/                      # Post-processing + tools (adopter-facing)
 │   ├── html_packager.py          # Multi-page HTML → paginated preview
 │   ├── html2svg.py               # HTML → SVG (dom-to-svg, editable text)
 │   ├── svg2pptx.py               # SVG → PPTX (OOXML native)
-│   ├── gallery.py                # Generate 29-style preview gallery + screenshots
-│   ├── build_hero.py             # Generate README hero composites
-│   └── smoke_test.py             # E2E test + pipeline-compat scan
+│   └── gallery.py                # Generate 29-style preview gallery + screenshots
+├── tools/                        # Maintainer tools (not part of adopter payload)
+│   ├── smoke_test.py             # E2E test + pipeline-compat scan
+│   ├── check_skill.py            # Doc/code contract-drift check
+│   └── build_hero.py             # Generate README hero composites
 ├── ppt-output/                   # runtime: one <deck-name>/ folder per deck (gitignored)
 │   └── style-gallery/            # 29 mocks + 29 PNGs + index.html (tooling sibling, not a deck)
 ├── docs/superpowers/specs/       # Design docs
@@ -282,11 +284,11 @@ ppt-agent-skill/
 
 ```bash
 # JSON validation + pipeline-compat scan + typography self-check (29 styles)
-python3 scripts/smoke_test.py --phase 1
+python3 tools/smoke_test.py --phase 1
 # → 52 pass / 0 fail / 0 warn
 
 # End-to-end pipeline (HTML→SVG→PPTX, 3 representative styles)
-python3 scripts/smoke_test.py --phase 5
+python3 tools/smoke_test.py --phase 5
 # → 6 pass / 0 fail (preview.html + svg/*.svg + presentation.pptx all generated)
 ```
 
@@ -335,7 +337,7 @@ PRs welcome:
 - **New charts**: append HTML template to `references/charts/<level>.md`
 - **Doc improvements**: typo fixes, usage clarifications
 
-Run `python3 scripts/smoke_test.py` before submitting.
+Run `python3 tools/smoke_test.py` before submitting.
 
 ## 📜 License
 

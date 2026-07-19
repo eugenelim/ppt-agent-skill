@@ -66,8 +66,8 @@
 | **ECharts 级图表** | 无 | 世界地图 choropleth / 关系网络 / 桑基图 / 热力日历 |
 | **排版铁律** | 弱 | [`typography.md`](references/typography.md) 14 条（字距 / tabular-nums / OpenType / serif italic 混排 / 字体栈三层降级）|
 | **风格预览画廊** | 无 | [`gallery.py`](scripts/gallery.py) + [`style-gallery/index.html`](ppt-output/style-gallery/) 卡片墙 |
-| **Hero 拼图** | 无 | [`build_hero.py`](scripts/build_hero.py) + 5 板块拼图（README 用）|
-| **架构图** | 无 | [`assets/architecture.svg`](assets/architecture.svg) 自制可视化 |
+| **Hero 拼图** | 无 | [`build_hero.py`](tools/build_hero.py) + 5 板块拼图（README 用）|
+| **架构图** | 无 | [`docs/assets/architecture.svg`](docs/assets/architecture.svg) 自制可视化 |
 | **README 包装** | 简洁 | logo + banner + 5 hero 拼图 + 架构图 + 实时 badges + star history |
 
 ### 致谢

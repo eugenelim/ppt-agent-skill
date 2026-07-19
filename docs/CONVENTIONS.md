@@ -609,12 +609,11 @@ name but importable by tests — this is expected and fine.
 
 ### Where tests live
 
-- `tests/` — pytest unit tests; import directly from scripts/ (no subprocess)
-- `scripts/test_*.py` — integration or cross-module tests that need the full scripts/ path
-- `scripts/smoke_test.py` — end-to-end subprocess tests; organized by `--phase N`
+- `tests/` — pytest unit tests (including script-style integration tests); import from `scripts/` or `tools/` via `sys.path`
+- `tools/smoke_test.py` — end-to-end subprocess tests; organized by `--phase N`
 
-Run all: `pytest tests/ scripts/test_diagram_qa.py -x -q`
-Run mermaid smoke: `python scripts/smoke_test.py --phase 2`
+Run all: `pytest tests/ -x -q`
+Run mermaid smoke: `python tools/smoke_test.py --phase 2`
 
 ### Importing internals in tests
 
