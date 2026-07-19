@@ -8,9 +8,9 @@ index.html 网格预览 —— 让本会话新增的图解 block 可以直接被
 与 gallery.py 互补：gallery.py 预览 28 种风格，本脚本预览图解配方本身。
 
 用法:
-    python3 scripts/diagram_gallery.py                 # 生成 HTML（dark 主题）
-    python3 scripts/diagram_gallery.py --style light   # light / editorial / dark
-    python3 scripts/diagram_gallery.py --screenshots   # + 调 html2png 出 PNG
+    python3 tools/diagram_gallery.py                 # 生成 HTML（dark 主题）
+    python3 tools/diagram_gallery.py --style light   # light / editorial / dark
+    python3 tools/diagram_gallery.py --screenshots   # + 调 html2png 出 PNG
 
 输出:
     ppt-output/diagram-gallery/<id>.html / .png

@@ -67,12 +67,12 @@ render. If a PNG→PDF is ever needed without a browser, use present **Pillow**
 ## Hero prompt (Ask first — never automatic)
 
 **Prompt the maintainer**: "Refresh the hero collage?" Regenerating
-`assets/hero-*.png` is their call. If **yes**:
+`docs/assets/hero-*.png` is their call. If **yes**:
 
-1. Ensure the style id is in `scripts/build_hero.py` CATEGORIES (coverage:
+1. Ensure the style id is in `tools/build_hero.py` CATEGORIES (coverage:
    reuse `gallery.py`'s `collect_all_styles()` and diff against the union of
    CATEGORIES `ids` — every real id present exactly once).
-2. `python3 scripts/gallery.py --screenshots` then `python3 scripts/build_hero.py`
+2. `python3 scripts/gallery.py --screenshots` then `python3 tools/build_hero.py`
    (needs the per-style PNGs + puppeteer).
 
 If **no**, note it in the run spec and leave the collage.
@@ -82,9 +82,9 @@ If **no**, note it in the run spec and leave the collage.
 Run all four; each must pass:
 
 ```bash
-python3 scripts/smoke_test.py --style <style_id>   # style JSON + mock pipeline-safety + typography
-python3 scripts/lint_diagram_recipes.py            # block recipes (5 markers, no forbidden, CSS-var)
-python3 scripts/check_skill.py                     # product-surface doc↔code contract
+python3 tools/smoke_test.py --style <style_id>   # style JSON + mock pipeline-safety + typography
+python3 tools/lint_diagram_recipes.py            # block recipes (5 markers, no forbidden, CSS-var)
+python3 tools/check_skill.py                     # product-surface doc↔code contract
 python3 scripts/icon_search.py --validate          # icon catalog↔files + inline-safety
 ```
 

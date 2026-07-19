@@ -59,7 +59,7 @@
 | `diagram-project.md` | gantt / dependency-network / org-tree / kanban |
 | `diagram-concept.md` | mind-map / matrix-quadrant / venn / pyramid / funnel / cycle / hub-spoke / onion / fishbone |
 
-**主题契约**：所有图解颜色/字体只绑定 deck 的 CSS 变量（经 `diagram.md` 的 `--node-*` 局部变量），换风格整图随 `:root` 改色。**管线安全**：箭头 SVG `<polygon>`、连线真实 `<div>`/SVG `<line>`、标注 HTML 叠加、禁 SVG `<text>`，由 `scripts/lint_diagram_recipes.py` 把关。
+**主题契约**：所有图解颜色/字体只绑定 deck 的 CSS 变量（经 `diagram.md` 的 `--node-*` 局部变量），换风格整图随 `:root` 改色。**管线安全**：箭头 SVG `<polygon>`、连线真实 `<div>`/SVG `<line>`、标注 HTML 叠加、禁 SVG `<text>`，由 `tools/lint_diagram_recipes.py` 把关。
 
 ## worksheet 原语（按需加载）
 

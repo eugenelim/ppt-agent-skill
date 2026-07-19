@@ -51,13 +51,13 @@ explicit list `timeline.md`, `worksheet.md`, `advisory-brief.md`.
   A/B/C. Then you **must**: register it in `references/blocks/README.md` as a
   `按需加载` companion (a row + a short "which style it fits + where its styling
   spec lives" paragraph), and **append it to the target list in
-  `scripts/lint_diagram_recipes.py`** (~line 201-206) — a non-`diagram*` filename
+  `tools/lint_diagram_recipes.py`** (~line 201-206) — a non-`diagram*` filename
   is otherwise never linted.
 
 ## Gate
 
 ```bash
-python3 scripts/lint_diagram_recipes.py
+python3 tools/lint_diagram_recipes.py
 ```
 
 must pass with the recipe present (5 markers, no forbidden techniques,

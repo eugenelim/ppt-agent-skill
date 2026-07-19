@@ -20,7 +20,7 @@ the recipe contract pinned in docs/specs/diagram-consistency-system/spec.md:
      stale on a recipe edit (docs/specs/persistent-chrome-flag).
 
 Usage:
-    python3 scripts/lint_diagram_recipes.py [--refs-dir references]
+    python3 tools/lint_diagram_recipes.py [--refs-dir references]
 
 Exit: 0 = clean, 1 = violations found.
 Stdlib only.

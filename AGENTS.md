@@ -138,9 +138,9 @@ tasks, not most — the work-loop skill covers when it's the right tool.
 
 ```bash
 pip install python-pptx lxml      # one-time Python deps (Node deps auto-install on first html2svg run)
-python scripts/smoke_test.py      # phased smoke test (accepts --phase N, --style ID)
-python scripts/smoke_skill.py     # Step 3/4 end-to-end smoke (validators + visual_qa + resource routing)
-python scripts/check_skill.py     # doc↔code contract-drift check — run after editing SKILL.md / prompts / validators
+python tools/smoke_test.py      # phased smoke test (accepts --phase N, --style ID)
+python tools/smoke_skill.py     # Step 3/4 end-to-end smoke (validators + visual_qa + resource routing)
+python tools/check_skill.py     # doc↔code contract-drift check — run after editing SKILL.md / prompts / validators
 ```
 
 <!-- No linter or build step is configured: this is a Python script pipeline,
@@ -205,7 +205,7 @@ from a **fixed bold-label section order**, matching `references/charts/basic.md`
 - **Progressive disclosure:** keep an always-loaded thin selector
   (`blocks/diagram.md`) that points to on-demand family files via
   `block_refs`; never inline every recipe into the always-loaded file.
-- Reference-file conformance is enforced by `scripts/lint_diagram_recipes.py`
+- Reference-file conformance is enforced by `tools/lint_diagram_recipes.py`
   (the recipe lint), not a frontmatter lint.
 
 ## Agent workflows
