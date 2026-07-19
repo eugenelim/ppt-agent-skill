@@ -209,6 +209,8 @@ class _Edge:
     reversed_: bool = False       # back-edge flag
     cardinality_src: Optional[str] = None  # ER crow's foot: 'one'|'zero-one'|'many'|'zero-many'
     cardinality_dst: Optional[str] = None
+    orig_src: Optional[str] = None  # original src for dummy-chained edges
+    orig_dst: Optional[str] = None  # original dst for dummy-chained edges
 
 
 @dataclass

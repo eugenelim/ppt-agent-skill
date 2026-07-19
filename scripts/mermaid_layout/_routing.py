@@ -298,7 +298,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             else:
                 llx, lly = tip_x + 14, mid_y
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
+                           "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
+                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst})
             continue
 
         rank_gap = d.rank - s.rank
@@ -348,7 +349,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     else:
                         llx, lly = max(0, x1 - 164), int(y1) - 12
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                                   "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
+                                   "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
+                                   "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst})
                 else:
                     lane_y = bottom_lane_y + 32 * be_lane
                     sx = s.x + NODE_W // 2
@@ -373,7 +375,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     else:
                         llx, lly = (sx + dx_) // 2, lane_y + 4
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                                   "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
+                                   "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
+                                   "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst})
             else:
                 lane_x = right_lane_x + 32 * be_lane
                 sx = s.x + _node_render_w(s)
@@ -398,7 +401,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 else:
                     llx, lly = lane_x + 4, (sy + dy_) // 2
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                               "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id})
+                               "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
+                               "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst})
             continue
 
         if is_lr:
@@ -511,7 +515,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             else:
                 lx, ly = x1 + 24, int(y1) - 12
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id})
+                           "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
+                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst})
             continue
 
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
@@ -597,7 +602,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         else:
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
-                       "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id})
+                       "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
+                       "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst})
 
     return result
 

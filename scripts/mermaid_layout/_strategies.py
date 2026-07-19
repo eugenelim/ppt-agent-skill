@@ -330,7 +330,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         lx = PAD_H + i * col_pitch + (col_pitch - col_w) // 2  # centered in pitch slot
         lbl = _h(p_label.get(pid, pid))
         parts.append(
-            f'<div class="node node-rect" style="position:absolute;left:{lx}px;top:{PAD_V}px;'
+            f'<div class="node node-rect" data-node-id="{_h(pid)}" style="position:absolute;left:{lx}px;top:{PAD_V}px;'
             f'width:{col_w}px;height:{HDR_H - 8}px;display:flex;align-items:center;'
             f'justify-content:center;border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
             f'border-radius:var(--node-radius,8px);box-sizing:border-box;overflow:hidden;'
@@ -404,13 +404,15 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if sx == dx2:
             parts.append(
                 f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
-                f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}/>'
+                f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}'
+                f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
             ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
-                f'stroke="{_seq_edge}" stroke-width="1.5"{dash}/>'
+                f'stroke="{_seq_edge}" stroke-width="1.5"{dash}'
+                f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
             ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
         parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
@@ -460,7 +462,9 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if lbl:
             mid_x = (sx + dx2) // 2
             parts.append(
-                f'<span class="edge-label" style="position:absolute;'
+                f'<span class="edge-label" '
+                f'data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}" data-edge-label="{lbl}" '
+                f'style="position:absolute;'
                 f'left:{mid_x - 30}px;top:{ry - 18}px;'
                 f'font-size:11px;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
@@ -873,8 +877,9 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
                 f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
                 f'{_h(task["name"])}</span></div>'
             )
+            _task_id_val = task["id"] if task["id"] else task["name"]
             parts.append(
-                f'<div style="position:absolute;left:{bx}px;top:{y + 1}px;'
+                f'<div data-task-id="{_h(_task_id_val)}" style="position:absolute;left:{bx}px;top:{y + 1}px;'
                 f'width:{bw}px;height:{BAR_H - 2}px;background:{bar_color};'
                 f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
                 f'border-radius:3px;box-sizing:border-box;"></div>'
@@ -942,7 +947,7 @@ def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
     for i, sec in enumerate(sections):
         ix = PAD_H + i * step + step // 2 - ITEM_W // 2
         parts.append(
-            f'<div class="node node-rect" style="position:absolute;left:{ix}px;top:{ty}px;'
+            f'<div class="node node-rect" data-node-id="{_h(sec["period"])}" style="position:absolute;left:{ix}px;top:{ty}px;'
             f'width:{ITEM_W}px;padding:6px 8px;box-sizing:border-box;'
             f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
             f'border-radius:var(--node-radius,8px);'
@@ -1060,7 +1065,7 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
         px = gx + int(pt["x"] * gw)
         py = gy + gh - int(pt["y"] * gh)
         parts.append(
-            f'<span style="position:absolute;left:{px + 8}px;top:{py - 8}px;'
+            f'<span data-point="{_h(pt["name"])}" style="position:absolute;left:{px + 8}px;top:{py - 8}px;'
             f'font-size:10px;color:var(--node-fg,var(--text-primary,#191A17));'
             f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));white-space:nowrap;">'
             f'{_h(pt["name"])}</span>'
@@ -1151,7 +1156,7 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
         ly = cy + int(lr * math.sin(mid_a))
         pct = f"{sl['value'] / total * 100:.0f}%"
         parts.append(
-            f'<span style="position:absolute;left:{lx - 30}px;top:{ly - 8}px;'
+            f'<span data-slice="{_h(sl["label"])}" style="position:absolute;left:{lx - 30}px;top:{ly - 8}px;'
             f'width:60px;font-size:10px;text-align:center;'
             f'color:var(--node-fg,var(--text-primary,#191A17));'
             f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));white-space:nowrap;">'
@@ -1258,13 +1263,13 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
             bh = max(4, int(norm * ch))
             bx = cx_start + i * bar_unit + (bar_unit - bar_w) // 2
             by = cy_top + ch - bh
+            cat = x_cats[i] if i < len(x_cats) else str(i + 1)
             parts.append(
-                f'<div style="position:absolute;left:{bx}px;top:{by}px;'
+                f'<div data-category="{_h(cat)}" style="position:absolute;left:{bx}px;top:{by}px;'
                 f'width:{bar_w}px;height:{bh}px;'
                 f'background:var(--edge-strong,var(--accent-1,#60a5fa));'
                 f'border-radius:2px 2px 0 0;box-sizing:border-box;"></div>'
             )
-            cat = x_cats[i] if i < len(x_cats) else str(i + 1)
             parts.append(
                 f'<span style="position:absolute;'
                 f'left:{bx - (bar_unit - bar_w) // 2}px;top:{cy_top + ch + 4}px;'
@@ -1384,7 +1389,7 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
         else:
             bg = 'background:rgba(53,148,103,0.05);'
         parts.append(
-            f'<div class="node" style="position:absolute;left:{nx}px;top:{ny}px;'
+            f'<div class="node" data-node-id="{i}" style="position:absolute;left:{nx}px;top:{ny}px;'
             f'min-width:120px;height:{NODE_H_MM}px;display:flex;align-items:center;'
             f'padding:4px 8px;box-sizing:border-box;border-radius:var(--node-radius,8px);{bg}">'
             f'<span class="node-label" style="font-size:13px;{bold}'
@@ -1475,7 +1480,8 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         svg_edges.append(
             f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
             f'stroke="{edge_color}" stroke-width="1.5" '
-            f'marker-end="url(#arr)"/>'
+            f'marker-end="url(#arr)"'
+            f' data-src="{_h(src_id)}" data-dst="{_h(dst_id)}"/>'
         )
 
     parts: list[str] = []
@@ -1490,7 +1496,7 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         for blk in row:
             bw = cell_w * blk["span"] + CELL_GAP * (blk["span"] - 1)
             parts.append(
-                f'<div class="node node-rect" style="position:absolute;'
+                f'<div class="node node-rect" data-node-id="{_h(blk["id"])}" style="position:absolute;'
                 f'left:{cx_cur}px;top:{ry}px;width:{bw}px;height:{CELL_H}px;'
                 f'display:flex;align-items:center;justify-content:center;'
                 f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
@@ -1557,8 +1563,9 @@ def _layout_packet(src: str, direction: str, width_hint: int) -> str:
     for fld in fields:
         fx = PAD_H + int(fld["start"] * bit_w)
         fw = max(1, int(fld["bits"] * bit_w) - 1)
+        _fld_id = f'{fld["start"]}-{fld["end"]}' if fld["end"] != fld["start"] else str(fld["start"])
         parts.append(
-            f'<div class="node node-rect" style="position:absolute;'
+            f'<div class="node node-rect" data-field="{_fld_id}" style="position:absolute;'
             f'left:{fx}px;top:{PAD_V}px;width:{fw}px;height:{CELL_H}px;'
             f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
             f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
@@ -1624,7 +1631,7 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
     for ci, col in enumerate(columns):
         cx = PAD_H + ci * (COL_W + COL_GAP)
         parts.append(
-            f'<div style="position:absolute;left:{cx}px;top:{PAD_V}px;'
+            f'<div data-col="{_h(col["name"])}" style="position:absolute;left:{cx}px;top:{PAD_V}px;'
             f'width:{COL_W}px;height:{HDR_H}px;'
             f'display:flex;align-items:center;justify-content:center;'
             f'border-bottom:2px solid var(--edge-strong,var(--accent-1,#60a5fa));'
@@ -1637,7 +1644,7 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
         for ki, card in enumerate(col["cards"]):
             ky = PAD_V + HDR_H + ki * (CARD_H + CARD_GAP) + 8
             parts.append(
-                f'<div class="node node-rect" style="position:absolute;'
+                f'<div class="node node-rect" data-card="{_h(card)}" style="position:absolute;'
                 f'left:{cx}px;top:{ky}px;width:{COL_W}px;height:{CARD_H}px;'
                 f'display:flex;align-items:center;padding:6px 10px;'
                 f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
