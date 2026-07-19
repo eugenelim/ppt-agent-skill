@@ -118,9 +118,10 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
             dummy = _Node(id=dummy_id, label="", is_dummy=True, rank=dummy_rank)
             new_nodes[dummy_id] = dummy
             new_edges.append(_Edge(src=prev_id, dst=dummy_id, label="" if k > 1 else e.label,
-                                   style=e.style, arrow=False))
+                                   style=e.style, arrow=False, orig_src=e.src, orig_dst=e.dst))
             prev_id = dummy_id
-        new_edges.append(_Edge(src=prev_id, dst=e.dst, style=e.style, arrow=e.arrow))
+        new_edges.append(_Edge(src=prev_id, dst=e.dst, style=e.style, arrow=e.arrow,
+                               orig_src=e.src, orig_dst=e.dst))
 
     nodes.update(new_nodes)
     edges[:] = new_edges

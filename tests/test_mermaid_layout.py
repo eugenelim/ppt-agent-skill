@@ -808,8 +808,8 @@ class TestTitleAccentColor:
         positions = [(m.group(1), int(m.group(2))) for m in
                      re.finditer(r'data-card-id="([^"]*)"[^>]*left:(\d+)px', html)]
         if not positions:
-            # fall back to parsing left from node divs
-            nodes_pos = re.findall(r'class="node[^"]*" style="[^"]*left:(\d+)px', html)
+            # fall back to parsing left from node divs (allow data-* attrs between class and style)
+            nodes_pos = re.findall(r'class="node[^"]*"[^>]*style="[^"]*left:(\d+)px', html)
             assert nodes_pos, "no node positions found"
             # All should be parseable — just verify nodes exist
             return
@@ -6021,3 +6021,286 @@ stateDiagram-v2
         # The renderer emits class="diagram-group" for subgraph containers
         groups = re.findall(r'class="diagram-group"', html)
         assert groups, "No diagram-group container found — composite state is not rendered as subgraph"
+
+
+# ── TestStableIds — T0: _Edge.orig_src / orig_dst ────────────────────────────
+
+class TestAssignRanksOrigSrcDst:
+    """T0: _assign_ranks threads orig_src/orig_dst on dummy-chain edges."""
+
+    def test_multi_rank_edge_orig_src_dst_threaded(self):
+        # Backbone A→B→C→D forces D to rank 3; A→D is a 3-rank jump → dummies
+        nodes = {n: _Node(id=n, label=n) for n in "ABCD"}
+        edges = [_Edge("A", "B"), _Edge("B", "C"), _Edge("C", "D"), _Edge("A", "D")]
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        dummy_edges = [e for e in edges if "_dummy_" in e.src or "_dummy_" in e.dst]
+        assert dummy_edges, "expected dummy-chain edges from multi-rank A→D"
+        for e in dummy_edges:
+            assert e.orig_src == "A", f"orig_src should be 'A', got {e.orig_src!r} on {e}"
+            assert e.orig_dst == "D", f"orig_dst should be 'D', got {e.orig_dst!r} on {e}"
+
+    def test_direct_edge_orig_fields_none(self):
+        # Single-rank edges (rank gap == 1) must not have orig_src/orig_dst set
+        nodes = {n: _Node(id=n, label=n) for n in "AB"}
+        edges = [_Edge("A", "B")]
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        non_dummy = [e for e in edges if "_dummy_" not in e.src and "_dummy_" not in e.dst]
+        for e in non_dummy:
+            assert e.orig_src is None
+            assert e.orig_dst is None
+
+
+# ── TestStableIds — T1: _route_edges src/dst pipe-through ────────────────────
+
+class TestRouteEdgesIdentity:
+    """T1: every dict from _route_edges carries 'src' and 'dst' keys."""
+
+    def _build_graph(self, direction: str):
+        import sys
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        # A→B forward, B→A back-edge, A→A self-loop
+        nodes = {
+            "A": _Node(id="A", label="A", x=40, y=40, rank=0, col=0),
+            "B": _Node(id="B", label="B", x=40, y=160, rank=1, col=0),
+        }
+        if direction == "LR":
+            nodes["A"] = _Node(id="A", label="A", x=40, y=40, rank=0, col=0)
+            nodes["B"] = _Node(id="B", label="B", x=200, y=40, rank=1, col=0)
+        edges = [
+            _Edge("A", "B"),
+            _Edge("B", "A", reversed_=True),
+            _Edge("A", "A"),
+        ]
+        return nodes, edges
+
+    def test_tb_all_dicts_carry_src_dst(self):
+        nodes, edges = self._build_graph("TB")
+        result = _route_edges(nodes, edges, 400, "TB")
+        assert result, "expected at least one routed spec"
+        for spec in result:
+            assert "src" in spec, f"missing 'src' key in spec: {spec}"
+            assert "dst" in spec, f"missing 'dst' key in spec: {spec}"
+
+    def test_lr_all_dicts_carry_src_dst(self):
+        nodes, edges = self._build_graph("LR")
+        result = _route_edges(nodes, edges, 600, "LR")
+        assert result, "expected at least one routed spec"
+        for spec in result:
+            assert "src" in spec, f"missing 'src' key in spec: {spec}"
+            assert "dst" in spec, f"missing 'dst' key in spec: {spec}"
+
+    def test_src_dst_values_match_endpoints(self):
+        nodes = {
+            "X": _Node(id="X", label="X", x=40, y=40, rank=0, col=0),
+            "Y": _Node(id="Y", label="Y", x=40, y=160, rank=1, col=0),
+        }
+        edges = [_Edge("X", "Y")]
+        result = _route_edges(nodes, edges, 400, "TB")
+        assert result
+        spec = result[0]
+        assert spec["src"] == "X"
+        assert spec["dst"] == "Y"
+
+    def test_orig_src_dst_used_for_dummy_chain(self):
+        # A multi-rank edge A→D routed through dummies: src/dst must be 'A'/'D'
+        nodes = {n: _Node(id=n, label=n) for n in "ABCD"}
+        edges = [_Edge("A", "B"), _Edge("B", "C"), _Edge("C", "D"), _Edge("A", "D")]
+        _break_cycles(nodes, edges)
+        _assign_ranks(nodes, edges)
+        _minimize_crossings(nodes, edges)
+        _assign_coordinates(nodes, "TB")
+        result = _route_edges(nodes, edges, 600, "TB")
+        # Find specs that involve A→D (orig connection)
+        ad_specs = [s for s in result if s.get("src") == "A" and s.get("dst") == "D"]
+        assert ad_specs, "expected at least one routed spec for A→D"
+
+
+# ── TestStableIds — T2: _render_graph_fragment data-* attrs ──────────────────
+
+class TestRenderGraphFragmentStableIds:
+    """T2: node divs carry data-node-id; edge paths/labels carry data-src/data-dst."""
+
+    def test_node_div_has_data_node_id(self):
+        nodes = {"MyNode": _Node(id="MyNode", label="My Node", x=40, y=40)}
+        html = _render_graph_fragment(nodes, [], {}, 300, 200)
+        assert 'data-node-id="MyNode"' in html
+
+    def test_node_div_data_node_id_escaped(self):
+        nodes = {"A<B": _Node(id="A<B", label="AB", x=40, y=40)}
+        html = _render_graph_fragment(nodes, [], {}, 300, 200)
+        assert 'data-node-id="A&lt;B"' in html
+
+    def test_dummy_node_has_no_data_node_id(self):
+        nodes = {"_dummy_A_B_1": _Node(id="_dummy_A_B_1", label="", x=40, y=40, is_dummy=True)}
+        html = _render_graph_fragment(nodes, [], {}, 300, 200)
+        assert "data-node-id" not in html
+
+    def test_edge_path_has_data_src_dst(self):
+        nodes = {
+            "A": _Node(id="A", label="A", x=40, y=40, rank=0, col=0),
+            "B": _Node(id="B", label="B", x=40, y=160, rank=1, col=0),
+        }
+        edges = [_Edge("A", "B")]
+        html = _render_graph_fragment(nodes, edges, {}, 200, 280)
+        assert 'data-src="A"' in html
+        assert 'data-dst="B"' in html
+
+    def test_edge_label_has_data_attrs(self):
+        nodes = {
+            "A": _Node(id="A", label="A", x=40, y=40, rank=0, col=0),
+            "B": _Node(id="B", label="B", x=40, y=160, rank=1, col=0),
+        }
+        edges = [_Edge("A", "B", label="myLabel")]
+        html = _render_graph_fragment(nodes, edges, {}, 200, 280)
+        assert 'data-src="A"' in html
+        assert 'data-dst="B"' in html
+        assert 'data-edge-label="myLabel"' in html
+
+    def test_circle_node_has_data_node_id(self):
+        nodes = {"S": _Node(id="S", label="●", x=40, y=40, shape="circle")}
+        html = _render_graph_fragment(nodes, [], {}, 200, 160)
+        assert 'data-node-id="S"' in html
+
+    def test_doublecircle_node_has_data_node_id(self):
+        nodes = {"E": _Node(id="E", label="◎", x=40, y=40, shape="doublecircle")}
+        html = _render_graph_fragment(nodes, [], {}, 200, 160)
+        assert 'data-node-id="E"' in html
+
+    def test_dispatch_flowchart_node_has_data_node_id(self):
+        html = _dispatch("flowchart TB\n  Alpha-->Beta", None, 400)
+        assert 'data-node-id="Alpha"' in html
+        assert 'data-node-id="Beta"' in html
+
+    def test_dispatch_flowchart_edge_has_data_src_dst(self):
+        html = _dispatch("flowchart TB\n  Alpha-->Beta", None, 400)
+        assert 'data-src="Alpha"' in html
+        assert 'data-dst="Beta"' in html
+
+
+# ── TestStableIds — T3: sequenceDiagram ──────────────────────────────────────
+
+class TestStableIdsSequence:
+    """T3: participant divs and message arrows carry stable ids."""
+
+    _SRC = "sequenceDiagram\n  participant Alice as A\n  Alice->>Bob: hello"
+
+    def test_participant_has_data_node_id(self):
+        html = _dispatch(self._SRC, None, 600)
+        assert 'data-node-id="Alice"' in html
+
+    def test_bare_participant_has_data_node_id(self):
+        html = _dispatch("sequenceDiagram\n  Bob->>Carol: hi", None, 600)
+        assert 'data-node-id="Bob"' in html
+        assert 'data-node-id="Carol"' in html
+
+    def test_message_line_has_data_src_dst(self):
+        html = _dispatch("sequenceDiagram\n  Alice->>Bob: hi", None, 600)
+        assert 'data-src="Alice"' in html
+        assert 'data-dst="Bob"' in html
+
+    def test_message_label_span_has_data_attrs(self):
+        html = _dispatch("sequenceDiagram\n  Alice->>Bob: hello", None, 600)
+        assert 'data-edge-label="hello"' in html
+
+
+# ── TestStableIds — T4: gantt ─────────────────────────────────────────────────
+
+class TestStableIdsGantt:
+    """T4: task bars carry data-task-id."""
+
+    def test_task_with_explicit_id(self):
+        src = "gantt\n  Task A: taskA, 2024-01-01, 7d"
+        html = _dispatch(src, None, 600)
+        assert 'data-task-id="taska"' in html
+
+    def test_task_without_id_uses_name(self):
+        src = "gantt\n  My Task: 2024-01-01, 7d"
+        html = _dispatch(src, None, 600)
+        assert 'data-task-id="My Task"' in html
+
+
+# ── TestStableIds — T5: remaining strategies ──────────────────────────────────
+
+class TestStableIdsStrategies:
+    """T5: kanban, pie, quadrant, xychart, packet, mindmap, timeline, block."""
+
+    def test_kanban_col_has_data_col(self):
+        src = "kanban\n  Todo\n    task1"
+        html = _dispatch(src, None, 600)
+        assert 'data-col="Todo"' in html
+
+    def test_kanban_card_has_data_card(self):
+        src = "kanban\n  Todo\n    task1"
+        html = _dispatch(src, None, 600)
+        assert 'data-card="task1"' in html
+
+    def test_pie_slice_has_data_slice(self):
+        src = 'pie\n  "Dogs": 42\n  "Cats": 58'
+        html = _dispatch(src, None, 400)
+        assert 'data-slice="Dogs"' in html
+        assert 'data-slice="Cats"' in html
+
+    def test_quadrant_point_has_data_point(self):
+        src = "quadrantChart\n  Alpha: [0.3, 0.7]\n  Beta: [0.8, 0.2]"
+        html = _dispatch(src, None, 480)
+        assert 'data-point="Alpha"' in html
+        assert 'data-point="Beta"' in html
+
+    def test_xychart_bar_has_data_category_with_labels(self):
+        src = "xychart-beta\n  x-axis [Jan, Feb, Mar]\n  bar [10, 20, 30]"
+        html = _dispatch(src, None, 480)
+        assert 'data-category="Jan"' in html
+        assert 'data-category="Feb"' in html
+
+    def test_xychart_bar_has_data_category_index_fallback(self):
+        src = "xychart-beta\n  bar [10, 20]"
+        html = _dispatch(src, None, 480)
+        assert 'data-category="1"' in html
+        assert 'data-category="2"' in html
+
+    def test_packet_field_has_data_field_range(self):
+        src = "packet-beta\n  0-7: Header\n  8-15: Payload"
+        html = _dispatch(src, None, 480)
+        assert 'data-field="0-7"' in html
+        assert 'data-field="8-15"' in html
+
+    def test_packet_field_has_data_field_single(self):
+        src = "packet-beta\n  0: Flag"
+        html = _dispatch(src, None, 480)
+        assert 'data-field="0"' in html
+
+    def test_mindmap_node_has_data_node_id_index(self):
+        src = "mindmap\n  root\n    child1\n    child2"
+        html = _dispatch(src, None, 480)
+        assert 'data-node-id="0"' in html
+        assert 'data-node-id="1"' in html
+        assert 'data-node-id="2"' in html
+
+    def test_mindmap_same_source_same_indices(self):
+        src = "mindmap\n  root\n    alpha\n    beta"
+        h1 = _dispatch(src, None, 480)
+        h2 = _dispatch(src, None, 480)
+        import re
+        ids1 = re.findall(r'data-node-id="(\d+)"', h1)
+        ids2 = re.findall(r'data-node-id="(\d+)"', h2)
+        assert ids1 == ids2
+
+    def test_timeline_period_has_data_node_id(self):
+        src = "timeline\n  Q1 : Launch\n  Q2 : Scale"
+        html = _dispatch(src, None, 600)
+        assert 'data-node-id="Q1"' in html
+        assert 'data-node-id="Q2"' in html
+
+    def test_block_node_has_data_node_id(self):
+        src = "block-beta\n  columns 2\n  A[\"Block A\"] B[\"Block B\"]"
+        html = _dispatch(src, None, 480)
+        assert 'data-node-id="A"' in html
+        assert 'data-node-id="B"' in html
+
+    def test_block_edge_has_data_src_dst(self):
+        src = "block-beta\n  columns 2\n  A[\"Block A\"] B[\"Block B\"]\n  A --> B"
+        html = _dispatch(src, None, 480)
+        assert 'data-src="A"' in html
+        assert 'data-dst="B"' in html

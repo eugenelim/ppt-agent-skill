@@ -299,7 +299,7 @@ def _render_graph_fragment(
         if _is_terminal_circle(n):
             # UML initial/final state: small fixed-size circle, no padding, centered symbol
             parts.append(
-                f'<div class="node node-circle{extra_cls}" style="'
+                f'<div class="node node-circle{extra_cls}" data-node-id="{_h(nid)}" style="'
                 f'position:absolute; left:{n.x}px; top:{n.y}px; '
                 f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
                 f'border-radius:50%; box-sizing:border-box; '
@@ -342,7 +342,7 @@ def _render_graph_fragment(
             if n.shape == "doublecircle":
                 # Outer circle + inner concentric circle (5px inset)
                 parts.append(
-                    f'<div class="node node-doublecircle{extra_cls}" style="'
+                    f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:{node_h}px; height:{node_h}px; '
                     f'border-radius:50%; box-sizing:border-box; overflow:visible; '
@@ -357,7 +357,7 @@ def _render_graph_fragment(
             elif n.shape == "subroutine":
                 # Rect with two inner vertical lines near left and right edges
                 parts.append(
-                    f'<div class="node node-subroutine{extra_cls}" style="'
+                    f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
                     f'min-width:{NODE_W}px; '
@@ -383,7 +383,7 @@ def _render_graph_fragment(
                 _align = "center" if _center_shapes else "flex-start"
                 _text_align = "center" if _center_shapes else "left"
                 parts.append(
-                    f'<div class="node node-{_h(n.shape)}{extra_cls}" style="'
+                    f'<div class="node node-{_h(n.shape)}{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
                     f'min-width:{NODE_W}px; '
@@ -480,7 +480,8 @@ def _render_graph_fragment(
         marker_attr = f' marker-end="url(#{mid})"' if mid else ""
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none" '
-            f'stroke-width="{stroke_w}"{dash}{marker_attr}/>'
+            f'stroke-width="{stroke_w}"{dash}{marker_attr}'
+            f' data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}"/>'
         )
 
     parts.append('</svg>')
@@ -492,7 +493,9 @@ def _render_graph_fragment(
             rot = spec.get("rot", 0)
             rot_part = f" rotate({rot}deg)" if rot else ""
             parts.append(
-                f'<span class="edge-label" style="'
+                f'<span class="edge-label" '
+                f'data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}" data-edge-label="{_h(spec["label"])}" '
+                f'style="'
                 f'position:absolute; left:{lx}px; top:{ly}px; '
                 f'font-size:12px; font-weight:500; '
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
