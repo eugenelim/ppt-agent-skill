@@ -5,14 +5,15 @@ metadata:
   risk_tier: elevated
   permission_surface:
     - filesystem_write: "OUTPUT_DIR (per-deck directory under ppt-output/)"
-    - subprocess: "Python3 scripts; Node.js (Puppeteer headless Chrome for html2svg/html2png/build_pdf)"
-    - network_egress: "outbound search/URL fetch during Step 2 research (user-scoped to topic); Puppeteer renders file:// only (HTTP blocked)"
-    - runtime_install: "pip (python-pptx, lxml, Pillow); npm (puppeteer, dom-to-svg, esbuild) — versions should be pinned in CI (see docs/backlog.md#npm-version-pinning)"
+    - subprocess: "Python3 scripts; Playwright headless Chromium (for html2svg/html2png/build_pdf/gallery)"
+    - network_egress: "outbound search/URL fetch during Step 2 research (user-scoped to topic); Playwright renders file:// only (HTTP blocked via page.route allowlist)"
+    - runtime_install: "pip (python-pptx, lxml, Pillow, playwright); playwright install chromium (one-time Chromium provisioning)"
   sandbox_declaration: |
-    Puppeteer subprocesses launch with --no-sandbox (required for non-userns environments);
-    network egress is blocked via page.setRequestInterception in html2svg/html2png/build_pdf.
+    Playwright launches Chromium with --no-sandbox (required for non-userns environments);
+    network egress is blocked via page.route in html2svg/html2png/build_pdf/gallery — only
+    file:// and data: URLs are allowed (LLM01/ASI05).
     OS-level container isolation (Docker/namespace) is the recommended outer boundary.
-    File reads in html2svg are confined to OUTPUT_DIR via path-prefix check.
+    File reads in html2svg are confined to OUTPUT_DIR via Python _within_deck_root() check (LLM05/CWE-22).
   security_reviewed: "2026-07-04 (OWASP LLM Top 10:2025 + Agentic Skills Top 10 v1.0)"
 ---
 
@@ -39,14 +40,14 @@ metadata:
 | **信息获取**（搜索/URL/文档/知识库） | 全部缺失 **且** 用户也没给资料 -> **STOP，不得凭主题记忆编造**（见下方接地契约）|
 | **图片生成**（绝大多数环境都有） | 缺失 -> 纯 CSS 装饰替代 |
 | **文件输出** | 必须有 |
-| **脚本执行**（Python/Node.js） | 缺失 -> 跳过自动打包和 SVG 转换 |
+| **脚本执行**（Python/Playwright） | 缺失 -> 跳过自动打包和 SVG 转换 |
 
 **原则**：检查实际可调用的工具列表，有什么用什么。
 
 ### 可视化自检的唯一正道：`html2png.py`（file://），不要起本地服务器
 
 需要"亲眼看一眼"某页/整份 deck 的渲染效果时（图审、排查溢出、确认修复），**一律用
-`scripts/html2png.py`**——它用无头 Puppeteer 以 `file://` 直接截图，无端口、无 shell、
+`scripts/html2png.py`**——它用无头 Playwright Chromium 以 `file://` 直接截图，无端口、无 shell、
 无本地服务器：
 
 ```bash
@@ -391,9 +392,9 @@ python3 SKILL_DIR/scripts/milestone_check.py 4 --output-dir OUTPUT_DIR --with-vi
 闸门校验：每个 `slides/slide-N.html` 都有对应且**不比它旧**的 `png/slide-N.png`（证明 Review 在
 当前 HTML 上重跑过）+ `visual_qa.py` 批量退出码 ≠ 1。任一不满足 → 该页回炉重跑 Review。
 
-- **降级（Node/puppeteer 不可用）**：无法截图 → 渲染降级为"仅 HTML + preview.html"，闸门**明确宣告
-  跳过** PNG/visual 验收（`[SKIP] visual gate: node ...`），**不硬失败、也不静默放行**——如实告知用户
-  可安装 Node 后重跑取图。这与下方 SVG/PPTX 的 Node 降级同源。
+- **降级（Playwright/Chromium 不可用）**：无法截图 → 渲染降级为"仅 HTML + preview.html"，闸门**明确宣告
+  跳过** PNG/visual 验收（`[SKIP] visual gate: playwright/chromium unavailable`），**不硬失败、也不静默放行**——如实告知用户
+  可运行 `playwright install chromium` 后重跑取图。
 
 **给用户的可视化交付：整份 contact sheet（替代起本地服务器）**。要让用户一眼扫完整份 deck 时，
 拼一张联系表 PNG（确定性、无服务器、无端口）：
@@ -435,8 +436,8 @@ pip install python-pptx lxml Pillow 2>/dev/null
    ```bash
    python3 SKILL_DIR/scripts/html2svg.py OUTPUT_DIR/slides/ -o OUTPUT_DIR/svg/
    ```
-   底层用 dom-to-svg（自动安装），首次运行会 esbuild 打包。
-   **降级**：如果 Node.js 不可用或 dom-to-svg 安装失败，跳过此步和步骤 3，只输出 preview.html。
+   底层用 dom-to-svg（预打包为 `scripts/vendor/dom-to-svg.bundle.js`，无需 npm/esbuild）。
+   **降级**：如果 Playwright/Chromium 不可用，跳过此步和步骤 3，只输出 preview.html。
 
 3. **PPTX 生成** -- 运行 `svg2pptx.py`（OOXML 原生 SVG 嵌入，PPT 365 可编辑）
    ```bash
@@ -448,7 +449,7 @@ pip install python-pptx lxml Pillow 2>/dev/null
    - `<deck-slug>-preview.html` -- 浏览器打开即可翻页预览
    - `<deck-slug>-svg.pptx` -- PPTX（右键 -> "转换为形状" 可编辑）
    - `svg/` -- 每个 SVG 也可单独拖入 PPT
-   - **如果步骤 2-3 被降级跳过**，说明原因并告知用户手动安装 Node.js 后可重新运行
+   - **如果步骤 2-3 被降级跳过**，说明原因并告知用户运行 `playwright install chromium` 后可重新运行
 
 **产物**：`<deck-slug>-preview.html` + svg/*.svg + `<deck-slug>-svg.pptx`
 
@@ -483,7 +484,7 @@ ppt-output/                    # OUTPUT_ROOT：所有 deck 的共享父目录
 |------|-------|
 | 内容 | 每页 >= 2 信息卡片 / >= 60% 内容页含数据 / 章节有递进 |
 | 视觉 | 全局风格一致 / 配图风格统一 / 卡片不重叠 / 文字不溢出 |
-| 技术 | CSS 变量统一 / SVG 友好约束遵守 / HTML 可被 Puppeteer 渲染 / `pipeline-compat.md` 禁止清单检查 |
+| 技术 | CSS 变量统一 / SVG 友好约束遵守 / HTML 可被 Playwright Chromium 渲染 / `pipeline-compat.md` 禁止清单检查 |
 
 ---
 

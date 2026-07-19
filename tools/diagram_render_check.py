@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """diagram_render_check.py — browser-based DOM inspection for diagram HTML.
 
-Renders each DiagramCase in a real headless browser via Puppeteer and checks:
+Renders each DiagramCase in a real headless browser via Playwright and checks:
   DIAG-01  hasDiagram present
   DIAG-02  nodeCount matches expected
   DIAG-03  edge SVG paths present when expected
@@ -17,12 +17,10 @@ Exit codes:
   1  any FAIL
   2  only WARN (no FAIL)
 
-If `node` is not on PATH, prints [SKIP] and exits 0.
+If Playwright/Chromium is not available, prints [SKIP] and exits 0.
 """
 from __future__ import annotations
 
-import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -32,112 +30,70 @@ from pathlib import Path
 # ── Project layout ────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 
-# ── Puppeteer DOM-inspection script ──────────────────────────────────────────
-DOM_INSPECT_SCRIPT = r"""
-const puppeteer = require('puppeteer');
+# scripts/ on sys.path so bare `from _browser import` resolves
+sys.path.insert(0, str(ROOT / "scripts"))
+from _browser import _setup_page, get_browser
 
-(async () => {
-    const config = JSON.parse(process.argv[2]);
-    const browser = await puppeteer.launch({
-        headless: 'new',
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu',
-               '--font-render-hinting=none']
-    });
+# ── DOM inspection expression (verbatim JS port from Puppeteer version) ───────
+_DOM_INSPECT_JS = r"""() => {
+    return {
+        // Basic presence
+        hasDiagram: !!(document.querySelector('.diagram.mermaid-layout') ||
+                       document.querySelector('.diagram-lifeline')),
+        nodeCount: document.querySelectorAll('.node').length,
 
-    const results = [];
+        // Edge SVG — flowcharts use <path stroke=...>, sequence diagrams use <line stroke=...>
+        svgPresent: !!document.querySelector('svg'),
+        edgePathCount: document.querySelectorAll('svg path[stroke], svg line[stroke], svg polyline[stroke]').length,
 
-    for (const item of config) {
-        const page = await browser.newPage();
-        await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+        // Legend checks
+        legendPresent: !!document.querySelector('.diagram-legend'),
+        legendAtBottom: (() => {
+            const wrapper = document.querySelector('.diagram-wrapper');
+            const legend = document.querySelector('.diagram-legend');
+            if (!wrapper || !legend) return null;
+            const wRect = wrapper.getBoundingClientRect();
+            const lRect = legend.getBoundingClientRect();
+            const gapToBottom = Math.abs(wRect.bottom - lRect.bottom);
+            return { gapPx: Math.round(gapToBottom), isAtBottom: gapToBottom < 30 };
+        })(),
 
-        // Block outbound HTTP(S) — allow only file:// and data:.
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            const url = req.url();
-            if (url.startsWith('file://') || url.startsWith('data:')) {
-                req.continue();
-            } else {
-                req.abort('blockedbyresponse');
-            }
-        });
+        // Node overflow: any node where scrollWidth > clientWidth + 4 or scrollHeight > clientHeight + 4
+        overflowNodes: (() => {
+            const bad = [];
+            document.querySelectorAll('.node').forEach(n => {
+                if (n.scrollWidth > n.clientWidth + 4 || n.scrollHeight > n.clientHeight + 4) {
+                    bad.push(n.querySelector('.node-label')?.textContent?.trim().slice(0, 40) || '(unlabeled)');
+                }
+            });
+            return bad;
+        })(),
 
-        await page.goto('file://' + item.html, {
-            waitUntil: 'networkidle0',
-            timeout: 30000
-        });
+        // Nodes outside diagram canvas bounds
+        outsideNodes: (() => {
+            const canvas = document.querySelector('.diagram.mermaid-layout');
+            if (!canvas) return [];
+            const cRect = canvas.getBoundingClientRect();
+            const bad = [];
+            document.querySelectorAll('.node').forEach(n => {
+                const r = n.getBoundingClientRect();
+                if (r.right > cRect.right + 8 || r.bottom > cRect.bottom + 8 ||
+                    r.left < cRect.left - 8 || r.top < cRect.top - 8) {
+                    bad.push(n.querySelector('.node-label')?.textContent?.trim().slice(0, 40) || '(unlabeled)');
+                }
+            });
+            return bad;
+        })(),
 
-        await page.evaluate(async () => {
-            await document.fonts.ready;
-        });
-
-        const dom = await page.evaluate(() => {
-            return {
-                // Basic presence
-                hasDiagram: !!(document.querySelector('.diagram.mermaid-layout') ||
-                               document.querySelector('.diagram-lifeline')),
-                nodeCount: document.querySelectorAll('.node').length,
-
-                // Edge SVG — flowcharts use <path stroke=...>, sequence diagrams use <line stroke=...>
-                svgPresent: !!document.querySelector('svg'),
-                edgePathCount: document.querySelectorAll('svg path[stroke], svg line[stroke], svg polyline[stroke]').length,
-
-                // Legend checks
-                legendPresent: !!document.querySelector('.diagram-legend'),
-                legendAtBottom: (() => {
-                    const wrapper = document.querySelector('.diagram-wrapper');
-                    const legend = document.querySelector('.diagram-legend');
-                    if (!wrapper || !legend) return null;
-                    const wRect = wrapper.getBoundingClientRect();
-                    const lRect = legend.getBoundingClientRect();
-                    const gapToBottom = Math.abs(wRect.bottom - lRect.bottom);
-                    return { gapPx: Math.round(gapToBottom), isAtBottom: gapToBottom < 30 };
-                })(),
-
-                // Node overflow: any node where scrollWidth > clientWidth + 4 or scrollHeight > clientHeight + 4
-                overflowNodes: (() => {
-                    const bad = [];
-                    document.querySelectorAll('.node').forEach(n => {
-                        if (n.scrollWidth > n.clientWidth + 4 || n.scrollHeight > n.clientHeight + 4) {
-                            bad.push(n.querySelector('.node-label')?.textContent?.trim().slice(0, 40) || '(unlabeled)');
-                        }
-                    });
-                    return bad;
-                })(),
-
-                // Nodes outside diagram canvas bounds
-                outsideNodes: (() => {
-                    const canvas = document.querySelector('.diagram.mermaid-layout');
-                    if (!canvas) return [];
-                    const cRect = canvas.getBoundingClientRect();
-                    const bad = [];
-                    document.querySelectorAll('.node').forEach(n => {
-                        const r = n.getBoundingClientRect();
-                        if (r.right > cRect.right + 8 || r.bottom > cRect.bottom + 8 ||
-                            r.left < cRect.left - 8 || r.top < cRect.top - 8) {
-                            bad.push(n.querySelector('.node-label')?.textContent?.trim().slice(0, 40) || '(unlabeled)');
-                        }
-                    });
-                    return bad;
-                })(),
-
-                // Canvas dimensions (sanity check non-zero)
-                canvasSize: (() => {
-                    const c = document.querySelector('.diagram.mermaid-layout');
-                    if (!c) return null;
-                    const r = c.getBoundingClientRect();
-                    return { w: Math.round(r.width), h: Math.round(r.height) };
-                })()
-            };
-        });
-
-        results.push({ name: item.name, dom });
-        await page.close();
-    }
-
-    await browser.close();
-    console.log(JSON.stringify(results));
-})();
-"""
+        // Canvas dimensions (sanity check non-zero)
+        canvasSize: (() => {
+            const c = document.querySelector('.diagram.mermaid-layout');
+            if (!c) return null;
+            const r = c.getBoundingClientRect();
+            return { w: Math.round(r.width), h: Math.round(r.height) };
+        })()
+    };
+}"""
 
 # ── CSS fixture wrapper ───────────────────────────────────────────────────────
 FIXTURE_TEMPLATE = """\
@@ -219,57 +175,13 @@ CASES: list[DiagramCase] = [
 ]
 
 
-# ── Puppeteer helpers (mirroring html2png.py) ─────────────────────────────────
+# ── Playwright availability ───────────────────────────────────────────────────
 
-def _get_dep_dir(work_dir: Path) -> Path:
-    curr = work_dir.resolve()
-    for _ in range(5):
-        if curr.name == "ppt-output":
-            return curr
-        if curr.parent == curr:
-            break
-        curr = curr.parent
-    return work_dir
-
-
-def _node_env(work_dir: Path) -> dict:
-    dep_dir = _get_dep_dir(work_dir)
-    env = os.environ.copy()
-    node_modules = str((dep_dir / "node_modules").resolve())
-    existing = env.get("NODE_PATH")
-    env["NODE_PATH"] = node_modules + (os.pathsep + existing if existing else "")
-    return env
-
-
-def _ensure_puppeteer(work_dir: Path) -> bool:
-    dep_dir = _get_dep_dir(work_dir)
+def _playwright_available() -> bool:
     try:
-        r = subprocess.run(
-            ["node", "-e", "require('puppeteer')"],
-            capture_output=True, text=True, timeout=10,
-            cwd=str(dep_dir), env=_node_env(work_dir)
-        )
-        if r.returncode == 0:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        pass
-
-    print(f"Installing puppeteer in {dep_dir}...")
-    try:
-        r = subprocess.run(
-            ["npm", "ci"],
-            capture_output=True, text=True, timeout=300, cwd=str(dep_dir)
-        )
-        return r.returncode == 0
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
-
-
-def _node_available() -> bool:
-    try:
-        r = subprocess.run(["node", "--version"], capture_output=True, timeout=5)
-        return r.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        from playwright.sync_api import sync_playwright  # noqa: F401
+        return True
+    except ImportError:
         return False
 
 
@@ -354,18 +266,13 @@ def _evaluate(case: DiagramCase, dom: dict) -> list[Finding]:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> int:
-    # Check node availability first
-    if not _node_available():
-        print("[SKIP] diagram_render_check: node not found")
-        return 0
-
-    work_dir = ROOT
-    if not _ensure_puppeteer(work_dir):
-        print("[SKIP] diagram_render_check: puppeteer not available")
+    if not _playwright_available():
+        print("[SKIP] diagram_render_check: playwright not available")
         return 0
 
     # Phase 1: render each case to HTML
-    tmp_html_files: list[tuple[DiagramCase, str | None, str]] = []  # (case, tmp_path, error)
+    import shutil
+    tmp_html_files: list[tuple[DiagramCase, str | None, str]] = []
     tmpdir = tempfile.mkdtemp(prefix="diag_render_check_")
 
     for case in CASES:
@@ -375,80 +282,55 @@ def main() -> int:
             continue
 
         html = FIXTURE_TEMPLATE.format(fragment=fragment)
-        tmp_path = os.path.join(tmpdir, f"{case.name}.html")
+        tmp_path = str(Path(tmpdir) / f"{case.name}.html")
         with open(tmp_path, "w", encoding="utf-8") as f:
             f.write(html)
         tmp_html_files.append((case, tmp_path, ""))
 
-    # Phase 2: run Puppeteer on all available HTML files
+    # Phase 2: run Playwright on all available HTML files
+    dom_results: dict[str, dict] = {}
+
     config_items = [
-        {"html": tmp_path, "name": case.name}
+        (case, tmp_path)
         for case, tmp_path, _ in tmp_html_files
         if tmp_path is not None
     ]
 
-    dom_results: dict[str, dict] = {}
-
     if config_items:
-        dep_dir = _get_dep_dir(work_dir)
         try:
-            fd, script_path = tempfile.mkstemp(prefix=".diag_render_check_", suffix=".js", dir=str(dep_dir))
-        except OSError:
-            fd, script_path = tempfile.mkstemp(prefix=".diag_render_check_", suffix=".js")
-        os.close(fd)
-        script_path = Path(script_path)
-        script_path.write_text(DOM_INSPECT_SCRIPT)
+            with get_browser() as browser:
+                for case, tmp_path in config_items:
+                    page = browser.new_page()
+                    _setup_page(page, width=1280, height=900)
+                    page.goto("file://" + tmp_path, wait_until="networkidle", timeout=30000)
+                    page.evaluate("async () => { await document.fonts.ready; }")
+                    dom = page.evaluate(_DOM_INSPECT_JS)
+                    dom_results[case.name] = dom
+                    page.close()
+        except RuntimeError as e:
+            print(f"[SKIP] diagram_render_check: {e}")
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            return 0
+        except Exception as e:
+            print(f"[ERROR] Playwright script failed: {e}", file=sys.stderr)
 
-        try:
-            r = subprocess.run(
-                ["node", str(script_path), json.dumps(config_items)],
-                capture_output=True, text=True,
-                cwd=str(dep_dir), env=_node_env(work_dir),
-                timeout=120
-            )
-            if r.returncode == 0:
-                # Find last line that is JSON (the script outputs JSON as last line)
-                for line in reversed(r.stdout.strip().splitlines()):
-                    line = line.strip()
-                    if line.startswith("["):
-                        try:
-                            items = json.loads(line)
-                            for item in items:
-                                dom_results[item["name"]] = item["dom"]
-                        except json.JSONDecodeError:
-                            pass
-                        break
-            else:
-                print(f"[ERROR] Puppeteer script failed (rc={r.returncode}):", file=sys.stderr)
-                print(r.stderr[-500:], file=sys.stderr)
-        except subprocess.TimeoutExpired:
-            print("[ERROR] Puppeteer script timed out", file=sys.stderr)
-        finally:
-            if script_path.exists():
-                script_path.unlink()
-
-    # Clean up temp HTML files
-    import shutil
     shutil.rmtree(tmpdir, ignore_errors=True)
 
     # Phase 3: evaluate findings
     all_findings: list[Finding] = []
-    case_map = {c.name: c for c in CASES}
 
-    # Total checks per case (used for summary line)
-    CHECKS_PER_CASE = 9  # DIAG-01 through DIAG-09 (DIAG-09 is warn only)
+    CHECKS_PER_CASE = 9  # DIAG-01 through DIAG-09
 
     print(f"\ndiagram_render_check — {len(CASES)} cases")
     print("─" * 60)
 
     for case, tmp_path, render_error in tmp_html_files:
         if tmp_path is None:
-            # mermaid_layout failed to render
             findings = [Finding(case=case.name, check_id="DIAG-00", severity="FAIL",
                                 detail=f"mermaid_layout failed: {render_error[:100]}")]
         elif case.name not in dom_results:
             findings = [Finding(case=case.name, check_id="DIAG-00", severity="FAIL",
-                                detail="Puppeteer did not return DOM result for this case")]
+                                detail="Playwright did not return DOM result for this case")]
         else:
             dom = dom_results[case.name]
             findings = _evaluate(case, dom)
@@ -484,7 +366,6 @@ def main() -> int:
         if not any(f.case == case.name and f.severity == "FAIL" for f in all_findings)
         and any(f.case == case.name and f.severity == "WARN" for f in all_findings)
     )
-    fail_count = len(CASES) - pass_count - warn_only_count
 
     print(f"SUMMARY: {pass_count} pass, {total_warns} warn, {total_fails} fail")
     print()
