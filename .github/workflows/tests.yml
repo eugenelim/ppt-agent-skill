@@ -33,3 +33,22 @@ jobs:
       # self-consistency. mermaidx is declared in requirements-dev.txt so the
       # differential mode actually runs here instead of skipping.
       - run: python3 -m pytest tests/test_oracle.py -q
+
+  render-scripts:
+    name: render scripts (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: playwright install chromium --with-deps
+      # Security helpers, error-wrapping, lazy-provisioning, and behavioral
+      # degradation tests (test_browser.py); Playwright-contract assertions and
+      # the out-of-root image confinement test (test_html2svg_tmp_isolation.py);
+      # source-level contract checks for html2png and build_pdf.
+      # Snapshot pixel-comparison tests are skipped — baselines are captured on
+      # macOS and cross-platform pixel-exact comparison is unreliable in CI.
+      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py -q

@@ -30,9 +30,15 @@ HTML2PNG = REPO_ROOT / "scripts" / "html2png.py"
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-# Skip the entire module when node is unavailable.
-if shutil.which("node") is None:
-    pytest.skip("node not found — snapshot tests require puppeteer", allow_module_level=True)
+# Skip the entire module when Playwright+Chromium is unavailable.
+try:
+    from playwright.sync_api import sync_playwright as _sp  # noqa: F401
+    _playwright_importable = True
+except ImportError:
+    _playwright_importable = False
+
+if not _playwright_importable:
+    pytest.skip("playwright not installed — snapshot tests require playwright + chromium", allow_module_level=True)
 
 # Skip when the baseline was captured on a different platform.
 _baseline_platform = os.environ.get("SNAPSHOT_BASELINE_PLATFORM", "")
