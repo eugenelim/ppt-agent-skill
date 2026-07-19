@@ -1,0 +1,8 @@
+# Dev / test-only dependencies. NOT part of the shipped skill payload
+# (agentskills.io official folders are SKILL.md + scripts/ + references/ + assets/).
+# Adopters never install this file.
+-r requirements.txt
+
+pytest>=8
+numpy>=1.26          # tests/test_snapshots.py pixel diffing
+mermaidx==0.9.1      # tests/test_oracle.py differential mode (embeds real mermaid.js)
