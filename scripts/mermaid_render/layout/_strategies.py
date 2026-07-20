@@ -2085,8 +2085,32 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
 
 # ── T3: mindmap ───────────────────────────────────────────────────────────────
 
+# Section colour palette for depth-1 branches (rotates for > 7 branches).
+# Section-0 is rgba(53,148,103,...) so existing colour-check tests continue
+# to pass without modification.
+_MINDMAP_SECTION_COLORS: tuple[str, ...] = (
+    "rgba(53,148,103,0.08)",   # teal-green  — section 0 (colour tests depend on this)
+    "rgba(99,102,241,0.08)",   # indigo
+    "rgba(245,158,11,0.08)",   # amber
+    "rgba(239,68,68,0.08)",    # red
+    "rgba(20,184,166,0.08)",   # teal
+    "rgba(168,85,247,0.08)",   # purple
+    "rgba(236,72,153,0.08)",   # pink
+)
+
+# Leaf opacity — lighter tint of the section colour; satisfies "≤0.06" assertion.
+_MINDMAP_LEAF_ALPHA: str = "0.04"
+
+
+def _mindmap_count_leaves(idx: int, children: "list[list[int]]") -> int:
+    """Return the number of leaf nodes in the subtree rooted at *idx*."""
+    if not children[idx]:
+        return 1
+    return sum(_mindmap_count_leaves(c, children) for c in children[idx])
+
+
 def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
-    """mindmap: indented tree layout, root at top."""
+    """mindmap: radial spider layout — root at centre, branches radiating outward."""
     content_lines = _directive_content(src)
     flat: list[dict] = []
     for raw in content_lines:
@@ -2095,81 +2119,222 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
             continue
         indent = len(line) - len(line.lstrip())
         raw_node = line.strip()
-        # Strip id-prefix + shape wrappers: id((lbl)), id[lbl], id(lbl), id{lbl}
-        m_shape = re.match(r'^\w+(?:\(\((.+?)\)\)|\[(.+?)\]|\((.+?)\)|\{(.+?)\})', raw_node)
-        if m_shape:
-            lbl = next(g for g in m_shape.groups() if g is not None)
+        # Strip class annotations (:::classname) and icon hints (::icon(...))
+        raw_node = re.sub(r'\s*:{2,3}[\w-]+(?:\([^)]*\))?', '', raw_node).strip()
+        # Detect Mermaid mindmap shape from syntax wrapper
+        shape = "default"
+        m = re.match(r'^\w+\(\((.+?)\)\)', raw_node)       # id((circle))
+        if m:
+            lbl, shape = m.group(1), "circle"
         else:
-            lbl = re.sub(r'^[\[\(\{:]+|[\]\)\}]+$', '', raw_node).strip()
+            m = re.match(r'^\w+\)\)(.+?)\(\(', raw_node)   # id))cloud((
+            if m:
+                lbl, shape = m.group(1), "cloud"
+            else:
+                m = re.match(r'^\w+\[(.+?)\]', raw_node)   # id[rect]
+                if m:
+                    lbl, shape = m.group(1), "rect"
+                else:
+                    m = re.match(r'^\w+\((.+?)\)', raw_node)  # id(pill)
+                    if m:
+                        lbl, shape = m.group(1), "pill"
+                    else:
+                        lbl = re.sub(r'^[\[\(\{:]+|[\]\)\}]+$', '', raw_node).strip()
+        # Strip Markdown bold/italic markers from label text
+        lbl = re.sub(r'\*\*(.+?)\*\*', r'\1', lbl)
+        lbl = re.sub(r'\*(.+?)\*', r'\1', lbl)
         if lbl:
-            flat.append({"depth": indent, "label": lbl})
+            flat.append({"depth": indent, "label": lbl, "shape": shape})
+
     if not flat:
         raise ValueError("No nodes found in mindmap.")
 
-    # Normalize depths
+    # Normalise indentation so root is always depth 0
     min_d = min(n["depth"] for n in flat)
     for n in flat:
         n["depth"] -= min_d
 
-    PAD_H, PAD_V = 40, 24
-    NODE_H_MM, NODE_GAP, INDENT_W = 32, 8, 24
-    canvas_w = width_hint or 480
-    canvas_h = PAD_V * 2 + len(flat) * (NODE_H_MM + NODE_GAP)
+    # Build parent-child tree from the flat, indented list
+    n_nodes = len(flat)
+    children: list[list[int]] = [[] for _ in range(n_nodes)]
+    parent_of: list[int] = [-1] * n_nodes
+    for i in range(1, n_nodes):
+        for j in range(i - 1, -1, -1):
+            if flat[j]["depth"] < flat[i]["depth"]:
+                parent_of[i] = j
+                children[j].append(i)
+                break
 
-    parts: list[str] = []
-    parts.append(
+    # Propagate depth-1 section index to every descendant (for colour coding)
+    section_of: list[int] = [-1] * n_nodes
+    for sect_idx, child_idx in enumerate(children[0]):
+        section_of[child_idx] = sect_idx
+    pending: list[int] = list(children[0])
+    while pending:
+        cur = pending.pop()
+        for ci in children[cur]:
+            section_of[ci] = section_of[cur]
+            pending.append(ci)
+
+    # Compute actual tree depth (0 for root, 1 for root's children, etc.)
+    # The raw flat[i]["depth"] is raw indentation — not reliable as a depth level.
+    tree_depth: list[int] = [0] * n_nodes
+    for i in range(1, n_nodes):
+        if parent_of[i] >= 0:
+            tree_depth[i] = tree_depth[parent_of[i]] + 1
+
+    # Canvas dimensions — expand to fit the maximum depth radially
+    max_depth = max(tree_depth)
+    _BASE_R = 85    # root → depth-1 radius in px
+    _STEP_R = 70    # additional radius per depth level
+    max_r = _BASE_R + max_depth * _STEP_R
+    _MARGIN = 90    # px clearance for node label + padding beyond the outermost ring
+    min_side = 2 * (max_r + _MARGIN)
+    canvas_w = max(width_hint or 480, min_side)
+    canvas_h = canvas_w
+    cx = canvas_w // 2
+    cy = canvas_h // 2
+
+    # Assign radial positions: flat index → (x, y) floats
+    positions: dict[int, tuple[float, float]] = {0: (float(cx), float(cy))}
+
+    def _place_radial(idx: int, start: float, end: float, depth: int) -> None:
+        """Place children of *idx* in the angular sector [start, end] at *depth*."""
+        ch = children[idx]
+        if not ch:
+            return
+        total = sum(_mindmap_count_leaves(c, children) for c in ch)
+        cur = start
+        for ci in ch:
+            leaves = _mindmap_count_leaves(ci, children)
+            span = (end - start) * leaves / total
+            mid = cur + span / 2
+            r = _BASE_R + depth * _STEP_R
+            positions[ci] = (
+                cx + r * math.cos(math.radians(mid)),
+                cy + r * math.sin(math.radians(mid)),
+            )
+            _place_radial(ci, cur, cur + span, depth + 1)
+            cur += span
+
+    # Sweep from top (−90°) clockwise to bottom (+270°) so root branches upward
+    _place_radial(0, -90.0, 270.0, 1)
+
+    # ── Render ────────────────────────────────────────────────────────────────
+    _ROOT_DIAM = 60   # root circle diameter in px
+    _NODE_H = 32      # pill / rect node height in px
+    _NODE_W_MIN = 80  # minimum pill / rect node width in px
+
+    parts: list[str] = [
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
-    )
-    parts.append(
-        f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
-        f'overflow:visible;pointer-events:none;">'
-    )
-    y_pos: list[int] = []
-    for i, n in enumerate(flat):
-        ny = PAD_V + i * (NODE_H_MM + NODE_GAP) + NODE_H_MM // 2
-        nx = PAD_H + n["depth"] * INDENT_W
-        y_pos.append(ny)
-        if i > 0:
-            for j in range(i - 1, -1, -1):
-                if flat[j]["depth"] < n["depth"]:
-                    parent_cy = y_pos[j]
-                    child_cy = ny
-                    elbow_x = PAD_H + flat[j]["depth"] * INDENT_W + 8
-                    parts.append(
-                        f'<path d="M{elbow_x},{parent_cy} V{child_cy} H{nx}" '
-                        f'fill="none" stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1"/>'
-                    )
-                    break
-    parts.append('</svg>')
-    for i, n in enumerate(flat):
-        ny = PAD_V + i * (NODE_H_MM + NODE_GAP)
-        nx = PAD_H + n["depth"] * INDENT_W
-        bold = "font-weight:700;" if n["depth"] == 0 else ""
-        if n["depth"] == 0:
+    ]
+
+    # SVG edge layer — drawn first so node divs render above connectors
+    edge_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.6)))"
+    svg_parts: list[str] = [
+        f'<svg style="position:absolute;inset:0;width:{canvas_w}px;'
+        f'height:{canvas_h}px;overflow:visible;pointer-events:none;">'
+    ]
+    for i in range(1, n_nodes):
+        p = parent_of[i]
+        if p < 0:
+            continue
+        px_p, py_p = positions[p]
+        px_c, py_c = positions[i]
+        # Quadratic bezier with control point nudged radially outward from centre
+        mx = (px_p + px_c) / 2
+        my = (py_p + py_c) / 2
+        dx, dy = mx - cx, my - cy
+        dl = math.hypot(dx, dy) or 1.0
+        qx = mx + dx / dl * 18
+        qy = my + dy / dl * 18
+        svg_parts.append(
+            f'<path d="M{px_p:.1f},{py_p:.1f} Q{qx:.1f},{qy:.1f} {px_c:.1f},{py_c:.1f}" '
+            f'fill="none" stroke="{edge_color}" stroke-width="1.5"/>'
+        )
+    svg_parts.append('</svg>')
+    parts.extend(svg_parts)
+
+    # Node divs
+    for i, node in enumerate(flat):
+        px, py = positions[i]
+        depth = tree_depth[i]
+        shape = node["shape"]
+        sec = section_of[i]
+
+        # Background colour — root uses card gradient; branches use section palette
+        if depth == 0:
             bg = (
-                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                f'background:linear-gradient(180deg,'
+                f'var(--node-bg-from,var(--card-bg-from,#ffffff)),'
                 f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
                 f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
             )
-        elif n["depth"] == 1:
-            bg = 'background:rgba(53,148,103,0.08);'
+        elif depth == 1:
+            sec_idx = sec % len(_MINDMAP_SECTION_COLORS) if sec >= 0 else 0
+            bg = f'background:{_MINDMAP_SECTION_COLORS[sec_idx]};'
         else:
-            bg = 'background:rgba(53,148,103,0.05);'
+            sec_idx = sec % len(_MINDMAP_SECTION_COLORS) if sec >= 0 else 0
+            base_color = _MINDMAP_SECTION_COLORS[sec_idx]
+            # Replace the opacity to produce a lighter leaf tint (≤ 0.06)
+            leaf_bg = re.sub(r'0\.\d+\)', f'{_MINDMAP_LEAF_ALPHA})', base_color)
+            bg = f'background:{leaf_bg};'
+
+        bold = "font-weight:700;" if depth == 0 else ""
+
+        # Shape geometry: root or ((circle)) → disc; [rect] → sharp corners; default → pill
+        if depth == 0 and shape in ("circle", "default"):
+            w = h = _ROOT_DIAM
+            pos_s = (
+                f'left:{int(px - w / 2)}px;top:{int(py - h / 2)}px;'
+                f'width:{w}px;height:{h}px;'
+            )
+            layout_s = 'display:flex;align-items:center;justify-content:center;'
+            pad_s = 'padding:4px;box-sizing:border-box;'
+            radius_s = 'border-radius:50%;'
+        elif shape == "circle":
+            diam = 48
+            pos_s = (
+                f'left:{int(px - diam / 2)}px;top:{int(py - diam / 2)}px;'
+                f'width:{diam}px;height:{diam}px;'
+            )
+            layout_s = 'display:flex;align-items:center;justify-content:center;'
+            pad_s = 'padding:4px;box-sizing:border-box;'
+            radius_s = 'border-radius:50%;'
+        elif shape == "rect":
+            pos_s = (
+                f'left:{int(px - _NODE_W_MIN / 2)}px;top:{int(py - _NODE_H / 2)}px;'
+                f'min-width:{_NODE_W_MIN}px;height:{_NODE_H}px;'
+            )
+            layout_s = 'display:flex;align-items:center;'
+            pad_s = 'padding:4px 8px;box-sizing:border-box;'
+            radius_s = 'border-radius:4px;'
+        else:
+            # pill / cloud / default
+            pos_s = (
+                f'left:{int(px - _NODE_W_MIN / 2)}px;top:{int(py - _NODE_H / 2)}px;'
+                f'min-width:{_NODE_W_MIN}px;height:{_NODE_H}px;'
+            )
+            layout_s = 'display:flex;align-items:center;'
+            pad_s = 'padding:4px 8px;box-sizing:border-box;'
+            radius_s = 'border-radius:var(--node-radius,16px);'
+
         parts.append(
-            f'<div class="node" data-node-id="{i}" style="position:absolute;left:{nx}px;top:{ny}px;'
-            f'min-width:120px;height:{NODE_H_MM}px;display:flex;align-items:center;'
-            f'padding:4px 8px;box-sizing:border-box;border-radius:var(--node-radius,8px);{bg}">'
+            f'<div class="node" data-node-id="{i}" style="position:absolute;'
+            f'{pos_s}{layout_s}{pad_s}{radius_s}{bg}">'
             f'<span class="node-label" style="font-size:13px;{bold}'
             f'color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-            f'{_h(n["label"])}</span></div>'
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+            f'text-align:center;">'
+            f'{_h(node["label"])}</span></div>'
         )
+
     parts.append('</div>')
     return "\n".join(parts)
 
 
-# ── T3: block-beta ────────────────────────────────────────────────────────────────────────────
+# ── T3: block-beta ────────────────────────────────────────────────────────────
 
 # Matches a complete block-beta token (ID + optional shape + optional :span),
 # honouring quoted labels that may contain spaces.  Shape alternatives are
