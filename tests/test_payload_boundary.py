@@ -84,11 +84,16 @@ def test_no_test_files_in_scripts() -> None:
 
 
 def test_mermaid_render_vendor_bundle_parity() -> None:
-    """mermaid_render/vendor/dom-to-svg.bundle.js must be byte-identical to scripts/vendor/."""
+    """mermaid_render/vendor/dom-to-svg.bundle.js must be byte-identical to scripts/vendor/.
+
+    Both copies are committed (whitelisted in .gitignore); this is a hard gate,
+    not an optional skip — if either file is absent the tree is broken.
+    """
     orig = SCRIPTS / "vendor" / "dom-to-svg.bundle.js"
     copy = SCRIPTS / "mermaid_render" / "vendor" / "dom-to-svg.bundle.js"
-    if not orig.exists():
-        pytest.skip("vendor bundle not built")
+    assert orig.exists(), (
+        "scripts/vendor/dom-to-svg.bundle.js missing — it is a committed asset"
+    )
     assert copy.exists(), (
         "scripts/mermaid_render/vendor/dom-to-svg.bundle.js missing — copy from scripts/vendor/"
     )

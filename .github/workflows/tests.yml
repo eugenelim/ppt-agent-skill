@@ -47,8 +47,9 @@ jobs:
       # Guards run without playwright installed so the playwright-cleanliness
       # test is meaningful. Includes sibling-import AST scan, adaptive-theme
       # unit tests, vendor bundle parity, and the full mermaid_layout shim
-      # regression suite (playwright-free).
-      - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py tests/test_svg2pptx_shapes.py -q
+      # regression suite (playwright-free). test_svg2pptx_shapes needs lxml +
+      # python-pptx (requirements.txt) so it runs in render-scripts, not here.
+      - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py -q
 
   render-scripts:
     name: render scripts (Playwright)
@@ -67,4 +68,4 @@ jobs:
       # source-level contract checks for html2png and build_pdf.
       # Snapshot pixel-comparison tests are skipped — baselines are captured on
       # macOS and cross-platform pixel-exact comparison is unreliable in CI.
-      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py -q
+      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py tests/test_svg2pptx_shapes.py -q

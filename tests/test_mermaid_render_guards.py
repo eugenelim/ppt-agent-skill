@@ -48,8 +48,7 @@ def test_to_html_does_not_load_playwright():
 def test_mermaid_render_no_sibling_imports():
     """AST scan: mermaid_render/ must not import any sibling scripts/*.py module."""
     pkg = SCRIPTS / "mermaid_render"
-    if not pkg.exists():
-        pytest.skip("mermaid_render package not yet created")
+    assert pkg.exists(), "mermaid_render package missing — T1-T7 not yet run"
 
     sibling_names = (
         {p.stem for p in SCRIPTS.glob("*.py")}
