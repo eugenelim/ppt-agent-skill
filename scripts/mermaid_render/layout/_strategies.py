@@ -1905,48 +1905,171 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
     return "\n".join(parts)
 
 
-# ── T3: block-beta ────────────────────────────────────────────────────────────
+# ── T3: block-beta ────────────────────────────────────────────────────────────────────────────
 
-_BLOCK_ID_RE = re.compile(r'(\w+)(?:\["([^"]+)"\])?(?::(\d+))?')
+# Matches a complete block-beta token (ID + optional shape + optional :span),
+# honouring quoted labels that may contain spaces.  Shape alternatives are
+# ordered longest-first so that (( and ([ do not shadow each other.
+_BLOCK_TOKEN_RE = re.compile(
+    r'(?P<id>\w+)'
+    r'(?:'
+        r'>>"(?P<arrow_lbl>[^"]*)"'               # >> arrow chevron
+        r'|>\[\"(?P<asym_lbl>[^\"]*)\"\]'           # >[ asymmetric
+        r'|\(\(\"(?P<circle_lbl>[^\"]*)\"\)\)'       # (( circle
+        r'|\(\[\"(?P<stadium_lbl>[^\"]*)\"\]\)'      # ([ stadium
+        r'|\[\(\"(?P<cyl_lbl>[^\"]*)\"\)\]'          # [( cylinder
+        r'|\{\{\"(?P<hex_lbl>[^\"]*)\"\}\}'          # {{ hexagon
+        r'|\{\"(?P<diam_lbl>[^\"]*)\"\}'             # { diamond
+        r'|\[\"(?P<rect_lbl>[^\"]*)\"\]'             # [ rect with label
+        r'|\(\"(?P<round_lbl>[^\"]*)\"\)'            # ( rounded rect
+    r')?'
+    r'(?::(?P<span>\d+))?'
+)
 
+# Lines that start with these keywords are whole-line directives; skip them
+# instead of tokenising their tokens as spurious block nodes.
+_BLOCK_SKIP_LINE_RE = re.compile(r'^(style|classDef|class)\b', re.I)
 
-_BLOCK_EDGE_RE = re.compile(r'(\w+)\s*(?:-->|<-->|---)\s*(\w+)')
+# Extra inline CSS appended to the base node style per block shape.
+# Clipped shapes override border to none to avoid rectangular CSS-border artefacts.
+_BLOCK_SHAPE_CSS: dict[str, str] = {
+    "arrow":   (
+        "clip-path:polygon(0% 0%,calc(100% - 14px) 0%,100% 50%,"
+        "calc(100% - 14px) 100%,0% 100%);border-radius:0;border:none;"
+    ),
+    "circle":  "border-radius:50%;",
+    "stadium": "border-radius:28px;",
+    "diamond": (
+        "clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);"
+        "border-radius:0;border:none;"
+    ),
+    "hexagon": (
+        "clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);"
+        "border-radius:0;border:none;"
+    ),
+    "asym":    (
+        "clip-path:polygon(0% 0%,100% 0%,100% 100%,10px 100%);"
+        "border-radius:0;border:none;"
+    ),
+    "cyl":     "border-radius:4px 4px 0 0;",
+    "round":   "border-radius:28px;",
+    "rect":    "",
+}
+
+# CSS class name (after "node ") per block shape.
+_BLOCK_SHAPE_CLASS: dict[str, str] = {
+    "arrow":   "node-arrow",
+    "circle":  "node-circle",
+    "stadium": "node-stadium",
+    "diamond": "node-diamond",
+    "hexagon": "node-hexagon",
+    "asym":    "node-asym",
+    "cyl":     "node-cyl",
+    "round":   "node-round",
+    "rect":    "node-rect",
+}
 
 
 def _layout_block(src: str, direction: str, width_hint: int) -> str:
-    """block-beta: blocks in declared rows/columns with arrows."""
+    '''block-beta: blocks in declared rows/columns with arrows.
+
+    Fixes vs. original implementation:
+    - Whole-line directives (style, classDef, class) are skipped rather than
+      tokenised into spurious block nodes.
+    - Tokeniser uses _BLOCK_TOKEN_RE.finditer() so quoted labels with spaces
+      (e.g. A["Foo Bar"]) are preserved intact.
+    - space / space:N tokens advance the column cursor without producing a
+      visible block node.
+    - >> arrow shape is parsed and rendered with a clip-path chevron.
+    - Standard flowchart shapes ((circle)), (["stadium"]), [("cylinder")],
+      {diamond}, {{hexagon}} are parsed and rendered with matching CSS.
+    - Column cursor tracks cumulative span so spanning blocks (:2) and
+      spacers correctly advance the grid position.
+    '''
     content_lines = _directive_content(src)
     rows: list[list[dict]] = []
     current_row: list[dict] = []
+    col_cursor = 0          # column slots consumed in the current row
     edges: list[tuple[str, str]] = []
     n_cols = 3
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
+        # columns N directive
         m = re.match(r'columns\s+(\d+)', line, re.I)
         if m:
             n_cols = int(m.group(1)); continue
-        # Edge lines contain --> or <-->
-        # Split on operators to handle chaining: A --> B --> C → [(A,B),(B,C)]
+        # Skip whole-line styling directives (style / classDef / class)
+        if _BLOCK_SKIP_LINE_RE.match(line):
+            continue
+        # Edge lines -- split on operators: A --> B --> C -> [(A,B),(B,C)]
         if '-->' in line or '<-->' in line or '---' in line:
             _ids = re.findall(r'\b(\w+)\b', line)
             for _i in range(len(_ids) - 1):
                 edges.append((_ids[_i], _ids[_i + 1]))
             continue
-        for token in line.split():
-            m2 = _BLOCK_ID_RE.match(token)
-            if m2 and m2.group(1) not in ("space", "classDef", "class"):
-                current_row.append({
-                    "id": m2.group(1),
-                    "label": m2.group(2) or m2.group(1),
-                    "span": int(m2.group(3)) if m2.group(3) else 1,
-                })
-                if len(current_row) >= n_cols:
-                    rows.append(current_row); current_row = []
+        # Block content -- tokenise respecting quoted labels
+        for m2 in _BLOCK_TOKEN_RE.finditer(line):
+            nid = m2.group("id")
+            span_str = m2.group("span")
+            span = int(span_str) if span_str else 1
+
+            if nid.lower() == "space":
+                # Spacer: advance column cursor span times, no visible block
+                for _ in range(span):
+                    current_row.append({"is_space": True, "span": 1})
+                    col_cursor += 1
+                    if col_cursor >= n_cols:
+                        rows.append(current_row); current_row = []; col_cursor = 0
+                continue
+
+            # Determine shape and label from matched named groups
+            arrow_lbl   = m2.group("arrow_lbl")
+            asym_lbl    = m2.group("asym_lbl")
+            circle_lbl  = m2.group("circle_lbl")
+            stadium_lbl = m2.group("stadium_lbl")
+            cyl_lbl     = m2.group("cyl_lbl")
+            hex_lbl     = m2.group("hex_lbl")
+            diam_lbl    = m2.group("diam_lbl")
+            rect_lbl    = m2.group("rect_lbl")
+            round_lbl   = m2.group("round_lbl")
+
+            if arrow_lbl is not None:
+                shape, label = "arrow", arrow_lbl
+            elif asym_lbl is not None:
+                shape, label = "asym", asym_lbl
+            elif circle_lbl is not None:
+                shape, label = "circle", circle_lbl
+            elif stadium_lbl is not None:
+                shape, label = "stadium", stadium_lbl
+            elif cyl_lbl is not None:
+                shape, label = "cyl", cyl_lbl
+            elif hex_lbl is not None:
+                shape, label = "hexagon", hex_lbl
+            elif diam_lbl is not None:
+                shape, label = "diamond", diam_lbl
+            elif rect_lbl is not None:
+                shape, label = "rect", rect_lbl
+            elif round_lbl is not None:
+                shape, label = "round", round_lbl
+            else:
+                shape, label = "rect", nid  # bare ID -- use ID as label
+
+            current_row.append({
+                "id": nid,
+                "label": label,
+                "span": span,
+                "shape": shape,
+                "is_space": False,
+            })
+            col_cursor += span
+            if col_cursor >= n_cols:
+                rows.append(current_row); current_row = []; col_cursor = 0
+
     if current_row:
         rows.append(current_row)
-    if not rows:
+    if not rows or not any(not b.get("is_space") for row in rows for b in row):
         raise ValueError("No blocks found in block-beta.")
 
     PAD_H, PAD_V, CELL_H, CELL_GAP = 40, 24, 56, 24
@@ -1956,14 +2079,15 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
     cell_w = max(80, available // n_cols)
     canvas_h = PAD_V * 2 + len(rows) * (CELL_H + CELL_GAP) - CELL_GAP
 
-    # Build block positions for edge routing
+    # Build block positions for edge routing (non-space blocks only)
     block_pos: dict[str, dict] = {}
     for ri, row in enumerate(rows):
         ry = PAD_V + ri * (CELL_H + CELL_GAP)
         cx_cur = PAD_H
         for blk in row:
             bw = cell_w * blk["span"] + CELL_GAP * (blk["span"] - 1)
-            block_pos[blk["id"]] = {"x": cx_cur, "y": ry, "w": bw, "h": CELL_H}
+            if not blk.get("is_space"):
+                block_pos[blk["id"]] = {"x": cx_cur, "y": ry, "w": bw, "h": CELL_H}
             cx_cur += bw + CELL_GAP
 
     edge_color = "var(--edge,rgba(100,116,139,0.7))"
@@ -1972,15 +2096,14 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         if src_id not in block_pos or dst_id not in block_pos:
             continue
         s, d = block_pos[src_id], block_pos[dst_id]
-        # Right-center of source to left-center of dest (same row)
-        # For cross-row, use bottom-center to top-center
+        # Right-center of source to left-center of dest (same row);
+        # cross-row: bottom-center to top-center.
         if abs((s["y"] + s["h"] / 2) - (d["y"] + d["h"] / 2)) < CELL_H:
             x1 = s["x"] + s["w"]; y1 = s["y"] + s["h"] // 2
             x2 = d["x"]; y2 = d["y"] + d["h"] // 2
         else:
             x1 = s["x"] + s["w"] // 2; y1 = s["y"] + s["h"]
             x2 = d["x"] + d["w"] // 2; y2 = d["y"]
-        mx = (x1 + x2) // 2
         svg_edges.append(
             f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
             f'stroke="{edge_color}" stroke-width="1.5" '
@@ -1999,18 +2122,23 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
         cx_cur = PAD_H
         for blk in row:
             bw = cell_w * blk["span"] + CELL_GAP * (blk["span"] - 1)
-            parts.append(
-                f'<div class="node node-rect" data-node-id="{_h(blk["id"])}" style="position:absolute;'
-                f'left:{cx_cur}px;top:{ry}px;width:{bw}px;height:{CELL_H}px;'
-                f'display:flex;align-items:center;justify-content:center;'
-                f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-                f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
-                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-                f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));"><span class="node-label" style="'
-                f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));text-align:center;">'
-                f'{_h(blk["label"])}</span></div>'
-            )
+            if not blk.get("is_space"):
+                shape = blk.get("shape", "rect")
+                shape_css = _BLOCK_SHAPE_CSS.get(shape, "")
+                shape_class = _BLOCK_SHAPE_CLASS.get(shape, "node-rect")
+                parts.append(
+                    f'<div class="node {shape_class}" data-node-id="{_h(blk["id"])}" style="position:absolute;'
+                    f'left:{cx_cur}px;top:{ry}px;width:{bw}px;height:{CELL_H}px;'
+                    f'display:flex;align-items:center;justify-content:center;'
+                    f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+                    f'border-radius:var(--node-radius,8px);box-sizing:border-box;{shape_css}'
+                    f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                    f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));">'
+                    f'<span class="node-label" style="'
+                    f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));text-align:center;">'
+                    f'{_h(blk["label"])}</span></div>'
+                )
             cx_cur += bw + CELL_GAP
     # SVG edge layer last so connectors appear above block backgrounds
     if svg_edges:
@@ -2025,7 +2153,7 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
     return "\n".join(parts)
 
 
-# ── T3: packet-beta ─────────────────────────────────────────────────
+# ── T3: packet-beta ───────────────────────────────────────────────────────────
 
 # Absolute range: "start-end: label" or "start: label"
 _PKT_FIELD_RE = re.compile(r'^(\d+)(?:-(\d+))?\s*:\s*(.+)$')
