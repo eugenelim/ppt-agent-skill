@@ -7,8 +7,8 @@ source glyph. The library grows mainly through the `assimilate-slides` skill's
 **EXTRACT ICONS** phase, which harvests the concepts a deck's diagrams lean on
 and redraws them here.
 
-- **Search / validate:** `scripts/icon_search.py` (stdlib, CI-capable).
-- **Metadata:** `assets/icons/catalog.json` · **SVGs:** `assets/icons/<id>.svg`.
+- **Search / validate:** `python3 -m mermaid_render icons` (stdlib, CI-capable).
+- **Metadata:** `scripts/mermaid_render/icons/catalog.json` · **SVGs:** `scripts/mermaid_render/icons/<id>.svg`.
 
 ## Authoring contract
 
@@ -43,7 +43,7 @@ both are lossy or forbidden in the html→svg→pptx pipeline. Because the paint
 `currentColor`, an inlined icon takes the color of its container
 (`color: var(--accent-1)` on the node → the icon is accent-colored).
 
-`python3 scripts/icon_search.py <query> --snippet` prints the inline `<svg>` for
+`python3 -m mermaid_render icons <query> --snippet` prints the inline `<svg>` for
 the top hit, ready to paste.
 
 ## Catalog entry
@@ -67,16 +67,16 @@ softer synonyms so a search still lands even when the exact tag isn't guessed.
 ## Usage
 
 ```bash
-python3 scripts/icon_search.py database          # search id/name/tags/keywords
-python3 scripts/icon_search.py "data flow" --json # machine-readable results
-python3 scripts/icon_search.py database --snippet # inline <svg> for the top hit
-python3 scripts/icon_search.py --list [--category infrastructure]
-python3 scripts/icon_search.py --validate         # catalog↔file + pipeline-safety gate
+python3 -m mermaid_render icons database          # search id/name/tags/keywords
+python3 -m mermaid_render icons "data flow" --json # machine-readable results
+python3 -m mermaid_render icons database --snippet # inline <svg> for the top hit
+python3 -m mermaid_render icons --list [--category infrastructure]
+python3 -m mermaid_render icons --validate         # catalog↔file + pipeline-safety gate
 ```
 
 ## Contributing a new icon
 
 1. Redraw the concept per the authoring contract (idea-level, `currentColor`).
-2. Save `assets/icons/<id>.svg`; add its `catalog.json` entry.
-3. `python3 scripts/icon_search.py --validate` must exit 0.
+2. Save `scripts/mermaid_render/icons/<id>.svg`; add its `catalog.json` entry.
+3. `python3 -m mermaid_render icons --validate` must exit 0.
 4. Search for the concept to confirm it's discoverable.

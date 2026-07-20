@@ -775,3 +775,45 @@ python3 SKILL_DIR/scripts/visual_qa.py OUTPUT_DIR/png --planning-dir OUTPUT_DIR/
 - PNG 命名：同时接受 `slide-N.png` 与 `slide_NN.png`（零填充）两种命名，无需再手动 symlink。
 
 依赖：`pip install Pillow`
+
+---
+
+## Mermaid 图表渲染器 (`python3 -m mermaid_render`)
+
+运行目录：`SKILL_DIR/scripts/`
+
+### render — Mermaid 源码 → HTML 页面（无需浏览器）
+
+```bash
+python3 -m mermaid_render render --source "flowchart LR\n  A --> B"
+python3 -m mermaid_render render --source @diagram.mmd --output out.html
+python3 -m mermaid_render render --source "..." --theme light
+```
+
+`--theme`：`auto`（默认，自适应深浅色）、`light`、`dark`；`--output` 省略则输出到 stdout。
+
+### svg — Mermaid 源码 → SVG（需要 Playwright）
+
+```bash
+python3 -m mermaid_render svg --source "flowchart LR\n  A --> B"
+python3 -m mermaid_render svg --source @diagram.mmd --output out.svg
+```
+
+### png — Mermaid 源码 → PNG（需要 Playwright）
+
+```bash
+python3 -m mermaid_render png --source "flowchart LR\n  A --> B" --output out.png
+python3 -m mermaid_render png --source @diagram.mmd --output out.png --scale 2.0
+```
+
+### icons — 图标库检索 / 验证 / 内联片段
+
+```bash
+python3 -m mermaid_render icons database          # 搜索匹配 "database" 的图标
+python3 -m mermaid_render icons database --snippet  # 打印顶部命中的 <svg> 内容
+python3 -m mermaid_render icons --list            # 列出全部图标
+python3 -m mermaid_render icons --list --json     # JSON 格式
+python3 -m mermaid_render icons --validate        # 校验 catalog↔文件完整性 + 管线安全性
+```
+
+图标库位于 `scripts/mermaid_render/icons/`；`catalog.json` 手动维护，包含 id / name / category / tags / keywords 等元数据。

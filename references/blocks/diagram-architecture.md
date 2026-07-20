@@ -268,7 +268,7 @@
 
 ### 架构-图标画布 (architecture-canvas)
 
-**何时用**：数据/平台架构的"分层带 + 图标节点"画布——若干**带名横向 zone**，每个 zone 内是一排**图标节点卡**（来自 `assets/icons/` 图标库，内联 `<svg>`），中间一条**高亮主脊 zone**（如数据湖/知识层），zone 之间用**带标注连接线**相接。适合"平台由哪些层构成、每层有哪些能力、数据如何流动"。比 `architecture-component` 多了图标语义与命名脊层；节点少时退化为 `layers`。
+**何时用**：数据/平台架构的"分层带 + 图标节点"画布——若干**带名横向 zone**，每个 zone 内是一排**图标节点卡**（来自 `scripts/mermaid_render/icons/` 图标库，内联 `<svg>`），中间一条**高亮主脊 zone**（如数据湖/知识层），zone 之间用**带标注连接线**相接。适合"平台由哪些层构成、每层有哪些能力、数据如何流动"。比 `architecture-component` 多了图标语义与命名脊层；节点少时退化为 `layers`。
 
 **数据格式**：
 ```json
@@ -288,7 +288,7 @@
   ]
 }
 ```
-> `icon` = `assets/icons/<id>.svg` 的 id（用 `python3 scripts/icon_search.py <concept> --snippet` 取内联片段）。图标 `stroke=currentColor`，颜色随节点 `color` 变。
+> `icon` = `scripts/mermaid_render/icons/<id>.svg` 的 id（用 `python3 -m mermaid_render icons <concept> --snippet` 取内联片段）。图标 `stroke=currentColor`，颜色随节点 `color` 变。
 
 **模板**（zone 带 + 图标节点卡 + 主脊高亮 + 带标注连接线）：
 ```html

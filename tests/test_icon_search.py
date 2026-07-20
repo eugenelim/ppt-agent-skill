@@ -2,7 +2,7 @@
 """test_icon_search.py — search ranking + pipeline-safety validation for the
 SVG icon library (scripts/icon_search.py).
 
-No pytest harness in this repo; run directly (`python3 scripts/test_icon_search.py`)
+No pytest harness in this repo; run directly (`python3 tests/test_icon_search.py`)
 or via smoke_test.py. Exit 0 = all pass, 1 = a failure.
 """
 from __future__ import annotations

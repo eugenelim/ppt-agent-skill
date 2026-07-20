@@ -208,7 +208,7 @@ flowchart TD
 
 ### `:::icon-name` — 节点图标
 
-在节点追加 `:::icon-name`，渲染器从 `assets/icons/<icon-name>.svg` 内联 SVG 图标到节点卡片左侧（同 architecture-canvas 的图标布局）。规划阶段应根据节点语义选择图标；渲染器也会按标签关键词自动回退推断，但显式标注更准确。
+在节点追加 `:::icon-name`，渲染器从 `scripts/mermaid_render/icons/<icon-name>.svg` 内联 SVG 图标到节点卡片左侧（同 architecture-canvas 的图标布局）。规划阶段应根据节点语义选择图标；渲染器也会按标签关键词自动回退推断，但显式标注更准确。
 
 ```
 flowchart LR
@@ -219,7 +219,7 @@ flowchart LR
   Auth -.-> IdP[Identity Provider]:::external
 ```
 
-**常用图标速查（完整列表见 `assets/icons/catalog.json`）：**
+**常用图标速查（完整列表见 `scripts/mermaid_render/icons/catalog.json`）：**
 
 | `:::icon-name` | 适用节点 |
 |---|---|
