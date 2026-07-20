@@ -50,7 +50,7 @@ def _blocked_segs(
     """Precompute set of (xi, yi, xi2, yi2) grid-index tuples for blocked segments.
 
     A segment is blocked when it passes through any obstacle AABB interior
-    (more than 2 px inside a boundary in the perpendicular direction).
+    (more than 4 px inside a boundary in the perpendicular direction).
     """
     CLEAR = 4
     blocked: set = set()
@@ -110,7 +110,7 @@ def _astar_route(
     dxi, dyi = _snap(dx, grid_xs), _snap(dy, grid_ys)
 
     if sxi == dxi and syi == dyi:
-        return [(sx, sy)]
+        return [(sx, sy), (dx, dy)]
 
     # State: (xi, yi, dir) — dir: 0=horizontal, 1=vertical
     _MOVES = [(-1, 0, 0), (1, 0, 0), (0, -1, 1), (0, 1, 1)]
@@ -477,8 +477,13 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             _ayi = _snap_to_grid(_ay, _grid_ys)
             _bxi = _snap_to_grid(_bx, _grid_xs)
             _byi = _snap_to_grid(_by, _grid_ys)
-            _occupied.add((min(_axi, _bxi), min(_ayi, _byi),
-                           max(_axi, _bxi), max(_ayi, _byi)))
+            # Decompose into unit grid steps to match A*'s single-step segments
+            if _axi == _bxi:
+                for _yi in range(min(_ayi, _byi), max(_ayi, _byi)):
+                    _occupied.add((_axi, _yi, _axi, _yi + 1))
+            else:
+                for _xi in range(min(_axi, _bxi), max(_axi, _bxi)):
+                    _occupied.add((_xi, _ayi, _xi + 1, _ayi))
 
     # Right-lane x: always clears the rightmost node + group container border
     non_dummy = [n for n in nodes.values() if not n.is_dummy]
@@ -698,8 +703,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if e.arrow:
                 _ldx_lr, _ldy_lr = 1, 0  # LR nominal default
                 if len(_pts_lr) >= 2:
-                    _ldx_lr = _pts_lr[-1][0] - _pts_lr[-2][0]
-                    _ldy_lr = _pts_lr[-1][1] - _pts_lr[-2][1]
+                    _ddx = _pts_lr[-1][0] - _pts_lr[-2][0]
+                    _ddy = _pts_lr[-1][1] - _pts_lr[-2][1]
+                    if _ddx != 0 or _ddy != 0:
+                        _ldx_lr, _ldy_lr = _ddx, _ddy
                 ah = _arrowhead(int(x2), int(y2), _ldx_lr, _ldy_lr, **ah_kw)
             else:
                 ah = None
@@ -768,8 +775,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if e.arrow:
             _ldx, _ldy = 0, 1  # TB nominal default
             if len(_pts) >= 2:
-                _ldx = _pts[-1][0] - _pts[-2][0]
-                _ldy = _pts[-1][1] - _pts[-2][1]
+                _ddx = _pts[-1][0] - _pts[-2][0]
+                _ddy = _pts[-1][1] - _pts[-2][1]
+                if _ddx != 0 or _ddy != 0:
+                    _ldx, _ldy = _ddx, _ddy
             ah = _arrowhead(int(x2), int(y2), _ldx, _ldy, **ah_kw)
         else:
             ah = None
