@@ -153,25 +153,51 @@ class C4Bounds:
 
 # ── Geometry helpers ──────────────────────────────────────────────────────────
 
-def _rect_edge_point(
-    cx: float, cy: float,   # center of the rectangle
-    w: float, h: float,      # rectangle dimensions
-    tx: float, ty: float,    # target point (direction)
+def _mermaid_edge_point(
+    src_x: float, src_y: float,    # source node top-left
+    src_cx: float, src_cy: float,  # source node center
+    src_w: float, src_h: float,    # source dimensions
+    dst_cx: float, dst_cy: float,  # target node center
 ) -> tuple[float, float]:
-    """Intersection of the ray from (cx,cy) toward (tx,ty) with the rectangle boundary."""
-    dx = tx - cx
-    dy = ty - cy
-    if abs(dx) < 0.001 and abs(dy) < 0.001:
-        return cx, cy
-    hw, hh = w / 2.0, h / 2.0
-    if abs(dx) < 0.001:
-        return cx, cy + (hh if dy > 0 else -hh)
-    if abs(dy) < 0.001:
-        return cx + (hw if dx > 0 else -hw), cy
-    t_x = hw / abs(dx)
-    t_y = hh / abs(dy)
-    t = min(t_x, t_y)
-    return cx + t * dx, cy + t * dy
+    """Intersection geometry matching Mermaid 11.15 C4 edge attachment.
+
+    Slope is computed from source top-left to target center (not center-to-center
+    as in a conventional ray), then projected from the source center to find the
+    exit point.  This pins the formula to the Mermaid 11.15 algorithm observed in
+    c4-basic reference output; compare_gallery.py provides visual ground truth.
+
+    MIT notice: inspired by mermaid/packages/mermaid/src/diagrams/c4/svgDraw.ts.
+    """
+    dx = dst_cx - src_x   # from top-left to target center
+    dy = dst_cy - src_y   # from top-left to target center
+
+    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+        return src_cx, src_cy
+
+    hw = src_w / 2.0
+    hh = src_h / 2.0
+
+    if abs(dx) < 1e-9:
+        return src_cx, src_cy + (hh if dy > 0 else -hh)
+    if abs(dy) < 1e-9:
+        return src_cx + (hw if dx > 0 else -hw), src_cy
+
+    m = dy / dx  # slope from top-left to target center
+
+    # Use the top-left-based slope to pick which edge to exit through,
+    # then project from the center along that same slope.
+    if abs(dy) * hw < abs(dx) * hh:
+        # Exits left or right edge
+        if dx > 0:
+            return src_cx + hw, src_cy + m * hw
+        else:
+            return src_cx - hw, src_cy - m * hw
+    else:
+        # Exits top or bottom edge
+        if dy > 0:
+            return src_cx + hh / m, src_cy + hh
+        else:
+            return src_cx - hh / m, src_cy - hh
 
 
 # ── Node HTML rendering ───────────────────────────────────────────────────────
@@ -294,15 +320,23 @@ def _render_c4_edges(
         dst_box = box_map.get(rel.dst)
         if src_box is None or dst_box is None:
             continue
+        if rel.src == rel.dst:
+            continue  # self-relation produces a degenerate zero-length path
 
         src_cx = src_box.x + src_box.width / 2
         src_cy = src_box.y + src_box.height / 2
         dst_cx = dst_box.x + dst_box.width / 2
         dst_cy = dst_box.y + dst_box.height / 2
 
-        # Edge attachment points (center-ray intersection with rectangle)
-        sx, sy = _rect_edge_point(src_cx, src_cy, src_box.width, src_box.height, dst_cx, dst_cy)
-        ex, ey = _rect_edge_point(dst_cx, dst_cy, dst_box.width, dst_box.height, src_cx, src_cy)
+        # Edge attachment points (Mermaid 11.15 top-left-slope intersection)
+        sx, sy = _mermaid_edge_point(
+            src_box.x, src_box.y, src_cx, src_cy,
+            src_box.width, src_box.height, dst_cx, dst_cy,
+        )
+        ex, ey = _mermaid_edge_point(
+            dst_box.x, dst_box.y, dst_cx, dst_cy,
+            dst_box.width, dst_box.height, src_cx, src_cy,
+        )
 
         if i == 0:
             # First relationship: straight line
@@ -374,8 +408,9 @@ def _render_c4_fragment(
         bounds.insert(box)
         box_map[box.alias] = box
 
-    # Canvas dimensions
-    canvas_w = int(math.ceil(bounds.max_right + C4_SHAPE_MARGIN))
+    # Canvas width is pinned to the packing canvas (832 px) so sparse diagrams
+    # don't produce a narrow, tightly-cropped render.  Height stays content-tight.
+    canvas_w = C4_LAYOUT_WIDTH
     canvas_h = int(math.ceil(bounds.max_bottom + C4_SHAPE_MARGIN))
 
     # Scale for display (packing is always at layout_width=832)
