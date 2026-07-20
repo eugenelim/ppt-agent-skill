@@ -2235,31 +2235,65 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
 _ARCH_SVC_RE = re.compile(
     r'^service\s+(\w+)\s*(?:\(([^)]*)\))?\s*\[([^\]]+)\](?:\s+in\s+(\w+))?', re.I
 )
+# Group declarations: "group id [(icon)] [Label] [in parent]"
 _ARCH_GRP_RE = re.compile(
-    r'^(?:group|junction)\s+(\w+)\s*(?:\([^)]*\))?\s*(?:\[([^\]]+)\])?', re.I
+    r'^group\s+(\w+)\s*(?:\([^)]*\))?\s*(?:\[([^\]]+)\])?(?:\s+in\s+(\w+))?', re.I
 )
+# Junction declarations: "junction id" — renders as invisible routing point
+_ARCH_JCT_RE = re.compile(r'^junction\s+(\w+)', re.I)
+# Edge syntax: "src[:side] (<-->|-->|<--|--) [side:]dst [: label]"
+# Operator order: <--> before <-- before -- to avoid prefix shadowing.
 _ARCH_EDGE_RE = re.compile(
-    r'^(\w+)(?::\w+)?\s*(?:-->|<-->|--)\s*(?:\w+:)?(\w+)(?::\w+)?(?:\s*:\s*(.*))?$'
+    r'^(\w+)(?::\w+)?\s*(<-->|-->|<--|--)\s*(?:\w+:)?(\w+)(?::\w+)?'
+    r'(?:\s*:\s*(.*))?$'
 )
 
 
 def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
-    """architecture-beta: zone containers with service nodes and edges."""
+    """architecture-beta: zone containers with service nodes and directional edges.
+
+    Supports:
+    - ``service id (icon) [Label] [in group]`` — service nodes with icons
+    - ``group id [(icon)] [Label] [in parent]`` — dashed group boundaries
+    - ``junction id`` — invisible routing-point nodes
+    - Indentation-based group membership (services indented under a group block)
+    - ``A:R --> L:B``, ``A <--> B`` (bidirectional), ``A <-- B`` (reverse)
+    """
     content_lines = _directive_content(src)
     nodes: dict[str, _Node] = {}
     groups: dict[str, _Group] = {}
     edges: list[_Edge] = []
+
+    # Indentation-based group tracking.
+    # Stack of (indent_level, group_id): when a line's indent drops to or
+    # below a stack entry's level, that entry's group is no longer active.
+    grp_stack: list[tuple[int, str]] = []
+
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
+        indent = len(raw) - len(raw.lstrip())
+
+        # Pop groups whose indent level is no longer the enclosing context.
+        while grp_stack and grp_stack[-1][0] >= indent:
+            grp_stack.pop()
+
         m = _ARCH_SVC_RE.match(line)
         if m:
             sid = m.group(1)
             icon_hint = (m.group(2) or "").lower().strip()
             lbl = m.group(3)
-            gin = m.group(4)
-            icon_name = _ARCH_ICON_MAP.get(icon_hint, "")
+            gin = m.group(4)  # explicit "in <group>"
+
+            # Indentation-based membership: if no explicit "in" and we are
+            # inside an active group block, assign to the innermost one.
+            if not gin and grp_stack:
+                gin = grp_stack[-1][1]
+
+            # Icon resolution: explicit map first, then try the hint itself as
+            # a file name (pipeline.svg, queue.svg, etc. are present in icons/).
+            icon_name = _ARCH_ICON_MAP.get(icon_hint) or icon_hint or ""
             nodes[sid] = _Node(id=sid, label=lbl, shape="rect",
                                group=gin if gin else None, icon=icon_name)
             if gin:
@@ -2267,21 +2301,66 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
                 if sid not in groups[gin].members:
                     groups[gin].members.append(sid)
             continue
+
+        m = _ARCH_JCT_RE.match(line)
+        if m:
+            # Junction = invisible routing point (zero-size dummy node).
+            jid = m.group(1)
+            nodes[jid] = _Node(id=jid, label="", shape="rect", is_dummy=True)
+            continue
+
         m = _ARCH_GRP_RE.match(line)
         if m:
-            gid, glbl = m.group(1), m.group(2) or m.group(1)
+            gid = m.group(1)
+            glbl = m.group(2) or m.group(1)
+            gin_grp = m.group(3)  # "in <parent_group>"
             if gid not in groups:
-                groups[gid] = _Group(id=gid, label=glbl, members=[])
+                grp = _Group(id=gid, label=glbl, members=[])
+                if gin_grp:
+                    grp.parent_group = gin_grp
+                groups[gid] = grp
             else:
                 groups[gid].label = glbl
+                if gin_grp:
+                    groups[gid].parent_group = gin_grp
+            # Push onto indent stack so indented services below belong to this group.
+            grp_stack.append((indent, gid))
             continue
+
         m = _ARCH_EDGE_RE.match(line)
         if m:
-            edges.append(_Edge(src=m.group(1), dst=m.group(2),
-                               label=(m.group(3) or "").strip(), style="solid", arrow=True))
+            src_id = m.group(1)
+            op = m.group(2)
+            dst_id = m.group(3)
+            lbl = (m.group(4) or "").strip()
+            if op == "<-->":
+                # Bidirectional: emit forward + reverse edges so both ends get arrowheads.
+                edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
+                                   style="solid", arrow=True))
+                edges.append(_Edge(src=dst_id, dst=src_id, label="",
+                                   style="solid", arrow=True))
+            elif op == "<--":
+                # Reverse arrow: swap src/dst so layout flows correctly.
+                edges.append(_Edge(src=dst_id, dst=src_id, label=lbl,
+                                   style="solid", arrow=True))
+            else:
+                # --> (directed) or -- (undirected)
+                edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
+                                   style="solid", arrow=(op == "-->")))
+
     if not nodes:
         raise ValueError("No services found in architecture-beta.")
-    return _graph_from_content_nodes(nodes, edges, groups, width_hint)
+
+    # Architecture diagrams flow left-to-right by convention (services as columns).
+    _break_cycles(nodes, edges)
+    _assign_ranks(nodes, edges)
+    _minimize_crossings(nodes, edges)
+    canvas_w, canvas_h = _assign_coordinates(nodes, "LR")
+    zoom = 1.0
+    if width_hint and canvas_w > 0 and canvas_w > width_hint:
+        zoom = width_hint / canvas_w
+    return _render_graph_fragment(nodes, edges, groups, canvas_w, canvas_h,
+                                  direction="LR", zoom=zoom)
 
 
 # ── T3: C4 diagrams ──────────────────────────────────────────────────────────
