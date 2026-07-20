@@ -1984,19 +1984,51 @@ def _layout_block(src: str, direction: str, width_hint: int) -> str:
     return "\n".join(parts)
 
 
-# ── T3: packet-beta ───────────────────────────────────────────────────────────
+# ── T3: packet-beta ─────────────────────────────────────────────────
 
+# Absolute range: "start-end: label" or "start: label"
 _PKT_FIELD_RE = re.compile(r'^(\d+)(?:-(\d+))?\s*:\s*(.+)$')
+# Relative width: "+N: label"  — N bits wide starting from current cursor position
+_PKT_REL_RE = re.compile(r'^\+(\d+)\s*:\s*(.+)$')
+_PKT_BITS_PER_ROW = 32   # standard protocol row width; mmdc wraps here
+_PKT_RULER_H = 20        # height of the per-row bit-number ruler strip
+_PKT_CELL_H = 48         # height of each field row
+_PKT_ROW_GAP = 12        # vertical gap between successive rows
 
 
 def _layout_packet(src: str, direction: str, width_hint: int) -> str:
-    """packet-beta: fixed-width bit-field cells."""
+    """packet-beta: proportional bit-field cells, 32-bit row wrapping, bit ruler.
+
+    Supports absolute ranges ("start-end: label", "start: label") and relative
+    widths ("+N: label" — N bits wide from the current cursor position).
+    Fields that span a 32-bit row boundary are rendered in both affected rows,
+    clipped to the visible portion of each row.  A ruler strip with tick marks
+    at every 8 bits sits above each field row.
+    """
     content_lines = _directive_content(src)
     fields: list[dict] = []
+    _next_bit = 0  # cursor for relative +N syntax
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
+        # Relative +N syntax (must be tested before absolute to avoid false matches)
+        m = _PKT_REL_RE.match(line)
+        if m:
+            n_bits = int(m.group(1))
+            if n_bits <= 0:
+                raise ValueError(
+                    f"packet-beta: relative width +{n_bits} must be > 0."
+                )
+            start = _next_bit
+            end = _next_bit + n_bits - 1
+            fields.append({
+                "start": start, "end": end,
+                "bits": n_bits, "label": m.group(2).strip().strip('"'),
+            })
+            _next_bit = end + 1
+            continue
+        # Absolute range: "start-end: label" or "start: label"
         m = _PKT_FIELD_RE.match(line)
         if m:
             start = int(m.group(1))
@@ -2004,47 +2036,122 @@ def _layout_packet(src: str, direction: str, width_hint: int) -> str:
             if start < 0 or end < start:
                 raise ValueError(
                     f"packet-beta: invalid bit range {start}-{end} "
-                    f"(start must be ≥ 0, end must be ≥ start)."
+                    f"(start must be \u2265 0, end must be \u2265 start)."
                 )
-            fields.append({"start": start, "end": end,
-                           "bits": end - start + 1, "label": m.group(3).strip().strip('"')})
+            fields.append({
+                "start": start, "end": end,
+                "bits": end - start + 1, "label": m.group(3).strip().strip('"'),
+            })
+            _next_bit = end + 1
     if not fields:
         raise ValueError("No fields found in packet-beta.")
 
-    total_bits = max(f["end"] for f in fields) + 1
-    PAD_H, PAD_V, CELL_H = 40, 40, 56
+    max_bit = max(f["end"] for f in fields)
+    BITS_PER_ROW = _PKT_BITS_PER_ROW
+    n_rows = math.ceil((max_bit + 1) / BITS_PER_ROW)
+
+    PAD_H, PAD_V = 40, 24
+    RULER_H = _PKT_RULER_H
+    CELL_H = _PKT_CELL_H
+    ROW_GAP = _PKT_ROW_GAP
     canvas_w = width_hint or 640
     available_w = canvas_w - PAD_H * 2
-    bit_w = available_w / max(total_bits, 1)
-    canvas_h = PAD_V * 2 + CELL_H + 20
+    # One bit unit is always 1/32 of available_w so proportions are consistent
+    bit_unit = available_w / BITS_PER_ROW
+
+    row_pitch = RULER_H + CELL_H + ROW_GAP
+    canvas_h = PAD_V * 2 + n_rows * row_pitch - ROW_GAP
+
+    _bc = "var(--node-border,var(--card-border,#DAD7CE))"
+    _lc = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+    _fc = "var(--node-fg,var(--text-primary,#191A17))"
+    _bg = (
+        "linear-gradient(180deg,"
+        "var(--node-bg-from,var(--card-bg-from,#ffffff)),"
+        "var(--node-bg-to,var(--card-bg-to,#F7F6F2)))"
+    )
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
 
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
-    for fld in fields:
-        fx = PAD_H + int(fld["start"] * bit_w)
-        fw = max(1, int(fld["bits"] * bit_w) - 1)
-        _fld_id = f'{fld["start"]}-{fld["end"]}' if fld["end"] != fld["start"] else str(fld["start"])
+
+    for row_idx in range(n_rows):
+        row_start_bit = row_idx * BITS_PER_ROW
+        row_end_bit = row_start_bit + BITS_PER_ROW - 1
+        row_y = PAD_V + row_idx * row_pitch
+
+        # ── Bit ruler SVG ────────────────────────────────────
+        # Ticks at every 8 bits (0, 8, 16, 24) plus the last bit of the row
+        # (31, 63, \u2026).  SVG text labels are placed above the tick lines.
+        tick_offsets: list[int] = list(range(0, BITS_PER_ROW, 8)) + [BITS_PER_ROW - 1]
+        seen: set[int] = set()
+        ruler_ticks: list[str] = []
+        for tick_off in tick_offsets:
+            if tick_off in seen:
+                continue
+            seen.add(tick_off)
+            tx = int(tick_off * bit_unit)
+            ruler_ticks.append(
+                f'<line x1="{tx}" y1="{RULER_H - 6}" x2="{tx}" y2="{RULER_H}" '
+                f'stroke="{_bc}" stroke-width="1"/>'
+                f'<text x="{tx}" y="{RULER_H - 8}" text-anchor="middle" '
+                f'font-size="9" fill="{_lc}" '
+                f'font-family="var(--label-font,-apple-system,Inter,sans-serif)">'
+                f'{row_start_bit + tick_off}</text>'
+            )
         parts.append(
-            f'<div class="node node-rect" data-field="{_fld_id}" style="position:absolute;'
-            f'left:{fx}px;top:{PAD_V}px;width:{fw}px;height:{CELL_H}px;'
-            f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
-            f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-            f'box-sizing:border-box;'
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-            f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));"><span class="node-label" style="'
-            f'font-size:11px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));text-align:center;">'
-            f'{_h(fld["label"])}</span>'
-            f'<span style="font-size:9px;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-            f'{fld["start"]}{"–" + str(fld["end"]) if fld["end"] != fld["start"] else ""}'
-            f'</span></div>'
+            f'<svg data-pkt-ruler="{row_idx}" '
+            f'style="position:absolute;left:{PAD_H}px;top:{row_y}px;'
+            f'width:{available_w}px;height:{RULER_H}px;'
+            f'overflow:visible;pointer-events:none;">'
+            + "".join(ruler_ticks)
+            + "</svg>"
         )
+
+        # ── Field cells ───────────────────────────────────────────
+        # Include every field whose bit range overlaps this row's bit band.
+        cell_y = row_y + RULER_H
+        row_fields = [
+            f for f in fields
+            if f["start"] <= row_end_bit and f["end"] >= row_start_bit
+        ]
+        for fld in row_fields:
+            # Clip visible portion to this row's bit band
+            vis_start = max(fld["start"], row_start_bit)
+            vis_end = min(fld["end"], row_end_bit)
+            local_start = vis_start - row_start_bit
+            local_bits = vis_end - vis_start + 1
+            fx = PAD_H + int(local_start * bit_unit)
+            fw = max(2, int(local_bits * bit_unit) - 1)
+            _fld_id = (
+                f'{fld["start"]}-{fld["end"]}' if fld["end"] != fld["start"]
+                else str(fld["start"])
+            )
+            bit_range_lbl = (
+                f'{fld["start"]}\u2013{fld["end"]}' if fld["end"] != fld["start"]
+                else str(fld["start"])
+            )
+            parts.append(
+                f'<div class="node node-rect" data-field="{_fld_id}" style="position:absolute;'
+                f'left:{fx}px;top:{cell_y}px;width:{fw}px;height:{CELL_H}px;'
+                f'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+                f'border:1px solid {_bc};box-sizing:border-box;background:{_bg};">'
+                f'<span class="node-label" style="'
+                f'font-size:11px;font-weight:700;color:{_fc};'
+                f'font-family:{_lf};text-align:center;'
+                f'overflow:hidden;word-break:break-word;">'
+                f'{_h(fld["label"])}</span>'
+                f'<span style="font-size:9px;color:{_lc};font-family:{_lf};">'
+                f'{bit_range_lbl}</span>'
+                f'</div>'
+            )
+
     parts.append('</div>')
     return "\n".join(parts)
+
 
 
 # ── T3: kanban ────────────────────────────────────────────────────────────────
