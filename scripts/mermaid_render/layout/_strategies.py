@@ -763,7 +763,15 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
 # ── T3: gantt ─────────────────────────────────────────────────────────────────
 
 def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
-    """gantt: sections as swim-lanes, tasks as horizontal bars."""
+    """gantt: sections as swim-lanes, tasks as horizontal bars.
+
+    Renders:
+    - Date axis at top with tick labels and full-height vertical grid lines
+    - Section headers with border-bottom dividers
+    - Task bars colour-coded: crit=red, done=grey, active=blue, default=green
+    - Milestone tasks as a rotated-45deg diamond at their start date
+    - ``after id1 id2`` resolved to max(end(id1), end(id2)) for multi-id deps
+    """
     content_lines = _directive_content(src)
     title = ""
     sections: list[dict] = [{"name": "Tasks", "tasks": []}]
@@ -796,6 +804,7 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
                     else:
                         task_dur_str = _p
                 elif _pl.startswith("after "):
+                    # Preserve entire "after id1 id2 ..." string for multi-id resolution
                     task_start_str = _pl
                 elif re.match(r'^\d+[dwm]$', _pl):
                     task_dur_str = _p
@@ -803,7 +812,10 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
                     task_id = _pl
             sections[-1]["tasks"].append({
                 "name": name.strip(),
-                "crit": "crit" in task_flags, "done": "done" in task_flags,
+                "crit": "crit" in task_flags,
+                "done": "done" in task_flags,
+                "active": "active" in task_flags,
+                "milestone": "milestone" in task_flags,
                 "id": task_id,
                 "start_str": task_start_str,
                 "dur_str": task_dur_str,
@@ -841,8 +853,10 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         ss = task["start_str"]
         ds = task["dur_str"]
         if ss.startswith("after "):
-            ref_id = ss[6:].strip()
-            t_start = id_end_date.get(ref_id) or _date(2024, 1, 1)
+            # Multi-id: "after id1 id2 ..." -> max(end(id1), end(id2), ...)
+            ref_ids = ss[6:].strip().split()
+            end_dates = [id_end_date[rid] for rid in ref_ids if rid in id_end_date]
+            t_start = max(end_dates) if end_dates else _date(2024, 1, 1)
         else:
             t_start = _parse_date(ss) or _date(2024, 1, 1)
         dur = _parse_dur(ds)
@@ -886,13 +900,14 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         )
         y += 22
 
-    # Date axis (top)
+    # Date axis (top) -- tick labels and small indicator marks
     _tick_count = min(6, total_days)
     _tick_days = max(1, total_days // _tick_count)
     parts.append(
         f'<div style="position:absolute;left:{bar_x}px;top:{y}px;'
         f'width:{bar_w_total}px;height:{AXIS_H}px;overflow:hidden;">'
     )
+    _tick_xs: list[int] = []
     for _ti in range(_tick_count + 1):
         _td_off = _ti * _tick_days
         if _td_off > total_days:
@@ -900,6 +915,7 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         _tx = int(_td_off / total_days * bar_w_total)
         _tick_d = earliest + _td(days=_td_off)
         _label = f"{_tick_d.month}/{_tick_d.day}"
+        _tick_xs.append(_tx)
         parts.append(
             f'<span style="position:absolute;left:{_tx}px;top:2px;'
             f'font-size:9px;color:{_lc};font-family:{_lf};white-space:nowrap;">'
@@ -915,6 +931,21 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
     )
     y += AXIS_H
 
+    # Full-height vertical grid lines rendered behind task bars
+    _grid_y_top = y
+    _grid_h = canvas_h - _grid_y_top - PAD_V
+    if _grid_h > 0 and _tick_xs:
+        parts.append(
+            f'<svg style="position:absolute;left:{bar_x}px;top:{_grid_y_top}px;'
+            f'width:{bar_w_total}px;height:{_grid_h}px;overflow:visible;pointer-events:none;">'
+        )
+        for _tx in _tick_xs:
+            parts.append(
+                f'<line x1="{_tx}" y1="0" x2="{_tx}" y2="{_grid_h}" '
+                f'stroke="{_ec}" stroke-width="1" stroke-dasharray="3 4" opacity="0.45"/>'
+            )
+        parts.append('</svg>')
+
     for sec in sections:
         parts.append(
             f'<div style="position:absolute;left:{PAD_H}px;top:{y}px;'
@@ -927,10 +958,12 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         )
         y += SEC_H + 4
         for task in sec["tasks"]:
+            # Bar colour: crit=red, done=grey, active=blue, default=green
             bar_color = (
-                "var(--accent-4,rgba(31,58,95,0.7))" if task["crit"]
-                else "var(--node-border,rgba(100,116,139,0.25))" if task["done"]
-                else "rgba(53,148,103,0.25)"
+                "rgba(220,38,38,0.75)" if task["crit"]
+                else "var(--node-border,rgba(100,116,139,0.35))" if task["done"]
+                else "rgba(59,130,246,0.55)" if task.get("active")
+                else "rgba(53,148,103,0.35)"
             )
             t_off = (task["t_start"] - earliest).days
             t_len = (task["t_end"] - task["t_start"]).days
@@ -946,16 +979,32 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
                 f'{_h(task["name"])}</span></div>'
             )
             _task_id_val = task["id"] if task["id"] else task["name"]
-            parts.append(
-                f'<div data-task-id="{_h(_task_id_val)}" style="position:absolute;left:{bx}px;top:{y + 1}px;'
-                f'width:{bw}px;height:{BAR_H - 2}px;background:{bar_color};'
-                f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-                f'border-radius:3px;box-sizing:border-box;"></div>'
-            )
+            if task.get("milestone"):
+                # Milestone: a square rotated 45deg (diamond) pinned at the start date
+                _ms = BAR_H - 4
+                _ms_half = _ms // 2
+                _ms_cx = bx + _ms_half
+                _ms_cy = y + BAR_H // 2
+                parts.append(
+                    f'<div data-task-id="{_h(_task_id_val)}" data-milestone="1" '
+                    f'style="position:absolute;'
+                    f'left:{_ms_cx - _ms_half}px;top:{_ms_cy - _ms_half}px;'
+                    f'width:{_ms}px;height:{_ms}px;'
+                    f'background:{bar_color};'
+                    f'border:1.5px solid var(--node-border,var(--card-border,#DAD7CE));'
+                    f'box-sizing:border-box;'
+                    f'transform:rotate(45deg);"></div>'
+                )
+            else:
+                parts.append(
+                    f'<div data-task-id="{_h(_task_id_val)}" style="position:absolute;left:{bx}px;top:{y + 1}px;'
+                    f'width:{bw}px;height:{BAR_H - 2}px;background:{bar_color};'
+                    f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+                    f'border-radius:3px;box-sizing:border-box;"></div>'
+                )
             y += BAR_H + ROW_GAP
     parts.append('</div>')
     return "\n".join(parts)
-
 
 # ── T3: timeline ──────────────────────────────────────────────────────────────
 
