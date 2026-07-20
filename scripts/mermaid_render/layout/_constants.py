@@ -163,7 +163,8 @@ _NODE_PAD_V = 12   # vertical padding per side (top and bottom)
 _TITLE_LINE_H = 18  # title text line height (~14px font × 1.3)
 _SUB_LINE_H = 16    # sub-label line height (~12px font × 1.3)
 _ICON_H = 24        # icon SVG height in card header
-_NODE_H_TECH = 17   # separator + tech text line (7px margin + 7px padding + ~12px text ÷ 2)
+_NODE_H_TECH = 17   # separator + first tech line (7px margin + 7px padding + ~12px text ÷ 2)
+_MEMBER_LINE_H = 16  # height of each additional member/attribute row after the first
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 _TERMINAL_NODE_SIZE = 32  # px square for circle nodes with symbol labels (UML start/end states)
@@ -197,6 +198,7 @@ class _Node:
     bary: float = 0.0
     icon: str = ""                # icon name from mermaid_render/icons/ (without .svg)
     css_class: str = ""           # semantic class, e.g. "external"
+    extra_css: str = ""           # inline CSS overrides (from `style NodeId fill:...`)
 
 
 @dataclass
@@ -211,6 +213,7 @@ class _Edge:
     cardinality_dst: Optional[str] = None
     orig_src: Optional[str] = None  # original src for dummy-chained edges
     orig_dst: Optional[str] = None  # original dst for dummy-chained edges
+    extra_css: str = ""           # inline CSS overrides (from `linkStyle N stroke:...`)
 
 
 @dataclass
@@ -392,7 +395,13 @@ def _node_render_h(n: "_Node") -> int:
     sub_h = len(sub_lines) * _SUB_LINE_H
 
     header_h = max(_ICON_H, title_h + sub_h) if has_icon else (title_h + sub_h)
-    tech_h = _NODE_H_TECH if "|" in n.label else 0
+    tech_h = 0
+    if "|" in n.label:
+        _tech_lines = n.label.split("|", 1)[1].split("\n")
+        _n_member = sum(1 for ln in _tech_lines if ln.strip() and ln.strip() != "---")
+        _n_divider = sum(1 for ln in _tech_lines if ln.strip() == "---")
+        _n_lines = max(1, _n_member)
+        tech_h = _NODE_H_TECH + (_n_lines - 1) * _MEMBER_LINE_H + _n_divider * 7
 
     return max(NODE_H, 2 * _NODE_PAD_V + header_h + tech_h)
 

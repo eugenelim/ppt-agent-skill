@@ -82,9 +82,9 @@ _NODE_CSS = {
     "trapezoid": "clip-path:polygon(10% 0%,90% 0%,100% 100%,0% 100%); border-radius:4px;",
     "trapezoid-alt": "clip-path:polygon(0% 0%,100% 0%,90% 100%,10% 100%); border-radius:4px;",
     "doublecircle": "border-radius:50%; position:relative;",
-    "cylinder": "border-radius:8px 8px 2px 2px;",
+    "cylinder": "",  # SVG overlay draws the silo shape; no CSS border-radius needed
     "circle": "border-radius:50%;",
-    "flag": "border-radius:0 8px 8px 0;",
+    "flag": "clip-path:polygon(0% 0%,88% 0%,100% 50%,88% 100%,0% 100%); border-radius:0;",
 }
 
 
@@ -170,7 +170,7 @@ def _render_graph_fragment(
             f'<div class="diagram-group" style="'
             f'position:absolute; left:{gx}px; top:{gy}px; '
             f'width:{gw}px; height:{gh}px; '
-            f'border:1px dashed {_accent}; '
+            f'border:1.5px dashed {_accent}; '
             f'background:{_tint}; '
             f'border-radius:var(--group-radius,12px); '
             f'box-sizing:border-box; overflow:visible;">'
@@ -251,19 +251,50 @@ def _render_graph_fragment(
                 f'{sub_html}</span>'
             )
 
-        # tech_span: full-width separator line (expanded card body section)
+        # tech_span: full-width separator line (expanded card body section).
+        # Multiple \n-separated lines render as individual member/attribute rows.
         tech_span = ""
         if tech_label:
-            tech_span = (
-                f'<span class="node-tech" style="'
-                f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
-                f'color:{text_color}; opacity:0.6; '
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
-                f'line-height:1.3; margin-top:7px; padding-top:7px; '
-                f'border-top:1px solid var(--node-border,var(--card-border,#DAD7CE)); '
-                f'text-align:left; width:100%;">'
-                f'{_h(tech_label)}</span>'
-            )
+            _trows = [r for r in tech_label.split("\n") if r.strip()]
+            if len(_trows) > 1:
+                _row_parts: list[str] = []
+                for r in _trows:
+                    if r.strip() == "---":
+                        _row_parts.append(
+                            f'<div style="height:1px; background:var(--node-border,'
+                            f'var(--card-border,#DAD7CE)); margin:3px -12px 3px -12px;"></div>'
+                        )
+                    else:
+                        _row_parts.append(
+                            f'<span class="node-member" style="display:block; '
+                            f'font-size:var(--node-fs-tech,11px); font-weight:400; '
+                            f'color:{text_color}; opacity:0.75; '
+                            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                            f'line-height:1.5; padding:0; white-space:nowrap; overflow:hidden; '
+                            f'text-overflow:ellipsis;">{_h(r)}</span>'
+                        )
+                _rows_html = "".join(_row_parts)
+                tech_span = (
+                    f'<div class="node-tech" style="'
+                    f'display:block; font-size:var(--node-fs-tech,11px); font-weight:400; '
+                    f'color:{text_color}; '
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                    f'line-height:1.5; margin-top:7px; padding-top:7px; '
+                    f'border-top:1px solid var(--node-border,var(--card-border,#DAD7CE)); '
+                    f'text-align:left; width:100%;">'
+                    f'{_rows_html}</div>'
+                )
+            else:
+                tech_span = (
+                    f'<span class="node-tech" style="'
+                    f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
+                    f'color:{text_color}; opacity:0.6; '
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                    f'line-height:1.3; margin-top:7px; padding-top:7px; '
+                    f'border-top:1px solid var(--node-border,var(--card-border,#DAD7CE)); '
+                    f'text-align:left; width:100%;">'
+                    f'{_h(tech_label)}</span>'
+                )
 
         if icon_svg:
             # Icon-left, text-right layout for header; tech body below full-width separator.
@@ -296,6 +327,21 @@ def _render_graph_fragment(
 
         # Accent appears as a 2px colored top border; other borders stay neutral
         extra_cls = f" node-{n.css_class}" if n.css_class else ""
+        # Convert Mermaid-style `fill:#f00,stroke:#333,color:#fff` to safe inline CSS.
+        # Only allow safe CSS color/value tokens to prevent injection.
+        _SAFE_V = re.compile(r'^[\w#()\-.,% ]+$')
+        _safe_props: list[str] = []
+        if n.extra_css:
+            _PROP_MAP = {"fill": "background", "stroke": "border-color", "color": "color"}
+            for _kv in n.extra_css.split(","):
+                _kv = _kv.strip()
+                if ":" in _kv:
+                    _k, _v = _kv.split(":", 1)
+                    _k, _v = _k.strip(), _v.strip()
+                    if _SAFE_V.match(_v):
+                        _css_k = _PROP_MAP.get(_k, _k)
+                        _safe_props.append(f"{_css_k}:{_v}")
+        _extra_css = (" " + "; ".join(_safe_props) + ";") if _safe_props else ""
         if _is_terminal_circle(n):
             # UML initial/final state: small fixed-size circle, no padding, centered symbol
             parts.append(
@@ -324,7 +370,7 @@ def _render_graph_fragment(
             # Use an SVG polygon overlay instead that traces the actual diamond outline.
             _diamond_border_svg = ""
             if is_external:
-                _border_css = f'border:1px dashed {border_var};'
+                _border_css = f'border:1.5px dashed {border_var};'
             elif n.shape == "diamond":
                 _border_css = ""  # SVG overlay handles the border (see below)
                 _hw = NODE_W // 2
@@ -337,7 +383,7 @@ def _render_graph_fragment(
             elif _uses_clip:
                 _border_css = f'box-shadow:inset 0 0 0 2px {accent_color};'
             else:
-                _border_css = f'border:1px solid {border_var}; border-top:3px solid {accent_color};'
+                _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent_color};'
 
             if n.shape == "doublecircle":
                 # Outer circle + inner concentric circle (5px inset)
@@ -376,10 +422,48 @@ def _render_graph_fragment(
                     f'</svg>'
                     f'</div>'
                 )
+            elif n.shape == "cylinder":
+                # Proper silo/drum shape: SVG overlay draws two elliptical caps
+                # and side walls; the div provides background fill and label text.
+                _cyl_ry = min(10, node_h // 5)
+                _cyl_rx = NODE_W // 2 - 2
+                _cyl_cx = NODE_W // 2
+                _bg = (f'linear-gradient({_depth_wash},{_depth_wash}),'
+                       f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                       f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)))')
+                _cyl_svg = (
+                    f'<svg style="position:absolute;inset:0;width:{NODE_W}px;height:{node_h}px;'
+                    f'pointer-events:none;overflow:visible;">'
+                    # Side walls
+                    f'<line x1="2" y1="{_cyl_ry}" x2="2" y2="{node_h - _cyl_ry}"'
+                    f' stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'<line x1="{NODE_W - 2}" y1="{_cyl_ry}" x2="{NODE_W - 2}" y2="{node_h - _cyl_ry}"'
+                    f' stroke="{accent_color}" stroke-width="1.5"/>'
+                    # Bottom cap arc (front half only)
+                    f'<path d="M 2 {node_h - _cyl_ry} A {_cyl_rx} {_cyl_ry} 0 0 0 {NODE_W - 2} {node_h - _cyl_ry}"'
+                    f' fill="none" stroke="{accent_color}" stroke-width="1.5"/>'
+                    # Top cap ellipse (filled to cover rectangular div edge)
+                    f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
+                    f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'</svg>'
+                )
+                parts.append(
+                    f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                    f'width:{NODE_W}px; min-height:{node_h}px; '
+                    f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
+                    f'box-sizing:border-box; overflow:visible; '
+                    f'border:none; '
+                    f'background:{_bg}; '
+                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
+                    f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+                    f'text-align:left;">'
+                    f'{inner}{_cyl_svg}</div>'
+                )
             else:
                 # Diamond/hexagon use clip-path: center text so it sits in the
                 # widest part of the polygon and doesn't touch the clipped edges.
-                _center_shapes = n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt")
+                _center_shapes = n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag")
                 _align = "center" if _center_shapes else "flex-start"
                 _text_align = "center" if _center_shapes else "left"
                 parts.append(
@@ -391,7 +475,7 @@ def _render_graph_fragment(
                     f'box-sizing:border-box; overflow:hidden; '
                     f'{_border_css} '
                     f'{shape_css} '
-                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
+                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css} '
                     f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
                     f'display:flex; flex-direction:column; align-items:{_align}; justify-content:center; '
                     f'text-align:{_text_align};">'
@@ -476,6 +560,22 @@ def _render_graph_fragment(
         is_dashed = style == "dotted" or style.endswith("-dotted")
         dash = ' stroke-dasharray="6 4"' if is_dashed else ""
         stroke_w = "2" if style == "thick" else "1.5"
+        # Apply linkStyle overrides: extract stroke color and stroke-width.
+        # Values are sanitized to safe CSS color/length tokens only.
+        _ecss = spec.get("extra_css", "")
+        if _ecss:
+            import re as _re
+            _SAFE_CSS_VAL = re.compile(r'^[\w#()\-.,% ]+$')
+            _sc = _re.search(r'stroke:\s*([^,;]+)', _ecss)
+            _sw = _re.search(r'stroke-width:\s*([^,;]+)', _ecss)
+            if _sc:
+                _val = _sc.group(1).strip()
+                if _SAFE_CSS_VAL.match(_val):
+                    stroke_color = _val
+            if _sw:
+                _val = _sw.group(1).strip().rstrip("px")
+                if _re.match(r'^\d+(\.\d+)?$', _val):
+                    stroke_w = _val
         mid = spec.get("marker_id")
         marker_attr = f' marker-end="url(#{mid})"' if mid else ""
         parts.append(
@@ -973,6 +1073,19 @@ def _compute_group_bboxes(
         x1 = float(max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X)
         y1 = float(max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT)
         bboxes[gid] = [x0, y0, x1, y1]
+
+    # Push parent bboxes up so nested subgraph labels don't overprint each other.
+    # Each parent needs its top edge at least GROUP_PAD_Y_TOP above each child's top.
+    _push_changed = True
+    while _push_changed:
+        _push_changed = False
+        for _gid, _grp in groups.items():
+            if _grp.parent_group and _grp.parent_group in bboxes and _gid in bboxes:
+                _needed = bboxes[_gid][1] - GROUP_PAD_Y_TOP
+                _pb = bboxes[_grp.parent_group]
+                if _pb[1] > _needed:
+                    _pb[1] = _needed
+                    _push_changed = True
 
     if not bboxes:
         return bboxes

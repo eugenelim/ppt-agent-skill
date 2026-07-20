@@ -131,6 +131,7 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
     edges: list[_Edge] = []
     groups: dict[str, _Group] = {}
     stack: list[str] = []  # subgraph id stack
+    _pending_link_styles: list[tuple[int, str]] = []
 
     def _ensure(nid: str, label: str, shape: str, css_class: str = "") -> None:
         if nid not in nodes:
@@ -150,7 +151,33 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
-        if line.startswith(("style ", "classDef ", "class ", "linkStyle ", "click ")):
+        if line.startswith(("classDef ", "click ")):
+            continue
+        if line.startswith("style "):
+            # `style NodeId fill:#f00,stroke:#333,color:#fff`
+            _sm = re.match(r'^style\s+(\S+)\s+(.*)', line)
+            if _sm:
+                _snid, _scss = _sm.group(1), _sm.group(2).strip()
+                if _snid in nodes:
+                    nodes[_snid].extra_css = _scss
+                else:
+                    # Node may not exist yet; store for post-processing below
+                    nodes.setdefault(_snid, _Node(id=_snid, label=_snid))
+                    nodes[_snid].extra_css = _scss
+            continue
+        if line.startswith("linkStyle "):
+            # `linkStyle <index> stroke:#f00,stroke-width:2px`
+            _lm = re.match(r'^linkStyle\s+(\d+)\s+(.*)', line)
+            if _lm:
+                _lidx, _lcss = int(_lm.group(1)), _lm.group(2).strip()
+                if _lidx < len(edges):
+                    edges[_lidx].extra_css = _lcss
+                else:
+                    # Edge not yet parsed; defer by tagging a placeholder
+                    # (linkStyle appears after the edges in mermaid source)
+                    _pending_link_styles.append((_lidx, _lcss))
+            continue
+        if line.startswith("class ") and not line.startswith("classDiagram"):
             continue
         # stateDiagram-v2: [*] is the initial/terminal state marker; map to a
         # renderable node id. Inside a composite state (stack non-empty), use a
@@ -217,6 +244,11 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
 
         # Try to match as edge chain; a line can chain: A --> B --> C
         _parse_line(line, edges, _ensure)
+
+    # Apply deferred linkStyle overrides (linkStyle appears after edges in source)
+    for _lidx, _lcss in _pending_link_styles:
+        if _lidx < len(edges):
+            edges[_lidx].extra_css = _lcss
 
     # Post-process: all _sm_start_ / _sm_end_ nodes (global and scoped) get circle shape
     for _sm_id in list(nodes.keys()):

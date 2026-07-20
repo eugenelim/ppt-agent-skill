@@ -228,7 +228,7 @@ _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
 _SEQ_ACTIVATE_RE = re.compile(r'^(activate|deactivate)\s+(\S+)', re.I)
 _SEQ_NOTE_RE = re.compile(r'^[Nn]ote\s+(?:over|left\s+of|right\s+of)\s+([^:]+):\s*(.+)', re.I)
-_SEQ_ELSE_RE = re.compile(r'^else\s*(.*)', re.I)
+_SEQ_ELSE_RE = re.compile(r'^(else|and)\s*(.*)', re.I)
 
 
 def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
@@ -268,15 +268,23 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             continue
         m = _SEQ_MSG_RE.match(line)
         if m:
-            sp, arrow, dp, lbl = m.group(1), m.group(2), m.group(3), m.group(4)
+            sp_raw, arrow, dp_raw, lbl = m.group(1), m.group(2), m.group(3), m.group(4)
+            # Activation shorthand: ->>+Dest activates Dest; -->>-Dest deactivates src
+            dp_prefix = dp_raw[0] if dp_raw and dp_raw[0] in ('+', '-') else ''
+            dp = dp_raw[1:] if dp_prefix else dp_raw
+            sp = sp_raw.lstrip('+')
             _ensure_p(sp); _ensure_p(dp)
             items.append({"type": "msg", "src": sp, "dst": dp,
                           "label": lbl.strip(), "dotted": arrow.startswith("--")})
+            if dp_prefix == '+':
+                items.append({"type": "activate", "pid": dp})
+            elif dp_prefix == '-':
+                items.append({"type": "deactivate", "pid": sp})
             continue
         if block_depth > 0:
             me = _SEQ_ELSE_RE.match(line)
             if me:
-                items.append({"type": "else", "label": me.group(1).strip()})
+                items.append({"type": "else", "kw": me.group(1).lower(), "label": me.group(2).strip()})
                 continue
         m = _SEQ_BLOCK_RE.match(line)
         if m:
@@ -285,9 +293,26 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             continue
         if _SEQ_END_RE.match(line) and block_depth > 0:
             block_depth -= 1
+            items.append({"type": "block_end"})
 
     if not participants:
         raise ValueError("No participants found in sequenceDiagram.")
+
+    # Pre-compute span (row count) for each block so alt/loop/par boxes cover
+    # their full height rather than collapsing to a single-row band.
+    _bstack: list[int] = []
+    _row_types = {"msg", "block", "note", "else"}
+    for _bi, _bit in enumerate(items):
+        if _bit["type"] == "block":
+            _bstack.append(_bi)
+        elif _bit["type"] == "block_end" and _bstack:
+            _si = _bstack.pop()
+            items[_si]["span"] = sum(
+                1 for _ji in range(_si, _bi) if items[_ji]["type"] in _row_types
+            )
+    for _bit in items:
+        if _bit["type"] == "block":
+            _bit.setdefault("span", 1)
 
     COL_W, COL_GAP, PAD_H, PAD_V = 160, 24, 40, 24
     HDR_H, ROW_H = 48, 40
@@ -299,7 +324,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         canvas_w = width_hint
     col_w = min(COL_W, max(40, col_pitch - 8))  # header scales with pitch; min 8px gap
     n_rows = sum(1 for it in items if it["type"] in ("msg", "block", "note", "else"))
-    canvas_h = PAD_V * 2 + HDR_H + n_rows * ROW_H + 32
+    canvas_h = PAD_V * 2 + HDR_H * 2 + n_rows * ROW_H + 32  # extra HDR_H for bottom boxes
 
     # Pre-compute activation spans: [(pid, start_row, end_row)]
     _act_stacks: dict[str, list[int]] = {}
@@ -326,19 +351,34 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
+    _seq_box_css = (
+        f'display:flex;align-items:center;justify-content:center;'
+        f'border:1.5px solid var(--node-border,var(--card-border,#DAD7CE));'
+        f'border-radius:var(--node-radius,8px);box-sizing:border-box;overflow:hidden;'
+        f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+        f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+    )
+    _seq_label_css = (
+        f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
+        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+        f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+    )
     for i, pid in enumerate(participants):
         lx = PAD_H + i * col_pitch + (col_pitch - col_w) // 2  # centered in pitch slot
         lbl = _h(p_label.get(pid, pid))
+        # Top participant box
         parts.append(
-            f'<div class="node node-rect" data-node-id="{_h(pid)}" style="position:absolute;left:{lx}px;top:{PAD_V}px;'
-            f'width:{col_w}px;height:{HDR_H - 8}px;display:flex;align-items:center;'
-            f'justify-content:center;border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-            f'border-radius:var(--node-radius,8px);box-sizing:border-box;overflow:hidden;'
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-            f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));"><span class="node-label" style="'
-            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{lbl}</span></div>'
+            f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
+            f'position:absolute;left:{lx}px;top:{PAD_V}px;'
+            f'width:{col_w}px;height:{HDR_H - 8}px;{_seq_box_css}">'
+            f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
+        )
+        # Bottom participant box (same label, anchored to lifeline bottom)
+        parts.append(
+            f'<div class="node node-rect" data-node-id="{_h(pid)}-bottom" style="'
+            f'position:absolute;left:{lx}px;top:{ll_bot}px;'
+            f'width:{col_w}px;height:{HDR_H - 8}px;{_seq_box_css}">'
+            f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
@@ -364,8 +404,9 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     for it in items:
         if it["type"] == "block":
             ry = ll_top + row * ROW_H
+            bh = it.get("span", 1) * ROW_H
             parts.append(
-                f'<rect x="{PAD_H // 2}" y="{ry}" width="{canvas_w - PAD_H}" height="{ROW_H}" '
+                f'<rect x="{PAD_H // 2}" y="{ry}" width="{canvas_w - PAD_H}" height="{bh}" '
                 f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.6" '
                 f'stroke="{_seq_edge}" stroke-width="1" rx="3"/>'
             )
@@ -438,7 +479,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                     f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
                     f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
                     f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-                    f'else {_h(it["label"])}</span>'
+                    f'{_h(it.get("kw", "else"))} {_h(it["label"])}</span>'
                 )
             row += 1; continue
         if it["type"] == "note":
@@ -541,6 +582,7 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
     nodes: dict[str, _Node] = {}
     edges: list[_Edge] = []
     current_entity: Optional[str] = None
+    _entity_attrs: dict[str, list[str]] = {}  # eid → attribute lines
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
@@ -551,8 +593,10 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
         if m:
             eid = m.group(1)
             nodes.setdefault(eid, _Node(id=eid, label=eid, shape="rect"))
+            _entity_attrs.setdefault(eid, [])
             current_entity = eid; continue
         if current_entity:
+            _entity_attrs.setdefault(current_entity, []).append(line)
             continue
         m = _ER_REL_RE.match(line)
         if m:
@@ -571,6 +615,11 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
             ))
     if not nodes:
         raise ValueError("No entities found in erDiagram.")
+
+    # Encode entity attributes into label pipe-separated tech section
+    for eid, attrs in _entity_attrs.items():
+        if eid in nodes and attrs:
+            nodes[eid].label = f"{eid}|" + "\n".join(attrs)
 
     # Layout
     _break_cycles(nodes, edges)
@@ -661,6 +710,7 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
     nodes: dict[str, _Node] = {}
     edges: list[_Edge] = []
     current_class: Optional[str] = None
+    _class_members: dict[str, list[str]] = {}  # cid → member lines
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
@@ -671,15 +721,20 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
         if m:
             cid = m.group(1)
             nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
+            _class_members.setdefault(cid, [])
             current_class = cid if "{" in line else None
             continue
         if current_class:
+            # Collect member line (attribute or method)
+            if line not in ("+", "-", "#", "~"):
+                _class_members.setdefault(current_class, []).append(line)
             continue
         m = _CLASS_REL_RE.match(line)
         if m:
             c1, op, c2, lbl = m.group(1), m.group(2), m.group(3), (m.group(4) or "")
             for cid in (c1, c2):
                 nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
+                _class_members.setdefault(cid, [])
             edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(),
                                style=_class_rel_style(op), arrow=True))
             continue
@@ -687,8 +742,21 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
         m2 = re.match(r'^(\w+)\s*:', line)
         if m2:
             nodes.setdefault(m2.group(1), _Node(id=m2.group(1), label=m2.group(1), shape="rect"))
+            _class_members.setdefault(m2.group(1), [])
     if not nodes:
         raise ValueError("No classes found in classDiagram.")
+    # Encode members into label as pipe-separated multi-line tech section.
+    # Attributes (no parens) come first, then a "---" divider, then methods.
+    for cid, members in _class_members.items():
+        if cid in nodes and members:
+            attrs = [m for m in members if "(" not in m]
+            methods = [m for m in members if "(" in m]
+            rows = attrs
+            if attrs and methods:
+                rows = attrs + ["---"] + methods
+            elif methods:
+                rows = methods
+            nodes[cid].label = f"{cid}|" + "\n".join(rows)
     return _graph_from_content_nodes(nodes, edges, {}, width_hint)
 
 
@@ -1002,8 +1070,8 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
             points.append({"name": m.group(1).strip(), "x": float(m.group(2)), "y": float(m.group(3))})
 
     PAD = 48
-    canvas_w = width_hint or 480
-    canvas_h = max(320, canvas_w * 3 // 4)
+    canvas_w = width_hint or 800
+    canvas_h = max(600, canvas_w * 3 // 4)
     gx = PAD + 24
     gy = PAD + (24 if title else 0)
     gw = canvas_w - gx - PAD
@@ -1825,6 +1893,12 @@ def _dispatch(
         return _layout_architecture(clean, direction, width_hint)
     if d in ("c4context", "c4container", "c4component"):
         return _layout_c4(clean, direction, width_hint)
+
+    if d in ("gitgraph", "journey", "requirementdiagram"):
+        raise ValueError(
+            f"Mermaid directive '{directive}' is not supported by the pure-Python renderer. "
+            "Use mmdc (mermaid-js CLI) for this diagram type."
+        )
 
     # Unknown directive — graph-topology best-effort fallback
     try:
