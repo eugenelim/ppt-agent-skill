@@ -1,7 +1,7 @@
 # Plan: Mermaid Renderer Correctness
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Phase 0-3 complete (all ACs done). **Remaining: Task 1.5 — snapshot baseline recapture.** Run `python -m pytest tests/test_snapshots.py --snapshot-capture` on the reference machine, then commit updated PNGs.
+- **Status:** Done — all phases done, baselines recaptured, 132 snapshot tests passing.
 
 ## Phase 0 — Dummy-chain routing bug fix (DONE)
 

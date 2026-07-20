@@ -1,6 +1,6 @@
 # Spec: Mermaid Renderer Correctness
 
-- **Status:** Implementing — all ACs done; Task 1.5 (snapshot baseline recapture) remaining <!-- Draft | Approved | Implementing | Shipped | Archived -->
+- **Status:** Shipped <!-- Draft | Approved | Implementing | Shipped | Archived -->
 - **Owner:** eugenelim
 - **Plan:** [`plan.md`](plan.md)
 - **Mode:** full (risk triggers: multi-feature; structural change to layout pipeline; behavioral change to edge-routing contract)
@@ -62,8 +62,8 @@ Note: flowchart fixtures drifted because Phase 0 routing changes shifted edge pa
 
 **Bucket B — visual defects in the rendering (not just stale baselines):**
 Some failures reflect real rendering bugs identified in the inspection report. These must be *fixed* before baselines are recaptured, otherwise the baseline would encode broken geometry:
-- `sequence-notes-all`: notes extend to x ≈ −116 and x ≈ 748 while canvas is ≈ 608 (canvas bounds pass, Phase 1 AC-3).
-- `statediagram-complex`: `Processing` state appears as both compound boundary and a separate atomic node (nested state compound layout, Phase 2 AC-7).
+- `sequence-notes-all`: notes extend to x ≈ −116 and x ≈ 748 while canvas is ≈ 608 (canvas bounds pass, Phase 1 AC-1.3).
+- `statediagram-complex`: `Processing` state appears as both compound boundary and a separate atomic node (nested state compound layout, Phase 2 AC-2.4).
 - `statediagram-nested`: external transitions attach to duplicate atomic node rather than compound boundary.
 
 **Resolution plan:** Fix Bucket B defects in Phase 1/Phase 2 first, then recapture all 63 baselines in one batch. Do **not** recapture before the defects are fixed.
