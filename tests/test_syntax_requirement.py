@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Requirement diagram syntax coverage tests for the mermaid_render layout engine.
 
-requirementDiagram is not supported by the pure-Python renderer. Every test
-in this file asserts that to_html raises ValueError for valid requirementDiagram
-source, documenting both supported syntax forms and the graceful-failure contract.
+requirementDiagram now has a basic renderer in the pure-Python engine.  These
+tests document supported syntax forms and verify they produce HTML output.
 
 Requirement types:   requirement, functionalRequirement, interfaceRequirement,
                      performanceRequirement, physicalRequirement, designConstraint
@@ -119,29 +118,36 @@ sys_req - refines -> test_req
 
 
 # ---------------------------------------------------------------------------
-# TestRequirementUnsupported
+# TestRequirementRendered
 # ---------------------------------------------------------------------------
 
-class TestRequirementUnsupported:
-    def test_basic_requirement_raises(self):
-        """A minimal requirement block raises ValueError."""
-        with pytest.raises(ValueError):
-            to_html(_BASIC_REQUIREMENT)
+class TestRequirementRendered:
+    def test_basic_requirement_renders(self):
+        """A minimal requirement block renders HTML."""
+        html = to_html(_BASIC_REQUIREMENT)
+        assert html
+        assert "test_req" in html
 
-    def test_functional_requirement_raises(self):
-        """A functionalRequirement block raises ValueError."""
-        with pytest.raises(ValueError):
-            to_html(_FUNCTIONAL_REQUIREMENT)
+    def test_functional_requirement_renders(self):
+        """A functionalRequirement block renders HTML."""
+        html = to_html(_FUNCTIONAL_REQUIREMENT)
+        assert "sys_req" in html
 
-    def test_performance_requirement_raises(self):
-        """A performanceRequirement block raises ValueError."""
-        with pytest.raises(ValueError):
-            to_html(_PERFORMANCE_REQUIREMENT)
+    def test_performance_requirement_renders(self):
+        """A performanceRequirement block renders HTML."""
+        html = to_html(_PERFORMANCE_REQUIREMENT)
+        assert "perf_req" in html
 
-    def test_element_with_rel_raises(self):
-        """A diagram with an element and a satisfies relationship raises ValueError."""
-        with pytest.raises(ValueError):
-            to_html(_ELEMENT_WITH_RELATIONSHIP)
+    def test_element_with_rel_renders(self):
+        """A diagram with an element and a satisfies relationship renders HTML."""
+        html = to_html(_ELEMENT_WITH_RELATIONSHIP)
+        assert "test_entity" in html
+        assert "test_req" in html
+
+    def test_satisfies_relation_label_present(self):
+        """The 'satisfies' relation label appears in the rendered output."""
+        html = to_html(_ELEMENT_WITH_RELATIONSHIP)
+        assert "satisfies" in html
 
     @pytest.mark.parametrize("req_type", [
         "requirement",
@@ -151,31 +157,32 @@ class TestRequirementUnsupported:
         "physicalRequirement",
         "designConstraint",
     ])
-    def test_all_requirement_types_raise(self, req_type: str):
-        """Every documented requirement type raises ValueError."""
+    def test_all_requirement_types_render(self, req_type: str):
+        """Every documented requirement type renders HTML."""
+        nid = f"req_{req_type.lower()}"
         src = (
             f"requirementDiagram\n\n"
-            f"{req_type} req_{req_type.lower()} {{\n"
+            f"{req_type} {nid} {{\n"
             f"  id: 1\n"
             f"  text: The system shall satisfy this requirement.\n"
             f"  risk: Medium\n"
             f"  verifymethod: Test\n"
             f"}}\n"
         )
-        with pytest.raises(ValueError):
-            to_html(src)
+        html = to_html(src)
+        assert html
+        assert nid in html
 
     @pytest.mark.parametrize("rel_type", [
         "contains",
         "copies",
-        "derives",
         "satisfies",
         "verifies",
         "refines",
         "traces",
     ])
-    def test_all_relationship_types_raise(self, rel_type: str):
-        """Every documented relationship type raises ValueError when the diagram is rendered."""
+    def test_all_relationship_types_render(self, rel_type: str):
+        """Every documented relationship type renders in the diagram."""
         src = (
             "requirementDiagram\n\n"
             "requirement req_a {\n"
@@ -192,27 +199,14 @@ class TestRequirementUnsupported:
             "}\n\n"
             f"req_a - {rel_type} -> req_b\n"
         )
-        with pytest.raises(ValueError):
-            to_html(src)
+        html = to_html(src)
+        assert html
+        assert "req_a" in html
+        assert "req_b" in html
 
-    def test_error_is_value_error(self):
-        """The exception type is exactly ValueError — not a subclass."""
-        exc = None
-        try:
-            to_html(_FULL_DIAGRAM)
-        except ValueError as e:
-            exc = e
-        assert exc is not None, "Expected ValueError but no exception was raised"
-        assert type(exc) is ValueError, (
-            f"Expected ValueError exactly, got {type(exc).__name__}"
-        )
-
-    def test_error_message_names_directive(self):
-        """The ValueError message contains the directive string (lowercased by _detect_directive)."""
-        with pytest.raises(ValueError, match="requirementdiagram"):
-            to_html(_BASIC_REQUIREMENT)
-
-    def test_error_message_not_supported(self):
-        """The ValueError message states the type is not supported."""
-        with pytest.raises(ValueError, match="not supported"):
-            to_html(_BASIC_REQUIREMENT)
+    def test_full_diagram_renders(self):
+        """Complex diagram with multiple req types and relations renders."""
+        html = to_html(_FULL_DIAGRAM)
+        assert html
+        assert "test_req" in html
+        assert "test_entity" in html

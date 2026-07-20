@@ -5,9 +5,9 @@ from typing import Optional
 from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
-    NODE_MIN_W, NODE_HPAD,
+    NODE_MIN_W, NODE_HPAD, ICON_COL_WIDTH,
     CROSSING_PASSES, GROUP_CAP,
-    _node_render_h, _measure_text_px,
+    _node_render_h, _measure_text_px, _load_icon,
 )
 
 # ── cycle break (DFS back-edge detection) ─────────────────────────────────────
@@ -223,24 +223,49 @@ def _group_coherent_cols(
 
 # ── coordinate assignment (integer pixels) ────────────────────────────────────
 
-def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple[int, int]:
+def _assign_coordinates(
+    nodes: dict[str, _Node],
+    direction: str = "TB",
+    col_gap: int | None = None,
+    rank_gap: int | None = None,
+) -> tuple[int, int]:
     """Assign x/y pixel positions; return (canvas_width, canvas_height).
 
     TB (default): rank→Y (row), col→X (column). Row heights are variable based on
     actual node render heights (mirrors LR's variable column heights — dagre parity).
     LR: rank→X (column), col→Y (row) with variable Y pitch based on node height.
+    col_gap / rank_gap override the module constants (used by %%{init:...}%% config).
     """
     if not nodes:
         return 2 * CANVAS_PAD, 2 * CANVAS_PAD
 
+    _col_gap = col_gap if col_gap is not None else COL_GAP
+    _rank_gap = rank_gap if rank_gap is not None else RANK_GAP
+
     is_lr = direction.upper() in ("LR", "RL")
     max_rank = max(n.rank for n in nodes.values())
 
-    # Compute per-node display widths from label text (skip special-shape fixed sizes)
+    # Compute per-node display widths from label text (skip special-shape fixed sizes).
+    # Icon-left nodes reserve ICON_COL_WIDTH for the icon; add it to the required width
+    # so the text column budget (n.width - NODE_HPAD - ICON_COL_WIDTH) can fit the label.
+    # For nodes with pipe-separated member rows (class/ER diagrams), the longest member
+    # line drives the width so it doesn't overflow the rendered box.
     _fixed_shapes = {"circle", "diamond", "hexagon"}
     for n in nodes.values():
         if n.width == 0 and not n.is_dummy and n.shape not in _fixed_shapes:
-            n.width = max(NODE_MIN_W, _measure_text_px(n.label) + NODE_HPAD)
+            _has_icon = bool(
+                (n.icon and _load_icon(n.icon)) or (n.css_class and _load_icon(n.css_class))
+            )
+            _icon_extra = ICON_COL_WIDTH if _has_icon else 0
+            _label_w = _measure_text_px(n.label)
+            if "|" in n.label:
+                # Scan all member lines (the part after the first |)
+                _members = n.label.split("|", 1)[1].replace("---", "").split("\n")
+                for _ml in _members:
+                    _ml = _ml.strip()
+                    if _ml:
+                        _label_w = max(_label_w, _measure_text_px(_ml))
+            n.width = max(NODE_MIN_W, _label_w + NODE_HPAD + _icon_extra)
     # Effective layout width = max across non-dummy nodes (uniform column spacing)
     _layout_nw = max(
         (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
@@ -248,7 +273,7 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
     )
 
     if not is_lr:
-        col_pitch = _layout_nw + COL_GAP
+        col_pitch = _layout_nw + _col_gap
         max_col = max(n.col for n in nodes.values())
         for n in nodes.values():
             # Center narrow nodes within the _layout_nw-wide column slot so that all
@@ -281,16 +306,16 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
             rank_h = max(_node_render_h(n) for n in rank_to_nodes[rank])
             for n in rank_to_nodes[rank]:
                 n.y = y_cursor + (rank_h - _node_render_h(n)) // 2
-            y_cursor += rank_h + RANK_GAP
+            y_cursor += rank_h + _rank_gap
 
         # Recompute canvas_w using actual node x positions (dummies may have shifted)
         max_x_right = max(n.x + (n.width or _layout_nw) for n in nodes.values())
         canvas_w = max_x_right + CANVAS_PAD
-        canvas_h = y_cursor + CANVAS_PAD - RANK_GAP
+        canvas_h = y_cursor + CANVAS_PAD - _rank_gap
         return canvas_w, canvas_h
 
     # LR: rank→X with fixed pitch; col→Y with variable pitch (multi-line nodes)
-    rank_pitch = _layout_nw + RANK_GAP
+    rank_pitch = _layout_nw + _rank_gap
     for n in nodes.values():
         n.x = CANVAS_PAD + n.rank * rank_pitch
 
@@ -304,10 +329,10 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
         col_h = max(_node_render_h(n) for n in col_to_nodes[col])
         for n in col_to_nodes[col]:
             n.y = y_cursor + (col_h - _node_render_h(n)) // 2
-        y_cursor += col_h + COL_GAP
+        y_cursor += col_h + _col_gap
 
-    canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - RANK_GAP
-    canvas_h = y_cursor + CANVAS_PAD - COL_GAP
+    canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - _rank_gap
+    canvas_h = y_cursor + CANVAS_PAD - _col_gap
     return canvas_w, canvas_h
 
 

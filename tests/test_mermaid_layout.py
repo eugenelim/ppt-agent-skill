@@ -2258,13 +2258,24 @@ class TestWrapLabelBudget:
             "narrower icon budget must wrap sooner than plain budget"
         )
 
-    def test_icon_card_wraps_with_icon(self):
-        # "Event Streaming Platform" fits on 1 line at default budget (152px)
-        # but wraps to 2 when the icon column (34px) reduces budget to 118px.
-        src = "flowchart TB\nA[\"Event Streaming Platform\"]:::database"
-        html = _dispatch(src, None, 600)
-        assert "<br>" in html, (
-            "icon-card node with wide label must contain <br> wrapping"
+    def test_icon_card_wider_with_icon(self):
+        # When a node has an icon, the node width is expanded by ICON_COL_WIDTH so
+        # the text column remains wide enough to fit the label without wrapping.
+        # Verify: label renders on one line (no <br>), and the node is wider than
+        # the same node without an icon.
+        src_icon = "flowchart TB\nA[\"Event Streaming Platform\"]:::database"
+        src_text = "flowchart TB\nA[\"Event Streaming Platform\"]"
+        html_icon = _dispatch(src_icon, None, 600)
+        html_text = _dispatch(src_text, None, 600)
+        assert "Event Streaming Platform" in html_icon, (
+            "icon-card label must not wrap (node should widen to fit icon + text)"
+        )
+        # Icon node canvas is wider than text-only node canvas (accommodates icon col)
+        import re as _re2
+        w_icon = int(_re2.search(r"width:(\d+)px", html_icon).group(1))
+        w_text = int(_re2.search(r"width:(\d+)px", html_text).group(1))
+        assert w_icon > w_text, (
+            f"icon-card canvas ({w_icon}px) must be wider than text-only ({w_text}px)"
         )
 
 
@@ -6523,14 +6534,15 @@ flowchart TB
 # ── TestBugfixUnsupportedDirectives ───────────────────────────────────────────
 
 class TestBugfixUnsupportedDirectives:
-    """gitGraph / journey / requirementDiagram must raise ValueError, not silently
+    """sankey-beta / zenuml must raise ValueError, not silently
     fall through to the graph-topology fallback and produce gibberish output.
+    gitGraph, journey, requirementDiagram now have real renderers and are tested
+    in TestGitGraphBasic, TestJourneyBasic, TestRequirementBasic.
     """
 
     @pytest.mark.parametrize("src,label", [
-        ("gitGraph\n  commit\n  branch dev\n  checkout dev\n  commit\n", "gitGraph"),
-        ("journey\n  title My journey\n  section Go to work\n    Make tea: 5: Me\n", "journey"),
-        ("requirementDiagram\n  requirement req1 {\n    id: 1\n    text: test\n  }\n", "requirementDiagram"),
+        ("sankey-beta\nA,B,10\n", "sankey-beta"),
+        ("zenuml\ntitle Demo\nA.method()\n", "zenuml"),
     ])
     def test_raises_value_error(self, src: str, label: str):
         with pytest.raises(ValueError, match=r"not supported"):
@@ -6587,3 +6599,134 @@ quadrantChart
         assert "Quick wins" in html
         assert "Major projects" in html
         assert "Feature A" in html
+
+
+class TestGitGraphBasic:
+    _SRC = (
+        "gitGraph\n"
+        "   commit\n"
+        "   commit\n"
+        "   branch develop\n"
+        "   checkout develop\n"
+        "   commit\n"
+        "   commit\n"
+        "   checkout main\n"
+        "   merge develop\n"
+        "   commit\n"
+    )
+
+    def test_renders_without_error(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert html
+
+    def test_main_branch_label_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "main" in html
+
+    def test_develop_branch_label_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "develop" in html
+
+    def test_commit_circles_present(self):
+        import re
+        html = _dispatch(self._SRC, None, 800)
+        circles = re.findall(r'border-radius:50%', html)
+        assert len(circles) >= 4, f"expected ≥4 commit circles, got {len(circles)}"
+
+
+class TestJourneyBasic:
+    _SRC = (
+        "journey\n"
+        "    title My working day\n"
+        "    section Go to work\n"
+        "      Make tea: 5: Me\n"
+        "      Go upstairs: 3: Me\n"
+        "    section Work\n"
+        "      Sit in chair: 5: Me, Cat\n"
+    )
+
+    def test_renders_without_error(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert html
+
+    def test_section_labels_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "Go to work" in html
+        assert "Work" in html
+
+    def test_task_entries_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "Make tea" in html
+        assert "Sit in chair" in html
+
+    def test_title_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "My working day" in html
+
+
+class TestRequirementBasic:
+    _SRC = (
+        "requirementDiagram\n"
+        "    requirement test_req {\n"
+        "    id: 1\n"
+        "    text: the test text.\n"
+        "    risk: high\n"
+        "    verifyMethod: test\n"
+        "    }\n"
+        "    element test_entity {\n"
+        "    type: simulation\n"
+        "    }\n"
+        "    test_entity - satisfies -> test_req\n"
+    )
+
+    def test_renders_without_error(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert html
+
+    def test_requirement_node_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "test_req" in html
+
+    def test_element_node_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "test_entity" in html
+
+    def test_relation_label_present(self):
+        html = _dispatch(self._SRC, None, 800)
+        assert "satisfies" in html
+
+
+class TestSubgraphLocalDirection:
+    _SRC = (
+        "graph TB\n"
+        "  subgraph SG\n"
+        "    direction LR\n"
+        "    A --> B\n"
+        "  end\n"
+        "  C --> A\n"
+    )
+
+    def test_inner_lr_nodes_same_y(self):
+        from scripts.mermaid_render.layout import _dispatch as _d
+        from scripts.mermaid_render.layout._constants import CANVAS_PAD
+        import re
+        html = _d(self._SRC, None, 0)
+        tops = {}
+        for m in re.finditer(r'data-node-id="([^"]+)"[^>]*top:\s*(\d+)px', html):
+            tops[m.group(1)] = int(m.group(2))
+        assert "A" in tops and "B" in tops, f"nodes missing from output; tops={tops}"
+        assert tops["A"] == tops["B"], (
+            f"direction LR subgraph: A and B should have same y; got A={tops['A']}, B={tops['B']}"
+        )
+
+    def test_inner_lr_nodes_different_x(self):
+        from scripts.mermaid_render.layout import _dispatch as _d
+        import re
+        html = _d(self._SRC, None, 0)
+        lefts = {}
+        for m in re.finditer(r'data-node-id="([^"]+)"[^>]*left:\s*(\d+)px', html):
+            lefts[m.group(1)] = int(m.group(2))
+        assert "A" in lefts and "B" in lefts, f"nodes missing from output; lefts={lefts}"
+        assert lefts["A"] != lefts["B"], (
+            f"direction LR subgraph: A and B should have different x; got A={lefts['A']}, B={lefts['B']}"
+        )

@@ -13,7 +13,7 @@ from .browser import get_browser, new_page
 
 
 def convert(html_dir: Path, output_dir: Path, scale: float = 1.0, full_page: bool = False) -> bool:
-    """主转换入口。"""
+    """Main conversion entry point."""
     if html_dir.is_file():
         html_files = [html_dir]
     else:

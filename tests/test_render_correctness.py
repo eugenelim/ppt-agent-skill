@@ -185,6 +185,16 @@ class TestNestedStateCompound:
         to_failed = re.search(r'<path\b[^>]*data-dst="Failed"', html)
         assert to_done or to_failed, "No path arriving at Done or Failed — Processing exit edges not rendered"
 
+    def test_complex_fixture_no_duplicate_atomic_node(self):
+        """statediagram-complex: Processing is a plain atomic state — must appear exactly once."""
+        src = (FIXTURES_DIR / "statediagram-complex.mmd").read_text()
+        html = _dispatch(src, None, 800)
+        node_ids = re.findall(r'data-node-id="([^"]+)"', html)
+        processing_count = node_ids.count("Processing")
+        assert processing_count == 1, (
+            f"Processing should appear exactly once as an atomic node; got {processing_count}"
+        )
+
 # ── AC-2.3: ER cardinality marker primitives ────────────────────────────────
 
 class TestERCardinalityMarkers:
@@ -414,11 +424,13 @@ class TestZenUMLUnsupported:
 
 class TestGitGraphDetector:
 
-    def test_gitgraph_lowercase_raises_unsupported(self):
-        """gitgraph (lowercase) must raise ValueError, not fall through to generic layout."""
+    def test_gitgraph_lowercase_renders(self):
+        """gitgraph (lowercase) renders HTML with branch names and commit circles."""
         src = (FIXTURES_DIR / "gitgraph-basic.mmd").read_text()
-        with pytest.raises(ValueError, match="not supported"):
-            _dispatch(src, None, 800)
+        html = _dispatch(src, None, 800)
+        assert html
+        assert "main" in html
+        assert "border-radius:50%" in html
 
 
 # ── AC-3.2: C4 semantic fields ────────────────────────────────────────────────

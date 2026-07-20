@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from typing import Optional
 
@@ -19,6 +20,40 @@ def _strip_frontmatter(src: str) -> str:
     if end == -1:
         return stripped
     return stripped[end + 4:].lstrip("\n")
+
+
+_INIT_RE = re.compile(r'%%\s*\{(.+?)\}\s*%%', re.DOTALL)
+
+
+def _parse_init_config(src: str) -> dict[str, int]:
+    """Extract layout overrides from %%{init:{...}}%% directives.
+
+    Recognises the flowchart config keys `nodeSpacing` (→ col_gap) and
+    `rankSpacing` (→ rank_gap).  Ignores unknown keys and unparseable JSON.
+    Returns a dict with zero or more of: {"col_gap": int, "rank_gap": int}.
+    """
+    overrides: dict[str, int] = {}
+    for m in _INIT_RE.finditer(src):
+        raw = m.group(1).strip()
+        # Allow single-quoted JSON-like syntax (Mermaid accepts it)
+        raw_json = re.sub(r"'([^']*)'", r'"\1"', raw)
+        try:
+            obj = json.loads("{" + raw_json + "}")
+        except json.JSONDecodeError:
+            continue
+        fc = obj.get("flowchart") or obj.get("init", {}).get("flowchart", {})
+        if isinstance(fc, dict):
+            if "nodeSpacing" in fc:
+                try:
+                    overrides["col_gap"] = int(fc["nodeSpacing"])
+                except (TypeError, ValueError):
+                    pass
+            if "rankSpacing" in fc:
+                try:
+                    overrides["rank_gap"] = int(fc["rankSpacing"])
+                except (TypeError, ValueError):
+                    pass
+    return overrides
 
 
 def _detect_directive(src: str) -> tuple[str, str]:
@@ -232,9 +267,14 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             continue
         if line.startswith("class ") and not line.startswith("classDiagram"):
             continue
-        # stateDiagram-v2: skip inline direction directive (direction LR / TB / etc.)
-        # Without this, "direction" becomes a spurious rect node.
-        if re.match(r'direction\s+(LR|RL|TB|TD)\s*$', line, re.I):
+        # stateDiagram-v2 / flowchart subgraph: inline direction directive
+        _dir_m = re.match(r'direction\s+(LR|RL|TB|TD)\s*$', line, re.I)
+        if _dir_m:
+            # If inside a subgraph, store direction on the current group
+            if stack:
+                _cur_gid = stack[-1]
+                if _cur_gid in groups:
+                    groups[_cur_gid].direction = _dir_m.group(1).upper()
             continue
         # stateDiagram-v2: [*] is the initial/terminal state marker; map to a
         # renderable node id. Inside a composite state (stack non-empty), use a
