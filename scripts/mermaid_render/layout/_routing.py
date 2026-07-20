@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import heapq
 import math
 
 from ._constants import (
@@ -13,6 +14,227 @@ from ._constants import (
 def _node_render_w(n: "_Node") -> int:
     """Effective rendered width for routing exit/entry x-coordinate computation."""
     return _TERMINAL_NODE_SIZE if _is_terminal_circle(n) else NODE_W
+
+
+# ── A* obstacle-avoiding orthogonal router ────────────────────────────────────
+
+def _build_routing_grid(
+    nodes: dict,
+    canvas_w: int,
+) -> "tuple[list[int], list[int]]":
+    """Build sparse routing grid from node AABB boundaries.
+
+    Grid lines are placed at node edges and 8 px outside each edge.
+    This guarantees routing lanes in the inter-node gaps without requiring
+    a dense pixel grid.
+    """
+    xs: set[int] = {0, canvas_w}
+    ys: set[int] = {0}
+    for n in nodes.values():
+        if n.is_dummy:
+            continue
+        nw, nh = _node_render_w(n), _node_render_h(n)
+        for off in (-8, 0, nw // 2, nw, nw + 8):
+            xs.add(n.x + off)
+        for off in (-8, 0, nh // 2, nh, nh + 8):
+            ys.add(n.y + off)
+    # Clamp negative coordinates
+    return sorted(x for x in xs if x >= -8), sorted(y for y in ys if y >= -8)
+
+
+def _blocked_segs(
+    grid_xs: "list[int]",
+    grid_ys: "list[int]",
+    obstacles: list,
+) -> "set[tuple[int, int, int, int]]":
+    """Precompute set of (xi, yi, xi2, yi2) grid-index tuples for blocked segments.
+
+    A segment is blocked when it passes through any obstacle AABB interior
+    (more than 2 px inside a boundary in the perpendicular direction).
+    """
+    CLEAR = 2
+    blocked: set = set()
+    nx, ny = len(grid_xs), len(grid_ys)
+
+    # Horizontal segments
+    for yi in range(ny):
+        y = grid_ys[yi]
+        for xi in range(nx - 1):
+            xl, xr = grid_xs[xi], grid_xs[xi + 1]
+            for ox1, oy1, ox2, oy2 in obstacles:
+                if oy1 + CLEAR < y < oy2 - CLEAR:
+                    if ox1 < xr and ox2 > xl:
+                        blocked.add((xi, yi, xi + 1, yi))
+                        break
+
+    # Vertical segments
+    for xi in range(nx):
+        x = grid_xs[xi]
+        for yi in range(ny - 1):
+            yt, yb = grid_ys[yi], grid_ys[yi + 1]
+            for ox1, oy1, ox2, oy2 in obstacles:
+                if ox1 + CLEAR < x < ox2 - CLEAR:
+                    if oy1 < yb and oy2 > yt:
+                        blocked.add((xi, yi, xi, yi + 1))
+                        break
+
+    return blocked
+
+
+def _astar_route(
+    sx: int, sy: int,
+    dx: int, dy: int,
+    grid_xs: "list[int]",
+    grid_ys: "list[int]",
+    blocked: "set[tuple]",
+) -> "list[tuple[int, int]]":
+    """Obstacle-avoiding A* on sparse orthogonal routing grid.
+
+    Cost function: total Manhattan length + 200 per 90° bend.
+    Heuristic: Manhattan distance to goal (admissible).
+    Returns a list of (x, y) waypoints with collinear points removed.
+    The caller should replace waypoints[0] and waypoints[-1] with the
+    exact port coordinates to restore sub-grid precision.
+    """
+    BEND = 200
+    nx, ny = len(grid_xs), len(grid_ys)
+
+    def _snap(val: int, arr: "list[int]") -> int:
+        return min(range(len(arr)), key=lambda i: abs(arr[i] - val))
+
+    sxi, syi = _snap(sx, grid_xs), _snap(sy, grid_ys)
+    dxi, dyi = _snap(dx, grid_xs), _snap(dy, grid_ys)
+
+    if sxi == dxi and syi == dyi:
+        return [(sx, sy)]
+
+    # State: (xi, yi, dir) — dir: 0=horizontal, 1=vertical
+    _MOVES = [(-1, 0, 0), (1, 0, 0), (0, -1, 1), (0, 1, 1)]
+    INF = float("inf")
+    dist: dict = {}
+    prev: dict = {}
+    heap: list = []
+    ctr = 0
+
+    for d0 in (0, 1):
+        h0 = abs(grid_xs[dxi] - grid_xs[sxi]) + abs(grid_ys[dyi] - grid_ys[syi])
+        dist[(sxi, syi, d0)] = 0
+        prev[(sxi, syi, d0)] = None
+        heapq.heappush(heap, (h0, ctr, sxi, syi, d0))
+        ctr += 1
+
+    while heap:
+        f, _, xi, yi, d = heapq.heappop(heap)
+        state = (xi, yi, d)
+        g = dist.get(state, INF)
+        # Discard stale heap entries
+        hval = abs(grid_xs[dxi] - grid_xs[xi]) + abs(grid_ys[dyi] - grid_ys[yi])
+        if f > g + hval + 1e-6:
+            continue
+
+        if xi == dxi and yi == dyi:
+            pts: list = []
+            s: "tuple | None" = state
+            while s is not None:
+                pts.append((grid_xs[s[0]], grid_ys[s[1]]))
+                s = prev[s]
+            pts.reverse()
+            return _simplify_waypoints(pts)
+
+        for ddxi, ddyi, nd in _MOVES:
+            nxi, nyi = xi + ddxi, yi + ddyi
+            if not (0 <= nxi < nx and 0 <= nyi < ny):
+                continue
+            seg = (min(xi, nxi), min(yi, nyi), max(xi, nxi), max(yi, nyi))
+            if seg in blocked:
+                continue
+            seg_len = abs(grid_xs[nxi] - grid_xs[xi]) + abs(grid_ys[nyi] - grid_ys[yi])
+            ng = g + seg_len + (BEND if nd != d else 0)
+            ns = (nxi, nyi, nd)
+            if ng < dist.get(ns, INF):
+                dist[ns] = ng
+                prev[ns] = state
+                nh = abs(grid_xs[dxi] - grid_xs[nxi]) + abs(grid_ys[dyi] - grid_ys[nyi])
+                heapq.heappush(heap, (ng + nh, ctr, nxi, nyi, nd))
+                ctr += 1
+
+    # No path found — direct fallback
+    return [(sx, sy), (dx, dy)]
+
+
+def _simplify_waypoints(pts: list) -> list:
+    """Remove collinear intermediate waypoints."""
+    if len(pts) < 3:
+        return pts
+    out = [pts[0]]
+    for i in range(1, len(pts) - 1):
+        px, py = pts[i - 1]
+        cx, cy = pts[i]
+        nx_, ny_ = pts[i + 1]
+        if not ((px == cx == nx_) or (py == cy == ny_)):
+            out.append(pts[i])
+    out.append(pts[-1])
+    return out
+
+
+def _try_3seg_clear(
+    pts: "list[tuple[int,int]]",
+    obstacles: list,
+    clearance: int = 2,
+) -> bool:
+    """Return True if every segment of pts (orthogonal path) is obstacle-free."""
+    for i in range(len(pts) - 1):
+        x1, y1 = int(pts[i][0]), int(pts[i][1])
+        x2, y2 = int(pts[i + 1][0]), int(pts[i + 1][1])
+        for ox1, oy1, ox2, oy2 in obstacles:
+            if x1 == x2:  # vertical segment
+                if ox1 + clearance < x1 < ox2 - clearance:
+                    if oy1 < max(y1, y2) and oy2 > min(y1, y2):
+                        return False
+            else:  # horizontal segment
+                if oy1 + clearance < y1 < oy2 - clearance:
+                    if ox1 < max(x1, x2) and ox2 > min(x1, x2):
+                        return False
+    return True
+
+
+def _label_on_longest(
+    pts: list,
+    label: str,
+    canvas_w: int,
+    obstacles: list,
+    placed: list,
+    y_range: "tuple[int,int] | None" = None,
+) -> "tuple[int, int]":
+    """Place label chip centred on the longest segment of the path."""
+    if not pts:
+        return 0, 0
+    if len(pts) < 2:
+        return pts[0][0], pts[0][1]
+
+    # Find longest segment
+    best_p1, best_p2 = pts[0], pts[1]
+    best_len = 0
+    for i in range(len(pts) - 1):
+        p1, p2 = pts[i], pts[i + 1]
+        seg_len = abs(p2[0] - p1[0]) + abs(p2[1] - p1[1])
+        if seg_len > best_len:
+            best_len = seg_len
+            best_p1, best_p2 = p1, p2
+
+    mid_x = (best_p1[0] + best_p2[0]) // 2
+    mid_y = (best_p1[1] + best_p2[1]) // 2
+    w = _est_label_w(label)
+    H = _LABEL_CHIP_H
+    # Candidates: above and below the segment midpoint, with offsets
+    cands = [
+        (mid_x - w // 2,          mid_y - H - 4),
+        (mid_x - w // 2,          mid_y + 4),
+        (mid_x - w // 2 + 20,     mid_y - H - 4),
+        (mid_x - w // 2 - 20,     mid_y - H - 4),
+        (mid_x - w // 2 + 20,     mid_y + 4),
+    ]
+    return _best_label_pos(cands, label, obstacles, placed, canvas_w, y_range=y_range)
 
 
 # ── diamond edge clipping ─────────────────────────────────────────────────────
@@ -227,6 +449,15 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         ]
     placed_labels: list = []  # accumulates placed chip bboxes to prevent inter-label collision
 
+    # ── Routing grid (A* obstacle avoidance) ─────────────────────────────────
+    # Build once per route_edges call; used by forward edges that clip obstacles.
+    _grid_xs, _grid_ys = _build_routing_grid(nodes, canvas_w)
+    # Node-body obstacles only (not group title strips) — group strips are narrow
+    # enough that routing over them is acceptable.
+    _routing_obs = [(n.x, n.y, n.x + _node_render_w(n), n.y + _node_render_h(n))
+                    for n in nodes.values() if not n.is_dummy]
+    _blocked = _blocked_segs(_grid_xs, _grid_ys, _routing_obs)
+
     # Right-lane x: always clears the rightmost node + group container border
     non_dummy = [n for n in nodes.values() if not n.is_dummy]
     right_lane_x = (max(n.x + _node_render_w(n) for n in non_dummy) if non_dummy else canvas_w) + 32
@@ -428,91 +659,25 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             y1 = s.y + out_offset
             x2 = d.x
             y2 = d.y + in_offset
-            # For cross-row adjacent-rank edges, place the vertical bend at 3/4 of
-            # the gap (near the destination) rather than the mid-point.  This keeps
-            # the vertical segment out of the x-range occupied by horizontal segments
-            # of same-rank same-destination edges, preventing visual overlap.
+            # 3-segment fast path (right → vertical → right); fall back to A* if blocked.
             _cross_row = abs(y1 - y2) > _node_render_h(s) // 2 and rank_gap == 1
-            bend_x = x1 + (x2 - x1) * 3 // 4 if _cross_row else (x1 + x2) // 2
-            path = _smooth_orthogonal_path([(x1, y1), (bend_x, y1), (bend_x, y2), (x2, y2)])
+            bend_x = int(x1 + (x2 - x1) * 3 // 4 if _cross_row else (x1 + x2) // 2)
+            _fast_lr = [(int(x1), int(y1)), (bend_x, int(y1)), (bend_x, int(y2)), (int(x2), int(y2))]
+            if _try_3seg_clear(_fast_lr, _routing_obs):
+                _pts_lr = _fast_lr
+            else:
+                _pts_lr = _astar_route(int(x1), int(y1), int(x2), int(y2),
+                                       _grid_xs, _grid_ys, _blocked)
+                if len(_pts_lr) >= 2:
+                    _pts_lr[0] = (int(x1), int(y1))
+                    _pts_lr[-1] = (int(x2), int(y2))
+            path = _smooth_orthogonal_path(_pts_lr)
             ah = _arrowhead(x2, y2, 1, 0, **ah_kw) if e.arrow else None
             if e.label:
                 H = _LABEL_CHIP_H
-                w = _est_label_w(e.label)
-                q1_x = x1 + (x2 - x1) // 4
-                q3_x = x1 + 3 * (x2 - x1) // 4
-                y_top = min(int(y1), int(y2)) - 12
-                y_bot = max(int(y1), int(y2)) + H + 4
-                # Midpoint candidates come first so each label is centered over
-                # its own edge segment rather than clustering near the source.
-                cands = [
-                    (bend_x - w // 2,   y_top),
-                    (bend_x - w // 2,   y_bot),
-                    (q1_x - w // 2,     y_top),
-                    (q1_x - w // 2,     y_bot),
-                    (q3_x - w // 2,     y_top),
-                    (q3_x - w // 2,     y_bot),
-                    (x1 + 32,           int(y1) - 12),
-                    (x1 + 32,           int(y1) + H + 4),
-                    (int(x2) - w - 24,  int(y2) - 12),
-                    (int(x2) - w - 24,  int(y2) + H + 4),
-                ]
-                # For short-gap edges (label wider than the gap), float the
-                # label below or above the source node.  Generate a vertical
-                # ladder of candidates so _best_label_pos can pick a clear
-                # slot even when multiple edges leave the same source.
-                # Short-gap candidates are PREPENDED so they have priority over
-                # the midpoint candidates above — without this, (x1+32, y1-12)
-                # lands above the source with zero overlap and gets picked,
-                # crowding all labels at the top of the canvas.
-                # _vstep > H + 2*margin(8) = 33 guarantees adjacent slots
-                # in the placed_labels list have zero overlap with each other.
-                if x2 - x1 < w + 16:
-                    # On-edge label: place centered on the edge midpoint, above/below
-                    # the exit y. Only avoid other labels (not node bodies) — the
-                    # chip's opaque background makes it readable even when it overlaps
-                    # a card.
-                    # When the vertical span is significant, prefer the alongside-segment
-                    # midpoint over the exit-point cluster so labels spread along the
-                    # edge rather than stacking at the top of the canvas.
-                    sg_cands: list[tuple[int, int]] = []
-                    if abs(y2 - y1) > H + 16:
-                        vert_mid = (int(y1) + int(y2)) // 2
-                        # Alongside the vertical segment — highest priority for long spans
-                        sg_cands += [
-                            (int(bend_x) + 8,      vert_mid),
-                            (int(bend_x) - w - 8,  vert_mid),
-                        ]
-                        # Additional slots at quarter-points of the vertical segment
-                        v_q1 = int(y1) + abs(int(y2) - int(y1)) // 4
-                        v_q3 = int(y1) + 3 * abs(int(y2) - int(y1)) // 4
-                        sg_cands += [
-                            (int(bend_x) + 8,      v_q1),
-                            (int(bend_x) + 8,      v_q3),
-                        ]
-                    sg_cands += [
-                        (int(bend_x) - w // 2,  int(y1) - H - 4),  # above exit, at bend
-                        (int(bend_x) - w // 2,  int(y1) + 4),       # below exit, at bend
-                        (x1 + 4,                int(y1) - H - 4),   # above exit, near src
-                        (x1 + 4,                int(y1) + 4),        # below exit, near src
-                    ]
-                    # Stagger: all DOWN candidates before all UP candidates.
-                    # Separated (not interleaved) so score==0 early-exit fires on a
-                    # below-edge slot before trying above-edge slots — prevents labels
-                    # from escaping to the clear space above the diagram's group boundaries.
-                    vstep = H + 8
-                    extra: list[tuple[int, int]] = []
-                    for base_lx, base_ly in sg_cands[-4:-2]:  # stagger from exit-point bases
-                        for si in range(1, 6):
-                            extra.append((base_lx, base_ly + si * vstep))  # DOWN
-                        for si in range(1, 6):
-                            extra.append((base_lx, base_ly - si * vstep))  # UP (all after all DOWN)
-                    sg_cands += extra
-                    _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
-                    lx, ly = _best_label_pos(sg_cands, e.label, obstacles, placed_labels, canvas_w, y_range=_yr)
-                else:
-                    _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
-                    lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w, y_range=_yr)
+                _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
+                lx, ly = _label_on_longest(_pts_lr, e.label, canvas_w, obstacles, placed_labels,
+                                           y_range=_yr)
             else:
                 lx, ly = int((x1 + x2) // 2), int(min(y1, y2)) - 12
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
@@ -554,52 +719,26 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             x2, y2 = _clip_to_diamond(float(x2), float(y2), float(_dx2), float(_dy2),
                                        float(_node_render_w(d)), float(_dh), 0, 0)
 
-        # Route: go down to midpoint, then right/left, then down to dst
+        # Route: 3-segment fast path (down → across → down); fall back to A* if blocked.
         mid_y = (int(y1) + int(y2)) // 2
-        path = _smooth_orthogonal_path([(x1, y1), (x1, mid_y), (x2, mid_y), (x2, y2)])
+        _fast = [(int(x1), int(y1)), (int(x1), mid_y), (int(x2), mid_y), (int(x2), int(y2))]
+        if _try_3seg_clear(_fast, _routing_obs):
+            _pts = _fast
+        else:
+            _pts = _astar_route(int(x1), int(y1), int(x2), int(y2),
+                                _grid_xs, _grid_ys, _blocked)
+            if len(_pts) >= 2:
+                _pts[0] = (int(x1), int(y1))
+                _pts[-1] = (int(x2), int(y2))
+        path = _smooth_orthogonal_path(_pts)
 
         ah = _arrowhead(int(x2), int(y2), 0, 1, **ah_kw) if e.arrow else None
 
         if e.label:
             H = _LABEL_CHIP_H
-            w = _est_label_w(e.label)
-            seg_mid_y = int((y1 + mid_y) // 2)
-            # Horizontal-segment midpoint and quarter-point candidates come first
-            # so wide-span edges (large |x2-x1|) place labels along the horizontal
-            # run rather than clustering near the source exit.
-            h_span = abs(x2 - x1)
-            h_mid = (int(x1) + int(x2)) // 2
-            h_q1 = int(x1) + h_span // 4
-            h_q3 = int(x1) + 3 * h_span // 4
-            cands: list[tuple[int, int]] = []
-            if h_span > 40:
-                cands += [
-                    (h_mid - w // 2,  mid_y - H - 4),   # above horizontal segment
-                    (h_mid - w // 2,  mid_y + 4),         # below horizontal segment
-                    (h_q1 - w // 2,   mid_y - H - 4),
-                    (h_q1 - w // 2,   mid_y + 4),
-                    (h_q3 - w // 2,   mid_y - H - 4),
-                    (h_q3 - w // 2,   mid_y + 4),
-                ]
-            cands += [
-                (int(x1) + _LABEL_PERP,              seg_mid_y),
-                (int(x1) - w - _LABEL_PERP,          seg_mid_y),
-                (int(x1) + _LABEL_PERP,              int(y1) + H + 4),
-                (int(x1) + _LABEL_PERP,              int(mid_y) - H - 4),
-                (int(x2) + _LABEL_PERP,              int((mid_y + y2) // 2)),
-                (int(x2) - w - _LABEL_PERP,          int((mid_y + y2) // 2)),
-            ]
-            # Stagger for multiple edges from same source: ladder above/below
-            _vstep = H + 24
-            for _si in range(1, 5):
-                _dy = _si * _vstep
-                cands += [
-                    (int(x1) + _LABEL_PERP,     int(y1) + H + 4 + _dy),
-                    (int(x1) - w - _LABEL_PERP, int(y1) + H + 4 + _dy),
-                    (int(x1) + _LABEL_PERP,     int(mid_y) - H - 4 - _dy),
-                    (int(x1) - w - _LABEL_PERP, int(mid_y) - H - 4 - _dy),
-                ]
-            lx, ly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+            _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
+            lx, ly = _label_on_longest(_pts, e.label, canvas_w, obstacles, placed_labels,
+                                       y_range=_yr)
         else:
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
