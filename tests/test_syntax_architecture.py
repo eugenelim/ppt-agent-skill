@@ -299,8 +299,11 @@ class TestArchitectureJunction:
         assert "Server A" in html
         assert "Server B" in html
 
-    def test_junction_only_raises_value_error(self):
-        """A diagram with only a junction (no services) raises ValueError."""
+    def test_junction_only_renders(self):
+        """A diagram with only a junction (no services) renders without error.
+
+        Junctions are invisible dummy nodes; the diagram is an empty canvas.
+        """
         src = "architecture-beta\n  junction junc1\n"
-        with pytest.raises(ValueError, match="No services"):
-            to_html(src)
+        html = to_html(src)
+        assert "mermaid-layout" in html

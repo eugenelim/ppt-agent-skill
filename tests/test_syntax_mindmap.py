@@ -322,8 +322,8 @@ class TestMindmapIcons:
         html = to_html(src)
         assert html
 
-    def test_icon_line_produces_node(self):
-        """::icon(...) is treated as a regular node; some text is emitted."""
+    def test_icon_line_stripped_not_node(self):
+        """::icon(...) lines are stripped; they do NOT create a separate node."""
         src = (
             "mindmap\n"
             "  root\n"
@@ -331,9 +331,9 @@ class TestMindmapIcons:
             "    Child\n"
         )
         html = to_html(src)
-        # The implementation strips leading '::' and trailing ')':
-        # '::icon(cloud)' → label 'icon(cloud'
-        assert "icon" in html
+        # Icon annotation stripped — no spurious 'icon' node, but diagram renders
+        assert "mermaid-layout" in html
+        assert "Child" in html
 
     def test_sibling_after_icon_still_renders(self):
         """A sibling node following an icon line appears in output."""

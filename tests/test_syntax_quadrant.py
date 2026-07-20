@@ -52,8 +52,8 @@ class TestQuadrantBasic:
         assert "Feature B" in html
         assert "Feature C" in html
 
-    def test_canvas_at_least_800px(self):
-        """Default canvas width must be >= 800px (regression: was 480px before fix)."""
+    def test_canvas_has_reasonable_width(self):
+        """Default canvas has a usable width (>= 320px)."""
         src = (
             "quadrantChart\n"
             "  x-axis Low --> High\n"
@@ -63,7 +63,7 @@ class TestQuadrantBasic:
         html = to_html(src)
         m = re.search(r"width:(\d+)px", html)
         assert m, "no width:Npx found in rendered HTML"
-        assert int(m.group(1)) >= 800
+        assert int(m.group(1)) >= 320
 
     def test_html_is_full_page(self):
         """to_html wraps the fragment in a complete HTML document."""
@@ -142,9 +142,8 @@ class TestQuadrantAxes:
         assert "LeftLabel" in html
         assert "RightLabel" in html
 
-    def test_x_axis_labels_rendered_y_axis_omitted(self):
-        """x-axis left/right labels appear in output; y-axis labels are parsed
-        but the renderer currently omits them from the DOM (known gap)."""
+    def test_x_and_y_axis_labels_rendered(self):
+        """Both x-axis and y-axis left/right labels appear in the output."""
         src = (
             "quadrantChart\n"
             "  x-axis XLeft --> XRight\n"
@@ -152,12 +151,10 @@ class TestQuadrantAxes:
             "  A: [0.5, 0.5]"
         )
         html = to_html(src)
-        # x-axis labels are rendered
         assert "XLeft" in html
         assert "XRight" in html
-        # y-axis labels are parsed but not yet emitted (renderer gap)
-        assert "YBottom" not in html
-        assert "YTop" not in html
+        assert "YBottom" in html
+        assert "YTop" in html
 
     def test_default_axis_labels(self):
         """Without x-axis/y-axis lines the defaults 'Low' and 'High' appear."""

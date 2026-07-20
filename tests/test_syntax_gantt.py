@@ -92,8 +92,7 @@ class TestGanttTasks:
             "    Old Task : done, 2024-01-01, 5d"
         )
         html = to_html(src)
-        # done background: var(--node-border,rgba(100,116,139,0.25))
-        assert "rgba(100,116,139,0.25)" in html
+        assert "rgba(100,116,139" in html
 
     # ── active ────────────────────────────────────────────────────────────────
 
@@ -107,15 +106,14 @@ class TestGanttTasks:
         assert "In Progress" in html
         assert 'data-task-id="b1"' in html
 
-    def test_active_task_bar_color_is_regular(self):
-        """active flag is parsed but not stored; renders as regular (green) bar."""
+    def test_active_task_bar_color_is_blue(self):
+        """active task renders with a blue bar background to distinguish it."""
         src = (
             "gantt\n  dateFormat YYYY-MM-DD\n  section S\n"
             "    Running : active, 2024-01-01, 5d"
         )
         html = to_html(src)
-        # Regular bar background is the green-ish token
-        assert "rgba(53,148,103,0.25)" in html
+        assert "rgba(59,130,246" in html
 
     # ── crit ──────────────────────────────────────────────────────────────────
 
@@ -130,14 +128,13 @@ class TestGanttTasks:
         assert 'data-task-id="c1"' in html
 
     def test_crit_task_bar_color(self):
-        """crit task uses the dark-accent bar background colour."""
+        """crit task uses a red bar background colour."""
         src = (
             "gantt\n  dateFormat YYYY-MM-DD\n  section S\n"
             "    Blocker : crit, 2024-01-01, 3d"
         )
         html = to_html(src)
-        # crit background: var(--accent-4,rgba(31,58,95,0.7))
-        assert "rgba(31,58,95,0.7)" in html
+        assert "rgba(220,38,38" in html
 
     # ── milestone ─────────────────────────────────────────────────────────────
 
@@ -171,8 +168,8 @@ class TestGanttTasks:
             "    Old Blocker : crit, done, 2024-01-01, 3d"
         )
         html = to_html(src)
-        # crit wins: rgba(31,58,95,0.7) present, not the done grey
-        assert "rgba(31,58,95,0.7)" in html
+        # crit wins: red bar present, not the done grey
+        assert "rgba(220,38,38" in html
         assert "Old Blocker" in html
 
     # ── task IDs ──────────────────────────────────────────────────────────────

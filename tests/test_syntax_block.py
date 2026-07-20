@@ -399,12 +399,12 @@ class TestBlockBetaStyleDirectives:
         html = _block(src)
         assert "mermaid-layout" in html
 
-    def test_style_quirk_documented(self):
-        """``style`` is NOT in the skip list: it is treated as a block node ID.
+    def test_style_directive_skipped(self):
+        """``style`` lines are now in the skip list and do NOT create a spurious node.
 
-        This is an implementation quirk — a ``style`` directive line causes
-        the token ``style`` to be registered as an additional block node.
-        The diagram still renders; it just contains a spurious 'style' node.
+        The block-beta renderer skips entire lines beginning with ``style``,
+        ``classDef``, or ``class`` to prevent directive keywords from being
+        registered as block node IDs.
         """
         src = (
             "  columns 3\n"
@@ -414,10 +414,10 @@ class TestBlockBetaStyleDirectives:
             "  style A fill:#f9f,stroke:#333\n"
         )
         html = _block(src)
-        # The renderer does not crash — it just adds a spurious 'style' node.
         assert "mermaid-layout" in html
-        # The known quirk: 'style' appears as a data-node-id.
-        assert 'data-node-id="style"' in html
+        # Exactly three real nodes (A, B, C) — no spurious 'style' node.
+        assert html.count('data-node-id=') == 3
+        assert 'data-node-id="style"' not in html
 
 
 # ── TestBlockBetaCanonical ────────────────────────────────────────────────────

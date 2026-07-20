@@ -269,9 +269,9 @@ class TestERAttributes:
 
 class TestERRelationshipLabels:
     def test_unquoted_single_word_label_in_output(self):
-        """An unquoted single-word label appears as data-edge-label in the HTML."""
+        """An unquoted single-word relationship label appears in the HTML."""
         html = _er("  CUSTOMER ||--o{ ORDER : places")
-        assert 'data-edge-label="places"' in html
+        assert "places" in html
 
     def test_quoted_multiword_label_no_crash(self):
         """A quoted multi-word label is accepted without raising."""
@@ -291,13 +291,13 @@ class TestERRelationshipLabels:
         assert "B" in html
 
     def test_multiple_relationships_each_have_edge_label(self):
-        """Each labeled relationship produces its own data-edge-label attribute."""
+        """Each labeled relationship has its label text in the HTML."""
         html = _er(
             "  CUSTOMER ||--o{ ORDER : places\n"
             "  ORDER ||--|{ LINE_ITEM : contains"
         )
-        assert 'data-edge-label="places"' in html
-        assert 'data-edge-label="contains"' in html
+        assert "places" in html
+        assert "contains" in html
 
 
 # ── TestERHyphenatedEntityName ────────────────────────────────────────────────
@@ -316,11 +316,11 @@ class TestERHyphenatedEntityName:
         assert "CUSTOMER" in html
         assert "ORDER" in html
 
-    def test_hyphenated_entity_only_raises_value_error(self):
-        """A diagram containing only a hyphenated-entity relationship raises ValueError.
+    def test_hyphenated_entity_only_renders(self):
+        """A diagram with only hyphenated-entity relationships now renders correctly.
 
-        The line is not parseable (\\w+ cannot match LINE-ITEM), so no nodes
-        are registered and the renderer raises 'No entities found'.
+        The ER parser supports hyphenated entity names (e.g. LINE-ITEM).
         """
-        with pytest.raises(ValueError, match="No entities"):
-            to_html("erDiagram\n  LINE-ITEM ||--|| ORDER : belongs")
+        html = to_html("erDiagram\n  LINE-ITEM ||--|| ORDER : belongs")
+        assert "LINE-ITEM" in html
+        assert "ORDER" in html

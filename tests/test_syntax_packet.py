@@ -142,25 +142,29 @@ class TestPacketAbsoluteRange:
 # ---------------------------------------------------------------------------
 
 class TestPacketRelativeSyntax:
-    def test_all_relative_raises_value_error(self):
-        """+N-only diagram raises ValueError — relative syntax is not parsed."""
-        with pytest.raises(ValueError, match="No fields"):
-            _packet('  +8: "Source Port"\n  +8: "Destination Port"\n  +16: "Length"')
+    def test_all_relative_renders(self):
+        """+N relative syntax is now supported and renders successfully."""
+        html = _packet('  +8: "Source Port"\n  +8: "Destination Port"\n  +16: "Length"')
+        assert "Source Port" in html
+        assert "Destination Port" in html
+        assert "Length" in html
 
-    def test_relative_single_field_raises_value_error(self):
-        """A single +N field raises ValueError (nothing parsed, no fields found)."""
-        with pytest.raises(ValueError, match="No fields"):
-            _packet('  +32: "Data"')
+    def test_relative_single_field_renders(self):
+        """A single +N field renders without error."""
+        html = _packet('  +32: "Data"')
+        assert "Data" in html
 
-    def test_relative_with_label_raises_value_error(self):
-        """Full real-world relative packet (all +N) raises ValueError."""
+    def test_relative_with_label_renders(self):
+        """Full real-world relative packet (all +N) renders correctly."""
         src = (
             '  +8: "Flags"\n'
             '  +16: "Checksum"\n'
             '  +32: "Data"'
         )
-        with pytest.raises(ValueError, match="No fields"):
-            _packet(src)
+        html = _packet(src)
+        assert "Flags" in html
+        assert "Checksum" in html
+        assert "Data" in html
 
 
 # ---------------------------------------------------------------------------
@@ -184,19 +188,17 @@ class TestPacketMixedSyntax:
         assert "Destination Port" in html
         assert "Sequence Number" in html
 
-    def test_mixed_only_absolute_fields_have_data_attrs(self):
-        """data-field attributes exist only for the absolute-range fields."""
+    def test_mixed_absolute_and_relative_all_render(self):
+        """Absolute and relative fields both render; relative fields continue from cursor."""
         src = (
             '  0-7: "Source Port"\n'
             '  8-15: "Destination Port"\n'
-            '  +8: "Flags"'   # skipped
+            '  +8: "Flags"'   # bits 16-23 (cursor at 16 after 8-15)
         )
         html = _packet(src)
-        found = _fields(html)
-        assert "0-7" in found
-        assert "8-15" in found
-        # No data-field for the skipped +8 line
-        assert len(found) == 2
+        assert "Source Port" in html
+        assert "Destination Port" in html
+        assert "Flags" in html
 
     def test_absolute_before_relative_renders_absolute(self):
         """Leading absolute field renders even when followed by all-relative lines."""

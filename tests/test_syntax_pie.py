@@ -161,7 +161,7 @@ class TestPieStructure:
         """Each slice label is followed by a percentage string."""
         src = 'pie\n  "Half" : 50\n  "Other" : 50'
         html = to_html(src)
-        assert "50%" in html
+        assert "50.0%" in html
 
     def test_pie_data_slice_attrs(self):
         """data-slice attributes match the slice labels exactly."""

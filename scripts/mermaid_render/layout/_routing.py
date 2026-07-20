@@ -52,7 +52,7 @@ def _blocked_segs(
     A segment is blocked when it passes through any obstacle AABB interior
     (more than 2 px inside a boundary in the perpendicular direction).
     """
-    CLEAR = 2
+    CLEAR = 4
     blocked: set = set()
     nx, ny = len(grid_xs), len(grid_ys)
 
@@ -180,7 +180,7 @@ def _simplify_waypoints(pts: list) -> list:
 def _try_3seg_clear(
     pts: "list[tuple[int,int]]",
     obstacles: list,
-    clearance: int = 2,
+    clearance: int = 4,
 ) -> bool:
     """Return True if every segment of pts (orthogonal path) is obstacle-free."""
     for i in range(len(pts) - 1):
@@ -672,7 +672,14 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     _pts_lr[0] = (int(x1), int(y1))
                     _pts_lr[-1] = (int(x2), int(y2))
             path = _smooth_orthogonal_path(_pts_lr)
-            ah = _arrowhead(x2, y2, 1, 0, **ah_kw) if e.arrow else None
+            if e.arrow:
+                _ldx_lr, _ldy_lr = 1, 0  # LR nominal default
+                if len(_pts_lr) >= 2:
+                    _ldx_lr = _pts_lr[-1][0] - _pts_lr[-2][0]
+                    _ldy_lr = _pts_lr[-1][1] - _pts_lr[-2][1]
+                ah = _arrowhead(int(x2), int(y2), _ldx_lr, _ldy_lr, **ah_kw)
+            else:
+                ah = None
             if e.label:
                 H = _LABEL_CHIP_H
                 _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
@@ -732,7 +739,16 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 _pts[-1] = (int(x2), int(y2))
         path = _smooth_orthogonal_path(_pts)
 
-        ah = _arrowhead(int(x2), int(y2), 0, 1, **ah_kw) if e.arrow else None
+        # Derive arrowhead direction from the actual last path segment so A*-routed
+        # edges whose final segment is not perfectly downward still point correctly.
+        if e.arrow:
+            _ldx, _ldy = 0, 1  # TB nominal default
+            if len(_pts) >= 2:
+                _ldx = _pts[-1][0] - _pts[-2][0]
+                _ldy = _pts[-1][1] - _pts[-2][1]
+            ah = _arrowhead(int(x2), int(y2), _ldx, _ldy, **ah_kw)
+        else:
+            ah = None
 
         if e.label:
             H = _LABEL_CHIP_H
