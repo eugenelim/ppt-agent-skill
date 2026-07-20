@@ -185,13 +185,14 @@ def _layout_graph_topology(
         canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
 
     # Center terminal-circle nodes (start ● / end ◎) within their TB column slot.
-    # _assign_coordinates places every node at the column's left edge (n.x = CANVAS_PAD +
-    # col * (NODE_W + COL_GAP)).  Rect nodes fill the full NODE_W so their visual centre is
-    # n.x + NODE_W // 2.  Terminal circles are _TERMINAL_NODE_SIZE (32 px) wide; without this
-    # adjustment their centre is n.x + 16, producing a visible horizontal jog in arrows that
-    # connect them to adjacent rect states.  Shifting right by (NODE_W - _TERMINAL_NODE_SIZE) // 2
-    # aligns their centres.  Canvas dimensions are already finalised above, so this shift does
-    # not affect zoom or canvas sizing.
+    # _assign_coordinates places terminal circles at col_left[col] with no centering
+    # offset (other nodes are centered within their per-column slot by _assign_coordinates).
+    # Terminal circles are _TERMINAL_NODE_SIZE (32 px) wide; without this shift their centre
+    # is col_left[col] + 16, producing a visible horizontal jog vs adjacent rect state nodes.
+    # _eff_nw uses the global max node width as an approximation of the column width, which
+    # is exact when all real nodes share one column (typical state diagrams); multi-column
+    # diagrams with terminal circles in a narrower column may show a slight jog (P1 fix).
+    # Canvas dimensions are already finalised above, so this shift does not affect sizing.
     if direction.upper() not in ("LR", "RL"):
         _eff_nw = max(
             (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),

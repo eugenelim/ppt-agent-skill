@@ -76,16 +76,25 @@ _NODE_CSS = {
     "rect": "border-radius:var(--node-radius,8px);",
     "round": "border-radius:14px;",
     "stadium": "border-radius:50px;",
-    # diamond uses clip-path to avoid rotating the label
-    "diamond": "border-radius:4px; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
-    "hexagon": "clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); border-radius:4px; overflow:visible;",
+    "diamond": "border-radius:4px;",
+    "hexagon": "border-radius:4px;",
     "subroutine": "border-radius:4px;",
-    "trapezoid":     "clip-path:polygon(15% 0%,100% 0%,85% 100%,0% 100%); border-radius:4px;",
-    "trapezoid-alt": "clip-path:polygon(0% 0%,85% 0%,100% 100%,15% 100%); border-radius:4px;",
+    "trapezoid":     "border-radius:4px;",
+    "trapezoid-alt": "border-radius:4px;",
     "doublecircle": "border-radius:50%; position:relative;",
     "cylinder": "",  # SVG overlay draws the silo shape; no CSS border-radius needed
     "circle": "border-radius:50%;",
-    "flag": "clip-path:polygon(0% 0%,88% 0%,100% 50%,88% 100%,0% 100%); border-radius:0;",
+    "flag": "border-radius:0;",
+}
+
+# clip-path polygons for polygon shapes — applied to the background div, NOT the outer container,
+# so text is not clipped by the polygon boundary.
+_CLIP_PATH_CSS = {
+    "diamond":      "clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
+    "hexagon":      "clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%);",
+    "trapezoid":    "clip-path:polygon(15% 0%,100% 0%,85% 100%,0% 100%);",
+    "trapezoid-alt":"clip-path:polygon(0% 0%,85% 0%,100% 100%,15% 100%);",
+    "flag":         "clip-path:polygon(0% 0%,88% 0%,100% 50%,88% 100%,0% 100%);",
 }
 
 
@@ -369,16 +378,18 @@ def _render_graph_fragment(
                 _border_css = f'border:1.5px dashed {border_var};'
             elif n.shape == "diamond":
                 _border_css = ""
-                _hw = _DIAMOND_SIZE // 2
+                _dw = n.width if n.width > 0 else _DIAMOND_SIZE
+                _hw = _dw // 2
                 _shape_border_svg = (
                     f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                    f'width="{_DIAMOND_SIZE}" height="{node_h}">'
-                    f'<polygon points="{_hw},1 {_DIAMOND_SIZE-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
+                    f'width="{_dw}" height="{node_h}">'
+                    f'<polygon points="{_hw},1 {_dw-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
                     f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
                 )
             elif n.shape == "hexagon":
                 _border_css = ""
-                _hw, _hh = _HEXAGON_SIZE, node_h
+                _hw = n.width if n.width > 0 else _HEXAGON_SIZE
+                _hh = node_h
                 _shape_border_svg = (
                     f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
                     f'width="{_hw}" height="{_hh}">'
@@ -484,13 +495,14 @@ def _render_graph_fragment(
                     f'{inner}{_cyl_svg}</div>'
                 )
             elif n.shape == "circle":
-                # Non-terminal circle: fixed _CIRCLE_NODE_SIZE square rendered as a
-                # perfect circle (border-radius:50%).  Using an explicit fixed height
-                # avoids the oval produced by border-radius:50% on a tall/wide rect.
+                # Non-terminal circle: dynamic-sized square rendered as a perfect circle
+                # (border-radius:50%). Using an explicit fixed height avoids the oval
+                # produced by border-radius:50% on a tall/wide rect.
+                _circ_sz = n.width if n.width > 0 else _CIRCLE_NODE_SIZE
                 parts.append(
                     f'<div class="node node-circle{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{_CIRCLE_NODE_SIZE}px; height:{_CIRCLE_NODE_SIZE}px; '
+                    f'width:{_circ_sz}px; height:{_circ_sz}px; '
                     f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
                     f'box-sizing:border-box; overflow:hidden; '
                     f'{_border_css} '
@@ -502,34 +514,45 @@ def _render_graph_fragment(
                     f'{inner}</div>'
                 )
             else:
-                # Diamond/hexagon use clip-path: center text so it sits in the
-                # widest part of the polygon and doesn't touch the clipped edges.
+                # Polygon shapes: clip-path goes on a background div (not the outer container)
+                # so the label text is never clipped by the polygon boundary.
                 _center_shapes = n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag")
                 _align = "center" if _center_shapes else "flex-start"
                 _text_align = "center" if _center_shapes else "left"
-                # Diamond and hexagon use fixed sizes to keep the clip-path aspect
-                # ratio 1:1 and match the routing width returned by _node_render_w.
-                # Diamond and hexagon use fixed sizes; all other shapes use per-node width.
                 if n.shape == "diamond":
-                    _w_css = f'width:{_DIAMOND_SIZE}px; min-height:{node_h}px; '
+                    _nw = n.width if n.width > 0 else _DIAMOND_SIZE
                 elif n.shape == "hexagon":
-                    _w_css = f'width:{_HEXAGON_SIZE}px; min-height:{node_h}px; '
+                    _nw = n.width if n.width > 0 else _HEXAGON_SIZE
                 else:
                     _nw = n.width or NODE_W
-                    _w_css = f'width:{_nw}px; min-height:{node_h}px; '
+                _bg_css = (
+                    f'background:linear-gradient({_depth_wash},{_depth_wash}),'
+                    f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css}'
+                )
+                _clip_css = _CLIP_PATH_CSS.get(n.shape, "")
                 parts.append(
+                    # Outer container: no clip-path, no overflow:hidden, no box-shadow
+                    # (box-shadow goes on the background div so it follows the polygon outline)
                     f'<div class="node node-{_h(n.shape)}{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'{_w_css}'
-                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                    f'box-sizing:border-box; overflow:hidden; '
+                    f'width:{_nw}px; min-height:{node_h}px; '
+                    f'box-sizing:border-box; overflow:visible; '
                     f'{_border_css} '
-                    f'{shape_css} '
-                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css} '
-                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                    f'display:flex; flex-direction:column; align-items:{_align}; justify-content:center; '
-                    f'text-align:{_text_align};">'
-                    f'{inner}{_shape_border_svg}</div>'
+                    f'{shape_css}">'
+                    # SVG polygon border first (before inner divs so existing tests
+                    # that search up to the first </div> still find the polygon)
+                    f'{_shape_border_svg}'
+                    # Background div: carries the polygon clip, fill, and shadow
+                    f'<div style="position:absolute; inset:0; {_clip_css} {_bg_css} '
+                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03));"></div>'
+                    # Text div: no clip-path — label text always visible
+                    f'<div style="position:absolute; inset:0; '
+                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                    f'box-sizing:border-box; display:flex; flex-direction:column; '
+                    f'align-items:{_align}; justify-content:center; '
+                    f'text-align:{_text_align}; overflow:visible;">'
+                    f'{inner}</div>'
+                    f'</div>'
                 )
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.

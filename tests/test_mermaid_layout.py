@@ -2375,7 +2375,9 @@ class TestWrapLabelBudget:
             _wrap_label("x", max_chars=20)  # type: ignore[call-arg]
 
     def test_icon_narrow_budget(self):
-        label = "long icon label text here"
+        # "medium length label" fits in the plain budget (152px) at 15/700 but not the
+        # icon budget (118px), so icon wrapping must produce more lines than plain.
+        label = "medium length label"
         icon_lines = _wrap_label(label, width_budget=NODE_W - 40 - ICON_COL_WIDTH)
         plain_lines = _wrap_label(label)
         assert len(icon_lines) > len(plain_lines), (
