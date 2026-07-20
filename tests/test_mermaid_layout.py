@@ -6856,3 +6856,72 @@ class TestSubgraphLocalDirection:
         assert lefts["A"] != lefts["B"], (
             f"direction LR subgraph: A and B should have different x; got A={lefts['A']}, B={lefts['B']}"
         )
+
+
+# ── TestP0GeometryFixes ──────────────────────────────────────────────────────
+
+class TestP0GeometryFixes:
+    """Construction tests for P0 layout geometry spec (AC-2, AC-3, AC-7, AC-8)."""
+
+    def _make_node(self, nid: str, label: str, rank: int = 0, col: int = 0, shape: str = "rect") -> _Node:
+        return _Node(id=nid, label=label, rank=rank, col=col, shape=shape)
+
+    def test_long_label_capped_at_node_max_w(self) -> None:
+        """AC-2: text-box node with a 300-char label gets n.width <= NODE_MAX_W."""
+        from mermaid_render.layout._constants import NODE_MAX_W
+        long_label = "A" * 300
+        nodes = {"A": self._make_node("A", long_label)}
+        _assign_coordinates(nodes)
+        n = nodes["A"]
+        assert n.width > 0, "width should be set"
+        assert n.width <= NODE_MAX_W, f"width {n.width} must be <= NODE_MAX_W={NODE_MAX_W}"
+
+    def test_assign_coordinates_populates_height(self) -> None:
+        """AC-3: every non-dummy node has n.height > 0 after _assign_coordinates."""
+        nodes = {
+            "A": self._make_node("A", "Alpha", rank=0, col=0),
+            "B": self._make_node("B", "Beta", rank=1, col=0),
+        }
+        _assign_coordinates(nodes)
+        for nid, n in nodes.items():
+            assert n.height > 0, f"node {nid} height should be > 0; got {n.height}"
+
+    def test_tb_per_column_narrow_node_x(self) -> None:
+        """AC-7: narrow-column node x reflects its own column width, not global max.
+
+        Two nodes at the same rank: A (col=0, short label, small width) and
+        B (col=1, long label, large width). A.x must equal CANVAS_PAD (first col).
+        B.x must equal CANVAS_PAD + col0_width + COL_GAP, not CANVAS_PAD + col1_width + COL_GAP.
+        """
+        nodes = {
+            "A": self._make_node("A", "Hi", rank=0, col=0),
+            "B": self._make_node("B", "A" * 50, rank=0, col=1),
+        }
+        _assign_coordinates(nodes, direction="TB")
+        a, b = nodes["A"], nodes["B"]
+        assert a.x == CANVAS_PAD, f"col-0 node x={a.x} should equal CANVAS_PAD={CANVAS_PAD}"
+        # B.x must equal CANVAS_PAD + A.width + COL_GAP (per-column), not CANVAS_PAD + B.width + COL_GAP (global)
+        expected_b_x = CANVAS_PAD + a.width + COL_GAP
+        assert b.x == expected_b_x, (
+            f"col-1 node x={b.x} should equal CANVAS_PAD+a.width+COL_GAP={expected_b_x}; "
+            f"a.width={a.width}, b.width={b.width}"
+        )
+
+    def test_lr_per_rank_wide_node_x(self) -> None:
+        """AC-8: wide-rank node x equals CANVAS_PAD + narrow_rank_width + RANK_GAP.
+
+        Two nodes: narrow (rank=0) and wide (rank=1). Wide node x must follow the
+        narrow rank's width, not the wide rank's width.
+        """
+        nodes = {
+            "A": self._make_node("A", "Hi", rank=0, col=0),
+            "B": self._make_node("B", "A" * 50, rank=1, col=0),
+        }
+        _assign_coordinates(nodes, direction="LR")
+        a, b = nodes["A"], nodes["B"]
+        assert a.x == CANVAS_PAD, f"rank-0 node x={a.x} should equal CANVAS_PAD={CANVAS_PAD}"
+        expected_b_x = CANVAS_PAD + a.width + RANK_GAP
+        assert b.x == expected_b_x, (
+            f"rank-1 node x={b.x} should equal CANVAS_PAD+a.width+RANK_GAP={expected_b_x}; "
+            f"a.width={a.width}, b.width={b.width}"
+        )

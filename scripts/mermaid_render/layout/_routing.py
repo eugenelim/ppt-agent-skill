@@ -18,8 +18,10 @@ def _node_render_w(n: "_Node") -> int:
         return _TERMINAL_NODE_SIZE
     if n.shape in ("circle", "doublecircle"):
         return n.width if n.width > 0 else _CIRCLE_NODE_SIZE
-    if n.shape in ("diamond", "hexagon"):
+    if n.shape == "diamond":
         return n.width if n.width > 0 else _DIAMOND_SIZE
+    if n.shape == "hexagon":
+        return n.width if n.width > 0 else _HEXAGON_SIZE
     return n.width or NODE_W
 
 

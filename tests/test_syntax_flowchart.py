@@ -513,6 +513,61 @@ class TestFlowchartShapeFixes:
         assert "diagram-group" in html
         assert "diagram mermaid-layout" in html
 
+    def test_circle_long_label_grows_beyond_base(self) -> None:
+        """AC-4: ((long label)) circle diameter is strictly > _CIRCLE_NODE_SIZE."""
+        import re
+        from mermaid_render.layout._constants import _CIRCLE_NODE_SIZE
+        html = _render("flowchart TB\n  A((A Long Circle Label That Exceeds Default))")
+        m = re.search(r'class="node node-circle[^"]*"[^>]*style="[^"]*width:(\d+)px', html)
+        assert m, "circle div not found"
+        w = int(m.group(1))
+        assert w > _CIRCLE_NODE_SIZE, (
+            f"long-label circle width {w} must grow > _CIRCLE_NODE_SIZE={_CIRCLE_NODE_SIZE}"
+        )
+
+    def test_diamond_long_label_grows_beyond_base(self) -> None:
+        """AC-5: {{long label}} diamond is strictly > _DIAMOND_SIZE for a wide label."""
+        import re
+        from mermaid_render.layout._constants import _DIAMOND_SIZE
+        html = _render("flowchart TB\n  A{A Very Long Decision Label That Exceeds Default Size}")
+        m = re.search(r'class="node node-diamond[^"]*"[^>]*style="[^"]*width:(\d+)px', html)
+        assert m, "diamond div not found"
+        w = int(m.group(1))
+        assert w > _DIAMOND_SIZE, (
+            f"long-label diamond width {w} must grow > _DIAMOND_SIZE={_DIAMOND_SIZE}"
+        )
+
+    def test_polygon_clip_path_on_background_not_outer(self) -> None:
+        """AC-6: outer container has no clip-path; background div has clip-path for all 5 shapes."""
+        import re
+        shapes = [
+            ("flowchart TB\n  A{Decision}", "diamond"),
+            ("flowchart TB\n  A{{Hexagon}}", "hexagon"),
+            ("flowchart TB\n  A[/Trapezoid/]", "trapezoid"),
+            ("flowchart TB\n  A[\\\\Trap-alt\\\\]", "trapezoid-alt"),
+            ("flowchart TB\n  A>Flag]", "flag"),
+        ]
+        for src, shape in shapes:
+            html = _render(src)
+            # Find the outer container div for this shape
+            outer_m = re.search(
+                rf'class="node node-{re.escape(shape)}[^"]*"[^>]*style="([^"]*)"',
+                html,
+            )
+            assert outer_m, f"{shape}: outer container div not found"
+            outer_style = outer_m.group(1)
+            assert "clip-path" not in outer_style, (
+                f"{shape}: clip-path must NOT be on outer container; found in: {outer_style!r}"
+            )
+            # Background div follows immediately and must carry the clip-path
+            after_outer = html[outer_m.end():]
+            bg_m = re.search(r'<div style="([^"]*)"', after_outer)
+            assert bg_m, f"{shape}: background div not found after outer container"
+            bg_style = bg_m.group(1)
+            assert "clip-path" in bg_style, (
+                f"{shape}: clip-path must be on background div; got: {bg_style!r}"
+            )
+
 
 class TestDummyChainRouting:
     """Long-range edges (A→C skipping B) must render as ONE path, not two segments."""

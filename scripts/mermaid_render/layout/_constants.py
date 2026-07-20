@@ -423,8 +423,10 @@ def _node_render_h(n: "_Node") -> int:
         return _TERMINAL_NODE_SIZE
     if n.shape in ("circle", "doublecircle"):
         return n.width if n.width > 0 else _CIRCLE_NODE_SIZE
-    if n.shape in ("diamond", "hexagon"):
+    if n.shape == "diamond":
         return n.width if n.width > 0 else _DIAMOND_SIZE
+    if n.shape == "hexagon":
+        return n.width if n.width > 0 else _HEXAGON_SIZE
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)
