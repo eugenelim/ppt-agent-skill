@@ -1,0 +1,31 @@
+requirementDiagram
+
+requirement test_req {
+  id: 1
+  text: The system shall process requests.
+  risk: High
+  verifymethod: Test
+}
+
+functionalRequirement func_req {
+  id: 2
+  text: The system shall provide a REST API.
+  risk: Medium
+  verifymethod: Demonstration
+}
+
+performanceRequirement perf_req {
+  id: 3
+  text: The system shall respond within 200ms.
+  risk: Low
+  verifymethod: Analysis
+}
+
+element test_entity {
+  type: simulation
+  docref: /refs/spec.docx
+}
+
+test_entity - satisfies -> test_req
+test_entity - verifies -> perf_req
+func_req - derives -> test_req

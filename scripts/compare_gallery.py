@@ -63,6 +63,15 @@ nav a {
     background: #f9f9f7;
 }
 nav a:hover { background: #e8e5e0; }
+.nav-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-right: 12px; }
+.nav-type { font-size: 11px; font-weight: 700; color: #555; padding: 2px 0; margin-right: 2px; white-space: nowrap; }
+.type-group-header {
+    padding: 10px 24px 6px;
+    font-size: 13px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #666;
+    border-top: 2px solid #ddd; margin-top: 8px; background: #f9f8f5;
+}
+.badge-warn { background: #fff3cd; color: #856404; }
 .diagram-section {
     padding: 24px;
     border-bottom: 1px solid #ddd;
@@ -174,13 +183,19 @@ def _render_ours(src: str) -> tuple[str | None, str]:
         return None, str(e)
 
 
+def _diagram_type(name: str) -> str:
+    """Extract diagram type prefix from fixture filename, e.g. 'flowchart-basic' → 'flowchart'."""
+    return name.split("-")[0]
+
+
 def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "ours").mkdir(exist_ok=True)
     (out_dir / "mmdc").mkdir(exist_ok=True)
 
-    sections: list[str] = []
-    nav_items: list[str] = []
+    # Collect results grouped by diagram type
+    from collections import defaultdict
+    type_results: dict[str, list[tuple]] = defaultdict(list)
 
     for mmd_path in sorted(mmd_files):
         name = mmd_path.stem
@@ -190,44 +205,61 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
         mmdc_svg_path = out_dir / "mmdc" / f"{name}.svg"
         mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
 
-        # Save our HTML for iframe-less embedding
         if ours_html:
             (out_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
 
-        ours_status = "ok" if ours_html else "err"
-        mmdc_status = "ok" if mmdc_ok else "err"
+        dtype = _diagram_type(name)
+        type_results[dtype].append((name, src, ours_html, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
 
-        nav_items.append(
-            f'<a href="#{name}">{name}'
-            f'<span class="status-badge badge-{ours_status}">O</span>'
-            f'<span class="status-badge badge-{mmdc_status}">M</span>'
-            f'</a>'
+    # Build grouped nav
+    nav_parts: list[str] = []
+    for dtype in sorted(type_results):
+        items = type_results[dtype]
+        n_ok = sum(1 for _, _, h, _, _, _, _ in items if h)
+        n_total = len(items)
+        group_status = "ok" if n_ok == n_total else ("err" if n_ok == 0 else "warn")
+        badge_cls = "badge-ok" if group_status == "ok" else ("badge-err" if group_status == "err" else "badge-warn")
+        nav_parts.append(
+            f'<div class="nav-group">'
+            f'<span class="nav-type">{_html_mod.escape(dtype)}'
+            f'<span class="status-badge {badge_cls}">{n_ok}/{n_total}</span></span>'
         )
-
-        src_escaped = _html_mod.escape(src)
-
-        if ours_html:
-            ours_content = f'<div class="render-box">{ours_html}</div>'
-        else:
-            ours_content = (
-                f'<div class="error-box">{_html_mod.escape(ours_err)}</div>'
+        for name, _, ours_html, _, _, mmdc_ok, _ in items:
+            ours_status = "ok" if ours_html else "err"
+            mmdc_status = "ok" if mmdc_ok else "err"
+            short = name[len(dtype):].lstrip("-") or name
+            nav_parts.append(
+                f'<a href="#{name}">{_html_mod.escape(short)}'
+                f'<span class="status-badge badge-{ours_status}">O</span>'
+                f'<span class="status-badge badge-{mmdc_status}">M</span>'
+                f'</a>'
             )
+        nav_parts.append('</div>')
 
-        if mmdc_ok:
-            svg_content = mmdc_svg_path.read_text(encoding="utf-8")
-            # Strip XML declaration if present
-            if svg_content.startswith("<?xml"):
-                svg_content = svg_content[svg_content.index("<svg"):]
-            mmdc_content = (
-                f'<div class="render-box" style="overflow:auto;">'
-                f'{svg_content}</div>'
-            )
-        else:
-            mmdc_content = (
-                f'<div class="error-box">{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}</div>'
-            )
+    # Build sections grouped by type
+    sections: list[str] = []
+    for dtype in sorted(type_results):
+        items = type_results[dtype]
+        sections.append(f'<div class="type-group-header" id="type-{dtype}">{_html_mod.escape(dtype)}</div>')
+        for name, src, ours_html, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
+            ours_status = "ok" if ours_html else "err"
+            mmdc_status = "ok" if mmdc_ok else "err"
+            src_escaped = _html_mod.escape(src)
 
-        sections.append(f"""
+            if ours_html:
+                ours_content = f'<div class="render-box">{ours_html}</div>'
+            else:
+                ours_content = f'<div class="error-box">{_html_mod.escape(ours_err)}</div>'
+
+            if mmdc_ok:
+                svg_content = mmdc_svg_path.read_text(encoding="utf-8")
+                if svg_content.startswith("<?xml"):
+                    svg_content = svg_content[svg_content.index("<svg"):]
+                mmdc_content = f'<div class="render-box" style="overflow:auto;">{svg_content}</div>'
+            else:
+                mmdc_content = f'<div class="error-box">{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}</div>'
+
+            sections.append(f"""
 <div class="diagram-section" id="{name}">
   <h2>{_html_mod.escape(name)}
     <span class="status-badge badge-{ours_status}">ours: {ours_status}</span>
@@ -249,8 +281,13 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
   </details>
 </div>""")
 
-    nav_html = "\n".join(nav_items)
+    nav_html = "\n".join(nav_parts)
     sections_html = "\n".join(sections)
+
+    total = sum(len(v) for v in type_results.values())
+    n_ours_ok = sum(1 for items in type_results.values() for _, _, h, _, _, _, _ in items if h)
+    n_mmdc_ok = sum(1 for items in type_results.values() for _, _, _, _, _, m, _ in items if m)
+    n_types = len(type_results)
 
     index_html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -262,7 +299,9 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
 <body>
   <header>
     <h1>mermaid_render vs mmdc comparison</h1>
-    <span>O = ours &nbsp;|&nbsp; M = mmdc &nbsp;|&nbsp; green = ok, red = error</span>
+    <span>{total} diagrams &nbsp;·&nbsp; {n_types} types &nbsp;·&nbsp;
+      ours {n_ours_ok}/{total} ok &nbsp;·&nbsp; mmdc {n_mmdc_ok}/{total} ok &nbsp;|&nbsp;
+      O = ours &nbsp;|&nbsp; M = mmdc &nbsp;|&nbsp; green = ok, red = error</span>
   </header>
   <nav>{nav_html}</nav>
   {sections_html}

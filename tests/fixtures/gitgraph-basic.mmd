@@ -1,0 +1,14 @@
+gitgraph LR:
+   commit id: "init"
+   branch develop
+   checkout develop
+   commit id: "feat-1" tag: "v0.1"
+   commit id: "feat-2" type: HIGHLIGHT
+   branch feature/login
+   checkout feature/login
+   commit id: "login-1"
+   commit id: "login-2" type: REVERSE
+   checkout develop
+   merge feature/login id: "merge-login"
+   checkout main
+   merge develop id: "release" tag: "v1.0"
