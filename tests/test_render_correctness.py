@@ -447,13 +447,15 @@ class TestC4SemanticFields:
         html = _dispatch((FIXTURES_DIR / "c4-basic.mmd").read_text(), None, 800)
         assert "Main application" in html, "System description not rendered"
 
-    def test_person_has_circle_shape(self):
-        """Person element must render with circle CSS class (node-circle), not a plain rect."""
+    def test_person_shape_is_rect(self):
+        """Person element must render as a rect (c4-person), not a circle."""
         html = _dispatch((FIXTURES_DIR / "c4-basic.mmd").read_text(), None, 800)
         assert 'data-node-id="user"' in html, "user node not found in rendered HTML"
-        # class="node node-circle" comes BEFORE data-node-id in the element tag
-        assert re.search(r'node-circle[^>]*data-node-id="user"', html), (
-            "Person node should have node-circle class"
+        assert not re.search(r'node-circle[^>]*data-node-id="user"', html), (
+            "Person node must not have node-circle class in new C4 renderer"
+        )
+        assert re.search(r'c4-person[^>]*data-node-id="user"', html), (
+            "Person node should have c4-person class"
         )
 
     def test_type_tag_rendered(self):

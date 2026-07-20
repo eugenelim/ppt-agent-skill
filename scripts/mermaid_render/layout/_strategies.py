@@ -10,7 +10,7 @@ from ._constants import (
     NODE_CAP, EDGE_CAP, GROUP_CAP,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
-    _ARCH_ICON_MAP, _C4_ICON_MAP, _LABEL_ICON_KEYWORDS,
+    _ARCH_ICON_MAP, _LABEL_ICON_KEYWORDS,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
     _node_render_h,
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
@@ -18,6 +18,7 @@ from ._constants import (
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
 from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
 from ._routing import _route_edges, _arrowhead
+from ._c4 import _render_c4_fragment, C4Item, C4Relationship, C4Boundary
 from ._renderer import (
     _render_graph_fragment,
     _extract_diagram_title, _render_metadata_chip, _render_legend,
@@ -3260,17 +3261,6 @@ _C4_ELEM_RE = re.compile(
     r'Person_Ext|System_Ext|Container_Ext)\s*'
     r'\(\s*(\w+)\s*,\s*"([^"]+)"(?:\s*,\s*"([^"]*)")?', re.I
 )
-_C4_TYPE_DISPLAY: dict[str, str] = {
-    "person": "Person",
-    "person_ext": "Person [Ext]",
-    "system": "Software System",
-    "system_ext": "Software System [Ext]",
-    "systemdb": "System DB",
-    "container": "Container",
-    "container_ext": "Container [Ext]",
-    "containerdb": "Container DB",
-    "component": "Component",
-}
 _C4_BOUNDARY_RE = re.compile(
     r'^(?:Enterprise_Boundary|System_Boundary|Container_Boundary|Boundary)'
     r'\s*\(\s*(\w+)\s*,\s*"([^"]+)"', re.I
@@ -3282,51 +3272,59 @@ _C4_REL_RE = re.compile(
 
 
 def _layout_c4(src: str, direction: str, width_hint: int) -> str:
-    """C4Context/C4Container/C4Component: boundary boxes + nodes + relationships."""
+    """C4Context/C4Container/C4Component: ordered shelf packing via C4Bounds."""
     content_lines = _directive_content(src)
-    nodes: dict[str, _Node] = {}
-    groups: dict[str, _Group] = {}
-    edges: list[_Edge] = []
+    title = ""
+    items: list[C4Item] = []
+    relationships: list[C4Relationship] = []
+    groups: dict[str, C4Boundary] = {}
     boundary_stack: list[str] = []
+
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
+        if line.lower().startswith("title "):
+            title = line[6:].strip()
+            continue
         m = _C4_BOUNDARY_RE.match(line)
         if m:
             bid, blbl = m.group(1), m.group(2)
-            groups.setdefault(bid, _Group(id=bid, label=blbl, members=[]))
-            boundary_stack.append(bid); continue
+            groups.setdefault(bid, C4Boundary(id=bid, label=blbl))
+            boundary_stack.append(bid)
+            continue
         if line.startswith(")") and boundary_stack:
-            boundary_stack.pop(); continue
+            boundary_stack.pop()
+            continue
         m = _C4_ELEM_RE.match(line)
         if m:
             elem_type = m.group(1).lower()
             eid, elbl = m.group(2), m.group(3)
             desc = m.group(4) or ""
-            type_tag = _C4_TYPE_DISPLAY.get(elem_type, elem_type.capitalize())
-            tech = f"[{type_tag}]"
-            if desc:
-                tech += f"\n{desc}"
-            label = f"{elbl}|{tech}"
-            shape = "circle" if "person" in elem_type else "rect"
-            icon_name = _C4_ICON_MAP.get(elem_type, "node")
-            css_class = "external" if elem_type.endswith("_ext") else ""
+            is_ext = elem_type.endswith("_ext")
             gin = boundary_stack[-1] if boundary_stack else None
-            nodes[eid] = _Node(id=eid, label=label, shape=shape,
-                               group=gin, icon=icon_name, css_class=css_class)
+            items.append(C4Item(
+                alias=eid,
+                kind=elem_type,
+                label=elbl,
+                description=desc,
+                is_external=is_ext,
+                boundary=gin,
+            ))
             if gin:
-                groups.setdefault(gin, _Group(id=gin, label=gin, members=[]))
+                groups.setdefault(gin, C4Boundary(id=gin, label=gin))
                 if eid not in groups[gin].members:
                     groups[gin].members.append(eid)
             continue
         m = _C4_REL_RE.match(line)
         if m:
-            edges.append(_Edge(src=m.group(1), dst=m.group(2),
-                               label=m.group(3), style="solid", arrow=True))
-    if not nodes:
+            relationships.append(C4Relationship(
+                src=m.group(1), dst=m.group(2), label=m.group(3),
+            ))
+
+    if not items:
         raise ValueError("No elements found in C4 diagram.")
-    return _graph_from_content_nodes(nodes, edges, groups, width_hint)
+    return _render_c4_fragment(title, items, relationships, groups, width_hint)
 
 
 # ── T16: journey ──────────────────────────────────────────────────────────────

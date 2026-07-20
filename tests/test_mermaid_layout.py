@@ -665,8 +665,8 @@ class TestDirectiveStrategies:
     def test_c4_context(self):
         self._ok("C4Context\n  Person(user, \"User\")\n  System(sys, \"System\")\n  Rel(user, sys, \"Uses\")")
 
-    def test_c4_ext_elements_get_external_class(self):
-        """C4 _ext element types must render with dashed border (css_class='external')."""
+    def test_c4_ext_elements_get_external_style(self):
+        """C4 _ext element types must render with solid gray fill (not dashed border)."""
         src = (
             "C4Context\n"
             "  Person_Ext(extuser, \"External User\")\n"
@@ -676,8 +676,8 @@ class TestDirectiveStrategies:
             "  Rel(sys, extsys, \"Calls\")\n"
         )
         html = _dispatch_ok(src)
-        assert "border:1.5px dashed" in html, "external C4 elements must have dashed border"
-        # Internal element should not have dashed border
+        assert "background:#999" in html, "external C4 elements must have gray fill"
+        assert "border:1.5px dashed" not in html, "C4 external nodes must not use dashed border"
         assert "border:1.5px solid" in html, "internal C4 elements must have solid border"
 
 
@@ -2166,7 +2166,7 @@ class TestD4C4Context:
         )
 
     def test_c4_bigbank_external_border(self):
-        """External C4 elements (Person_Ext, System_Ext) render with dashed border."""
+        """External C4 elements (Person_Ext, System_Ext) render with solid gray fill."""
         src = (
             "C4Context\n"
             '  Person_Ext(extuser, "External User", "Outside the boundary")\n'
@@ -2176,8 +2176,132 @@ class TestD4C4Context:
             '  Rel(sys, extsys, "Calls")\n'
         )
         html = _dispatch(src, None, 1200)
-        assert "border:1.5px dashed" in html, "external C4 elements must have dashed border"
+        assert "background:#999" in html, "external C4 elements must have gray fill"
+        assert "border:1.5px dashed" not in html, "C4 external nodes must not use dashed border"
         assert "border:1.5px solid" in html, "internal C4 elements must have solid border"
+
+
+# ── TestC4LayoutCoordinates ───────────────────────────────────────────────────
+
+def _c4_node_pos(html: str, node_id: str) -> tuple[int, int]:
+    """Extract (left, top) px values from a C4 node's style by data-node-id.
+
+    Anchors on 'position:absolute; left:Xpx; top:Ypx' to avoid matching
+    'border-top:Npx' which also contains 'top:N'.
+    """
+    import re as _re
+    # Match the positioned div anchored by data-node-id — use 'position:absolute'
+    # as a sentinel so 'left:' and 'top:' are from layout coords, not border-top.
+    m = _re.search(
+        rf'data-node-id="{node_id}"[^>]*position:absolute;?\s*left:(\d+)px;?\s*top:(\d+)px',
+        html,
+    )
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    raise AssertionError(f"node {node_id!r} not found in HTML or position not parseable")
+
+
+_C4_BASIC_SRC = (
+    "C4Context\n"
+    '    title System Context\n'
+    '    Person(user, "User", "End user")\n'
+    '    System(webapp, "Web App", "Main application")\n'
+    '    System_Ext(email, "Email Service", "Sends emails")\n'
+    '    Rel(user, webapp, "Uses")\n'
+    '    Rel(webapp, email, "Sends via")\n'
+)
+
+
+class TestC4LayoutCoordinates:
+    """Pixel-exact layout tests for C4 shelf packer (Mermaid 11.15 parity)."""
+
+    def test_c4_basic_packing_coordinates(self):
+        """c4-basic fixture: user/webapp on row 1, email wraps to row 2."""
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        user_pos = _c4_node_pos(html, "user")
+        webapp_pos = _c4_node_pos(html, "webapp")
+        email_pos = _c4_node_pos(html, "email")
+        assert user_pos == (150, 166), f"user position {user_pos!r}"
+        assert webapp_pos == (466, 166), f"webapp position {webapp_pos!r}"
+        assert email_pos == (150, 400), f"email position {email_pos!r}"
+
+    def test_c4_person_node_dimensions(self):
+        """Person node is 216×134px (taller than system nodes)."""
+        import re as _re
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        m = _re.search(
+            r'data-node-id="user"[^>]*width:(\d+)px[^>]*height:(\d+)px',
+            html,
+        )
+        assert m, "user node not found with width/height in style"
+        assert int(m.group(1)) == 216, f"Person width {m.group(1)!r} != 216"
+        assert int(m.group(2)) == 134, f"Person height {m.group(2)!r} != 134"
+
+    def test_c4_system_node_dimensions(self):
+        """System node is 216×86px."""
+        import re as _re
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        m = _re.search(
+            r'data-node-id="webapp"[^>]*width:(\d+)px[^>]*height:(\d+)px',
+            html,
+        )
+        assert m, "webapp node not found with width/height in style"
+        assert int(m.group(1)) == 216, f"System width {m.group(1)!r} != 216"
+        assert int(m.group(2)) == 86, f"System height {m.group(2)!r} != 86"
+
+    def test_c4_row_1_same_y(self):
+        """user and webapp are on the same row (same top coordinate)."""
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        assert _c4_node_pos(html, "user")[1] == _c4_node_pos(html, "webapp")[1]
+
+    def test_c4_email_wraps_below(self):
+        """email wraps to the next row, below and left-aligned with user."""
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        user_x, user_y = _c4_node_pos(html, "user")
+        _, email_y = _c4_node_pos(html, "email")
+        email_x, _ = _c4_node_pos(html, "email")
+        assert email_y > user_y, "email must be on a lower row than user"
+        assert email_x == user_x, "email must be left-aligned with user"
+
+    def test_c4_narrow_width_no_per_row_wrap(self):
+        """Packing width is independent of display width_hint.
+
+        Even at a narrow width_hint=200, the two nodes on row 1 stay on row 1
+        (zoom scales the canvas, packing uses the fixed layout_width=832).
+        """
+        html = _dispatch(_C4_BASIC_SRC, None, 200)
+        assert _c4_node_pos(html, "user")[1] == _c4_node_pos(html, "webapp")[1], (
+            "Packing must use layout_width=832, not width_hint — "
+            "user and webapp must remain on the same row"
+        )
+
+    def test_c4_title_rendered(self):
+        """'title System Context' line must appear as text in rendered HTML."""
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        assert "System Context" in html
+
+    def test_c4_external_solid_fill(self):
+        """System_Ext renders with gray fill, not dashed border."""
+        html = _dispatch(_C4_BASIC_SRC, None, 800)
+        assert "background:#999" in html
+        assert "border:1.5px dashed" not in html
+
+    def test_c4_relationships_do_not_move_nodes(self):
+        """Removing Rel(...) lines must not change node positions."""
+        src_with = _C4_BASIC_SRC
+        src_without = (
+            "C4Context\n"
+            '    title System Context\n'
+            '    Person(user, "User", "End user")\n'
+            '    System(webapp, "Web App", "Main application")\n'
+            '    System_Ext(email, "Email Service", "Sends emails")\n'
+        )
+        html_with = _dispatch(src_with, None, 800)
+        html_without = _dispatch(src_without, None, 800)
+        for nid in ("user", "webapp", "email"):
+            assert _c4_node_pos(html_with, nid) == _c4_node_pos(html_without, nid), (
+                f"Node {nid!r} position changed when relationships were removed"
+            )
 
 
 # ── TestMeasureTextWidth (AC-1) ───────────────────────────────────────────────

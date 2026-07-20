@@ -228,3 +228,39 @@ contract guarantees. Unblocked anytime; editorial only.
 
 -->
 
+## c4-layout-engine
+
+### c4-boundary-visual-rendering
+
+C4 boundary/group boxes (`Enterprise_Boundary`, `System_Boundary`, etc.) are
+currently parsed (member tracking only) but not rendered as visual containers.
+The `groups` dict is threaded through to `_render_c4_fragment` for future use.
+
+Also: the current parser closes boundary stacks on `)`, but Mermaid C4 closes
+with `}`. This latent bug has no output effect today (boundaries not rendered),
+but must be fixed before visual boundary rendering ships.
+
+### c4-boundary-closing-syntax
+
+The `_layout_c4` parser pops the `boundary_stack` on a line starting with `)`.
+Mermaid's C4 syntax closes boundaries with `}`. This produces wrong
+`item.boundary` attribution for elements inside boundaries in diagrams that use
+the correct `}` closing syntax. Fix together with `c4-boundary-visual-rendering`.
+
+### c4-edge-geometry-parity
+
+Current edge rendering uses a conventional center-ray rectangle intersection.
+Mermaid 11.15's `getIntersectPoint()` computes slope using the rectangle's
+top-left corner, but places the resulting intersection point at the center —
+producing slightly different edge attachment points from a mathematically
+conventional center-ray approach. The first relationship renders as a straight
+line; subsequent ones use a quadratic Bézier with control point
+`(sx + (ex-sx)/4, sy + (ey-sy)/2)`. Exact pixel parity with mmdc screenshots
+requires porting the Mermaid algorithm directly.
+
+### c4-icon-map-orphan
+
+`_C4_ICON_MAP` in `scripts/mermaid_render/layout/_constants.py` is now dead —
+`_strategies.py` no longer imports it after the C4 renderer was decoupled. Remove
+it in a future `_constants.py`-touching pass.
+
