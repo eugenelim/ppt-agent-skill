@@ -11,3 +11,8 @@ import pathlib as _p
 _sys.path.insert(0, str(_p.Path(__file__).parent))
 from mermaid_render import png as _real  # noqa: E402
 _sys.modules[__name__] = _real
+
+# __name__ remains "__main__" here even after the sys.modules alias above, so
+# subprocess invocations (python3 html2png.py ...) reach _real.main() correctly.
+if __name__ == "__main__":
+    _real.main()
