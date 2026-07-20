@@ -1091,7 +1091,12 @@ _QUAD_POINT_RE = re.compile(r'^(.+?)\s*:\s*\[([0-9.]+)\s*,\s*([0-9.]+)\]')
 
 
 def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
-    """quadrantChart: 2×2 fixed grid with plotted data points."""
+    """quadrantChart: 2×2 fixed grid with plotted data points.
+
+    Renders: title, x/y axis labels (including y-axis which was previously
+    dropped), quadrant background fills, quadrant labels, data-point circles,
+    and point labels.  Center dividers are solid lines (not dashed).
+    """
     content_lines = _directive_content(src)
     title = ""
     x_labels = ("Low", "High")
@@ -1119,13 +1124,35 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
             points.append({"name": m.group(1).strip(), "x": float(m.group(2)), "y": float(m.group(3))})
 
     PAD = 48
-    canvas_w = width_hint or 800
-    canvas_h = max(600, canvas_w * 3 // 4)
+    canvas_w = width_hint or 480
+    canvas_h = max(320, canvas_w * 3 // 4)
+    # Left margin: PAD (48) outer + 24 reserved for rotated y-axis labels.
     gx = PAD + 24
     gy = PAD + (24 if title else 0)
     gw = canvas_w - gx - PAD
     gh = canvas_h - gy - PAD - 24
     mx, my = gx + gw // 2, gy + gh // 2
+
+    _edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    _lc = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    _dot = "var(--edge-strong,var(--accent-1,#60a5fa))"
+
+    # Per-quadrant subtle background fills (Q1=top-right, Q2=top-left,
+    # Q3=bottom-left, Q4=bottom-right), consistent with mermaid's own palette.
+    _QUAD_BG: dict[str, str] = {
+        "1": "rgba(96,165,250,0.08)",   # top-right
+        "2": "rgba(52,211,153,0.07)",   # top-left
+        "3": "rgba(251,191,36,0.07)",   # bottom-left
+        "4": "rgba(248,113,113,0.07)",  # bottom-right
+    }
+    # (rect_x, rect_y, rect_w, rect_h) for each quadrant
+    _QUAD_RECT: dict[str, tuple[int, int, int, int]] = {
+        "1": (mx,  gy,  gw - gw // 2, gh // 2),
+        "2": (gx,  gy,  gw // 2,       gh // 2),
+        "3": (gx,  my,  gw // 2,       gh - gh // 2),
+        "4": (mx,  my,  gw - gw // 2,  gh - gh // 2),
+    }
 
     parts: list[str] = []
     parts.append(
@@ -1136,55 +1163,80 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<div style="position:absolute;left:{gx}px;top:{PAD}px;'
             f'font-size:12px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
+            f'font-family:{_lf};">{_h(title)}</div>'
         )
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
+
+    # Quadrant background fills (rendered first, behind border and dividers)
+    for qid, (qrx, qry, qrw, qrh) in _QUAD_RECT.items():
+        parts.append(
+            f'<rect x="{qrx}" y="{qry}" width="{qrw}" height="{qrh}" '
+            f'fill="{_QUAD_BG[qid]}" stroke="none"/>'
+        )
+
+    # Outer border + solid center dividers (solid, not dashed)
     parts.append(
         f'<rect x="{gx}" y="{gy}" width="{gw}" height="{gh}" '
-        f'fill="none" stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
+        f'fill="none" stroke="{_edge}" stroke-width="1.5"/>'
         f'<line x1="{mx}" y1="{gy}" x2="{mx}" y2="{gy + gh}" '
-        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'stroke="{_edge}" stroke-width="1"/>'
         f'<line x1="{gx}" y1="{my}" x2="{gx + gw}" y2="{my}" '
-        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1" stroke-dasharray="4 3"/>'
+        f'stroke="{_edge}" stroke-width="1"/>'
     )
+
+    # Data-point circles
     for pt in points:
         px = gx + int(pt["x"] * gw)
         py = gy + gh - int(pt["y"] * gh)
-        r = 5
-        poly = " ".join(
-            f"{px + int(r * math.cos(math.pi * 2 * k / 8))},"
-            f"{py + int(r * math.sin(math.pi * 2 * k / 8))}"
-            for k in range(8)
-        )
-        parts.append(f'<polygon points="{poly}" fill="var(--edge-strong,var(--accent-1,#60a5fa))"/>')
+        parts.append(f'<circle cx="{px}" cy="{py}" r="5" fill="{_dot}"/>')
+
+    # Y-axis labels as rotated SVG text: Low label at bottom, High at top.
+    # rotate(-90, anchor_x, anchor_y) pivots the text -90deg around the anchor.
+    # text-anchor="end" aligns the text end at the anchor for Low (bottom edge),
+    # text-anchor="start" aligns the text start at the anchor for High (top edge).
+    _yax_x = gx - 10
+    parts.append(
+        f'<text transform="rotate(-90,{_yax_x},{gy + gh})" '
+        f'x="{_yax_x}" y="{gy + gh}" font-size="10" fill="{_lc}" '
+        f'font-family="-apple-system,Inter,sans-serif" text-anchor="end">'
+        f'{_h(y_labels[0])}</text>'
+        f'<text transform="rotate(-90,{_yax_x},{gy})" '
+        f'x="{_yax_x}" y="{gy}" font-size="10" fill="{_lc}" '
+        f'font-family="-apple-system,Inter,sans-serif" text-anchor="start">'
+        f'{_h(y_labels[1])}</text>'
+    )
+
     parts.append('</svg>')
+
+    # Quadrant labels (HTML layer, corner-anchored inside each quadrant)
     for qid, qlbl in quad_labels.items():
         qx = (mx + 8) if qid in ("1", "4") else (gx + 8)
         qy = (gy + 8) if qid in ("1", "2") else (my + 8)
         parts.append(
             f'<span style="position:absolute;left:{qx}px;top:{qy}px;'
             f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
-            f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(qlbl)}</span>'
+            f'color:{_lc};font-family:{_lf};">{_h(qlbl)}</span>'
         )
+
+    # X-axis labels (low at left, high at right, below the chart)
     parts.append(
         f'<span style="position:absolute;left:{gx}px;top:{gy + gh + 6}px;'
-        f'font-size:10px;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-        f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(x_labels[0])}</span>'
+        f'font-size:10px;color:{_lc};font-family:{_lf};">{_h(x_labels[0])}</span>'
         f'<span style="position:absolute;right:{PAD}px;top:{gy + gh + 6}px;'
-        f'font-size:10px;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-        f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(x_labels[1])}</span>'
+        f'font-size:10px;color:{_lc};font-family:{_lf};">{_h(x_labels[1])}</span>'
     )
+
+    # Point labels (HTML layer, positioned next to each dot)
     for pt in points:
         px = gx + int(pt["x"] * gw)
         py = gy + gh - int(pt["y"] * gh)
         parts.append(
             f'<span data-point="{_h(pt["name"])}" style="position:absolute;left:{px + 8}px;top:{py - 8}px;'
             f'font-size:10px;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));white-space:nowrap;">'
+            f'font-family:{_lf};white-space:nowrap;">'
             f'{_h(pt["name"])}</span>'
         )
     parts.append('</div>')
