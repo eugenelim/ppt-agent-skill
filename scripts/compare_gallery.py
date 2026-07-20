@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import html as _html_mod
+import re
 import subprocess
 import sys
 import tempfile
@@ -110,6 +111,12 @@ nav a:hover { background: #e8e5e0; }
     min-height: 120px;
     padding: 8px;
 }
+.render-frame {
+    width: 100%;
+    border: none;
+    display: block;
+    min-height: 80px;
+}
 .pane-ours .render-box { border-color: #b8d8b8; }
 .pane-mmdc .render-box { border-color: #b8c4e0; }
 .error-box {
@@ -175,13 +182,10 @@ def _run_mmdc(src: str, out_svg: Path) -> tuple[bool, str]:
         tmp.unlink(missing_ok=True)
 
 
-_COMPARE_PANE_WIDTH = 560  # Pixel budget for each side-by-side pane
-
-
 def _render_ours(src: str) -> tuple[str | None, str]:
-    """Return (html_fragment, error_msg). html_fragment is None on error."""
+    """Return (full_html, error_msg). full_html is None on error."""
     try:
-        return mermaid_render.to_html(src, width_hint=_COMPARE_PANE_WIDTH), ""
+        return mermaid_render.to_html(src, width_hint=0), ""
     except Exception as e:
         return None, str(e)
 
@@ -196,73 +200,109 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
     (out_dir / "ours").mkdir(exist_ok=True)
     (out_dir / "mmdc").mkdir(exist_ok=True)
 
-    # Collect results grouped by diagram type
     from collections import defaultdict
+    # Tuple: (name, src, ours_ok, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err)
+    # ours_html is NOT held in memory — written to disk and re-read per section below.
     type_results: dict[str, list[tuple]] = defaultdict(list)
 
-    for mmd_path in sorted(mmd_files):
+    sorted_files = sorted(mmd_files)
+    n_total = len(sorted_files)
+    for i, mmd_path in enumerate(sorted_files):
         name = mmd_path.stem
         src = mmd_path.read_text(encoding="utf-8").strip()
+        print(f"  [{i + 1}/{n_total}] {name} ...", end=" ", flush=True)
 
         ours_html, ours_err = _render_ours(src)
-        mmdc_svg_path = out_dir / "mmdc" / f"{name}.svg"
-        mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
-
         if ours_html:
             (out_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
 
-        dtype = _diagram_type(name)
-        type_results[dtype].append((name, src, ours_html, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
+        mmdc_svg_path = out_dir / "mmdc" / f"{name}.svg"
+        mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
 
-    # Build grouped nav
+        ours_ok = ours_html is not None
+        print(f"ours:{'ok' if ours_ok else 'err'}  mmdc:{'ok' if mmdc_ok else 'err'}")
+
+        dtype = _diagram_type(name)
+        type_results[dtype].append((name, src, ours_ok, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
+
+    # Build nav — requires all results, so collected first.
     nav_parts: list[str] = []
     for dtype in sorted(type_results):
         items = type_results[dtype]
-        n_ok = sum(1 for _, _, h, _, _, _, _ in items if h)
-        n_total = len(items)
-        group_status = "ok" if n_ok == n_total else ("err" if n_ok == 0 else "warn")
+        n_ok = sum(1 for _, _, ok, _, _, _, _ in items if ok)
+        n_items = len(items)
+        group_status = "ok" if n_ok == n_items else ("err" if n_ok == 0 else "warn")
         badge_cls = "badge-ok" if group_status == "ok" else ("badge-err" if group_status == "err" else "badge-warn")
         nav_parts.append(
             f'<div class="nav-group">'
             f'<span class="nav-type">{_html_mod.escape(dtype)}'
-            f'<span class="status-badge {badge_cls}">{n_ok}/{n_total}</span></span>'
+            f'<span class="status-badge {badge_cls}">{n_ok}/{n_items}</span></span>'
         )
-        for name, _, ours_html, _, _, mmdc_ok, _ in items:
-            ours_status = "ok" if ours_html else "err"
-            mmdc_status = "ok" if mmdc_ok else "err"
+        for name, _, ours_ok, _, _, mmdc_ok, _ in items:
             short = name[len(dtype):].lstrip("-") or name
             nav_parts.append(
                 f'<a href="#{name}">{_html_mod.escape(short)}'
-                f'<span class="status-badge badge-{ours_status}">O</span>'
-                f'<span class="status-badge badge-{mmdc_status}">M</span>'
+                f'<span class="status-badge badge-{"ok" if ours_ok else "err"}">O</span>'
+                f'<span class="status-badge badge-{"ok" if mmdc_ok else "err"}">M</span>'
                 f'</a>'
             )
         nav_parts.append('</div>')
 
-    # Build sections grouped by type
-    sections: list[str] = []
-    for dtype in sorted(type_results):
-        items = type_results[dtype]
-        sections.append(f'<div class="type-group-header" id="type-{dtype}">{_html_mod.escape(dtype)}</div>')
-        for name, src, ours_html, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
-            ours_status = "ok" if ours_html else "err"
-            mmdc_status = "ok" if mmdc_ok else "err"
-            src_escaped = _html_mod.escape(src)
+    total_diags = sum(len(v) for v in type_results.values())
+    n_ours_ok = sum(ok for items in type_results.values() for _, _, ok, _, _, _, _ in items)
+    n_mmdc_ok = sum(m for items in type_results.values() for _, _, _, _, _, m, _ in items)
+    n_types = len(type_results)
+    nav_html = "\n".join(nav_parts)
 
-            if ours_html:
-                ours_content = f'<div class="render-box">{ours_html}</div>'
-            else:
-                ours_content = f'<div class="error-box">{_html_mod.escape(ours_err)}</div>'
+    # Stream index.html — write one section at a time to avoid holding all HTML in memory.
+    index_path = out_dir / "index.html"
+    with index_path.open("w", encoding="utf-8") as f:
+        f.write(f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>mermaid_render vs mmdc — comparison gallery</title>
+  <style>{_PAGE_CSS}</style>
+</head>
+<body>
+  <header>
+    <h1>mermaid_render vs mmdc comparison</h1>
+    <span>{total_diags} diagrams &nbsp;·&nbsp; {n_types} types &nbsp;·&nbsp;
+      ours {n_ours_ok}/{total_diags} ok &nbsp;·&nbsp; mmdc {n_mmdc_ok}/{total_diags} ok &nbsp;|&nbsp;
+      O = ours &nbsp;|&nbsp; M = mmdc &nbsp;|&nbsp; green = ok, red = error</span>
+  </header>
+  <nav>{nav_html}</nav>
+""")
 
-            if mmdc_ok:
-                svg_content = mmdc_svg_path.read_text(encoding="utf-8")
-                if svg_content.startswith("<?xml"):
-                    svg_content = svg_content[svg_content.index("<svg"):]
-                mmdc_content = f'<div class="render-box" style="overflow:auto;">{svg_content}</div>'
-            else:
-                mmdc_content = f'<div class="error-box">{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}</div>'
+        for dtype in sorted(type_results):
+            items = type_results[dtype]
+            f.write(f'  <div class="type-group-header" id="type-{dtype}">{_html_mod.escape(dtype)}</div>\n')
+            for name, src, ours_ok, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
+                ours_status = "ok" if ours_ok else "err"
+                mmdc_status = "ok" if mmdc_ok else "err"
 
-            sections.append(f"""
+                if ours_ok:
+                    ours_html = (out_dir / "ours" / f"{name}.html").read_text(encoding="utf-8")
+                    ours_srcdoc = _html_mod.escape(ours_html, quote=True)
+                    ours_content = (
+                        '<div class="render-box">'
+                        f'<iframe class="render-frame" srcdoc="{ours_srcdoc}"></iframe>'
+                        '</div>'
+                    )
+                else:
+                    ours_content = f'<div class="error-box">{_html_mod.escape(ours_err)}</div>'
+
+                if mmdc_ok:
+                    svg_content = mmdc_svg_path.read_text(encoding="utf-8")
+                    if svg_content.startswith("<?xml"):
+                        svg_content = svg_content[svg_content.index("<svg"):]
+                    svg_content = re.sub(r'\bwidth="[^"]*"', 'width="100%"', svg_content, count=1)
+                    svg_content = re.sub(r'\bheight="[^"]*"', 'height="auto"', svg_content, count=1)
+                    mmdc_content = f'<div class="render-box">{svg_content}</div>'
+                else:
+                    mmdc_content = f'<div class="error-box">{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}</div>'
+
+                f.write(f"""
 <div class="diagram-section" id="{name}">
   <h2>{_html_mod.escape(name)}
     <span class="status-badge badge-{ours_status}">ours: {ours_status}</span>
@@ -280,39 +320,36 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
   </div>
   <details>
     <summary>Mermaid source</summary>
-    <pre>{src_escaped}</pre>
+    <pre>{_html_mod.escape(src)}</pre>
   </details>
-</div>""")
+</div>
+""")
 
-    nav_html = "\n".join(nav_parts)
-    sections_html = "\n".join(sections)
-
-    total = sum(len(v) for v in type_results.values())
-    n_ours_ok = sum(1 for items in type_results.values() for _, _, h, _, _, _, _ in items if h)
-    n_mmdc_ok = sum(1 for items in type_results.values() for _, _, _, _, _, m, _ in items if m)
-    n_types = len(type_results)
-
-    index_html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>mermaid_render vs mmdc — comparison gallery</title>
-  <style>{_PAGE_CSS}</style>
-</head>
-<body>
-  <header>
-    <h1>mermaid_render vs mmdc comparison</h1>
-    <span>{total} diagrams &nbsp;·&nbsp; {n_types} types &nbsp;·&nbsp;
-      ours {n_ours_ok}/{total} ok &nbsp;·&nbsp; mmdc {n_mmdc_ok}/{total} ok &nbsp;|&nbsp;
-      O = ours &nbsp;|&nbsp; M = mmdc &nbsp;|&nbsp; green = ok, red = error</span>
-  </header>
-  <nav>{nav_html}</nav>
-  {sections_html}
+        f.write("""  <script>
+    function fitRendererFrame(frame) {
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const stage = doc.querySelector(".diagram");
+      if (!stage) return;
+      doc.body.style.padding = "0";
+      doc.body.style.overflow = "hidden";
+      stage.style.zoom = "1";
+      const intrinsicWidth = stage.offsetWidth;
+      const scale = Math.min(1, frame.clientWidth / intrinsicWidth);
+      stage.style.zoom = String(scale);
+      frame.style.height = `${Math.ceil(stage.offsetHeight * scale)}px`;
+    }
+    function attachFrameObservers() {
+      document.querySelectorAll("iframe.render-frame").forEach(frame => {
+        frame.addEventListener("load", () => fitRendererFrame(frame));
+        new ResizeObserver(() => fitRendererFrame(frame)).observe(frame.parentElement);
+      });
+    }
+    document.addEventListener("DOMContentLoaded", attachFrameObservers);
+  </script>
 </body>
-</html>"""
+</html>""")
 
-    index_path = out_dir / "index.html"
-    index_path.write_text(index_html, encoding="utf-8")
     return index_path
 
 
@@ -320,12 +357,20 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Build side-by-side mermaid_render vs mmdc gallery")
     ap.add_argument("files", nargs="*", help=".mmd files to include (default: all tests/fixtures/*.mmd)")
     ap.add_argument("--open", action="store_true", help="Open result in browser")
+    ap.add_argument("--type", dest="diagram_type", metavar="TYPE",
+                    help="Only include diagrams of this type prefix (e.g. flowchart, sequence, c4)")
     args = ap.parse_args()
 
     if args.files:
         mmd_files = [Path(f).resolve() for f in args.files]
     else:
         mmd_files = sorted(FIXTURES_DIR.glob("*.mmd"))
+
+    if args.diagram_type:
+        mmd_files = [f for f in mmd_files if _diagram_type(f.stem) == args.diagram_type]
+        if not mmd_files:
+            print(f"No .mmd files found for type '{args.diagram_type}'.", file=sys.stderr)
+            sys.exit(1)
 
     if not mmd_files:
         print("No .mmd files found.", file=sys.stderr)
