@@ -5,7 +5,7 @@ from html import escape as _h
 
 from ._constants import (
     _Node, _Edge, _Group,
-    NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
+    NODE_W, NODE_H, NODE_HPAD, RANK_GAP, COL_GAP, CANVAS_PAD,
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _NODE_H_TECH, ICON_COL_WIDTH,
     _TERMINAL_NODE_SIZE, _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
@@ -222,7 +222,10 @@ def _render_graph_fragment(
 
         # Icon-left cards have a narrower text column; use the same pixel budget
         # as _node_render_h so HTML line breaks match the computed height.
-        _wbudget = (NODE_W - 40 - ICON_COL_WIDTH) if icon_svg else (NODE_W - 40)
+        # Deduct NODE_HPAD (consistent with how n.width is assigned) not the
+        # historical -40 which left a 16px gap causing CJK/narrow labels to wrap.
+        _nw_for_budget = n.width or NODE_W
+        _wbudget = (_nw_for_budget - NODE_HPAD - ICON_COL_WIDTH) if icon_svg else (_nw_for_budget - NODE_HPAD)
         main_lines = _wrap_label(main_label, width_budget=_wbudget)
         main_html = _render_label_html("<br>".join(main_lines))
 

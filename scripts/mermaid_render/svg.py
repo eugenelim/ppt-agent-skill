@@ -15,7 +15,7 @@ BUNDLE_PATH = Path(__file__).resolve().parent / "vendor" / "dom-to-svg.bundle.js
 
 # Verbatim in-page JS: materialise CSS features dom-to-svg can't read (steps 1–6).
 _PREPROCESS_JS = r"""() => {
-    // 1. 物化伪元素 ::before / ::after -> 真实 span
+    // 1. Materialise ::before / ::after pseudo-elements as real <span> elements
     const all = document.querySelectorAll('*');
     for (const el of all) {
         for (const pseudo of ['::before', '::after']) {
@@ -65,7 +65,7 @@ _PREPROCESS_JS = r"""() => {
         }
     }
 
-    // 2. 将 conic-gradient 环形图转为 SVG
+    // 2. Replace conic-gradient ring charts with inline SVG
     for (const el of document.querySelectorAll('*')) {
         const bg = el.style.background || el.style.backgroundImage || '';
         const computed = getComputedStyle(el);
@@ -146,7 +146,7 @@ _PREPROCESS_JS = r"""() => {
         el.insertBefore(svg, el.firstChild);
     }
 
-    // 3. 将 CSS border 三角形箭头修复
+    // 3. Fix CSS border-triangle arrows
     for (const el of document.querySelectorAll('*')) {
         const cs = getComputedStyle(el);
         const w = parseFloat(cs.width);
@@ -200,7 +200,7 @@ _PREPROCESS_JS = r"""() => {
         el.appendChild(svg);
     }
 
-    // 4. 修复 background-clip: text 渐变文字
+    // 4. Fix background-clip: text gradient text
     for (const el of document.querySelectorAll('*')) {
         const cs = getComputedStyle(el);
         const bgClip = cs.webkitBackgroundClip || cs.backgroundClip || '';
@@ -220,7 +220,7 @@ _PREPROCESS_JS = r"""() => {
         console.warn('html2svg fallback: background-clip:text -> color:' + mainColor, el.tagName);
     }
 
-    // 5. 修复 -webkit-text-fill-color
+    // 5. Fix -webkit-text-fill-color
     for (const el of document.querySelectorAll('*')) {
         const cs = getComputedStyle(el);
         const fillColor = cs.webkitTextFillColor;
@@ -231,7 +231,7 @@ _PREPROCESS_JS = r"""() => {
         }
     }
 
-    // 6. 修复 mask-image / -webkit-mask-image
+    // 6. Fix mask-image / -webkit-mask-image
     for (const el of document.querySelectorAll('*')) {
         const cs = getComputedStyle(el);
         const maskImg = cs.maskImage || cs.webkitMaskImage || '';
@@ -272,7 +272,7 @@ _DOM_TO_SVG_JS = r"""async () => {
     const svgDoc = documentToSVG(document);
     await inlineResources(svgDoc.documentElement);
 
-    // 后处理：将 <text> 的 color 属性转为 fill（SVG 标准）
+    // Post-process: translate <text> color attribute to fill (SVG standard)
     const texts = svgDoc.querySelectorAll('text');
     for (const t of texts) {
         const c = t.getAttribute('color');
@@ -345,7 +345,7 @@ def _render_page_to_svg(page, html_file: Path) -> str:
 
 
 def convert(html_dir: Path, output_dir: Path) -> bool:
-    """主转换入口"""
+    """Main conversion entry point."""
     if html_dir.is_file():
         html_files = [html_dir]
     else:

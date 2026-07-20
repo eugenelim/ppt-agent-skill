@@ -124,8 +124,8 @@ def test_all_scripts_reachable() -> None:
     unreachable = all_scripts - reachable
     # _browser is an internal shim; mermaid_render loads it indirectly.
     # __main__ may not be referenced in docs.
-    # compare_gallery is a developer visual-QA tool, not an adopter-facing command.
-    _ALLOWED_UNREACHABLE = {"__main__", "_browser", "compare_gallery"}
+    # compare_gallery and gen_comparison_page are developer visual-QA tools.
+    _ALLOWED_UNREACHABLE = {"__main__", "_browser", "compare_gallery", "gen_comparison_page"}
     assert unreachable <= _ALLOWED_UNREACHABLE, (
         f"scripts/*.py not reachable from adopter-facing roots: {sorted(unreachable - _ALLOWED_UNREACHABLE)}\n"
         "Add a reference in SKILL.md/cli-cheatsheet/references/, or move to tools/."

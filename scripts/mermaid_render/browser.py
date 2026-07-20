@@ -131,5 +131,10 @@ def new_page(
     page = context.new_page()
     page.emulate_media(media="screen")
     _install_route(page)
-    page.on("close", lambda _: context.close())
+    def _close_context(_):
+        try:
+            context.close()
+        except Exception:
+            pass
+    page.on("close", _close_context)
     return page

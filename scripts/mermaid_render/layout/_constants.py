@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html as _html
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -179,11 +180,35 @@ ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reser
 def _measure_text_px(label: str) -> int:
     """Approximate pixel width of a text label at 13px font size.
 
-    Uses average character width of ~7.5px. Only the first display line
-    is measured (before any | pipe-section or newline separator).
+    Uses character-class bucketing (same algorithm as _measure_text_width at
+    font_size=13, weight=500) so node widths are consistent with wrap decisions.
+    Only the first display line is measured (before any | separator or newline).
     """
     text = label.split("|")[0].split("\n")[0]
-    return int(len(text) * 7.5)
+    _base = 0.57  # matches _measure_text_width at font_weight=500
+    total = 0.0
+    for c in text:
+        cp = ord(c)
+        if 0x0300 <= cp <= 0x036F:   # combining diacritics — zero width
+            ratio = 0.0
+        elif c == " ":
+            ratio = 0.3
+        elif c in "iltfjI1!|.,:;'":  # narrow chars
+            ratio = 0.4
+        elif c in "()[]{}/\\-\"`":   # semi-narrow
+            ratio = 0.5
+        elif c == "r":
+            ratio = 0.8
+        elif c in "WMwm@%":          # wide chars
+            ratio = 1.5
+        elif "A" <= c <= "Z":
+            ratio = 1.2
+        elif cp >= 0x4E00:           # CJK unified ideographs + wider scripts
+            ratio = 2.0
+        else:
+            ratio = 1.0
+        total += ratio
+    return math.ceil(total * 13 * _base + 13 * 0.15)
 
 
 # ── directive sets ────────────────────────────────────────────────────────────
@@ -410,9 +435,12 @@ def _node_render_h(n: "_Node") -> int:
     has_icon = bool(
         (n.icon and _load_icon(n.icon)) or (n.css_class and _load_icon(n.css_class))
     )
-    # Icon-left cards have a narrower text column; use reduced pixel budget so
-    # height computation accounts for the extra lines that wrap in the rendered card.
-    _wbudget = (NODE_W - 40 - ICON_COL_WIDTH) if has_icon else (NODE_W - 40)
+    # Use per-node width for wrap budget; fall back to global NODE_W for nodes whose
+    # width hasn't been computed yet (e.g. called before _assign_coordinates).
+    # Deduct NODE_HPAD (not the historical -40) to stay consistent with how
+    # _assign_coordinates computes n.width = measure_text + NODE_HPAD.
+    _node_w = n.width if n.width > 0 else NODE_W
+    _wbudget = (_node_w - NODE_HPAD - ICON_COL_WIDTH) if has_icon else (_node_w - NODE_HPAD)
     title_lines = _wrap_label(main_label, width_budget=_wbudget)
     sub_lines = _wrap_label(sub_label, width_budget=_wbudget) if sub_label else []
 

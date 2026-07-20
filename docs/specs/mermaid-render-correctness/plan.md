@@ -1,7 +1,7 @@
 # Plan: Mermaid Renderer Correctness
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Done — all phases done, baselines recaptured, 132 snapshot tests passing.
+- **Status:** Executing — Phase 4 upstream-sync + text-fit tasks in progress.
 
 ## Phase 0 — Dummy-chain routing bug fix (DONE)
 
@@ -122,6 +122,164 @@ All tasks complete as of 2026-07-20 on branch `eugene/mermaid-render-bug-fixes`.
 ### Task 3.4: GitGraph — lowercase detector (DONE)
 - **Tests:** `tests/test_render_correctness.py::TestGitGraphDetector`
 - **Approach:** `_detect_directive` already lowercases the directive. The `gitgraph` check in `_dispatch` already uses lowercase comparison. Test confirms the existing behavior is correct and by design.
+
+---
+
+---
+
+## Phase 4 — Upstream-sync + text-fit regressions
+
+Identified after Phase 0-3 via downstream-vendor fidelity spike and the ours-vs-mmdc comparison gallery.
+
+### Task 4.1: Browser teardown guard (DONE)
+- **Files:** `scripts/mermaid_render/browser.py`
+- **Tests:** goal-based — existing browser tests pass; `page.close()` after context disposed raises no exception
+- **Done when:** `new_page()` wraps its close handler in try/except; `grep "lambda _: context.close()" browser.py` returns no match
+- **Approach:** Replace `page.on("close", lambda _: context.close())` with named `_close_context` function that swallows exceptions.
+
+### Task 4.2: English-only source comments (DONE)
+- **Files:** `scripts/mermaid_render/png.py`, `scripts/mermaid_render/svg.py`
+- **Tests:** goal-based — `grep -r '[^\x00-\x7F]' scripts/mermaid_render/*.py` returns no matches
+- **Done when:** All 9 Chinese-language step comments and docstrings translated to English.
+
+### Task 4.3: Vendor NOTICE file (DONE)
+- **Files:** `scripts/mermaid_render/vendor/NOTICE` (new)
+- **Tests:** goal-based — file exists and names project, copyright, license URL
+- **Done when:** `scripts/mermaid_render/vendor/NOTICE` exists with dom-to-svg attribution.
+
+### Task 4.4: Node height for wrapped labels — IN PROGRESS
+- **Files:** `scripts/mermaid_render/layout/_constants.py`, `_renderer.py`
+- **Tests:** `tests/test_render_correctness.py::TestNodeWrappedHeight` (new test); snapshot recapture
+- **Done when:** A node labelled "App service" at its computed width (106px) produces a height > NODE_H (42px), matching that the browser wraps the label. Snapshot tests pass after recapture.
+- **Depends on:** none
+- **Approach:** In `_node_render_h`, use `n.width if n.width > 0 else NODE_W` for the wrap budget instead of hardcoded `NODE_W`. Same fix in `_renderer.py`'s `_wbudget`. Recapture snapshots after.
+
+### Task 4.6: Dynamic canvas width
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (or wherever `make_page` is defined), `_renderer.py` (to return `canvas_w`), callers that use `make_page`
+- **Tests:** `tests/test_render_correctness.py::TestDynamicCanvas`
+- **Done when:** `make_page(fragment)` sets HTML viewport width from `canvas_w` embedded in `fragment`; a 3-node chain produces narrow HTML; test passes.
+- **Depends on:** none
+- **Approach:** `_dispatch` / the fragment returned already contains `canvas_w`. Extract it in `make_page` and set `<html style="width:{canvas_w}px">` or equivalent. Add `width` kwarg to `make_page` for callers that override (png export needs actual viewport).
+
+### Task 4.7: Two-pass rank-gap regression test
+- **Files:** `tests/test_render_correctness.py`
+- **Tests:** `TestTwoPassRankGap`
+- **Done when:** Test confirms that fixing AC-4.4 (width-aware wrap budget) also fixes rank gap: a TB diagram with a multi-word narrow label has adequate RANK_GAP between node bottom and next-rank top.
+- **Depends on:** Task 4.4
+- **Approach:** Render a fixture with a narrow node label that wraps. Assert `next_rank_node.y >= (narrow_node.y + narrow_node_h + RANK_GAP)`.
+
+### Task 4.8: Snapshot recapture after text-fit + canvas fixes
+- **Files:** `tests/snapshots/light/*.png`, `tests/snapshots/dark/*.png`
+- **Tests:** `python -m pytest tests/test_snapshots.py` passes after recapture
+- **Done when:** All snapshot tests pass.
+- **Depends on:** Tasks 4.4, 4.6, 4.7
+
+---
+
+---
+
+## Phase 5 — Fixture-level regressions (comparison gallery)
+
+### Task 5.1: Stadium / hexagon / trapezoid / trapalt border outlines (AC-5.3, AC-5.4)
+- **Files:** `scripts/mermaid_render/layout/_renderer.py` (shape SVG painters)
+- **Tests:** `tests/test_render_correctness.py::TestStadiumShape`, `TestPolygonShapeBorders`
+- **Done when:** Stadium has closed four-sided border; hexagon/trapezoid/trapalt have stroke border.
+- **Depends on:** none
+
+### Task 5.2: Double-circle size fix (AC-5.5)
+- **Files:** `scripts/mermaid_render/layout/_constants.py` (`_node_render_h` for `doublecircle`)
+- **Tests:** `tests/test_render_correctness.py::TestDoubleCircleSize`
+- **Done when:** Double-circle height ≤ 80px.
+- **Depends on:** none
+
+### Task 5.3: Gantt date-axis tick completeness (AC-5.6)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (gantt tick generator)
+- **Tests:** `tests/test_render_correctness.py::TestGanttAfterMultiTicks`
+- **Done when:** All months in `gantt-after-multi` date range appear as tick labels.
+- **Depends on:** none
+
+### Task 5.4: Kanban label / metadata fixes (AC-5.7, AC-5.8)
+- **Files:** `scripts/mermaid_render/parsers/` or `_strategies.py` (kanban parser)
+- **Tests:** `tests/test_render_correctness.py::TestKanbanLabelExtraction`
+- **Done when:** `t1["Label"]` renders as "Label"; `@{...}` metadata silently stripped.
+- **Depends on:** none
+
+### Task 5.5: Mind-map edge endpoints at node boundary (AC-5.9)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (mindmap renderer)
+- **Tests:** `tests/test_render_correctness.py::TestMindmapEdgeEndpoints`
+- **Done when:** No edge path endpoint coordinate equals a node center.
+- **Depends on:** none
+
+### Task 5.6: Sankey ribbon renderer (AC-5.10)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (new Sankey renderer replacing unsupported)
+- **Tests:** `tests/test_render_correctness.py::TestSankeyRibbons`
+- **Done when:** Ribbons rendered with proportional widths; source totals conserved.
+- **Depends on:** none
+
+### Task 5.7: Pie solid (AC-5.11)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (pie renderer)
+- **Tests:** `tests/test_render_correctness.py::TestPieSolid`
+- **Done when:** Pie arc inner radius = 0.
+- **Depends on:** none
+
+### Task 5.8: ER entity row height (AC-5.12)
+- **Files:** `scripts/mermaid_render/layout/_constants.py` (`_node_render_h` for ER nodes), `_strategies.py`
+- **Tests:** `tests/test_render_correctness.py::TestEREntityHeight`
+- **Done when:** Entity height accounts for all attribute rows.
+- **Depends on:** Task 4.4
+
+### Task 5.9: Class box width from members (AC-5.13)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (class width computation)
+- **Tests:** `tests/test_render_correctness.py::TestClassBoxWidth`
+- **Done when:** Box width ≥ longest member + NODE_HPAD.
+- **Depends on:** Task 4.4
+
+### Task 5.10: Packet viewport tighten (AC-5.14)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (packet renderer)
+- **Tests:** `tests/test_render_correctness.py::TestPacketViewport`
+- **Done when:** Content fills ≥ 60% of canvas.
+- **Depends on:** Task 4.6
+
+### Task 5.11: XY chart viewport tighten (AC-5.15)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (xychart renderer)
+- **Tests:** `tests/test_render_correctness.py::TestXYChartViewport`
+- **Done when:** Content fills ≥ 60% of canvas.
+- **Depends on:** Task 4.6
+
+### Task 5.12: Config spacing propagation (AC-5.16)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (config parser), `_layout.py` or `_constants.py` (RANK_GAP/COL_GAP)
+- **Tests:** `tests/test_render_correctness.py::TestFlowchartConfigSpacing`
+- **Done when:** `nodeSpacing`/`rankSpacing` init config changes layout coordinates.
+- **Depends on:** none
+
+### Task 5.13: Subgraph local direction (AC-5.17)
+- **Files:** `scripts/mermaid_render/layout/_parser.py`, `_layout.py`
+- **Tests:** `tests/test_render_correctness.py::TestSubgraphLocalDirection`
+- **Done when:** Nodes inside `direction LR` subgraph are arranged horizontally.
+- **Depends on:** none
+
+### Task 5.14: GitGraph basic renderer (AC-5.18)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (new gitgraph renderer)
+- **Tests:** `tests/test_render_correctness.py::TestGitGraphBasic`
+- **Done when:** gitgraph-basic renders commits as circles on lanes with branch labels.
+- **Depends on:** none
+
+### Task 5.15: Journey basic renderer (AC-5.19)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (new journey renderer)
+- **Tests:** `tests/test_render_correctness.py::TestJourneyBasic`
+- **Done when:** journey-basic renders section bands and task score cards.
+- **Depends on:** none
+
+### Task 5.16: Requirement basic renderer (AC-5.20)
+- **Files:** `scripts/mermaid_render/layout/_strategies.py` (new requirement renderer)
+- **Tests:** `tests/test_render_correctness.py::TestRequirementBasic`
+- **Done when:** requirement-basic renders record nodes with typed relation labels.
+- **Depends on:** none
+
+### Task 5.17: Snapshot recapture after Phase 5 fixes
+- **Files:** `tests/snapshots/light/*.png`, `tests/snapshots/dark/*.png`
+- **Done when:** All snapshot tests pass.
+- **Depends on:** Tasks 5.1–5.16, 4.4–4.8
 
 ---
 

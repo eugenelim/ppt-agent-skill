@@ -2258,13 +2258,24 @@ class TestWrapLabelBudget:
             "narrower icon budget must wrap sooner than plain budget"
         )
 
-    def test_icon_card_wraps_with_icon(self):
-        # "Event Streaming Platform" fits on 1 line at default budget (152px)
-        # but wraps to 2 when the icon column (34px) reduces budget to 118px.
-        src = "flowchart TB\nA[\"Event Streaming Platform\"]:::database"
-        html = _dispatch(src, None, 600)
-        assert "<br>" in html, (
-            "icon-card node with wide label must contain <br> wrapping"
+    def test_icon_card_wider_with_icon(self):
+        # When a node has an icon, the node width is expanded by ICON_COL_WIDTH so
+        # the text column remains wide enough to fit the label without wrapping.
+        # Verify: label renders on one line (no <br>), and the node is wider than
+        # the same node without an icon.
+        src_icon = "flowchart TB\nA[\"Event Streaming Platform\"]:::database"
+        src_text = "flowchart TB\nA[\"Event Streaming Platform\"]"
+        html_icon = _dispatch(src_icon, None, 600)
+        html_text = _dispatch(src_text, None, 600)
+        assert "Event Streaming Platform" in html_icon, (
+            "icon-card label must not wrap (node should widen to fit icon + text)"
+        )
+        # Icon node canvas is wider than text-only node canvas (accommodates icon col)
+        import re as _re2
+        w_icon = int(_re2.search(r"width:(\d+)px", html_icon).group(1))
+        w_text = int(_re2.search(r"width:(\d+)px", html_text).group(1))
+        assert w_icon > w_text, (
+            f"icon-card canvas ({w_icon}px) must be wider than text-only ({w_text}px)"
         )
 
 

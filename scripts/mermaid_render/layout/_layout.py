@@ -5,9 +5,9 @@ from typing import Optional
 from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
-    NODE_MIN_W, NODE_HPAD,
+    NODE_MIN_W, NODE_HPAD, ICON_COL_WIDTH,
     CROSSING_PASSES, GROUP_CAP,
-    _node_render_h, _measure_text_px,
+    _node_render_h, _measure_text_px, _load_icon,
 )
 
 # ── cycle break (DFS back-edge detection) ─────────────────────────────────────
@@ -236,11 +236,17 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
     is_lr = direction.upper() in ("LR", "RL")
     max_rank = max(n.rank for n in nodes.values())
 
-    # Compute per-node display widths from label text (skip special-shape fixed sizes)
+    # Compute per-node display widths from label text (skip special-shape fixed sizes).
+    # Icon-left nodes reserve ICON_COL_WIDTH for the icon; add it to the required width
+    # so the text column budget (n.width - NODE_HPAD - ICON_COL_WIDTH) can fit the label.
     _fixed_shapes = {"circle", "diamond", "hexagon"}
     for n in nodes.values():
         if n.width == 0 and not n.is_dummy and n.shape not in _fixed_shapes:
-            n.width = max(NODE_MIN_W, _measure_text_px(n.label) + NODE_HPAD)
+            _has_icon = bool(
+                (n.icon and _load_icon(n.icon)) or (n.css_class and _load_icon(n.css_class))
+            )
+            _icon_extra = ICON_COL_WIDTH if _has_icon else 0
+            n.width = max(NODE_MIN_W, _measure_text_px(n.label) + NODE_HPAD + _icon_extra)
     # Effective layout width = max across non-dummy nodes (uniform column spacing)
     _layout_nw = max(
         (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
