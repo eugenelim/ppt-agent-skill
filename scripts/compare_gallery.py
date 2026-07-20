@@ -175,10 +175,13 @@ def _run_mmdc(src: str, out_svg: Path) -> tuple[bool, str]:
         tmp.unlink(missing_ok=True)
 
 
+_COMPARE_PANE_WIDTH = 560  # Pixel budget for each side-by-side pane
+
+
 def _render_ours(src: str) -> tuple[str | None, str]:
     """Return (html_fragment, error_msg). html_fragment is None on error."""
     try:
-        return mermaid_render.to_html(src), ""
+        return mermaid_render.to_html(src, width_hint=_COMPARE_PANE_WIDTH), ""
     except Exception as e:
         return None, str(e)
 
