@@ -2803,8 +2803,50 @@ def _layout_packet(src: str, direction: str, width_hint: int) -> str:
 
 # ── T3: kanban ────────────────────────────────────────────────────────────────
 
+_KANBAN_PRIORITY_COLORS: dict[str, str] = {
+    "very high": "#ef4444",
+    "high":      "#f97316",
+    "medium":    "#eab308",
+    "low":       "#60a5fa",
+    "very low":  "#9ca3af",
+}
+
+_KANBAN_META_RE = re.compile(r'@\{\s*(.*?)\s*\}', re.DOTALL)
+_KANBAN_META_PAIR_RE = re.compile(
+    r"""(\w+)\s*:\s*(?:'([^']*)'|"([^"]*)"|([^,}]+))"""
+)
+
+
+def _parse_kanban_meta(meta_str: str) -> "dict[str, str]":
+    """Parse ``key: value`` pairs from a kanban ``@{...}`` metadata block.
+
+    Supports single-quoted, double-quoted, and bare values.
+    Returns a dict with lower-cased keys.
+    """
+    result: dict[str, str] = {}
+    for m in _KANBAN_META_PAIR_RE.finditer(meta_str):
+        key = m.group(1).lower()
+        value = (
+            m.group(2) if m.group(2) is not None
+            else m.group(3) if m.group(3) is not None
+            else (m.group(4) or "")
+        ).strip()
+        result[key] = value
+    return result
+
+
 def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
-    """kanban: cards stacked in labeled vertical columns."""
+    """kanban: cards stacked in labeled vertical columns.
+
+    Enhancements over the baseline renderer:
+    - Responsive column width fills the canvas evenly.
+    - Quoted column labels (``id["Label"]``) are unwrapped.
+    - ``@{ticket: …, priority: …, assigned: …}`` metadata is parsed and
+      rendered as inline badge pills on the card.
+    - Priority badges are colour-coded: Very High → red (#ef4444),
+      High → orange (#f97316), Low → blue (#60a5fa), Very Low → grey (#9ca3af).
+    - Cards with metadata are taller to accommodate the badge row.
+    """
     content_lines = _directive_content(src)
     # Find minimum indentation level — that is the column header depth
     min_indent = 9999
@@ -2813,6 +2855,7 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
             min_indent = min(min_indent, len(raw) - len(raw.lstrip()))
     if min_indent == 9999:
         min_indent = 0
+
     columns: list[dict] = []
     current_col: Optional[dict] = None
     for raw in content_lines:
@@ -2821,24 +2864,54 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
             continue
         indent = len(raw) - len(raw.lstrip())
         if indent == min_indent:
-            col_name = re.sub(r'@\{[^}]*\}', '', line).strip()
+            # Column header: strip @{…}, then unwrap quoted label if present
+            col_clean = re.sub(r'@\{[^}]*\}', '', line).strip()
+            m_col_lbl = re.match(r'^\w+\["([^"]+)"\]', col_clean)
+            col_name = m_col_lbl.group(1) if m_col_lbl else col_clean
             current_col = {"name": col_name, "cards": []}
             columns.append(current_col)
         elif current_col is not None:
-            card = re.sub(r'@\{[^}]*\}', '', line).strip()
-            m_lbl = re.match(r'^\w+\["([^"]+)"\]', card)
-            if m_lbl:
-                card = m_lbl.group(1)
-            if card:
-                current_col["cards"].append(card)
+            # Card line: extract @{…} metadata block first
+            meta_match = _KANBAN_META_RE.search(line)
+            meta: dict[str, str] = {}
+            if meta_match:
+                meta = _parse_kanban_meta(meta_match.group(1))
+                line_no_meta = line[:meta_match.start()].strip()
+            else:
+                line_no_meta = line.strip()
+            # Strip any remaining @{…} fragments then unwrap quoted label
+            line_no_meta = re.sub(r'@\{[^}]*\}', '', line_no_meta).strip()
+            m_lbl = re.match(r'^\w+\["([^"]+)"\]', line_no_meta)
+            card_label = m_lbl.group(1) if m_lbl else line_no_meta
+            if card_label:
+                current_col["cards"].append({"label": card_label, "meta": meta})
+
     if not columns:
         raise ValueError("No columns found in kanban.")
 
     PAD_H, PAD_V = 24, 24
-    COL_W, COL_GAP, HDR_H, CARD_H, CARD_GAP = 160, 12, 36, 44, 6
-    max_cards = max((len(c["cards"]) for c in columns), default=0)
-    canvas_w = width_hint or PAD_H * 2 + len(columns) * (COL_W + COL_GAP) - COL_GAP
-    canvas_h = PAD_V * 2 + HDR_H + max_cards * (CARD_H + CARD_GAP)
+    COL_GAP, HDR_H = 12, 36
+    CARD_H_BASE, CARD_H_META, CARD_GAP = 44, 68, 6
+    n_cols = len(columns)
+    canvas_w = width_hint or (PAD_H * 2 + n_cols * 160 + max(n_cols - 1, 0) * COL_GAP)
+
+    # Responsive column width: divide available space evenly across all columns
+    available_w = canvas_w - PAD_H * 2 - max(n_cols - 1, 0) * COL_GAP
+    col_w = max(100, available_w // n_cols)
+
+    # Canvas height driven by the tallest column's content
+    def _col_content_h(col: dict) -> int:
+        total = 0
+        for card in col["cards"]:
+            total += (CARD_H_META if card["meta"] else CARD_H_BASE) + CARD_GAP
+        return total
+
+    max_col_h = max((_col_content_h(c) for c in columns), default=0)
+    canvas_h = PAD_V * 2 + HDR_H + 8 + max_col_h
+
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    _fg = "var(--node-fg,var(--text-primary,#191A17))"
+    _fg_dim = "var(--node-fg-dim,var(--text-secondary,#75736C))"
 
     parts: list[str] = []
     parts.append(
@@ -2846,33 +2919,88 @@ def _layout_kanban(src: str, direction: str, width_hint: int) -> str:
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
     for ci, col in enumerate(columns):
-        cx = PAD_H + ci * (COL_W + COL_GAP)
+        cx = PAD_H + ci * (col_w + COL_GAP)
         parts.append(
             f'<div data-col="{_h(col["name"])}" style="position:absolute;left:{cx}px;top:{PAD_V}px;'
-            f'width:{COL_W}px;height:{HDR_H}px;'
+            f'width:{col_w}px;height:{HDR_H}px;'
             f'display:flex;align-items:center;justify-content:center;'
             f'border-bottom:2px solid var(--edge-strong,var(--accent-1,#60a5fa));'
             f'box-sizing:border-box;">'
             f'<span style="font-size:12px;font-weight:700;text-transform:uppercase;'
-            f'letter-spacing:.08em;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+            f'letter-spacing:.08em;color:{_fg};font-family:{_lf};">'
             f'{_h(col["name"])}</span></div>'
         )
-        for ki, card in enumerate(col["cards"]):
-            ky = PAD_V + HDR_H + ki * (CARD_H + CARD_GAP) + 8
-            parts.append(
-                f'<div class="node node-rect" data-card="{_h(card)}" style="position:absolute;'
-                f'left:{cx}px;top:{ky}px;width:{COL_W}px;height:{CARD_H}px;'
-                f'display:flex;align-items:center;padding:6px 10px;'
-                f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-                f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
-                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-                f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));"><span class="node-label" style="'
-                f'font-size:12px;color:var(--node-fg,var(--text-primary,#191A17));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));overflow:hidden;'
-                f'text-overflow:ellipsis;white-space:nowrap;">'
-                f'{_h(card)}</span></div>'
-            )
+        ky = PAD_V + HDR_H + 8
+        for card in col["cards"]:
+            meta = card["meta"]
+            card_h = CARD_H_META if meta else CARD_H_BASE
+            if meta:
+                # Build badge pills: ticket, priority (coloured), assigned
+                badges: list[str] = []
+                priority_val = meta.get("priority", "").strip()
+                if meta.get("ticket"):
+                    badges.append(
+                        f'<span data-badge="ticket" style="'
+                        f'font-size:9px;padding:1px 5px;border-radius:3px;'
+                        f'background:var(--node-bg-to,var(--card-bg-to,#F7F6F2));'
+                        f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+                        f'color:{_fg_dim};font-family:{_lf};white-space:nowrap;">'
+                        f'{_h(meta["ticket"])}</span>'
+                    )
+                if priority_val:
+                    p_bg = _KANBAN_PRIORITY_COLORS.get(priority_val.lower(),
+                                                        "var(--node-border,var(--card-border,#DAD7CE))")
+                    p_fg = "#fff" if p_bg.startswith("#") else _fg_dim
+                    badges.append(
+                        f'<span data-badge="priority" style="'
+                        f'font-size:9px;padding:1px 5px;border-radius:3px;'
+                        f'background:{p_bg};color:{p_fg};'
+                        f'font-family:{_lf};white-space:nowrap;">'
+                        f'{_h(priority_val)}</span>'
+                    )
+                if meta.get("assigned"):
+                    badges.append(
+                        f'<span data-badge="assigned" style="'
+                        f'font-size:9px;padding:1px 5px;border-radius:3px;'
+                        f'background:rgba(96,165,250,0.12);'
+                        f'border:1px solid var(--edge-strong,var(--accent-1,#60a5fa));'
+                        f'color:{_fg};font-family:{_lf};white-space:nowrap;">'
+                        f'{_h(meta["assigned"])}</span>'
+                    )
+                badge_row = (
+                    '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">'
+                    + "".join(badges) + "</div>"
+                ) if badges else ""
+                parts.append(
+                    f'<div class="node node-rect" data-card="{_h(card["label"])}" style="position:absolute;'
+                    f'left:{cx}px;top:{ky}px;width:{col_w}px;height:{card_h}px;'
+                    f'display:flex;flex-direction:column;justify-content:center;padding:6px 10px;'
+                    f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+                    f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
+                    f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                    f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+                    f'box-shadow:0 1px 3px rgba(0,0,0,0.07);">'
+                    f'<span class="node-label" style="'
+                    f'font-size:12px;color:{_fg};font-family:{_lf};'
+                    f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+                    f'{_h(card["label"])}</span>{badge_row}</div>'
+                )
+            else:
+                parts.append(
+                    f'<div class="node node-rect" data-card="{_h(card["label"])}" style="position:absolute;'
+                    f'left:{cx}px;top:{ky}px;width:{col_w}px;height:{card_h}px;'
+                    f'display:flex;align-items:center;padding:6px 10px;'
+                    f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+                    f'border-radius:var(--node-radius,8px);box-sizing:border-box;'
+                    f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                    f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+                    f'box-shadow:0 1px 3px rgba(0,0,0,0.07);">'
+                    f'<span class="node-label" style="'
+                    f'font-size:12px;color:{_fg};font-family:{_lf};'
+                    f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+                    f'{_h(card["label"])}</span></div>'
+                )
+            ky += card_h + CARD_GAP
     parts.append('</div>')
     return "\n".join(parts)
 
