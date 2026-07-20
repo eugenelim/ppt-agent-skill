@@ -1006,84 +1006,289 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
     parts.append('</div>')
     return "\n".join(parts)
 
+
+# ── T3: timeline helpers ───────────────────────────────────────────────────────
+
+# Vertical gap between the spine and the period-label chip (px)
+_TL_LABEL_GAP: int = 6
+# Height of the period-label chip (px)
+_TL_LABEL_H: int = 22
+# Height of each event card (px)
+_TL_CARD_H: int = 22
+# Vertical gap between consecutive event cards (px)
+_TL_CARD_GAP: int = 4
+# Gap between the period-label edge and the first event card (px)
+_TL_CARD_PAD: int = 8
+# Radius of the spine period-marker dot (px)
+_TL_MARKER_R: int = 5
+# Cycling section-band fill colours (semi-transparent)
+_TL_SECTION_COLORS: list = [
+    "rgba(96,165,250,0.10)",
+    "rgba(52,211,153,0.10)",
+    "rgba(251,191,36,0.10)",
+    "rgba(167,139,250,0.10)",
+    "rgba(248,113,113,0.10)",
+]
+
+
+def _tl_branch_height(n_events: int) -> int:
+    """Pixels from the spine surface to the far edge of all content for one period.
+
+    Applies symmetrically for both above-spine and below-spine placements:
+    label gap + label chip + (optional: card padding + N cards with gaps).
+    """
+    h = _TL_LABEL_GAP + _TL_LABEL_H
+    if n_events > 0:
+        h += _TL_CARD_PAD + n_events * _TL_CARD_H + (n_events - 1) * _TL_CARD_GAP
+    return h
+
+
 # ── T3: timeline ──────────────────────────────────────────────────────────────
 
 def _layout_timeline(src: str, direction: str, width_hint: int) -> str:
-    """timeline: periods/events as nodes on a horizontal axis."""
+    """timeline: horizontal spine with alternating above/below event cards.
+
+    Parsing rules
+    -------------
+    - ``title TEXT``      -> diagram title rendered above the spine.
+    - ``section TEXT``    -> named section band grouping subsequent periods.
+    - ``PERIOD : EVENT``  -> new period node with its first event.
+    - ``: EVENT``         -> continuation event appended to the current period.
+    """
     content_lines = _directive_content(src)
     title = ""
-    sections: list[dict] = []
-    current: Optional[dict] = None
+    # groups: list of {"name": str|None, "periods": list[{"period": str, "events": list}]}
+    groups: list[dict] = [{"name": None, "periods": []}]
+    current_period: Optional[dict] = None
+
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
         if line.lower().startswith("title "):
-            title = line[6:].strip(); continue
-        if line.lower().startswith("section "):
+            title = line[6:].strip()
             continue
-        if ' : ' in line:
-            period_name, first_event = line.split(' : ', 1)
-            current = {"period": period_name.strip(), "events": [first_event.strip()]}
+        if line.lower().startswith("section "):
+            groups.append({"name": line[8:].strip(), "periods": []})
+            current_period = None
+            continue
+        # Continuation event: ": EVENT" — no period text before the colon
+        if line.startswith(":"):
+            evt = line[1:].strip()
+            if current_period is not None and evt:
+                current_period["events"].append(evt)
+            continue
+        # New period, optionally with an inline first event
+        if " : " in line:
+            period_name, first_event = line.split(" : ", 1)
+            current_period = {"period": period_name.strip(), "events": [first_event.strip()]}
         else:
-            current = {"period": line, "events": []}
-        sections.append(current)
-    if not sections:
+            current_period = {"period": line, "events": []}
+        groups[-1]["periods"].append(current_period)
+
+    # Flatten to all_periods, tagging each with its group index
+    all_periods: list[dict] = []
+    for g_idx, grp in enumerate(groups):
+        for p in grp["periods"]:
+            all_periods.append({
+                "period": p["period"],
+                "events": p["events"],
+                "section": grp["name"],
+                "g_idx": g_idx,
+            })
+
+    if not all_periods:
         raise ValueError("No periods found in timeline.")
 
-    PAD_H, PAD_V = 40, 32
-    ITEM_W, ITEM_H, ITEM_GAP = 140, 64, 12
-    canvas_w = width_hint or max(400, PAD_H * 2 + len(sections) * (ITEM_W + ITEM_GAP) - ITEM_GAP)
-    step = (canvas_w - PAD_H * 2) // max(len(sections), 1)
-    axis_y = PAD_V + (28 if title else 0) + ITEM_H + 12
-    canvas_h = axis_y + PAD_V + 8
+    # ── Geometry ───────────────────────────────────────────────────────────────
+    PAD_H = 40
+    PAD_V = 32
+    title_h = 28 if title else 0
+
+    # Assign alternating above (even index) / below (odd index) placement
+    for i, p in enumerate(all_periods):
+        p["_above"] = (i % 2 == 0)
+
+    max_above = max(
+        (_tl_branch_height(len(p["events"])) for p in all_periods if p["_above"]),
+        default=_tl_branch_height(0),
+    )
+    max_below = max(
+        (_tl_branch_height(len(p["events"])) for p in all_periods if not p["_above"]),
+        default=_tl_branch_height(0),
+    )
+
+    canvas_w = width_hint or max(
+        500, PAD_H * 2 + len(all_periods) * 136 - 16
+    )
+    n = len(all_periods)
+    step = (canvas_w - PAD_H * 2) // max(n, 1)
+    card_w = max(64, min(120, step - 8))
+
+    spine_y = PAD_V + title_h + max_above
+    canvas_h = spine_y + max_below + PAD_V
+
+    # CSS variable aliases for concision
+    _ec = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    _fg = "var(--node-fg,var(--text-primary,#191A17))"
+    _fg_dim = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    _dot_fill = "var(--edge-strong,var(--accent-1,#60a5fa))"
+    _dot_stroke = "var(--node-bg-from,var(--card-bg-from,#ffffff))"
 
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
+
+    # Title
     if title:
         parts.append(
             f'<div style="position:absolute;left:{PAD_H}px;top:{PAD_V}px;'
-            f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
+            f'font-size:13px;font-weight:700;color:{_fg};'
+            f'font-family:{_lf};">{_h(title)}</div>'
         )
-    ty = PAD_V + (28 if title else 0)
+
+    # ── SVG layer: section bands, spine, connectors, period dots ──────────────
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
-    ax1 = PAD_H + ITEM_W // 2
-    ax2 = canvas_w - PAD_H - ITEM_W // 2
-    parts.append(
-        f'<line x1="{ax1}" y1="{axis_y}" x2="{ax2}" y2="{axis_y}" '
-        f'stroke="var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))" stroke-width="1.5"/>'
-    )
-    parts.append('</svg>')
-    for i, sec in enumerate(sections):
-        ix = PAD_H + i * step + step // 2 - ITEM_W // 2
+
+    # Section bands — one rect per named group spanning its period columns
+    sec_color_idx = 0
+    # Build a map: g_idx -> sorted list of period-column indices
+    g_period_cols: dict[int, list[int]] = {}
+    for col_i, p in enumerate(all_periods):
+        g_period_cols.setdefault(p["g_idx"], []).append(col_i)
+
+    for grp in groups:
+        g_idx = groups.index(grp)
+        if grp["name"] is None:
+            # Advance colour index for unnamed groups only if they have periods,
+            # so named sections get visually distinct cycling colours.
+            if g_period_cols.get(g_idx):
+                sec_color_idx += 1
+            continue
+        cols = g_period_cols.get(g_idx, [])
+        if not cols:
+            sec_color_idx += 1
+            continue
+        bx = PAD_H + min(cols) * step
+        bw = (max(cols) - min(cols) + 1) * step
+        band_y = PAD_V + title_h
+        band_h = canvas_h - band_y - PAD_V // 2
+        color = _TL_SECTION_COLORS[sec_color_idx % len(_TL_SECTION_COLORS)]
+        sec_color_idx += 1
         parts.append(
-            f'<div class="node node-rect" data-node-id="{_h(sec["period"])}" style="position:absolute;left:{ix}px;top:{ty}px;'
-            f'width:{ITEM_W}px;padding:6px 8px;box-sizing:border-box;'
-            f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
-            f'border-radius:var(--node-radius,8px);'
-            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-            f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));"><span class="node-label" style="'
-            f'display:block;font-size:12px;font-weight:700;'
-            f'color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(sec["period"])}</span>'
+            f'<rect x="{bx}" y="{band_y}" width="{bw}" height="{band_h}" '
+            f'fill="{color}" rx="4"/>'
         )
-        for ev in sec["events"][:2]:
+
+    # Horizontal spine
+    cx_first = PAD_H + step // 2
+    cx_last = PAD_H + (n - 1) * step + step // 2
+    spine_ext = max(8, step // 6)
+    parts.append(
+        f'<line x1="{cx_first - spine_ext}" y1="{spine_y}" '
+        f'x2="{cx_last + spine_ext}" y2="{spine_y}" '
+        f'stroke="{_ec}" stroke-width="2"/>'
+    )
+
+    # Per-period: dashed connector + filled dot (dot drawn last, sits atop connector)
+    for i, p in enumerate(all_periods):
+        cx_ = PAD_H + i * step + step // 2
+        above = p["_above"]
+        label_y = (spine_y - _TL_LABEL_GAP - _TL_LABEL_H if above
+                   else spine_y + _TL_LABEL_GAP)
+
+        # Dashed connector from dot surface to period-label edge
+        con_y1 = spine_y - _TL_MARKER_R if above else spine_y + _TL_MARKER_R
+        con_y2 = label_y + _TL_LABEL_H if above else label_y
+        parts.append(
+            f'<line x1="{cx_}" y1="{con_y1}" x2="{cx_}" y2="{con_y2}" '
+            f'stroke="{_ec}" stroke-width="1" stroke-dasharray="3 3"/>'
+        )
+
+        # Filled dot
+        parts.append(
+            f'<circle cx="{cx_}" cy="{spine_y}" r="{_TL_MARKER_R}" '
+            f'fill="{_dot_fill}" stroke="{_dot_stroke}" stroke-width="2"/>'
+        )
+
+    parts.append('</svg>')
+
+    # ── Section labels (HTML div, not SVG, so they clip cleanly) ──────────────
+    sec_color_idx = 0
+    for grp in groups:
+        g_idx = groups.index(grp)
+        if grp["name"] is None:
+            if g_period_cols.get(g_idx):
+                sec_color_idx += 1
+            continue
+        cols = g_period_cols.get(g_idx, [])
+        if not cols:
+            sec_color_idx += 1
+            continue
+        lx = PAD_H + min(cols) * step + 6
+        lbl_top = PAD_V + title_h + 4
+        sec_color_idx += 1
+        parts.append(
+            f'<div style="position:absolute;left:{lx}px;top:{lbl_top}px;'
+            f'font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
+            f'color:{_fg_dim};font-family:{_lf};pointer-events:none;">{_h(grp["name"])}</div>'
+        )
+
+    # ── Period labels and event cards ─────────────────────────────────────────
+    for i, p in enumerate(all_periods):
+        cx_ = PAD_H + i * step + step // 2
+        lx = cx_ - card_w // 2
+        above = p["_above"]
+        label_y = (spine_y - _TL_LABEL_GAP - _TL_LABEL_H if above
+                   else spine_y + _TL_LABEL_GAP)
+
+        # Period-label chip (carries data-node-id for identity tracking)
+        parts.append(
+            f'<div class="node node-rect" data-node-id="{_h(p["period"])}" '
+            f'style="position:absolute;left:{lx}px;top:{label_y}px;'
+            f'width:{card_w}px;height:{_TL_LABEL_H}px;'
+            f'display:flex;align-items:center;justify-content:center;'
+            f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+            f'border-radius:var(--node-radius,4px);'
+            f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+            f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+            f'overflow:hidden;">'
+            f'<span class="node-label" style="font-size:11px;font-weight:700;color:{_fg};'
+            f'font-family:{_lf};white-space:nowrap;overflow:hidden;'
+            f'text-overflow:ellipsis;">{_h(p["period"])}</span></div>'
+        )
+
+        # Event cards stacked away from the spine
+        for j, ev in enumerate(p["events"]):
+            if above:
+                # Stack upward: card[0] is just above the period label
+                ev_y = label_y - _TL_CARD_PAD - (j + 1) * _TL_CARD_H - j * _TL_CARD_GAP
+            else:
+                # Stack downward: card[0] is just below the period label
+                ev_y = label_y + _TL_LABEL_H + _TL_CARD_PAD + j * (_TL_CARD_H + _TL_CARD_GAP)
             parts.append(
-                f'<span style="display:block;font-size:10px;'
-                f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(ev)}</span>'
+                f'<div style="position:absolute;left:{lx}px;top:{ev_y}px;'
+                f'width:{card_w}px;height:{_TL_CARD_H}px;'
+                f'padding:0 6px;box-sizing:border-box;'
+                f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+                f'border-radius:var(--node-radius,4px);'
+                f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+                f'display:flex;align-items:center;justify-content:center;'
+                f'overflow:hidden;">'
+                f'<span style="font-size:10px;font-weight:500;color:{_fg};'
+                f'font-family:{_lf};white-space:nowrap;overflow:hidden;'
+                f'text-overflow:ellipsis;">{_h(ev)}</span></div>'
             )
-        parts.append('</div>')
+
     parts.append('</div>')
     return "\n".join(parts)
-
 
 # ── T3: quadrantChart ─────────────────────────────────────────────────────────
 
