@@ -423,7 +423,7 @@ def _node_render_h(n: "_Node") -> int:
     if n.shape == "circle":
         return _CIRCLE_NODE_SIZE
     if n.shape == "doublecircle":
-        return max(NODE_W, NODE_H) + 8
+        return _CIRCLE_NODE_SIZE + 20  # 100px — same visual weight as circle but with double ring
     if n.shape == "diamond":
         return _DIAMOND_SIZE
     if n.shape == "hexagon":

@@ -1280,18 +1280,20 @@ def _layout_gantt(src: str, direction: str, width_hint: int) -> str:
         )
         y += 22
 
-    # Date axis (top) -- tick labels and small indicator marks
-    _tick_count = min(6, total_days)
-    _tick_days = max(1, total_days // _tick_count)
+    # Date axis (top) -- tick labels and small indicator marks.
+    # Ticks are evenly spaced at total_days/N intervals so they always reach
+    # the end date regardless of how total_days divides.
+    _tick_count = min(10, total_days)  # up to 10 ticks; for short spans this shows every day
     parts.append(
         f'<div style="position:absolute;left:{bar_x}px;top:{y}px;'
         f'width:{bar_w_total}px;height:{AXIS_H}px;overflow:hidden;">'
     )
     _tick_xs: list[int] = []
+    _step = total_days / _tick_count  # float step ensures last tick == total_days
     for _ti in range(_tick_count + 1):
-        _td_off = _ti * _tick_days
+        _td_off = round(_ti * _step)
         if _td_off > total_days:
-            break
+            _td_off = total_days
         _tx = int(_td_off / total_days * bar_w_total)
         _tick_d = earliest + _td(days=_td_off)
         _label = f"{_tick_d.month}/{_tick_d.day}"
@@ -2331,6 +2333,39 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     ]
 
+    # Pre-compute approximate bounding-box half-dimensions for each node so that
+    # edges can start/end at the node boundary rather than the node center.
+    from ._constants import _measure_text_px as _mm_px
+    def _node_hw(idx: int) -> tuple[float, float]:
+        """Return (half_w, half_h) of node idx for boundary clipping."""
+        nd = flat[idx]
+        depth_i = tree_depth[idx]
+        shape_i = nd["shape"]
+        if depth_i == 0 and shape_i in ("circle", "default"):
+            return _ROOT_DIAM / 2, _ROOT_DIAM / 2  # circle
+        if shape_i == "circle":
+            return 24.0, 24.0  # radius
+        # rect / pill / cloud / default: use measured text width
+        lbl_w = max(_NODE_W_MIN, _mm_px(nd["label"]) + 16)
+        return lbl_w / 2, _NODE_H / 2
+
+    def _boundary_pt(
+        ox: float, oy: float, tx: float, ty: float, hw: float, hh: float, is_circle: bool
+    ) -> tuple[float, float]:
+        """Return the point on the boundary of the *origin* node in the direction of (tx, ty)."""
+        ddx, ddy = tx - ox, ty - oy
+        dist = math.hypot(ddx, ddy) or 1.0
+        if is_circle:
+            r = hw  # hw == hh for circles
+            return ox + ddx / dist * r, oy + ddy / dist * r
+        # Rect / pill: find first intersection with the bounding box edges
+        t = float("inf")
+        if ddx != 0:
+            t = min(t, hw / abs(ddx))
+        if ddy != 0:
+            t = min(t, hh / abs(ddy))
+        return ox + ddx * t, oy + ddy * t
+
     # SVG edge layer — drawn first so node divs render above connectors
     edge_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.6)))"
     svg_parts: list[str] = [
@@ -2343,15 +2378,23 @@ def _layout_mindmap(src: str, direction: str, width_hint: int) -> str:
             continue
         px_p, py_p = positions[p]
         px_c, py_c = positions[i]
+        # Compute boundary start/end points so edges touch node edges, not centres
+        p_hw, p_hh = _node_hw(p)
+        c_hw, c_hh = _node_hw(i)
+        p_is_circ = flat[p]["shape"] in ("circle", "default") and tree_depth[p] == 0
+        p_is_circ = p_is_circ or flat[p]["shape"] == "circle"
+        c_is_circ = flat[i]["shape"] == "circle"
+        sx, sy = _boundary_pt(px_p, py_p, px_c, py_c, p_hw, p_hh, p_is_circ)
+        ex, ey = _boundary_pt(px_c, py_c, px_p, py_p, c_hw, c_hh, c_is_circ)
         # Quadratic bezier with control point nudged radially outward from centre
-        mx = (px_p + px_c) / 2
-        my = (py_p + py_c) / 2
+        mx = (sx + ex) / 2
+        my = (sy + ey) / 2
         dx, dy = mx - cx, my - cy
         dl = math.hypot(dx, dy) or 1.0
         qx = mx + dx / dl * 18
         qy = my + dy / dl * 18
         svg_parts.append(
-            f'<path d="M{px_p:.1f},{py_p:.1f} Q{qx:.1f},{qy:.1f} {px_c:.1f},{py_c:.1f}" '
+            f'<path d="M{sx:.1f},{sy:.1f} Q{qx:.1f},{qy:.1f} {ex:.1f},{ey:.1f}" '
             f'fill="none" stroke="{edge_color}" stroke-width="1.5"/>'
         )
     svg_parts.append('</svg>')

@@ -360,32 +360,50 @@ def _render_graph_fragment(
                 f'{_nh(n.label)}</span></div>'
             )
         else:
-            # Accent top border only works on shapes without a clip-path.
-            # Diamond and flag nodes clip their top edge to a point/slant —
-            # the 3px accent stripe is invisible.
-            # For clip-path shapes, CSS border:2px solid creates orphan dot
-            # artifacts at the polygon vertices (the rectangular border bleeds
-            # through where the clip edge meets the bounding-box corner).
-            # Use box-shadow:inset 0 0 0 2px instead — it renders inside the
-            # element and is cleanly clipped to the polygon shape.
+            # For clip-path shapes, CSS border bleeds through polygon vertices as
+            # orphan dot artifacts. Use SVG polygon overlays instead that trace
+            # the actual shape outline — same pattern used for diamonds.
             _uses_clip = n.shape in ("diamond", "flag", "hexagon", "trapezoid", "trapezoid-alt")
-            # Diamond border: box-shadow:inset follows the bounding-box rectangle, so only
-            # 4 tiny accent-colour tips appear at the midpoints — effectively invisible.
-            # Use an SVG polygon overlay instead that traces the actual diamond outline.
-            _diamond_border_svg = ""
+            _shape_border_svg = ""
             if is_external:
                 _border_css = f'border:1.5px dashed {border_var};'
             elif n.shape == "diamond":
-                _border_css = ""  # SVG overlay handles the border (see below)
+                _border_css = ""
                 _hw = _DIAMOND_SIZE // 2
-                _diamond_border_svg = (
+                _shape_border_svg = (
                     f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
                     f'width="{_DIAMOND_SIZE}" height="{node_h}">'
                     f'<polygon points="{_hw},1 {_DIAMOND_SIZE-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
                     f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
                 )
-            elif _uses_clip:
-                _border_css = f'box-shadow:inset 0 0 0 2px {accent_color};'
+            elif n.shape == "hexagon":
+                _border_css = ""
+                _hw, _hh = _HEXAGON_SIZE, node_h
+                _shape_border_svg = (
+                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                    f'width="{_hw}" height="{_hh}">'
+                    f'<polygon points="{_hw//4},1 {3*_hw//4},1 {_hw-1},{_hh//2} {3*_hw//4},{_hh-1} {_hw//4},{_hh-1} 1,{_hh//2}" '
+                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
+                )
+            elif n.shape in ("trapezoid", "trapezoid-alt"):
+                _border_css = ""
+                _tw = n.width or NODE_W
+                _th = node_h
+                if n.shape == "trapezoid":
+                    # clip-path: 15% 0%, 100% 0%, 85% 100%, 0% 100%
+                    _pts = (f'{int(_tw*0.15)},1 {_tw-1},1 {int(_tw*0.85)},{_th-1} 1,{_th-1}')
+                else:
+                    # clip-path: 0% 0%, 85% 0%, 100% 100%, 15% 100%
+                    _pts = (f'1,1 {int(_tw*0.85)},1 {_tw-1},{_th-1} {int(_tw*0.15)},{_th-1}')
+                _shape_border_svg = (
+                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                    f'width="{_tw}" height="{_th}">'
+                    f'<polygon points="{_pts}" '
+                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
+                )
+            elif n.shape == "stadium":
+                # Full accent-color border all around (pill shape via border-radius)
+                _border_css = f'border:1.5px solid {accent_color};'
             else:
                 _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent_color};'
 
@@ -511,7 +529,7 @@ def _render_graph_fragment(
                     f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
                     f'display:flex; flex-direction:column; align-items:{_align}; justify-content:center; '
                     f'text-align:{_text_align};">'
-                    f'{inner}{_diamond_border_svg}</div>'
+                    f'{inner}{_shape_border_svg}</div>'
                 )
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
