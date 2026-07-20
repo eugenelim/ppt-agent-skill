@@ -168,6 +168,9 @@ _MEMBER_LINE_H = 16  # height of each additional member/attribute row after the 
 SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 _TERMINAL_NODE_SIZE = 32  # px square for circle nodes with symbol labels (UML start/end states)
+_CIRCLE_NODE_SIZE = 80    # px square for regular (non-terminal) circle nodes
+_DIAMOND_SIZE = 100       # px square for diamond nodes (keeps aspect ratio 1:1)
+_HEXAGON_SIZE = 100       # px square for hexagon nodes (keeps aspect ratio 1:1)
 ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
 
 # ── directive sets ────────────────────────────────────────────────────────────
@@ -375,10 +378,14 @@ def _node_render_h(n: "_Node") -> int:
     """
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
+    if n.shape == "circle":
+        return _CIRCLE_NODE_SIZE
     if n.shape == "doublecircle":
         return max(NODE_W, NODE_H) + 8
-    if n.shape in ("diamond", "hexagon"):
-        return NODE_W  # clip-path shapes need square aspect ratio
+    if n.shape == "diamond":
+        return _DIAMOND_SIZE
+    if n.shape == "hexagon":
+        return _HEXAGON_SIZE
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)

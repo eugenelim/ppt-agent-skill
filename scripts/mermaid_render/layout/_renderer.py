@@ -8,7 +8,8 @@ from ._constants import (
     NODE_W, NODE_H, RANK_GAP, COL_GAP, CANVAS_PAD,
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _NODE_H_TECH, ICON_COL_WIDTH,
-    _TERMINAL_NODE_SIZE, _is_terminal_circle,
+    _TERMINAL_NODE_SIZE, _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
+    _is_terminal_circle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
 from ._routing import _route_edges
@@ -73,14 +74,14 @@ def _render_label_html(label: str) -> str:
 
 _NODE_CSS = {
     "rect": "border-radius:var(--node-radius,8px);",
-    "round": "border-radius:28px;",
+    "round": "border-radius:14px;",
     "stadium": "border-radius:50px;",
     # diamond uses clip-path to avoid rotating the label
     "diamond": "border-radius:4px; clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%);",
     "hexagon": "clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); border-radius:4px; overflow:visible;",
     "subroutine": "border-radius:4px;",
-    "trapezoid": "clip-path:polygon(10% 0%,90% 0%,100% 100%,0% 100%); border-radius:4px;",
-    "trapezoid-alt": "clip-path:polygon(0% 0%,100% 0%,90% 100%,10% 100%); border-radius:4px;",
+    "trapezoid":     "clip-path:polygon(15% 0%,100% 0%,85% 100%,0% 100%); border-radius:4px;",
+    "trapezoid-alt": "clip-path:polygon(0% 0%,85% 0%,100% 100%,15% 100%); border-radius:4px;",
     "doublecircle": "border-radius:50%; position:relative;",
     "cylinder": "",  # SVG overlay draws the silo shape; no CSS border-radius needed
     "circle": "border-radius:50%;",
@@ -373,11 +374,11 @@ def _render_graph_fragment(
                 _border_css = f'border:1.5px dashed {border_var};'
             elif n.shape == "diamond":
                 _border_css = ""  # SVG overlay handles the border (see below)
-                _hw = NODE_W // 2
+                _hw = _DIAMOND_SIZE // 2
                 _diamond_border_svg = (
                     f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                    f'width="{NODE_W}" height="{node_h}">'
-                    f'<polygon points="{_hw},1 {NODE_W-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
+                    f'width="{_DIAMOND_SIZE}" height="{node_h}">'
+                    f'<polygon points="{_hw},1 {_DIAMOND_SIZE-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
                     f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
                 )
             elif _uses_clip:
@@ -460,17 +461,44 @@ def _render_graph_fragment(
                     f'text-align:left;">'
                     f'{inner}{_cyl_svg}</div>'
                 )
+            elif n.shape == "circle":
+                # Non-terminal circle: fixed _CIRCLE_NODE_SIZE square rendered as a
+                # perfect circle (border-radius:50%).  Using an explicit fixed height
+                # avoids the oval produced by border-radius:50% on a tall/wide rect.
+                parts.append(
+                    f'<div class="node node-circle{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                    f'width:{_CIRCLE_NODE_SIZE}px; height:{_CIRCLE_NODE_SIZE}px; '
+                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                    f'box-sizing:border-box; overflow:hidden; '
+                    f'{_border_css} '
+                    f'{shape_css} '
+                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css} '
+                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
+                    f'display:flex; flex-direction:column; align-items:center; justify-content:center; '
+                    f'text-align:center;">'
+                    f'{inner}</div>'
+                )
             else:
                 # Diamond/hexagon use clip-path: center text so it sits in the
                 # widest part of the polygon and doesn't touch the clipped edges.
                 _center_shapes = n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag")
                 _align = "center" if _center_shapes else "flex-start"
                 _text_align = "center" if _center_shapes else "left"
+                # Diamond and hexagon use fixed sizes to keep the clip-path aspect
+                # ratio 1:1 and match the routing width returned by _node_render_w.
+                # All other shapes keep the CSS-variable form so responsive theming
+                # (--node-w override) continues to work for rect/round/stadium/etc.
+                if n.shape == "diamond":
+                    _w_css = f'width:{_DIAMOND_SIZE}px; min-height:{node_h}px; min-width:{_DIAMOND_SIZE}px; '
+                elif n.shape == "hexagon":
+                    _w_css = f'width:{_HEXAGON_SIZE}px; min-height:{node_h}px; min-width:{_HEXAGON_SIZE}px; '
+                else:
+                    _w_css = f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; min-width:{NODE_W}px; '
                 parts.append(
                     f'<div class="node node-{_h(n.shape)}{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
-                    f'min-width:{NODE_W}px; '
+                    f'{_w_css}'
                     f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
                     f'box-sizing:border-box; overflow:hidden; '
                     f'{_border_css} '
@@ -1082,6 +1110,12 @@ def _compute_group_bboxes(
         all_mbr_ids = _recursive_members(gid)
         mbrs = [nodes[m] for m in all_mbr_ids if m in nodes and not nodes[m].is_dummy]
         if not mbrs:
+            # Empty group: give it a minimal placeholder bbox so it renders as
+            # a small labeled box.  Position at canvas origin; overlap resolution
+            # below will push it clear of other groups when possible.
+            _emp_w = float(NODE_W + 2 * GROUP_PAD_X)
+            _emp_h = float(GROUP_PAD_Y_TOP + GROUP_PAD_Y_BOT)
+            bboxes[gid] = [0.0, 0.0, _emp_w, _emp_h]
             continue
         x0 = float(min(n.x for n in mbrs) - GROUP_PAD_X)
         y0 = float(min(n.y for n in mbrs) - GROUP_PAD_Y_TOP)

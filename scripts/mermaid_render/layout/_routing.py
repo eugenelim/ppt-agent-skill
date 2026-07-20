@@ -8,12 +8,21 @@ from ._constants import (
     NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
     GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
+    _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
 )
 
 
 def _node_render_w(n: "_Node") -> int:
     """Effective rendered width for routing exit/entry x-coordinate computation."""
-    return _TERMINAL_NODE_SIZE if _is_terminal_circle(n) else NODE_W
+    if _is_terminal_circle(n):
+        return _TERMINAL_NODE_SIZE
+    if n.shape == "circle":
+        return _CIRCLE_NODE_SIZE
+    if n.shape == "diamond":
+        return _DIAMOND_SIZE
+    if n.shape == "hexagon":
+        return _HEXAGON_SIZE
+    return NODE_W
 
 
 # ── A* obstacle-avoiding orthogonal router ────────────────────────────────────
@@ -549,13 +558,13 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             mid_y = (ty + by_) // 2
             if e.label:
                 cands = [
-                    (tip_x + 14, mid_y),
-                    (tip_x + 14, ty - _LABEL_CHIP_H - 4),
-                    (tip_x + 14, by_ + _LABEL_CHIP_H + 4),
+                    (lx + SELF_LOOP_DX + 4, mid_y),
+                    (lx + SELF_LOOP_DX + 4, ty - _LABEL_CHIP_H - 4),
+                    (lx + SELF_LOOP_DX + 4, by_ + _LABEL_CHIP_H + 4),
                 ]
                 llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
             else:
-                llx, lly = tip_x + 14, mid_y
+                llx, lly = lx + SELF_LOOP_DX + 4, mid_y
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})

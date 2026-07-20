@@ -391,3 +391,110 @@ class TestFlowchartUnicodeLabels:
         assert "diagram mermaid-layout" in html
         assert "データ入力" in html
         assert "出力結果" in html
+
+
+# ── TestFlowchartShapeFixes ────────────────────────────────────────────────────
+
+
+class TestFlowchartShapeFixes:
+    """Regression tests for the six flowchart rendering bug fixes.
+
+    Each test verifies one specific fix is in effect:
+    1. Trapezoid/trapezoid-alt use parallelogram (same-direction) clip-paths.
+    2. Circle node uses a square fixed size (not oval from border-radius:50% on a rect).
+    3. Round node has a modest border-radius (not the same full-pill as stadium).
+    4. Diamond node uses _DIAMOND_SIZE (not oversized NODE_W).
+    5. Self-loop label is placed outside the arc, not inside it.
+    6. Empty subgraph renders a visible labeled group box.
+    """
+
+    def test_trapezoid_parallelogram_clip_path(self) -> None:
+        """[/Trap/] uses same-direction-slant clip-path (parallelogram, 15% offset)."""
+        html = _render("flowchart TB\n  A[/Lean/]")
+        assert "polygon(15% 0%,100% 0%,85% 100%,0% 100%)" in html
+
+    def test_trapezoid_alt_opposite_parallelogram_clip_path(self) -> None:
+        r"""[\Trap\] uses opposite-direction parallelogram clip-path."""
+        html = _render("flowchart TB\n  A[\\Lean\\]")
+        assert "polygon(0% 0%,85% 0%,100% 100%,15% 100%)" in html
+
+    def test_circle_equal_width_height(self) -> None:
+        """((Circle)) node has equal width and height — not oval."""
+        from mermaid_render.layout._constants import _CIRCLE_NODE_SIZE
+        html = _render("flowchart TB\n  A((My Circle Node))")
+        assert f"width:{_CIRCLE_NODE_SIZE}px; height:{_CIRCLE_NODE_SIZE}px" in html
+
+    def test_circle_not_node_w_wide(self) -> None:
+        """((Circle)) div width is _CIRCLE_NODE_SIZE, not the full NODE_W."""
+        from mermaid_render.layout._constants import _CIRCLE_NODE_SIZE, NODE_W
+        assert _CIRCLE_NODE_SIZE < NODE_W, "precondition: _CIRCLE_NODE_SIZE < NODE_W"
+        html = _render("flowchart TB\n  A((My Circle Node))")
+        # The node-circle div style should use _CIRCLE_NODE_SIZE, not NODE_W
+        assert f"width:{_CIRCLE_NODE_SIZE}px" in html
+
+    def test_round_border_radius_modest(self) -> None:
+        """(Round) node has modest border-radius (14px), not the old 28px pill."""
+        html = _render("flowchart TB\n  A(Round Node)")
+        assert "border-radius:14px" in html
+        assert "border-radius:28px" not in html
+
+    def test_stadium_is_full_pill(self) -> None:
+        """([Stadium]) node keeps 50px border-radius (full pill)."""
+        html = _render("flowchart TB\n  A([Stadium Node])")
+        assert "border-radius:50px" in html
+
+    def test_round_and_stadium_differ(self) -> None:
+        """Round and stadium nodes render with visually distinct border-radius values."""
+        html_round = _render("flowchart TB\n  A(Round)")
+        html_stadium = _render("flowchart TB\n  A([Stadium])")
+        # Extract the shape_css portion (simplified: look for the key style values)
+        assert "border-radius:14px" in html_round
+        assert "border-radius:50px" in html_stadium
+
+    def test_diamond_uses_diamond_size(self) -> None:
+        """Diamond node div uses _DIAMOND_SIZE for width, not the full NODE_W."""
+        from mermaid_render.layout._constants import _DIAMOND_SIZE, NODE_W
+        assert _DIAMOND_SIZE < NODE_W, "precondition: _DIAMOND_SIZE < NODE_W"
+        html = _render("flowchart TB\n  A{Decision}")
+        assert f"width:{_DIAMOND_SIZE}px" in html
+
+    def test_diamond_svg_uses_diamond_size(self) -> None:
+        """Diamond SVG border overlay uses _DIAMOND_SIZE, not NODE_W."""
+        from mermaid_render.layout._constants import _DIAMOND_SIZE, NODE_W
+        html = _render("flowchart TB\n  A{Decision}")
+        # The SVG polygon for the diamond border should reference _DIAMOND_SIZE
+        assert f'width="{_DIAMOND_SIZE}"' in html
+        assert f'width="{NODE_W}"' not in html
+
+    def test_self_loop_label_outside_arc(self) -> None:
+        """Self-loop label x is beyond the arc endpoint, not inside it."""
+        from mermaid_render.layout._constants import (
+            _Node, SELF_LOOP_DX, NODE_W,
+        )
+        from mermaid_render.layout._routing import _route_edges, _node_render_w
+        from mermaid_render.layout._constants import _Edge
+
+        n = _Node(id="A", label="A", x=100, y=100)
+        edges = [_Edge(src="A", dst="A", label="loop label")]
+        routed = _route_edges({"A": n}, edges, 800)
+
+        assert len(routed) == 1
+        spec = routed[0]
+        node_right = n.x + _node_render_w(n)
+        arc_end_x = node_right + SELF_LOOP_DX
+        assert spec["lx"] >= arc_end_x, (
+            f"Self-loop label lx={spec['lx']} is inside arc "
+            f"(arc endpoint x={arc_end_x})"
+        )
+
+    def test_empty_subgraph_renders_group_container(self) -> None:
+        """Empty subgraph renders a visible diagram-group container with its label."""
+        html = _render(
+            "flowchart TB\n"
+            "  subgraph SG[EmptyGroupLabel]\n"
+            "  end\n"
+            "  A --> B\n"
+        )
+        assert "EmptyGroupLabel" in html
+        assert "diagram-group" in html
+        assert "diagram mermaid-layout" in html
