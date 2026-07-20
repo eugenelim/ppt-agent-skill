@@ -288,4 +288,4 @@ Identified after Phase 0-3 via downstream-vendor fidelity spike and the ours-vs-
 - **Full ELK compound layout engine:** implementing the full ELK Layered pipeline (hierarchical nodes, port constraints, compound boundary dummies). The approach in Task 2.4 is a targeted fix for the specific stateDiagram bug; a full ELK-style engine is a future spec.
 - **Browser font measurement (canvas.measureText):** Task 2.5 uses a character-width approximation. True browser-quality text measurement requires a headless browser or a font-metrics library — a new dependency.
 - **Libavoid orthogonal router:** the inspection report recommends libavoid for grouped-flowchart edge collisions. This is a future spec; current A* router is retained.
-- **Journey, Requirement, ZenUML full implementations:** these are return-unsupported for now (AC-3.3, AC-3.4); full implementation is deferred.
+- **Journey, Requirement, ZenUML full implementations:** Journey and Requirement basic renderers are now implemented (AC-5.19, AC-5.20). ZenUML remains unsupported. Sankey ribbon renderer (AC-5.10) remains deferred.

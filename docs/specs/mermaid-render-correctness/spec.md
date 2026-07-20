@@ -135,56 +135,56 @@ Findings from comparing all 71 fixtures against official mermaid.js via `compare
 Ordered P0 first (blocks correctness of other diagrams), then by area type.
 
 **P0 — Geometry contract (cross-cutting)**
-- [ ] **AC-5.1** Dynamic canvas width (same as AC-4.6 — listed here for cross-reference). All rendered HTML viewports use content-derived width, not hard-coded 1280px.
-- [ ] **AC-5.2** Two-pass node sizing (same as AC-4.4 / AC-4.7 — cross-reference). No browser CSS reflow after final layout; labels measured before coordinates are fixed.
+- [x] **AC-5.1** Dynamic canvas width (same as AC-4.6 — listed here for cross-reference). All rendered HTML viewports use content-derived width, not hard-coded 1280px.
+- [x] **AC-5.2** Two-pass node sizing (same as AC-4.4 / AC-4.7 — cross-reference). No browser CSS reflow after final layout; labels measured before coordinates are fixed.
 
 **Shape rendering (flowchart-shapes-new)**
-- [ ] **AC-5.3** Stadium shape has a closed full-border outline on all four sides. Currently only the side segments are stroked; the left/right caps are missing the connecting border lines. Verified: `TestStadiumShape` asserts that the stadium SVG path/clip encloses all four sides.
-- [ ] **AC-5.4** Hexagon, trapezoid, and trapalt shapes have a visible closed-polygon border outline. Currently these shapes lack a visible stroke border. Verified: `TestPolygonShapeBorders`.
-- [ ] **AC-5.5** Double-circle node is not oversized. Currently computed as `max(NODE_W, NODE_H) + 8 = 200px`, which is much larger than the reference. Reduce to approximately `NODE_H + 24` or match the diameter of the inner ring plus border gap. Verified: `TestDoubleCircleSize` asserts height ≤ 80px.
+- [x] **AC-5.3** Stadium shape has a closed full-border outline on all four sides. Currently only the side segments are stroked; the left/right caps are missing the connecting border lines. Verified: `TestStadiumShape` asserts that the stadium SVG path/clip encloses all four sides.
+- [x] **AC-5.4** Hexagon, trapezoid, and trapalt shapes have a visible closed-polygon border outline. Currently these shapes lack a visible stroke border. Verified: `TestPolygonShapeBorders`.
+- [x] **AC-5.5** Double-circle node is not oversized. Currently computed as `max(NODE_W, NODE_H) + 8 = 200px`, which is much larger than the reference. Reduce to approximately `NODE_H + 24` or match the diameter of the inner ring plus border gap. Verified: `TestDoubleCircleSize` asserts height ≤ 80px.
 
 **Gantt**
-- [ ] **AC-5.6** `gantt-after-multi` renders all months in the date axis with no gaps. Currently months 2024-01-08, 2024-01-09, 2024-01-10 (the window after both dependencies) are missing from the tick labels. Fix: ensure the date-axis tick generator covers the full span `[min_start, max_end]` inclusive. Verified: `TestGanttAfterMultiTicks` asserts tick labels cover all months in the fixture's date range.
+- [x] **AC-5.6** `gantt-after-multi` renders all months in the date axis with no gaps. Currently months 2024-01-08, 2024-01-09, 2024-01-10 (the window after both dependencies) are missing from the tick labels. Fix: ensure the date-axis tick generator covers the full span `[min_start, max_end]` inclusive. Verified: `TestGanttAfterMultiTicks` asserts tick labels cover all months in the fixture's date range.
 
 **Kanban**
-- [ ] **AC-5.7** Kanban card IDs (`t1`, `t2`, etc.) are stripped from displayed label text. Currently `t1["Write unit tests"]` renders as `t1` or the raw id rather than just `Write unit tests`. Fix: the kanban parser must extract the bracketed label and discard the id prefix. Verified: `TestKanbanLabelExtraction`.
-- [ ] **AC-5.8** `kanban-metadata.mmd` (`@{ticket:..., priority:..., assigned:...}` syntax): document that current mmdc (installed version) does not support the `@{...}` metadata block syntax — this is an mmdc version issue, not a renderer bug. Our renderer should parse metadata gracefully and render cards without it rather than crashing. Verified: fixture renders without exception; metadata fields are stripped silently.
+- [x] **AC-5.7** Kanban card IDs (`t1`, `t2`, etc.) are stripped from displayed label text. Currently `t1["Write unit tests"]` renders as `t1` or the raw id rather than just `Write unit tests`. Fix: the kanban parser must extract the bracketed label and discard the id prefix. Verified: `TestKanbanLabelExtraction`.
+- [x] **AC-5.8** `kanban-metadata.mmd` (`@{ticket:..., priority:..., assigned:...}` syntax): document that current mmdc (installed version) does not support the `@{...}` metadata block syntax — this is an mmdc version issue, not a renderer bug. Our renderer should parse metadata gracefully and render cards without it rather than crashing. Verified: fixture renders without exception; metadata fields are stripped silently.
 
 **Mind map**
-- [ ] **AC-5.9** Mind-map edge paths start and end at the boundary of the source/destination node shape, not at the center point. Currently branch lines connect through the center, causing lines to visually enter nodes rather than touching their edges. Fix: compute the intersection of the line with the node's bounding ellipse/rectangle before emitting the `<path>`. Verified: `TestMindmapEdgeEndpoints` asserts that no edge path endpoint coordinate equals a node's center `(n.x + w/2, n.y + h/2)`.
+- [x] **AC-5.9** Mind-map edge paths start and end at the boundary of the source/destination node shape, not at the center point. Currently branch lines connect through the center, causing lines to visually enter nodes rather than touching their edges. Fix: compute the intersection of the line with the node's bounding ellipse/rectangle before emitting the `<path>`. Verified: `TestMindmapEdgeEndpoints` asserts that no edge path endpoint coordinate equals a node's center `(n.x + w/2, n.y + h/2)`.
 
 **Sankey**
 - [ ] **AC-5.10** `sankey-beta` renders a proportional ribbon diagram. Nodes are bars on left/right sides; ribbons connect them with width proportional to flow value; source ribbon widths sum to node total. (AC-3.1 currently returns unsupported — this upgrades it to a real renderer.) Verified: `TestSankeyRibbons` asserts ribbon SVG elements exist and that ribbon widths are proportional to flow values.
 
 **Pie**
-- [ ] **AC-5.11** Pie charts render as solid pie (inner radius = 0), not as donuts. Currently the renderer produces a ring/donut shape. Fix: set inner radius to 0 in the arc computation. Verified: `TestPieSolid` asserts no donut hole (inner radius = 0).
+- [x] **AC-5.11** Pie charts render as solid pie (inner radius = 0), not as donuts. Currently the renderer produces a ring/donut shape. Fix: set inner radius to 0 in the arc computation. Verified: `TestPieSolid` asserts no donut hole (inner radius = 0).
 
 **ER**
-- [ ] **AC-5.12** ER entity record nodes are sized to fit all attribute rows. Currently entity tables are too small and attributes overflow. Fix: `_node_render_h` for ER nodes must count attribute rows and multiply by `_MEMBER_LINE_H`. Verified: `TestEREntityHeight` asserts entity height ≥ `NODE_H + num_attributes * _MEMBER_LINE_H`.
+- [x] **AC-5.12** ER entity record nodes are sized to fit all attribute rows. Currently entity tables are too small and attributes overflow. Fix: `_node_render_h` for ER nodes must count attribute rows and multiply by `_MEMBER_LINE_H`. Verified: `TestEREntityHeight` asserts entity height ≥ `NODE_H + num_attributes * _MEMBER_LINE_H`.
 
 **Class**
-- [ ] **AC-5.13** Class diagram boxes are wide enough for the longest attribute/method name. Currently they are too narrow and text clips. Fix: `_measure_text_px` should scan all members, not just the class name, for width computation. Verified: `TestClassBoxWidth` asserts box width ≥ longest member text width + `NODE_HPAD`.
+- [x] **AC-5.13** Class diagram boxes are wide enough for the longest attribute/method name. Currently they are too narrow and text clips. Fix: `_measure_text_px` should scan all members, not just the class name, for width computation. Verified: `TestClassBoxWidth` asserts box width ≥ longest member text width + `NODE_HPAD`.
 
 **Packet**
-- [ ] **AC-5.14** Packet diagram viewport is tightened to content bounds with no excessive vertical padding. Currently rows have large vertical gaps and the diagram occupies a fraction of the 1280px canvas. Fix: compute `canvas_h` from actual row heights. Verified: `TestPacketViewport` asserts content fills ≥ 60% of canvas area.
+- [x] **AC-5.14** Packet diagram viewport is tightened to content bounds with no excessive vertical padding. Currently rows have large vertical gaps and the diagram occupies a fraction of the 1280px canvas. Fix: compute `canvas_h` from actual row heights. Verified: `TestPacketViewport` asserts content fills ≥ 60% of canvas area.
 
 **XY chart**
-- [ ] **AC-5.15** XY chart canvas is sized to content (not padded to 1280px). Plot area occupies ≥ 60% of the rendered canvas. Verified: `TestXYChartViewport`.
+- [x] **AC-5.15** XY chart canvas is sized to content (not padded to 1280px). Plot area occupies ≥ 60% of the rendered canvas. Verified: `TestXYChartViewport`.
 
 **Config propagation**
-- [ ] **AC-5.16** Flowchart `%%{init: {"flowchart": {"nodeSpacing": N, "rankSpacing": M}}}%%` directives are parsed and propagate to `COL_GAP` / `RANK_GAP` in the layout algorithm. Verified: `TestFlowchartConfigSpacing` renders two fixtures with different spacing configs and asserts the resulting node coordinates differ proportionally.
+- [x] **AC-5.16** Flowchart `%%{init: {"flowchart": {"nodeSpacing": N, "rankSpacing": M}}}%%` directives are parsed and propagate to `COL_GAP` / `RANK_GAP` in the layout algorithm. Verified: `TestFlowchartConfigSpacing` renders two fixtures with different spacing configs and asserts the resulting node coordinates differ proportionally.
 
 **Subgraph local direction**
-- [ ] **AC-5.17** An inner `direction LR` declaration inside a subgraph block is honored: children of that subgraph are laid out left-to-right while the outer graph remains TB. Verified: `TestSubgraphLocalDirection` asserts that nodes inside a `direction LR` subgraph have the same `y` but different `x` values.
+- [x] **AC-5.17** An inner `direction LR` declaration inside a subgraph block is honored: children of that subgraph are laid out left-to-right while the outer graph remains TB. Verified: `TestSubgraphLocalDirection` asserts that nodes inside a `direction LR` subgraph have the same `y` but different `x` values.
 
 **GitGraph (implement)**
-- [ ] **AC-5.18** `gitgraph-basic` renders a basic git branch diagram: commits appear as circles on horizontal lanes, branch labels shown, merge connectors drawn. Currently returns unsupported via lowercase `gitgraph` detection (AC-3.5 fixed detection — this AC requires the actual renderer). Verified: `TestGitGraphBasic`.
+- [x] **AC-5.18** `gitgraph-basic` renders a basic git branch diagram: commits appear as circles on horizontal lanes, branch labels shown, merge connectors drawn. Currently returns unsupported via lowercase `gitgraph` detection (AC-3.5 fixed detection — this AC requires the actual renderer). Verified: `TestGitGraphBasic`.
 
 **Journey (implement)**
-- [ ] **AC-5.19** `journey-basic` renders with section bands and task score cards. Currently returns unsupported. Verified: `TestJourneyBasic` asserts section labels and task entries are present in output.
+- [x] **AC-5.19** `journey-basic` renders with section bands and task score cards. Currently returns unsupported. Verified: `TestJourneyBasic` asserts section labels and task entries are present in output.
 
 **Requirement (implement)**
-- [ ] **AC-5.20** `requirement-basic` renders requirement and element record nodes with typed relation labels. Currently returns unsupported. Verified: `TestRequirementBasic`.
+- [x] **AC-5.20** `requirement-basic` renders requirement and element record nodes with typed relation labels. Currently returns unsupported. Verified: `TestRequirementBasic`.
 
 ## Assumptions
 
