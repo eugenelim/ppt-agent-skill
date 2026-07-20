@@ -87,16 +87,20 @@ def _astar_route(
     grid_xs: "list[int]",
     grid_ys: "list[int]",
     blocked: "set[tuple]",
+    occupied: "set[tuple] | None" = None,
 ) -> "list[tuple[int, int]]":
     """Obstacle-avoiding A* on sparse orthogonal routing grid.
 
-    Cost function: total Manhattan length + 200 per 90° bend.
+    Cost function: seg_length + SEG_COST per segment + BEND per 90° bend
+                   + CROSS penalty for each segment that crosses an already-routed edge.
     Heuristic: Manhattan distance to goal (admissible).
     Returns a list of (x, y) waypoints with collinear points removed.
     The caller should replace waypoints[0] and waypoints[-1] with the
     exact port coordinates to restore sub-grid precision.
     """
-    BEND = 200
+    BEND = 100   # reduced from 200; segment-count term handles turn avoidance
+    SEG_COST = 25
+    CROSS = 60   # soft penalty for crossing an already-routed edge
     nx, ny = len(grid_xs), len(grid_ys)
 
     def _snap(val: int, arr: "list[int]") -> int:
@@ -149,7 +153,8 @@ def _astar_route(
             if seg in blocked:
                 continue
             seg_len = abs(grid_xs[nxi] - grid_xs[xi]) + abs(grid_ys[nyi] - grid_ys[yi])
-            ng = g + seg_len + (BEND if nd != d else 0)
+            cross = CROSS if (occupied and seg in occupied) else 0
+            ng = g + seg_len + SEG_COST + (BEND if nd != d else 0) + cross
             ns = (nxi, nyi, nd)
             if ng < dist.get(ns, INF):
                 dist[ns] = ng
@@ -457,6 +462,23 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     _routing_obs = [(n.x, n.y, n.x + _node_render_w(n), n.y + _node_render_h(n))
                     for n in nodes.values() if not n.is_dummy]
     _blocked = _blocked_segs(_grid_xs, _grid_ys, _routing_obs)
+    # Tracks grid-index segments used by already-routed edges so subsequent
+    # edges pay a soft CROSS penalty for reusing the same channel.
+    _occupied: set = set()
+
+    def _snap_to_grid(val: int, arr: list) -> int:
+        return min(range(len(arr)), key=lambda i: abs(arr[i] - val))
+
+    def _accumulate_occupied(pts: list) -> None:
+        for _k in range(len(pts) - 1):
+            _ax, _ay = pts[_k]
+            _bx, _by = pts[_k + 1]
+            _axi = _snap_to_grid(_ax, _grid_xs)
+            _ayi = _snap_to_grid(_ay, _grid_ys)
+            _bxi = _snap_to_grid(_bx, _grid_xs)
+            _byi = _snap_to_grid(_by, _grid_ys)
+            _occupied.add((min(_axi, _bxi), min(_ayi, _byi),
+                           max(_axi, _bxi), max(_ayi, _byi)))
 
     # Right-lane x: always clears the rightmost node + group container border
     non_dummy = [n for n in nodes.values() if not n.is_dummy]
@@ -667,10 +689,11 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 _pts_lr = _fast_lr
             else:
                 _pts_lr = _astar_route(int(x1), int(y1), int(x2), int(y2),
-                                       _grid_xs, _grid_ys, _blocked)
+                                       _grid_xs, _grid_ys, _blocked, _occupied)
                 if len(_pts_lr) >= 2:
                     _pts_lr[0] = (int(x1), int(y1))
                     _pts_lr[-1] = (int(x2), int(y2))
+            _accumulate_occupied(_pts_lr)
             path = _smooth_orthogonal_path(_pts_lr)
             if e.arrow:
                 _ldx_lr, _ldy_lr = 1, 0  # LR nominal default
@@ -733,10 +756,11 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             _pts = _fast
         else:
             _pts = _astar_route(int(x1), int(y1), int(x2), int(y2),
-                                _grid_xs, _grid_ys, _blocked)
+                                _grid_xs, _grid_ys, _blocked, _occupied)
             if len(_pts) >= 2:
                 _pts[0] = (int(x1), int(y1))
                 _pts[-1] = (int(x2), int(y2))
+        _accumulate_occupied(_pts)
         path = _smooth_orthogonal_path(_pts)
 
         # Derive arrowhead direction from the actual last path segment so A*-routed
