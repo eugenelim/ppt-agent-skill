@@ -29,7 +29,57 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mermaid_render import to_html  # noqa: E402
+from mermaid_render.layout._c4 import C4Bounds, C4Box  # noqa: E402
 
+
+# ── C4Bounds packer unit tests (TDD, AC-1) ───────────────────────────────────
+
+class TestC4BoundsPacker:
+    """Pixel-exact packing tests matching Mermaid 11.15 Bounds.insert() behaviour."""
+
+    def test_c4_basic_fixture_coordinates(self):
+        """c4-basic reference: start_x=100, start_y=66, width_limit=832."""
+        boxes = [
+            C4Box("user", 216, 134),
+            C4Box("webapp", 216, 86),
+            C4Box("email", 216, 86),
+        ]
+        bounds = C4Bounds(start_x=100, start_y=66, width_limit=832)
+        for box in boxes:
+            bounds.insert(box)
+        assert (boxes[0].x, boxes[0].y) == (150, 166), f"user: {boxes[0].x},{boxes[0].y}"
+        assert (boxes[1].x, boxes[1].y) == (466, 166), f"webapp: {boxes[1].x},{boxes[1].y}"
+        assert (boxes[2].x, boxes[2].y) == (150, 400), f"email: {boxes[2].x},{boxes[2].y}"
+
+    def test_wrap_after_shapes_per_row(self):
+        """5 boxes at shapes_per_row=4 wraps: first 4 on row 1, fifth on row 2."""
+        boxes = [C4Box(str(i), 100, 50) for i in range(5)]
+        bounds = C4Bounds(start_x=0, start_y=0, width_limit=2000, shapes_per_row=4)
+        for box in boxes:
+            bounds.insert(box)
+        row1_ys = {box.y for box in boxes[:4]}
+        assert len(row1_ys) == 1, f"First four boxes must be on same row, got ys={row1_ys}"
+        assert boxes[4].y > boxes[0].y, "Fifth box must wrap to a lower row"
+
+    def test_single_item_placed(self):
+        """A single item is placed at start_x + margin, start_y + 2*margin."""
+        box = C4Box("a", 200, 80)
+        bounds = C4Bounds(start_x=0, start_y=0, width_limit=1000, shape_margin=50)
+        bounds.insert(box)
+        assert box.x == 50   # start_x + shape_margin (first_in_row)
+        assert box.y == 100  # start_y + 2 * shape_margin
+
+    def test_two_items_same_row(self):
+        """Two small items fit on the same row when width allows."""
+        b1, b2 = C4Box("a", 100, 50), C4Box("b", 100, 50)
+        bounds = C4Bounds(start_x=0, start_y=0, width_limit=1000, shape_margin=50)
+        for b in (b1, b2):
+            bounds.insert(b)
+        assert b1.y == b2.y, "Both boxes must be on the same row"
+        assert b2.x > b1.x, "Second box must be to the right of the first"
+
+
+# ── TestC4Unsupported ─────────────────────────────────────────────────────────
 
 class TestC4Unsupported:
     @pytest.mark.parametrize("keyword", [
