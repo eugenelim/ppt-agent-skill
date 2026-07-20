@@ -1645,6 +1645,7 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
     title = ""
     x_cats: list[str] = []
     y_range = (0.0, 100.0)
+    y_label = ""  # optional axis title from  y-axis "label" min --> max
     bar_data: list[float] = []
     line_data: list[float] = []
     for raw in content_lines:
@@ -1658,6 +1659,12 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
         if m:
             cats = m.group(1) or m.group(2) or ""
             x_cats = [c.strip().strip('"') for c in cats.split(",") if c.strip()]; continue
+        # y-axis with optional quoted label then range: y-axis "Revenue" 0 --> 10000
+        m = re.match(r'y-axis\s+"([^"]+)"\s+([0-9.]+)\s*-->\s*([0-9.]+)', line, re.I)
+        if m:
+            y_label = m.group(1)
+            y_range = (float(m.group(2)), float(m.group(3))); continue
+        # y-axis range only: y-axis 0 --> 100
         m = re.match(r'y-axis\s+\[?([0-9.]+)\s*-->\s*([0-9.]+)\]?', line, re.I)
         if m:
             y_range = (float(m.group(1)), float(m.group(2))); continue
@@ -1702,10 +1709,18 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
     for _i in range(_tick_count + 1):
         _tv = y_min + (y_span * _i / _tick_count)
         _ty = cy_top + ch - int((_tv - y_min) / y_span * ch)
+        # tick mark on the Y-axis
         parts.append(
             f'<line x1="{cx_start - 4}" y1="{_ty}" x2="{cx_start}" y2="{_ty}" '
             f'stroke="{_tick_color}" stroke-width="1"/>'
         )
+        # horizontal grid line across the plot area (skip the bottom baseline)
+        if _i > 0:
+            parts.append(
+                f'<line x1="{cx_start}" y1="{_ty}" x2="{cx_start + cw}" y2="{_ty}" '
+                f'stroke="{_tick_color}" stroke-width="0.5" '
+                f'stroke-dasharray="4 3" opacity="0.5"/>'
+            )
     parts.append('</svg>')
     # Y-axis tick labels
     _label_color = "var(--node-fg-dim,var(--text-secondary,#75736C))"
@@ -1718,6 +1733,17 @@ def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
             f'top:{_ty - 6}px;font-size:9px;line-height:1;'
             f'color:{_label_color};font-family:{_label_font};">'
             f'{int(_tv)}</span>'
+        )
+    # Y-axis label (optional; from  y-axis "label" min --> max  syntax)
+    if y_label:
+        parts.append(
+            f'<span data-y-label="{_h(y_label)}" style="position:absolute;'
+            f'writing-mode:vertical-lr;transform:rotate(180deg);'
+            f'left:2px;top:{cy_top}px;height:{ch}px;width:{PAD_H - 4}px;'
+            f'display:flex;align-items:center;justify-content:center;'
+            f'font-size:9px;color:{_label_color};font-family:{_label_font};'
+            f'white-space:nowrap;overflow:hidden;">'
+            f'{_h(y_label)}</span>'
         )
     if bar_data:
         bar_w = max(8, bar_unit - 8)
