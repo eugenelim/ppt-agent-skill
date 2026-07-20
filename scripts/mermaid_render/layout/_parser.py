@@ -179,6 +179,10 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             continue
         if line.startswith("class ") and not line.startswith("classDiagram"):
             continue
+        # stateDiagram-v2: skip inline direction directive (direction LR / TB / etc.)
+        # Without this, "direction" becomes a spurious rect node.
+        if re.match(r'direction\s+(LR|RL|TB|TD)\s*$', line, re.I):
+            continue
         # stateDiagram-v2: [*] is the initial/terminal state marker; map to a
         # renderable node id. Inside a composite state (stack non-empty), use a
         # scoped id so inner start/end don't collide with the outer [*] markers.

@@ -13,6 +13,7 @@ from ._constants import (
     _ARCH_ICON_MAP, _C4_ICON_MAP, _LABEL_ICON_KEYWORDS,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
     _node_render_h,
+    _TERMINAL_NODE_SIZE, _is_terminal_circle,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter
 from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
@@ -161,6 +162,20 @@ def _layout_graph_topology(
     if real_nodes:
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
         canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
+
+    # Center terminal-circle nodes (start ● / end ◎) within their TB column slot.
+    # _assign_coordinates places every node at the column's left edge (n.x = CANVAS_PAD +
+    # col * (NODE_W + COL_GAP)).  Rect nodes fill the full NODE_W so their visual centre is
+    # n.x + NODE_W // 2.  Terminal circles are _TERMINAL_NODE_SIZE (32 px) wide; without this
+    # adjustment their centre is n.x + 16, producing a visible horizontal jog in arrows that
+    # connect them to adjacent rect states.  Shifting right by (NODE_W - _TERMINAL_NODE_SIZE) // 2
+    # aligns their centres.  Canvas dimensions are already finalised above, so this shift does
+    # not affect zoom or canvas sizing.
+    if direction.upper() not in ("LR", "RL"):
+        _circ_shift = (NODE_W - _TERMINAL_NODE_SIZE) // 2
+        for _n in nodes.values():
+            if not _n.is_dummy and _is_terminal_circle(_n):
+                _n.x += _circ_shift
 
     # Scale to fit width/height constraints via CSS zoom.
     # Without height_hint: scale down only (never scale up — a tall diagram
