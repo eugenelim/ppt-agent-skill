@@ -498,3 +498,70 @@ class TestFlowchartShapeFixes:
         assert "EmptyGroupLabel" in html
         assert "diagram-group" in html
         assert "diagram mermaid-layout" in html
+
+
+class TestDummyChainRouting:
+    """Long-range edges (A→C skipping B) must render as ONE path, not two segments."""
+
+    # arrows-defs fixture: A-->B, A==>C, A-.->D, B-->C, C-->D
+    # Dummy nodes are inserted for A→C (rank 0→2) and A→D (rank 0→3).
+    # Before fix: each segment renders separately → 3 paths for A→D, 2 for A→C.
+    # After fix:  each logical edge renders as ONE path from real src to real dst.
+
+    _SRC = (
+        "flowchart TB\n"
+        "    A-->B\n"
+        "    A==>C\n"
+        "    A-.->D\n"
+        "    B-->C\n"
+        "    C-->D\n"
+    )
+
+    def _edge_paths(self, html: str):
+        """Return list of (src, dst) tuples for all rendered edge paths."""
+        import re
+        return re.findall(r'data-src="([^"]+)" data-dst="([^"]+)"', html)
+
+    def test_each_logical_edge_renders_one_path(self) -> None:
+        """5 logical edges must produce exactly 5 SVG paths (not 8 with dummy segments)."""
+        html = _render(self._SRC)
+        edges = self._edge_paths(html)
+        assert len(edges) == 5, (
+            f"Expected 5 edge paths (one per logical edge), got {len(edges)}: {edges}"
+        )
+
+    def test_long_edge_src_dst_are_real_nodes(self) -> None:
+        """data-src/data-dst on every edge must be a real node (A/B/C/D), not a dummy."""
+        html = _render(self._SRC)
+        for src, dst in self._edge_paths(html):
+            assert not src.startswith("_dummy_"), f"dummy src in edge: {src}→{dst}"
+            assert not dst.startswith("_dummy_"), f"dummy dst in edge: {src}→{dst}"
+
+    def test_long_edge_path_stays_within_canvas(self) -> None:
+        """The A→C path must not route to x > canvas_w (no off-canvas dummy swings)."""
+        import re
+        html = _render(self._SRC)
+        canvas_w_m = re.search(r'width:(\d+)px', html)
+        canvas_w = int(canvas_w_m.group(1)) if canvas_w_m else 800
+        # Collect x coords from all M/L/Q path commands
+        all_xs = [float(x) for x in re.findall(r'[ML]\s+([\d.]+)\s+[\d.]+', html)]
+        # Allow 5px overshoot for arrowhead tips
+        if all_xs:
+            assert max(all_xs) <= canvas_w + 5, (
+                f"Edge path goes off-canvas: max_x={max(all_xs)}, canvas_w={canvas_w}"
+            )
+
+    def test_arrow_defs_correct_edge_count(self) -> None:
+        """Full render of arrows-defs fixture produces exactly 5 edge paths."""
+        import os
+        fixture = os.path.join(
+            os.path.dirname(__file__), "fixtures", "flowchart-arrows-defs.mmd"
+        )
+        if not os.path.exists(fixture):
+            pytest.skip("fixture not found")
+        src = open(fixture).read()
+        html = _render(src)
+        edges = self._edge_paths(html)
+        assert len(edges) == 5, (
+            f"arrows-defs: expected 5 edge paths, got {len(edges)}: {edges}"
+        )

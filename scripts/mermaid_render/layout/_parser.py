@@ -184,6 +184,7 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
     groups: dict[str, _Group] = {}
     stack: list[str] = []  # subgraph id stack
     _pending_link_styles: list[tuple[int, str]] = []
+    _composite_gids: set[str] = set()  # group IDs that are state diagram composite states
 
     def _ensure(nid: str, label: str, shape: str, css_class: str = "") -> None:
         if nid not in nodes:
@@ -257,8 +258,10 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             gid = f"_g{len(groups)}"
             parent_gid = stack[-1] if stack else None
             groups[gid] = _Group(id=gid, label=_cs_id, parent_group=parent_gid)
-            _ensure(_cs_id, _cs_id, "rect", "")
-            nodes[_cs_id].group = parent_gid
+            # Do NOT create an atomic node for the composite state here.
+            # Transition lines like "Processing --> Done" will call _ensure("Processing")
+            # and re-create it; we remove it and rewire edges in the post-processing step below.
+            _composite_gids.add(gid)
             stack.append(gid)
             continue
 
@@ -314,6 +317,32 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
         elif _sm_id.endswith("_sm_end_"):
             nodes[_sm_id].shape = "circle"
             nodes[_sm_id].label = "◎"
+
+    # Post-process: composite state names are group labels, not standalone atomic nodes.
+    # Transition parsing re-creates them as nodes; remove them and rewire edges to
+    # the group's entry/exit anchor nodes (scoped _sm_start_ / _sm_end_).
+    for _cgid in _composite_gids:
+        _cs_name = groups[_cgid].label
+        if _cs_name not in nodes:
+            continue
+        del nodes[_cs_name]
+        _entry = f"{_cgid}_sm_start_"
+        _exit = f"{_cgid}_sm_end_"
+        if _entry not in nodes:
+            _entry = next(
+                (m for m in groups[_cgid].members if m in nodes and not m.endswith("_sm_end_")),
+                _entry,
+            )
+        if _exit not in nodes:
+            _exit = next(
+                (m for m in reversed(groups[_cgid].members) if m in nodes and not m.endswith("_sm_start_")),
+                _exit,
+            )
+        for _e in edges:
+            if _e.src == _cs_name:
+                _e.src = _exit
+            if _e.dst == _cs_name:
+                _e.dst = _entry
 
     return nodes, edges, groups
 

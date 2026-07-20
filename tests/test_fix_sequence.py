@@ -161,22 +161,34 @@ class TestActivationShorthand:
 
 class TestNotePositioning:
     def test_left_of_note_is_left_of_participant(self):
-        """Note left of Alice is positioned to the left of Alice's column."""
-        html = _render("sequence-notes-all.mmd")
-        polys = _note_polys(html)
-        # Alice is roughly at cx=160, col_w=160, so her left edge ≈ 80
-        # Note left of Alice should have x_max <= 80 (left of Alice's left edge)
-        left_notes = [p for p in polys if p[1] <= 90]
-        assert len(left_notes) >= 1, f"No left-of note found. All note polys: {polys}"
+        """Note left of Alice is positioned to the left of Alice's column.
 
-    def test_right_of_note_is_right_of_participant(self):
-        """Note right of Carol is positioned to the right of Carol's column."""
+        After the canvas-expansion fix, the canvas widens to accommodate left-of
+        notes. All notes must stay within [0, canvas_w] and the left-of note must
+        be in the leftmost third of the canvas (it's left of the first participant).
+        """
         html = _render("sequence-notes-all.mmd")
         cw = int(re.search(r'width:(\d+)px', html).group(1))
         polys = _note_polys(html)
-        # Canvas width=800, Carol is ~3rd of 3 participants
-        # Note right of Carol should have x_min >= ~700
-        right_notes = [p for p in polys if p[0] >= cw * 0.85]
+        # Left-of note is in the left third of the (now-expanded) canvas
+        left_notes = [p for p in polys if p[1] <= cw // 3]
+        assert len(left_notes) >= 1, f"No left-of note found. Canvas={cw} polys={polys}"
+        # All note polygons must be within canvas bounds
+        for x_min, x_max in polys:
+            assert x_min >= 0, f"Note polygon starts at negative x={x_min}"
+            assert x_max <= cw, f"Note polygon ends at x={x_max} beyond canvas_w={cw}"
+
+    def test_right_of_note_is_right_of_participant(self):
+        """Note right of Carol is positioned to the right of Carol's column.
+
+        After the canvas-expansion fix, the canvas widens to accommodate right-of
+        notes. The right-of note is in the rightmost third of the canvas.
+        """
+        html = _render("sequence-notes-all.mmd")
+        cw = int(re.search(r'width:(\d+)px', html).group(1))
+        polys = _note_polys(html)
+        # Right-of note is in the right third of the (now-expanded) canvas
+        right_notes = [p for p in polys if p[0] >= cw * 2 // 3]
         assert len(right_notes) >= 1, f"No right-of note found. Canvas={cw} polys={polys}"
 
     def test_spanning_note_over_multiple_participants(self):

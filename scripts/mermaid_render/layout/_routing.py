@@ -22,7 +22,7 @@ def _node_render_w(n: "_Node") -> int:
         return _DIAMOND_SIZE
     if n.shape == "hexagon":
         return _HEXAGON_SIZE
-    return NODE_W
+    return n.width or NODE_W
 
 
 # ── A* obstacle-avoiding orthogonal router ────────────────────────────────────
@@ -43,6 +43,9 @@ def _build_routing_grid(
         if n.is_dummy:
             continue
         nw, nh = _node_render_w(n), _node_render_h(n)
+        # External bypass channels are at ±8 px outside node edges, giving visual
+        # clearance. Exact boundary positions (0, nw) are still included because the
+        # A* start/end override restores exact port coords regardless of grid snapping.
         for off in (-8, 0, nw // 2, nw, nw + 8):
             xs.add(n.x + off)
         for off in (-8, 0, nh // 2, nh, nh + 8):
@@ -440,13 +443,25 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot)."""
     is_lr = direction.upper() in ("LR", "RL")
 
-    # Count fan-in/fan-out per node (for endpoint distribution)
+    # Count fan-in/fan-out per node using REAL endpoints.
+    # Dummy-chain edges (orig_src/orig_dst set) are counted once at the last segment
+    # so that multi-rank edges like A→C (via dummy) appear as one port on A and one
+    # on C, not as multiple ports pointing to invisible intermediate dummies.
     fan_in: dict[str, list[str]] = {nid: [] for nid in nodes}
     fan_out: dict[str, list[str]] = {nid: [] for nid in nodes}
+    _seen_fan_pairs: set = set()
     for e in edges:
-        if e.src in nodes and e.dst in nodes and not e.reversed_:
-            fan_in[e.dst].append(e.src)
-            fan_out[e.src].append(e.dst)
+        if e.src not in nodes or e.dst not in nodes or e.reversed_:
+            continue
+        if nodes[e.dst].is_dummy:
+            continue  # skip intermediate segments; handled at last segment
+        real_src = e.orig_src or e.src
+        real_dst = e.orig_dst or e.dst
+        pair = (real_src, real_dst)
+        if pair not in _seen_fan_pairs:
+            _seen_fan_pairs.add(pair)
+            fan_in[real_dst].append(real_src)
+            fan_out[real_src].append(real_dst)
 
     # Obstacle bboxes for label placement: node cards + group title strips.
     # Full group bboxes push labels above all groups (clear y < CANVAS_PAD area),
@@ -506,30 +521,75 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
 
     # Build back-edge lane assignments so each back-edge uses its own stagger lane,
     # preventing multiple back-edges from collapsing onto the same routing lane.
+    # Skip intermediate dummy-chain edges; use real endpoint ranks for gap detection.
     back_edge_lane: dict[int, int] = {}
     _be_count = 0
     for _i, _e in enumerate(edges):
         if _e.src not in nodes or _e.dst not in nodes or _e.src == _e.dst:
             continue
-        _rg = nodes[_e.dst].rank - nodes[_e.src].rank
-        if _e.reversed_ or _rg < 0 or _rg > 1:
+        if nodes[_e.dst].is_dummy:
+            continue  # skip intermediate dummy segments
+        _real_s = nodes.get(_e.orig_src or _e.src)
+        _real_s_rank = _real_s.rank if _real_s else nodes[_e.src].rank
+        _rg = nodes[_e.dst].rank - _real_s_rank
+        if _e.reversed_ or _rg < 0:
             back_edge_lane[_i] = _be_count
             _be_count += 1
 
-    # Build parallel-edge indices so labels for A→B, A→B can be staggered.
+    # Build parallel-edge indices using real endpoints for deduplication.
+    # Intermediate dummy-chain segments are skipped so each logical edge counts once.
     _par_count: dict[tuple, int] = {}
     parallel_edge_idx: dict[int, int] = {}
     for _i, _e in enumerate(edges):
-        _key = (_e.src, _e.dst)
+        if nodes.get(_e.dst) and nodes[_e.dst].is_dummy:
+            continue  # skip intermediate segments
+        _real_s = _e.orig_src or _e.src
+        _real_d = _e.orig_dst or _e.dst
+        _key = (_real_s, _real_d)
         parallel_edge_idx[_i] = _par_count.get(_key, 0)
         _par_count[_key] = _par_count.get(_key, 0) + 1
+
+    # Assign right-lane slots to TB skip-rank forward edges (rank_gap > 1) so they
+    # route around intermediate nodes cleanly instead of boundary-touching via A*.
+    _skip_lane: dict[int, int] = {}
+    if not is_lr:
+        _skip_count = 0
+        for _i, _e in enumerate(edges):
+            if _e.src not in nodes or _e.dst not in nodes:
+                continue
+            if nodes[_e.dst].is_dummy:
+                continue
+            if _e.reversed_:
+                continue
+            _real_s = nodes.get(_e.orig_src or _e.src)
+            _real_s_rank = _real_s.rank if _real_s else nodes[_e.src].rank
+            _rg = nodes[_e.dst].rank - _real_s_rank
+            if _rg > 1:
+                _skip_lane[_i] = _skip_count
+                _skip_count += 1
 
     result: list[dict] = []
     for edge_i, e in enumerate(edges):
         if e.src not in nodes or e.dst not in nodes:
             continue
-        s = nodes[e.src]
-        d = nodes[e.dst]
+        s_node = nodes[e.src]
+        d_node = nodes[e.dst]
+
+        # Dummy-chain routing: edges are split into unit-rank segments via dummy nodes.
+        # Skip all intermediate segments (dst is dummy). For the last segment (src is
+        # dummy, dst is real), substitute orig_src as the routing start so the full
+        # logical edge is drawn as ONE path from the original source to the destination.
+        if d_node.is_dummy:
+            continue  # intermediate segment — handled by last segment
+        if s_node.is_dummy:
+            orig = e.orig_src or e.src
+            s = nodes.get(orig)
+            if s is None:
+                continue
+        else:
+            s = s_node
+        d = d_node
+
         # thick edges get a larger arrowhead; all other edges get a slightly larger
         # head than the default (8/4) for visibility at small zoom levels.
         if e.style == "thick":
@@ -542,32 +602,40 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         else:
             ah_kw = {"back": 9, "half_w": 4}
             _mid = "arrow-open" if e.style == "dotted" else "arrow-normal"
-        marker_id: str | None = _mid if e.arrow else None
+        # arrow_src=True: UML marker belongs at the source end; use a -rev ID so
+        # the renderer emits marker-start with orient="auto-start-reverse".
+        if e.arrow and getattr(e, "arrow_src", False):
+            marker_id: str | None = _mid + "-rev"
+        else:
+            marker_id: str | None = _mid if e.arrow else None
 
-        # Self-loop
+        # Self-loop: rectangular orthogonal loop exiting the right face.
+        # Uses _smooth_orthogonal_path so corners are visually rounded.
         if e.src == e.dst:
             lx = s.x + _node_render_w(s)
-            ty = s.y
-            by_ = s.y + _node_render_h(s)
-            _sl_inset = max(6, min(12, (by_ - ty) // 4))
-            path = (f"M {lx} {ty + _sl_inset} "
-                    f"C {lx + SELF_LOOP_DX} {ty} {lx + SELF_LOOP_DX} {by_} "
-                    f"{lx} {by_ - _sl_inset}")
-            tip_x, tip_y = lx, by_ - _sl_inset
-            ah = _arrowhead(tip_x, tip_y, -1, 0, **ah_kw) if e.arrow else None
-            mid_y = (ty + by_) // 2
+            nh = _node_render_h(s)
+            # Exit and return at distinct y positions (top-third / bottom-third of node)
+            y_out = int(s.y + nh * 0.33)
+            y_ret = int(s.y + nh * 0.67)
+            loop_x = lx + SELF_LOOP_DX
+            path = _smooth_orthogonal_path(
+                [(lx, y_out), (loop_x, y_out), (loop_x, y_ret), (lx, y_ret)]
+            )
+            ah = _arrowhead(lx, y_ret, -1, 0, **ah_kw) if e.arrow else None
+            mid_y = (y_out + y_ret) // 2
             if e.label:
                 cands = [
-                    (lx + SELF_LOOP_DX + 4, mid_y),
-                    (lx + SELF_LOOP_DX + 4, ty - _LABEL_CHIP_H - 4),
-                    (lx + SELF_LOOP_DX + 4, by_ + _LABEL_CHIP_H + 4),
+                    (loop_x + 4, mid_y),
+                    (loop_x + 4, y_out - _LABEL_CHIP_H - 4),
+                    (loop_x + 4, y_ret + _LABEL_CHIP_H + 4),
                 ]
                 llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
             else:
-                llx, lly = lx + SELF_LOOP_DX + 4, mid_y
+                llx, lly = loop_x + 4, mid_y
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
-                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})
+                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
             continue
 
         rank_gap = d.rank - s.rank
@@ -618,7 +686,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         llx, lly = max(0, x1 - 164), int(y1) - 12
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
-                                   "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})
+                                   "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
                 else:
                     lane_y = bottom_lane_y + 32 * be_lane
                     sx = s.x + _node_render_w(s) // 2
@@ -644,9 +713,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         llx, lly = (sx + dx_) // 2, lane_y + 4
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
-                                   "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})
+                                   "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
             else:
-                lane_x = right_lane_x + 32 * be_lane
+                lane_x = right_lane_x + 12 * be_lane
                 sx = s.x + _node_render_w(s)
                 sy = s.y + _node_render_h(s) // 2
                 dx_ = d.x + _node_render_w(d)
@@ -670,22 +740,64 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     llx, lly = lane_x + 4, (sy + dy_) // 2
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                                "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
-                               "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})
+                               "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
+            continue
+
+        # TB skip-rank forward edge: rank_gap > 1 means this edge bypasses intermediate
+        # nodes. Route via the right lane to avoid visual boundary-touching via A*.
+        if not is_lr and rank_gap > 1 and not e.reversed_ and edge_i in _skip_lane:
+            skip_i = _skip_lane[edge_i]
+            _sk_lane_x = right_lane_x + 8 * skip_i
+            _tb_real_src = e.orig_src or e.src
+            _tb_real_dst = e.orig_dst or e.dst
+            out_list = fan_out.get(_tb_real_src, [])
+            out_idx = out_list.index(_tb_real_dst) if _tb_real_dst in out_list else 0
+            out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_w(s))
+            in_list = fan_in.get(_tb_real_dst, [])
+            in_idx = in_list.index(_tb_real_src) if _tb_real_src in in_list else 0
+            in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_w(d))
+            x1 = int(s.x + out_offset)
+            y1 = int(s.y + _node_render_h(s))   # src bottom
+            x2 = int(d.x + in_offset)
+            y2 = int(d.y)                         # dst top
+            path = _smooth_orthogonal_path(
+                [(x1, y1), (_sk_lane_x, y1), (_sk_lane_x, y2), (x2, y2)]
+            )
+            ah = _arrowhead(x2, y2, 0, 1, **ah_kw) if e.arrow else None
+            if e.label:
+                H = _LABEL_CHIP_H
+                mid_y = (y1 + y2) // 2
+                cands = [
+                    (_sk_lane_x + 4, mid_y),
+                    (_sk_lane_x + 4, y1 + H + 4),
+                    (_sk_lane_x + 4, y2 - H - 4),
+                ]
+                llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+            else:
+                llx, lly = _sk_lane_x + 4, (y1 + y2) // 2
+            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                           "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
+                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
             continue
 
         if is_lr:
             # LR forward edge: orthogonal path right-of-src to left-of-dst
-            out_list = fan_out[e.src]
-            out_idx = out_list.index(e.dst) if e.dst in out_list else 0
+            # Use real endpoints for fan lookup (dummy-chain edges have orig_src/orig_dst).
+            _lr_real_src = e.orig_src or e.src
+            _lr_real_dst = e.orig_dst or e.dst
+            out_list = fan_out.get(_lr_real_src, [])
+            out_idx = out_list.index(_lr_real_dst) if _lr_real_dst in out_list else 0
             out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_h(s))
 
-            in_list = fan_in[e.dst]
-            in_idx = in_list.index(e.src) if e.src in in_list else 0
+            in_list = fan_in.get(_lr_real_dst, [])
+            in_idx = in_list.index(_lr_real_src) if _lr_real_src in in_list else 0
             in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_h(d))
 
-            # Stagger parallel edges (same src→dst) so they don't share the same path
+            # Stagger parallel edges (same real src→dst) so they don't share the same path
             _par_nudge = int(
-                (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((e.src, e.dst), 1) - 1) / 2)
+                (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((_lr_real_src, _lr_real_dst), 1) - 1) / 2)
                 * MIN_FAN_STEP
             )
             out_offset += _par_nudge
@@ -728,21 +840,25 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 lx, ly = int((x1 + x2) // 2), int(min(y1, y2)) - 12
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
-                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})
+                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
             continue
 
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
-        out_list = fan_out[e.src]
-        out_idx = out_list.index(e.dst) if e.dst in out_list else 0
+        # Use real endpoints for fan lookup (dummy-chain edges have orig_src/orig_dst).
+        _tb_real_src = e.orig_src or e.src
+        _tb_real_dst = e.orig_dst or e.dst
+        out_list = fan_out.get(_tb_real_src, [])
+        out_idx = out_list.index(_tb_real_dst) if _tb_real_dst in out_list else 0
         out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_w(s))
 
-        in_list = fan_in[e.dst]
-        in_idx = in_list.index(e.src) if e.src in in_list else 0
+        in_list = fan_in.get(_tb_real_dst, [])
+        in_idx = in_list.index(_tb_real_src) if _tb_real_src in in_list else 0
         in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_w(d))
 
-        # Stagger parallel edges (same src→dst) so they don't share the same path
+        # Stagger parallel edges (same real src→dst) so they don't share the same path
         _par_nudge = int(
-            (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((e.src, e.dst), 1) - 1) / 2)
+            (parallel_edge_idx.get(edge_i, 0) - (_par_count.get((_tb_real_src, _tb_real_dst), 1) - 1) / 2)
             * MIN_FAN_STEP
         )
         out_offset += _par_nudge
@@ -801,7 +917,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                        "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
-                       "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css})
+                       "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
+                           "src_label": e.src_label, "dst_label": e.dst_label})
 
     return result
 

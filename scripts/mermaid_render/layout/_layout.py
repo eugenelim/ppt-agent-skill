@@ -5,8 +5,9 @@ from typing import Optional
 from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
+    NODE_MIN_W, NODE_HPAD,
     CROSSING_PASSES, GROUP_CAP,
-    _node_render_h,
+    _node_render_h, _measure_text_px,
 )
 
 # ── cycle break (DFS back-edge detection) ─────────────────────────────────────
@@ -110,17 +111,20 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
         if gap <= 1:
             new_edges.append(e)
             continue
-        # Insert gap-1 dummy nodes
+        # Insert gap-1 dummy nodes.
+        # The label travels on the LAST segment (the one that reaches the real dst)
+        # so that when routing merges the chain into one path, the label is present.
         prev_id = e.src
         for k in range(1, gap):
             dummy_id = f"_dummy_{e.src}_{e.dst}_{k}"
             dummy_rank = nodes[e.src].rank + k
             dummy = _Node(id=dummy_id, label="", is_dummy=True, rank=dummy_rank)
             new_nodes[dummy_id] = dummy
-            new_edges.append(_Edge(src=prev_id, dst=dummy_id, label="" if k > 1 else e.label,
+            new_edges.append(_Edge(src=prev_id, dst=dummy_id, label="",
                                    style=e.style, arrow=False, orig_src=e.src, orig_dst=e.dst))
             prev_id = dummy_id
-        new_edges.append(_Edge(src=prev_id, dst=e.dst, style=e.style, arrow=e.arrow,
+        new_edges.append(_Edge(src=prev_id, dst=e.dst, label=e.label,
+                               style=e.style, arrow=e.arrow,
                                orig_src=e.src, orig_dst=e.dst))
 
     nodes.update(new_nodes)
@@ -232,24 +236,40 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
     is_lr = direction.upper() in ("LR", "RL")
     max_rank = max(n.rank for n in nodes.values())
 
+    # Compute per-node display widths from label text (skip special-shape fixed sizes)
+    _fixed_shapes = {"circle", "diamond", "hexagon"}
+    for n in nodes.values():
+        if n.width == 0 and not n.is_dummy and n.shape not in _fixed_shapes:
+            n.width = max(NODE_MIN_W, _measure_text_px(n.label) + NODE_HPAD)
+    # Effective layout width = max across non-dummy nodes (uniform column spacing)
+    _layout_nw = max(
+        (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
+        default=NODE_W,
+    )
+
     if not is_lr:
-        col_pitch = NODE_W + COL_GAP
+        col_pitch = _layout_nw + COL_GAP
         max_col = max(n.col for n in nodes.values())
         for n in nodes.values():
-            n.x = CANVAS_PAD + n.col * col_pitch
+            # Center narrow nodes within the _layout_nw-wide column slot so that all
+            # nodes in a column share the same visual centre regardless of label length.
+            # Fixed-shape nodes (circles, diamonds) keep slot_off=0; they get their own
+            # centering elsewhere (_circ_shift in _strategies.py).
+            _slot_off = 0 if n.is_dummy else (_layout_nw - (n.width or _layout_nw)) // 2
+            n.x = CANVAS_PAD + n.col * col_pitch + _slot_off
 
         # Pull dummy nodes (routing waypoints) tightly against their sibling column.
         # Without this, a dummy assigned to col 1 sits ~290px from col-0 nodes,
         # creating very wide horizontal sweeps in the rendered edge paths.
-        # Strategy: move each dummy to just right of the rightmost non-dummy at the same rank.
+        # Strategy: move each dummy to just right of the column-slot right edge.
         _DUMMY_MARGIN = 20
         for n in nodes.values():
             if not n.is_dummy:
                 continue
             _siblings = [nn for nn in nodes.values() if nn.rank == n.rank and not nn.is_dummy]
             if _siblings:
-                _rightmost = max(nn.x + NODE_W for nn in _siblings)
-                n.x = _rightmost + _DUMMY_MARGIN
+                _slot_right = CANVAS_PAD + max(nn.col for nn in _siblings) * col_pitch + _layout_nw
+                n.x = _slot_right + _DUMMY_MARGIN
 
         # Variable rank heights: accumulate Y positions by actual max node height per rank.
         # Nodes shorter than rank_h are centered vertically within the row.
@@ -264,13 +284,13 @@ def _assign_coordinates(nodes: dict[str, _Node], direction: str = "TB") -> tuple
             y_cursor += rank_h + RANK_GAP
 
         # Recompute canvas_w using actual node x positions (dummies may have shifted)
-        max_x_right = max(n.x + NODE_W for n in nodes.values())
+        max_x_right = max(n.x + (n.width or _layout_nw) for n in nodes.values())
         canvas_w = max_x_right + CANVAS_PAD
         canvas_h = y_cursor + CANVAS_PAD - RANK_GAP
         return canvas_w, canvas_h
 
     # LR: rank→X with fixed pitch; col→Y with variable pitch (multi-line nodes)
-    rank_pitch = NODE_W + RANK_GAP
+    rank_pitch = _layout_nw + RANK_GAP
     for n in nodes.values():
         n.x = CANVAS_PAD + n.rank * rank_pitch
 

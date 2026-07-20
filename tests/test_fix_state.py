@@ -45,6 +45,14 @@ def _node_left(html: str, node_id: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _node_width(html: str, node_id: str) -> int | None:
+    """Return CSS width value (px) for a node div, or None if not found."""
+    m = re.search(
+        rf'data-node-id="{re.escape(node_id)}"[^>]*width:(\d+)px', html
+    )
+    return int(m.group(1)) if m else None
+
+
 def _edge_labels(html: str) -> list[str]:
     return re.findall(r'class="edge-label"[^>]*>([^<]+)', html)
 
@@ -54,14 +62,12 @@ def _edge_labels(html: str) -> list[str]:
 class TestCircleCenteringTB:
     """Terminal-circle nodes must be horizontally centred within their column slot (TB).
 
-    _assign_coordinates places every node at the column left edge so that rect
-    nodes (NODE_W wide) fill the slot exactly.  Terminal circles are only
-    _TERMINAL_NODE_SIZE px wide; without adjustment their visual centre sits
-    (NODE_W / 2 - _TERMINAL_NODE_SIZE / 2) px to the LEFT of the rect centre,
-    causing a horizontal jog in every transition arrow that connects them.
+    _assign_coordinates centers every node within its _layout_nw-wide column slot.
+    Terminal circles are _TERMINAL_NODE_SIZE px wide and get an additional
+    _circ_shift applied in _strategies.py so their visual centre aligns with
+    the column centre shared by all rect-type nodes in the same column.
 
-    After the fix: circle.left == rect.left + (NODE_W - _TERMINAL_NODE_SIZE) // 2,
-    i.e. both share the same column centre.
+    Invariant: circle.left + _TERMINAL_NODE_SIZE // 2 == rect.left + rect_width // 2
     """
 
     _BASIC_SRC = (
@@ -73,29 +79,35 @@ class TestCircleCenteringTB:
     )
 
     def test_start_circle_centered_relative_to_first_state(self):
-        """Start circle left = Idle left + (NODE_W - circle_size) // 2."""
+        """Start circle center == Idle center (both centered in column slot)."""
         html = _dispatch_ok(self._BASIC_SRC)
         start_left = _node_left(html, "_sm_start_")
         idle_left = _node_left(html, "Idle")
+        idle_width = _node_width(html, "Idle")
         assert start_left is not None, "_sm_start_ node not found"
         assert idle_left is not None, "Idle node not found"
-        expected_offset = (NODE_W - _TERMINAL_NODE_SIZE) // 2
+        assert idle_width is not None, "Idle width not found"
+        expected_offset = (idle_width - _TERMINAL_NODE_SIZE) // 2
         assert start_left == idle_left + expected_offset, (
             f"_sm_start_ left={start_left} should be Idle left ({idle_left}) "
-            f"+ {expected_offset} = {idle_left + expected_offset}"
+            f"+ (idle_width {idle_width} - circle {_TERMINAL_NODE_SIZE}) // 2 = "
+            f"{idle_left + expected_offset}"
         )
 
     def test_end_circle_centered_relative_to_last_state(self):
-        """End circle left = Done left + (NODE_W - circle_size) // 2."""
+        """End circle center == Done center (both centered in column slot)."""
         html = _dispatch_ok(self._BASIC_SRC)
         end_left = _node_left(html, "_sm_end_")
         done_left = _node_left(html, "Done")
+        done_width = _node_width(html, "Done")
         assert end_left is not None, "_sm_end_ node not found"
         assert done_left is not None, "Done node not found"
-        expected_offset = (NODE_W - _TERMINAL_NODE_SIZE) // 2
+        assert done_width is not None, "Done width not found"
+        expected_offset = (done_width - _TERMINAL_NODE_SIZE) // 2
         assert end_left == done_left + expected_offset, (
             f"_sm_end_ left={end_left} should be Done left ({done_left}) "
-            f"+ {expected_offset} = {done_left + expected_offset}"
+            f"+ (done_width {done_width} - circle {_TERMINAL_NODE_SIZE}) // 2 = "
+            f"{done_left + expected_offset}"
         )
 
     def test_start_circle_center_matches_rect_center(self):
@@ -103,9 +115,10 @@ class TestCircleCenteringTB:
         html = _dispatch_ok(self._BASIC_SRC)
         start_left = _node_left(html, "_sm_start_")
         idle_left = _node_left(html, "Idle")
-        assert start_left is not None and idle_left is not None
+        idle_width = _node_width(html, "Idle")
+        assert start_left is not None and idle_left is not None and idle_width is not None
         circle_center = start_left + _TERMINAL_NODE_SIZE // 2
-        rect_center = idle_left + NODE_W // 2
+        rect_center = idle_left + idle_width // 2
         assert circle_center == rect_center, (
             f"Circle centre {circle_center} != rect centre {rect_center}"
         )
@@ -131,12 +144,15 @@ class TestCircleCenteringTB:
         html = _dispatch_ok(src)
         inner_start = _node_left(html, "_g0_sm_start_")
         validating = _node_left(html, "Validating")
+        validating_width = _node_width(html, "Validating")
         assert inner_start is not None, "_g0_sm_start_ not found"
         assert validating is not None, "Validating not found"
-        expected_offset = (NODE_W - _TERMINAL_NODE_SIZE) // 2
+        assert validating_width is not None, "Validating width not found"
+        expected_offset = (validating_width - _TERMINAL_NODE_SIZE) // 2
         assert inner_start == validating + expected_offset, (
             f"Inner _g0_sm_start_ left={inner_start} should be Validating left ({validating}) "
-            f"+ {expected_offset}"
+            f"+ (validating_width {validating_width} - circle {_TERMINAL_NODE_SIZE}) // 2 = "
+            f"{validating + expected_offset}"
         )
 
 

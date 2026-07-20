@@ -161,7 +161,7 @@ def _layout_graph_topology(
     real_nodes = [n for n in nodes.values() if not n.is_dummy]
     if real_nodes:
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
-        canvas_w = max(n.x + NODE_W for n in real_nodes) + CANVAS_PAD
+        canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
 
     # Center terminal-circle nodes (start ● / end ◎) within their TB column slot.
     # _assign_coordinates places every node at the column's left edge (n.x = CANVAS_PAD +
@@ -172,7 +172,11 @@ def _layout_graph_topology(
     # aligns their centres.  Canvas dimensions are already finalised above, so this shift does
     # not affect zoom or canvas sizing.
     if direction.upper() not in ("LR", "RL"):
-        _circ_shift = (NODE_W - _TERMINAL_NODE_SIZE) // 2
+        _eff_nw = max(
+            (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
+            default=NODE_W,
+        )
+        _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
         for _n in nodes.values():
             if not _n.is_dummy and _is_terminal_circle(_n):
                 _n.x += _circ_shift
@@ -368,9 +372,11 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             if pid in _act_stacks and _act_stacks[pid]:
                 _act_spans.append((pid, _act_stacks[pid].pop(), _row_pre))
 
+    _cx_offset = [0]  # mutable shift applied after note-bounds pre-pass
+
     def _cx(pid: str) -> int:
         idx = participants.index(pid) if pid in participants else 0
-        return PAD_H + idx * col_pitch + col_pitch // 2
+        return PAD_H + _cx_offset[0] + idx * col_pitch + col_pitch // 2
 
     def _note_geom(it: dict, _row: int) -> "tuple[int,int,int,int]":
         """Return (note_x, note_y, note_w, note_h) for a note item."""
@@ -396,6 +402,31 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         else:
             nx, nw = _cx(primary) - col_w // 2, col_w
         return nx, note_y, nw, note_h
+
+    # Note-bounds pre-pass: find min/max x across all note polygons so we can
+    # shift participants right (left-of overflow) or expand canvas (right-of overflow).
+    _min_note_x = PAD_H
+    _max_note_x = canvas_w - PAD_H
+    for _nit in items:
+        if _nit["type"] != "note":
+            continue
+        _npos = _nit.get("pos", "over")
+        _npids = _nit.get("pids", [_nit.get("pid", "")])
+        _nprimary = _npids[0] if _npids else ""
+        if _npos == "left_of" and _nprimary in participants:
+            _nx = _cx(_nprimary) - col_w // 2 - col_w - 8
+            _min_note_x = min(_min_note_x, _nx)
+        elif _npos == "right_of" and _nprimary in participants:
+            _nx = _cx(_nprimary) + col_w // 2 + 8
+            _max_note_x = max(_max_note_x, _nx + col_w)
+    # Apply shift for left-of overflow
+    if _min_note_x < PAD_H:
+        _cx_offset[0] = PAD_H - _min_note_x
+        _max_note_x += _cx_offset[0]
+        canvas_w += _cx_offset[0]
+    # Expand canvas for right-of overflow
+    if _max_note_x > canvas_w - PAD_H:
+        canvas_w = _max_note_x + PAD_H
 
     parts: list[str] = []
     parts.append(
@@ -613,7 +644,7 @@ _ER_ATTR_RE = re.compile(
     r'(?:\s+"(?P<comment>[^"]*)")?'
     r'\s*$'
 )
-_ER_CARD_SRC_MAP = {"||": "one", "o|": "zero-one", "}|": "many", "}o": "zero-many"}
+_ER_CARD_SRC_MAP = {"||": "one", "|o": "zero-one", "}|": "many", "}o": "zero-many"}
 _ER_CARD_DST_MAP = {"||": "one", "|o": "zero-one", "|{": "many", "o{": "zero-many"}
 
 # Entity box geometry constants (px)
@@ -752,7 +783,7 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
         m = _ER_REL_RE.match(line)
         if m:
             e1, e2 = m.group("e1"), m.group("e2")
-            lbl = m.group("lbl").strip()
+            lbl = m.group("lbl").strip().strip('"')
             for eid in (e1, e2):
                 nodes.setdefault(eid, _Node(id=eid, label=eid, shape="rect"))
                 entity_attrs.setdefault(eid, [])
@@ -1026,9 +1057,9 @@ def _graph_from_content_nodes(
 # ── T2: classDiagram ──────────────────────────────────────────────────────────
 
 _CLASS_REL_RE = re.compile(
-    r'^(\w+)\s*(?:"[^"]*"\s*)?'
+    r'^(\w+)\s*(?:"([^"]*)"\s*)?'
     r'(<\|--|<\|\.\.|\.\.>\||\.\.\|>|\|>|\*--|--\*|o--|--o|-->|\.\.>|\.\.|\|\|)'
-    r'\s*(?:"[^"]*"\s*)?(\w+)(?:\s*:\s*(.*))?$'
+    r'\s*(?:"([^"]*)"\s*)?(\w+)(?:\s*:\s*(.*))?$'
 )
 
 def _class_rel_style(op: str) -> str:
@@ -1072,12 +1103,20 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
             continue
         m = _CLASS_REL_RE.match(line)
         if m:
-            c1, op, c2, lbl = m.group(1), m.group(2), m.group(3), (m.group(4) or "")
+            c1, mul_src, op, mul_dst, c2, lbl = (
+                m.group(1), m.group(2) or "", m.group(3),
+                m.group(4) or "", m.group(5), m.group(6) or ""
+            )
             for cid in (c1, c2):
                 nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
                 _class_members.setdefault(cid, [])
+            # For operators where the UML marker is on the LEFT (c1) side,
+            # arrow_src=True so the renderer places marker-start at c1.
+            _arrow_src = op.startswith(("<|", "*", "o"))
             edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(),
-                               style=_class_rel_style(op), arrow=True))
+                               style=_class_rel_style(op), arrow=True,
+                               arrow_src=_arrow_src,
+                               src_label=mul_src, dst_label=mul_dst))
             continue
         # Bare "A : method()" — just ensure class exists
         m2 = re.match(r'^(\w+)\s*:', line)
@@ -3156,8 +3195,19 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
 _C4_ELEM_RE = re.compile(
     r'^(Person|System|Container|Component|SystemDb|ContainerDb|'
     r'Person_Ext|System_Ext|Container_Ext)\s*'
-    r'\(\s*(\w+)\s*,\s*"([^"]+)"', re.I
+    r'\(\s*(\w+)\s*,\s*"([^"]+)"(?:\s*,\s*"([^"]*)")?', re.I
 )
+_C4_TYPE_DISPLAY: dict[str, str] = {
+    "person": "Person",
+    "person_ext": "Person [Ext]",
+    "system": "Software System",
+    "system_ext": "Software System [Ext]",
+    "systemdb": "System DB",
+    "container": "Container",
+    "container_ext": "Container [Ext]",
+    "containerdb": "Container DB",
+    "component": "Component",
+}
 _C4_BOUNDARY_RE = re.compile(
     r'^(?:Enterprise_Boundary|System_Boundary|Container_Boundary|Boundary)'
     r'\s*\(\s*(\w+)\s*,\s*"([^"]+)"', re.I
@@ -3190,11 +3240,17 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
         if m:
             elem_type = m.group(1).lower()
             eid, elbl = m.group(2), m.group(3)
+            desc = m.group(4) or ""
+            type_tag = _C4_TYPE_DISPLAY.get(elem_type, elem_type.capitalize())
+            tech = f"[{type_tag}]"
+            if desc:
+                tech += f"\n{desc}"
+            label = f"{elbl}|{tech}"
             shape = "circle" if "person" in elem_type else "rect"
             icon_name = _C4_ICON_MAP.get(elem_type, "node")
             css_class = "external" if elem_type.endswith("_ext") else ""
             gin = boundary_stack[-1] if boundary_stack else None
-            nodes[eid] = _Node(id=eid, label=elbl, shape=shape,
+            nodes[eid] = _Node(id=eid, label=label, shape=shape,
                                group=gin, icon=icon_name, css_class=css_class)
             if gin:
                 groups.setdefault(gin, _Group(id=gin, label=gin, members=[]))
@@ -3263,7 +3319,7 @@ def _dispatch(
     if d in ("c4context", "c4container", "c4component"):
         return _layout_c4(clean, direction, width_hint)
 
-    if d in ("gitgraph", "journey", "requirementdiagram"):
+    if d in ("gitgraph", "journey", "requirementdiagram", "sankey-beta", "zenuml"):
         raise ValueError(
             f"Mermaid directive '{directive}' is not supported by the pure-Python renderer. "
             "Use mmdc (mermaid-js CLI) for this diagram type."

@@ -31,8 +31,8 @@ from mermaid_render import to_html  # noqa: E402
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _node_labels(html: str) -> list[str]:
-    """Extract node-label text nodes from rendered HTML."""
-    return re.findall(r'class="node-label"[^>]*>([^<]+)', html)
+    """Extract visible text labels (node-label and group-label) from rendered HTML."""
+    return re.findall(r'class="(?:node|group)-label"[^>]*>([^<]+)', html)
 
 
 def _edge_labels(html: str) -> list[str]:

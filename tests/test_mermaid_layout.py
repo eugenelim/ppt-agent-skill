@@ -2674,7 +2674,7 @@ class TestERCardinality:
         assert dst == "one"
 
     def test_zero_one_to_many(self):
-        src, dst = self._parse("A o|--|{ B : rel")
+        src, dst = self._parse("A |o--|{ B : rel")  # |o is Mermaid's left-side zero-or-one notation
         assert src == "zero-one"
         assert dst == "many"
 
@@ -2716,7 +2716,7 @@ class TestClassRelationshipParse:
     def _style(self, op_line: str) -> tuple[str, bool]:
         m = _CLASS_REL_RE.match(op_line)
         assert m, f"no match for {op_line!r}"
-        style = _class_rel_style(m.group(2))
+        style = _class_rel_style(m.group(3))  # group 3 = op (group 2 = mul_src after AC-2.2)
         return style.replace("-dotted", ""), style.endswith("-dotted")
 
     def test_inherit(self):
@@ -2751,8 +2751,11 @@ Person --> Address"""
 
     def test_all_four_present(self):
         html = _dispatch(self._SRC, None, 800)
+        # Either the base marker or its -rev variant must be present (arrow_src edges use -rev)
         for mid in ("cls-inherit", "cls-composition", "cls-aggregation", "cls-dep"):
-            assert f'id="{mid}"' in html, f"missing <marker id='{mid}'> in class diagram"
+            assert f'id="{mid}"' in html or f'id="{mid}-rev"' in html, (
+                f"missing both <marker id='{mid}'> and <marker id='{mid}-rev'> in class diagram"
+            )
 
 
 class TestClassDashedLine:
@@ -2764,10 +2767,10 @@ class TestClassDashedLine:
 class TestClassInheritanceTriangle:
     def test_hollow(self):
         html = _dispatch("classDiagram\nAnimal <|-- Dog", None, 600)
-        # Find the cls-inherit marker definition and check it has fill="none"
+        # arrow_src=True → uses cls-inherit-rev (orient="auto-start-reverse") for marker-start
         import re
-        m = re.search(r'<marker id="cls-inherit"[^>]*>(.*?)</marker>', html, re.DOTALL)
-        assert m, "cls-inherit marker must be defined"
+        m = re.search(r'<marker id="cls-inherit(?:-rev)?"[^>]*>(.*?)</marker>', html, re.DOTALL)
+        assert m, "cls-inherit (or cls-inherit-rev) marker must be defined"
         assert 'fill="none"' in m.group(1), "inheritance triangle must be hollow (fill='none')"
 
 
@@ -2775,8 +2778,8 @@ class TestClassCompositionDiamond:
     def test_filled(self):
         html = _dispatch("classDiagram\nCar *-- Engine", None, 600)
         import re
-        m = re.search(r'<marker id="cls-composition"[^>]*>(.*?)</marker>', html, re.DOTALL)
-        assert m, "cls-composition marker must be defined"
+        m = re.search(r'<marker id="cls-composition(?:-rev)?"[^>]*>(.*?)</marker>', html, re.DOTALL)
+        assert m, "cls-composition (or cls-composition-rev) marker must be defined"
         assert 'fill="none"' not in m.group(1), "composition diamond must be filled, not hollow"
 
 
@@ -2910,28 +2913,31 @@ classDiagram
     Interface ..|> Implementation
 """
 
-    def _node_xy(self, html: str):
+    def _node_xy_w(self, html: str):
         import re
-        """Return list of (left, top) for each non-dummy node div."""
-        return [
-            (int(m.group(1)), int(m.group(2)))
-            for m in re.finditer(
-                r'left:(\d+)px;\s*top:(\d+)px[^"]*width:var\(--node-w,192px\)', html
-            )
-        ]
+        """Return list of (left, top, width) for each non-dummy node div."""
+        results = []
+        for m in re.finditer(
+            r'<div class="node[^"]*" data-node-id="[^"]*" style="[^"]*left:(\d+)px;\s*top:(\d+)px;\s*width:(\d+)px',
+            html,
+        ):
+            results.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
+        return results
 
     def test_no_node_overlap(self):
         html = _dispatch_ok(self._SRC)
-        nodes_with_y = self._node_xy(html)
-        assert nodes_with_y, "no node positions found in class diagram HTML"
+        nodes_xyw = self._node_xy_w(html)
+        assert nodes_xyw, "no node positions found in class diagram HTML"
         from itertools import groupby
-        nodes_with_y.sort(key=lambda xy: (xy[1], xy[0]))
-        for _y, group_iter in groupby(nodes_with_y, key=lambda xy: round(xy[1] / 20) * 20):
-            xs = [x for x, y in group_iter]
-            xs.sort()
-            for i in range(len(xs) - 1):
-                assert xs[i] + 192 <= xs[i + 1], (
-                    f"nodes overlap at y≈{_y}: right edge {xs[i]+192} > left {xs[i+1]}"
+        nodes_xyw.sort(key=lambda xyw: (xyw[1], xyw[0]))
+        for _y, group_iter in groupby(nodes_xyw, key=lambda xyw: round(xyw[1] / 20) * 20):
+            items = list(group_iter)
+            items.sort(key=lambda xyw: xyw[0])
+            for i in range(len(items) - 1):
+                x_i, _, w_i = items[i]
+                x_next, _, _ = items[i + 1]
+                assert x_i + w_i <= x_next, (
+                    f"nodes overlap at y≈{_y}: right edge {x_i + w_i} > left {x_next}"
                 )
 
     def test_zoom_applied_when_wide(self):
@@ -3482,7 +3488,8 @@ class TestDisconnectedLayout:
         for n in real_nodes:
             assert n.x >= 0, f"Node {n.id} x={n.x} < 0"
             assert n.y >= 0, f"Node {n.id} y={n.y} < 0"
-            assert n.x + NODE_W <= cw + CANVAS_PAD, f"Node {n.id} extends past canvas"
+            _nw = n.width or NODE_W
+            assert n.x + _nw <= cw + CANVAS_PAD, f"Node {n.id} extends past canvas"
 
     def test_three_isolated_nodes_all_unique_positions(self):
         """Three disconnected nodes must all have distinct positions."""
@@ -3969,16 +3976,18 @@ class TestClassParser:
         """Inheritance triangle must be hollow (fill='none')."""
         import re
         html = _dispatch_ok("classDiagram\n  Animal <|-- Dog")
-        m = re.search(r'<marker id="cls-inherit"[^>]*>(.*?)</marker>', html, re.DOTALL)
-        assert m, "cls-inherit marker must be defined"
+        # arrow_src=True → cls-inherit-rev; accept either
+        m = re.search(r'<marker id="cls-inherit(?:-rev)?"[^>]*>(.*?)</marker>', html, re.DOTALL)
+        assert m, "cls-inherit or cls-inherit-rev marker must be defined"
         assert 'fill="none"' in m.group(1)
 
     def test_composition_marker_filled(self):
         """Composition diamond must NOT be hollow."""
         import re
         html = _dispatch_ok("classDiagram\n  Car *-- Engine")
-        m = re.search(r'<marker id="cls-composition"[^>]*>(.*?)</marker>', html, re.DOTALL)
-        assert m, "cls-composition marker must be defined"
+        # arrow_src=True → cls-composition-rev; accept either
+        m = re.search(r'<marker id="cls-composition(?:-rev)?"[^>]*>(.*?)</marker>', html, re.DOTALL)
+        assert m, "cls-composition or cls-composition-rev marker must be defined"
         assert 'fill="none"' not in m.group(1)
 
     # ── methods fixture ──────────────────────────────────────────────────────
@@ -4048,7 +4057,7 @@ class TestERParser:
         assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "one"
 
     def test_zero_one_to_many(self):
-        m = _ER_REL_RE.match("A o|--|{ B : rel")
+        m = _ER_REL_RE.match("A |o--|{ B : rel")  # |o is Mermaid's left-side zero-or-one notation
         assert m
         assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "zero-one"
         assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "many"

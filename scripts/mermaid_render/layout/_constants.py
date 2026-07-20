@@ -149,6 +149,8 @@ CROSSING_PASSES = 8  # 4 forward + 4 backward barycenter passes
 
 # ── default geometry (px) ────────────────────────────────────────────────────
 NODE_W = 192
+NODE_MIN_W = 64   # minimum per-node width (never narrower than this)
+NODE_HPAD = 24    # horizontal padding (12px each side) added to measured text width
 NODE_H = 42       # minimum card height (2×pad_v + icon_h = 20+24=44 triggers icon bump above 42)
 RANK_GAP = 80    # gap in flow direction (vertical in TB, horizontal in LR)
 COL_GAP = 56     # gap perpendicular to flow (horizontal in TB, vertical in LR)
@@ -172,6 +174,17 @@ _CIRCLE_NODE_SIZE = 80    # px square for regular (non-terminal) circle nodes
 _DIAMOND_SIZE = 100       # px square for diamond nodes (keeps aspect ratio 1:1)
 _HEXAGON_SIZE = 100       # px square for hexagon nodes (keeps aspect ratio 1:1)
 ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
+
+
+def _measure_text_px(label: str) -> int:
+    """Approximate pixel width of a text label at 13px font size.
+
+    Uses average character width of ~7.5px. Only the first display line
+    is measured (before any | pipe-section or newline separator).
+    """
+    text = label.split("|")[0].split("\n")[0]
+    return int(len(text) * 7.5)
+
 
 # ── directive sets ────────────────────────────────────────────────────────────
 _GRAPH_DIRECTIVES = frozenset({
@@ -202,6 +215,7 @@ class _Node:
     icon: str = ""                # icon name from mermaid_render/icons/ (without .svg)
     css_class: str = ""           # semantic class, e.g. "external"
     extra_css: str = ""           # inline CSS overrides (from `style NodeId fill:...`)
+    width: int = 0                # computed per-node render width (0 → use global NODE_W)
 
 
 @dataclass
@@ -213,6 +227,9 @@ class _Edge:
     arrow: bool = True
     reversed_: bool = False       # back-edge flag
     bidir: bool = False           # True for <--> edges — renders marker-start in addition to marker-end
+    arrow_src: bool = False       # True when the UML marker belongs at SRC (e.g. Animal <|-- Dog)
+    src_label: str = ""           # text label near source endpoint (e.g. class multiplicities)
+    dst_label: str = ""           # text label near destination endpoint
     cardinality_src: Optional[str] = None  # ER crow's foot: 'one'|'zero-one'|'many'|'zero-many'
     cardinality_dst: Optional[str] = None
     orig_src: Optional[str] = None  # original src for dummy-chained edges

@@ -403,11 +403,11 @@ def _render_graph_fragment(
                 )
             elif n.shape == "subroutine":
                 # Rect with two inner vertical lines near left and right edges
+                _nw = n.width or NODE_W
                 parts.append(
                     f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; '
-                    f'min-width:{NODE_W}px; '
+                    f'width:{_nw}px; min-height:{node_h}px; '
                     f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
                     f'box-sizing:border-box; overflow:visible; '
                     f'{_border_css} '
@@ -417,31 +417,32 @@ def _render_graph_fragment(
                     f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
                     f'text-align:left;">'
                     f'{inner}'
-                    f'<svg style="position:absolute;inset:0;width:{NODE_W}px;height:{node_h}px;pointer-events:none;overflow:visible;">'
+                    f'<svg style="position:absolute;inset:0;width:{_nw}px;height:{node_h}px;pointer-events:none;overflow:visible;">'
                     f'<line x1="8" y1="0" x2="8" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'<line x1="{NODE_W - 8}" y1="0" x2="{NODE_W - 8}" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'<line x1="{_nw - 8}" y1="0" x2="{_nw - 8}" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
                     f'</svg>'
                     f'</div>'
                 )
             elif n.shape == "cylinder":
                 # Proper silo/drum shape: SVG overlay draws two elliptical caps
                 # and side walls; the div provides background fill and label text.
+                _nw = n.width or NODE_W
                 _cyl_ry = min(10, node_h // 5)
-                _cyl_rx = NODE_W // 2 - 2
-                _cyl_cx = NODE_W // 2
+                _cyl_rx = _nw // 2 - 2
+                _cyl_cx = _nw // 2
                 _bg = (f'linear-gradient({_depth_wash},{_depth_wash}),'
                        f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
                        f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)))')
                 _cyl_svg = (
-                    f'<svg style="position:absolute;inset:0;width:{NODE_W}px;height:{node_h}px;'
+                    f'<svg style="position:absolute;inset:0;width:{_nw}px;height:{node_h}px;'
                     f'pointer-events:none;overflow:visible;">'
                     # Side walls
                     f'<line x1="2" y1="{_cyl_ry}" x2="2" y2="{node_h - _cyl_ry}"'
                     f' stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'<line x1="{NODE_W - 2}" y1="{_cyl_ry}" x2="{NODE_W - 2}" y2="{node_h - _cyl_ry}"'
+                    f'<line x1="{_nw - 2}" y1="{_cyl_ry}" x2="{_nw - 2}" y2="{node_h - _cyl_ry}"'
                     f' stroke="{accent_color}" stroke-width="1.5"/>'
                     # Bottom cap arc (front half only)
-                    f'<path d="M 2 {node_h - _cyl_ry} A {_cyl_rx} {_cyl_ry} 0 0 0 {NODE_W - 2} {node_h - _cyl_ry}"'
+                    f'<path d="M 2 {node_h - _cyl_ry} A {_cyl_rx} {_cyl_ry} 0 0 0 {_nw - 2} {node_h - _cyl_ry}"'
                     f' fill="none" stroke="{accent_color}" stroke-width="1.5"/>'
                     # Top cap ellipse (filled to cover rectangular div edge)
                     f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
@@ -451,7 +452,7 @@ def _render_graph_fragment(
                 parts.append(
                     f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{NODE_W}px; min-height:{node_h}px; '
+                    f'width:{_nw}px; min-height:{node_h}px; '
                     f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
                     f'box-sizing:border-box; overflow:visible; '
                     f'border:none; '
@@ -487,14 +488,14 @@ def _render_graph_fragment(
                 _text_align = "center" if _center_shapes else "left"
                 # Diamond and hexagon use fixed sizes to keep the clip-path aspect
                 # ratio 1:1 and match the routing width returned by _node_render_w.
-                # All other shapes keep the CSS-variable form so responsive theming
-                # (--node-w override) continues to work for rect/round/stadium/etc.
+                # Diamond and hexagon use fixed sizes; all other shapes use per-node width.
                 if n.shape == "diamond":
-                    _w_css = f'width:{_DIAMOND_SIZE}px; min-height:{node_h}px; min-width:{_DIAMOND_SIZE}px; '
+                    _w_css = f'width:{_DIAMOND_SIZE}px; min-height:{node_h}px; '
                 elif n.shape == "hexagon":
-                    _w_css = f'width:{_HEXAGON_SIZE}px; min-height:{node_h}px; min-width:{_HEXAGON_SIZE}px; '
+                    _w_css = f'width:{_HEXAGON_SIZE}px; min-height:{node_h}px; '
                 else:
-                    _w_css = f'width:var(--node-w,{NODE_W}px); min-height:{node_h}px; min-width:{NODE_W}px; '
+                    _nw = n.width or NODE_W
+                    _w_css = f'width:{_nw}px; min-height:{node_h}px; '
                 parts.append(
                     f'<div class="node node-{_h(n.shape)}{extra_cls}" data-node-id="{_h(nid)}" style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
@@ -584,6 +585,40 @@ def _render_graph_fragment(
                 f' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
                 f'<path d="M 0,-4 L 9,0 L 0,4" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
             )
+        # Reversed variants: same geometry, orient="auto-start-reverse" so marker-start
+        # places the triangle apex at the source node (UML parent/owner end).
+        for _base in ("cls-inherit", "cls-composition", "cls-aggregation", "cls-dep"):
+            _rev_id = _base + "-rev"
+            if _rev_id in _needed_markers:
+                # Reuse the same polygon/path but swap orient.
+                _orig = {
+                    "cls-inherit": (
+                        f'<marker id="{_rev_id}" viewBox="0 -6 12 12" refX="12" refY="0"'
+                        f' markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse"'
+                        f' orient="auto-start-reverse">'
+                        f'<polygon points="0,-6 12,0 0,6" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
+                    ),
+                    "cls-composition": (
+                        f'<marker id="{_rev_id}" viewBox="-10 -5 20 10" refX="10" refY="0"'
+                        f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse"'
+                        f' orient="auto-start-reverse">'
+                        f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="{_cls_edge}"/></marker>'
+                    ),
+                    "cls-aggregation": (
+                        f'<marker id="{_rev_id}" viewBox="-10 -5 20 10" refX="10" refY="0"'
+                        f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse"'
+                        f' orient="auto-start-reverse">'
+                        f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
+                    ),
+                    "cls-dep": (
+                        f'<marker id="{_rev_id}" viewBox="0 -4 9 8" refX="9" refY="0"'
+                        f' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse"'
+                        f' orient="auto-start-reverse">'
+                        f'<path d="M 0,-4 L 9,0 L 0,4" fill="none" stroke="{_cls_edge}" stroke-width="1.5"/></marker>'
+                    ),
+                }
+                if _base in _orig:
+                    defs_parts.append(_orig[_base])
         defs_parts.append("</defs>")
         parts.append("".join(defs_parts))
 
@@ -618,16 +653,52 @@ def _render_graph_fragment(
                 if _re.match(r'^\d+(\.\d+)?$', _val):
                     stroke_w = _val
         mid = spec.get("marker_id")
-        marker_attr = f' marker-end="url(#{mid})"' if mid else ""
+        _is_rev_marker = mid and mid.endswith("-rev")
+        if _is_rev_marker:
+            # UML source-end marker: goes on marker-start, not marker-end.
+            marker_attr = ""
+            _src_marker_attr = f' marker-start="url(#{mid})"'
+        else:
+            marker_attr = f' marker-end="url(#{mid})"' if mid else ""
+            _src_marker_attr = ""
         _is_bidir_path = (spec.get("src"), spec.get("dst")) in _bidir_src_dst
         _bidir_start_attr = ' marker-start="url(#arrow-bidir-start)"' if _is_bidir_path else ""
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none" '
-            f'stroke-width="{stroke_w}"{dash}{_bidir_start_attr}{marker_attr}'
+            f'stroke-width="{stroke_w}"{dash}{_bidir_start_attr}{_src_marker_attr}{marker_attr}'
             f' data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}"/>'
         )
 
     parts.append('</svg>')
+
+    # Endpoint multiplicity labels (class diagram "1", "0..*", etc.)
+    def _path_endpoint(d: str, last: bool = False) -> tuple[int, int]:
+        coords = re.findall(r'[ML]\s+([\d.]+)\s+([\d.]+)', d)
+        if not coords:
+            return 0, 0
+        pair = coords[-1] if last else coords[0]
+        return int(float(pair[0])), int(float(pair[1]))
+
+    _mult_style = (
+        'position:absolute; font-size:10px; font-weight:600; '
+        'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+        'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
+        'background:var(--edge-label-bg,#F7F6F2); '
+        'padding:0 3px; border-radius:2px; pointer-events:none; z-index:2;'
+    )
+    for spec in routed:
+        if spec.get("src_label"):
+            px, py = _path_endpoint(spec["d"], last=False)
+            parts.append(
+                f'<span class="mult-label" style="{_mult_style} left:{px+4}px; top:{py-14}px;">'
+                f'{_h(spec["src_label"])}</span>'
+            )
+        if spec.get("dst_label"):
+            px, py = _path_endpoint(spec["d"], last=True)
+            parts.append(
+                f'<span class="mult-label" style="{_mult_style} left:{px+4}px; top:{py-14}px;">'
+                f'{_h(spec["dst_label"])}</span>'
+            )
 
     # Edge labels as absolutely-positioned HTML siblings (not inside SVG)
     for spec in routed:
