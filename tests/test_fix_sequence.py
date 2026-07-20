@@ -51,9 +51,8 @@ def _arrow_polys(html: str) -> int:
 
 
 def _block_heights(html: str) -> list[int]:
-    """Return sorted heights of block background rects (opacity=0.6)."""
-    # height may appear before or after opacity in the element
-    rects = re.findall(r'<rect[^>]+opacity="0\.6"[^>]*/>', html)
+    """Return sorted heights of block background rects (stroke-dasharray marks them)."""
+    rects = re.findall(r'<rect[^>]+stroke-dasharray="5 3"[^>]*/>', html)
     return sorted(
         int(re.search(r'height="(\d+)"', r).group(1))
         for r in rects

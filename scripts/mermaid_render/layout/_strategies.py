@@ -436,6 +436,24 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'overflow:visible;pointer-events:none;">'
     )
     _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    # Block x-extent: span only the participant columns, not the outer margin.
+    _blk_x0 = PAD_H // 2
+    _blk_x1 = PAD_H + (n_parts - 1) * col_pitch + col_w + PAD_H // 2
+    _blk_w = _blk_x1 - _blk_x0
+    # Render combined-fragment (loop/alt/opt/…) backgrounds BEFORE lifeline dashes
+    # so the dashed lifeline lines are drawn on top and remain visible.
+    _row_pre = 0
+    for it in items:
+        if it["type"] == "block":
+            ry = ll_top + _row_pre * ROW_H
+            bh = it.get("span", 1) * ROW_H
+            parts.append(
+                f'<rect x="{_blk_x0}" y="{ry}" width="{_blk_w}" height="{bh}" '
+                f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.5" '
+                f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 3" rx="3"/>'
+            )
+        if it["type"] in ("msg", "block", "note", "else"):
+            _row_pre += 1
     for pid in participants:
         lx = _cx(pid)
         parts.append(
@@ -454,18 +472,13 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     row = 0
     for it in items:
         if it["type"] == "block":
+            # Background already rendered above; now render the keyword label only.
             ry = ll_top + row * ROW_H
-            bh = it.get("span", 1) * ROW_H
-            parts.append(
-                f'<rect x="{PAD_H // 2}" y="{ry}" width="{canvas_w - PAD_H}" height="{bh}" '
-                f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.6" '
-                f'stroke="{_seq_edge}" stroke-width="1" rx="3"/>'
-            )
             row += 1; continue
         if it["type"] == "else":
             ry = ll_top + row * ROW_H
             parts.append(
-                f'<line x1="{PAD_H // 2}" y1="{ry}" x2="{canvas_w - PAD_H // 2}" y2="{ry}" '
+                f'<line x1="{_blk_x0}" y1="{ry}" x2="{_blk_x1}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="4 4"/>'
             )
             row += 1; continue

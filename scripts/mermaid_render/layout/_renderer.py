@@ -1123,6 +1123,28 @@ def _compute_group_bboxes(
         y1 = float(max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT)
         bboxes[gid] = [x0, y0, x1, y1]
 
+    # Expand parent bboxes so each nesting level is visually wider than its children.
+    # Without this, parent/child groups at the same column of nodes have identical
+    # x-extents and render as same-width overlapping boxes.
+    # Run bottom-up (inner groups first) until stable.
+    _nest_changed = True
+    while _nest_changed:
+        _nest_changed = False
+        for _gid, _grp in groups.items():
+            if _grp.parent_group and _grp.parent_group in bboxes and _gid in bboxes:
+                _pb = bboxes[_grp.parent_group]
+                _cb = bboxes[_gid]
+                # Parent must extend GROUP_PAD_X beyond each side of child
+                if _pb[0] > _cb[0] - GROUP_PAD_X:
+                    _pb[0] = _cb[0] - GROUP_PAD_X
+                    _nest_changed = True
+                if _pb[2] < _cb[2] + GROUP_PAD_X:
+                    _pb[2] = _cb[2] + GROUP_PAD_X
+                    _nest_changed = True
+                if _pb[3] < _cb[3] + GROUP_PAD_Y_BOT:
+                    _pb[3] = _cb[3] + GROUP_PAD_Y_BOT
+                    _nest_changed = True
+
     # Push parent bboxes up so nested subgraph labels don't overprint each other.
     # Each parent needs its top edge at least GROUP_PAD_Y_TOP above each child's top.
     _push_changed = True
@@ -1138,6 +1160,19 @@ def _compute_group_bboxes(
 
     if not bboxes:
         return bboxes
+
+    # If nesting expansion pushed any bbox to negative x, shift all nodes and bboxes
+    # rightward so the outermost group fits inside the canvas.  This keeps nesting
+    # visually distinct rather than clipping all parent groups to the same left=0 edge.
+    _min_x = min(b[0] for b in bboxes.values())
+    if _min_x < 0:
+        _shift = -_min_x
+        for n in nodes.values():
+            n.x += int(_shift)
+        for b in bboxes.values():
+            b[0] += _shift
+            b[2] += _shift
+        canvas_w = max(canvas_w, int(max(b[2] for b in bboxes.values()) + CANVAS_PAD))
 
     member_ids = {nid for grp in groups.values() for nid in grp.members}
     _NM_GAP = 4.0  # minimum gap between group edge and intruding non-member
