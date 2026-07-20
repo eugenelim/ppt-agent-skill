@@ -242,7 +242,12 @@ _SEQ_MSG_RE = re.compile(
 _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re.I)
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
 _SEQ_ACTIVATE_RE = re.compile(r'^(activate|deactivate)\s+(\S+)', re.I)
-_SEQ_NOTE_RE = re.compile(r'^[Nn]ote\s+(?:over|left\s+of|right\s+of)\s+([^:]+):\s*(.+)', re.I)
+# Group 1: position ("over", "left of", "right of")
+# Group 2: participant list (comma-separated)
+# Group 3: note text
+_SEQ_NOTE_RE = re.compile(
+    r'^[Nn]ote\s+(over|left\s+of|right\s+of)\s+([^:]+):\s*(.+)', re.I
+)
 _SEQ_ELSE_RE = re.compile(r'^(else|and)\s*(.*)', re.I)
 
 
@@ -278,8 +283,11 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             continue
         m = _SEQ_NOTE_RE.match(line)
         if m:
-            items.append({"type": "note", "pid": m.group(1).strip().split(",")[0].strip(),
-                          "text": m.group(2).strip()})
+            _note_pos = m.group(1).lower().replace(" ", "_")  # "over", "left_of", "right_of"
+            _note_pids = [p.strip() for p in m.group(2).strip().split(",")]
+            items.append({"type": "note", "pos": _note_pos,
+                          "pids": _note_pids, "pid": _note_pids[0],
+                          "text": m.group(3).strip()})
             continue
         m = _SEQ_MSG_RE.match(line)
         if m:
@@ -290,7 +298,8 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             sp = sp_raw.lstrip('+')
             _ensure_p(sp); _ensure_p(dp)
             items.append({"type": "msg", "src": sp, "dst": dp,
-                          "label": lbl.strip(), "dotted": arrow.startswith("--")})
+                          "label": lbl.strip(), "dotted": arrow.startswith("--"),
+                          "arrow": arrow})
             if dp_prefix == '+':
                 items.append({"type": "activate", "pid": dp})
             elif dp_prefix == '-':
@@ -339,7 +348,11 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         canvas_w = width_hint
     col_w = min(COL_W, max(40, col_pitch - 8))  # header scales with pitch; min 8px gap
     n_rows = sum(1 for it in items if it["type"] in ("msg", "block", "note", "else"))
-    canvas_h = PAD_V * 2 + HDR_H * 2 + n_rows * ROW_H + 32  # extra HDR_H for bottom boxes
+    BOX_H = HDR_H - 8  # actual participant box height (40 px)
+    # Geometry: top boxes → lifeline gap → messages → lifeline gap → bottom boxes
+    ll_top = PAD_V + BOX_H + 4        # lifeline start (just below top boxes)
+    ll_bot = ll_top + n_rows * ROW_H + 8  # lifeline end (just after last message row)
+    canvas_h = ll_bot + BOX_H + PAD_V    # canvas accommodates bottom boxes + padding
 
     # Pre-compute activation spans: [(pid, start_row, end_row)]
     _act_stacks: dict[str, list[int]] = {}
@@ -354,16 +367,39 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             pid = it["pid"]
             if pid in _act_stacks and _act_stacks[pid]:
                 _act_spans.append((pid, _act_stacks[pid].pop(), _row_pre))
-    ll_top = PAD_V + HDR_H
-    ll_bot = canvas_h - PAD_V
 
     def _cx(pid: str) -> int:
         idx = participants.index(pid) if pid in participants else 0
         return PAD_H + idx * col_pitch + col_pitch // 2
 
+    def _note_geom(it: dict, _row: int) -> "tuple[int,int,int,int]":
+        """Return (note_x, note_y, note_w, note_h) for a note item."""
+        note_y = ll_top + _row * ROW_H + 4
+        note_h = ROW_H - 8
+        pos = it.get("pos", "over")
+        pids_list = it.get("pids", [it.get("pid", "")])
+        primary = pids_list[0] if pids_list else ""
+        if pos == "left_of":
+            nw = col_w
+            nx = _cx(primary) - col_w // 2 - nw - 8
+        elif pos == "right_of":
+            nw = col_w
+            nx = _cx(primary) + col_w // 2 + 8
+        elif pos == "over" and len(pids_list) >= 2:
+            xs = [_cx(p) for p in pids_list if p in participants]
+            if xs:
+                span_l = min(xs) - col_w // 2
+                span_r = max(xs) + col_w // 2
+                nx, nw = span_l, max(col_w, span_r - span_l)
+            else:
+                nx, nw = _cx(primary) - col_w // 2, col_w
+        else:
+            nx, nw = _cx(primary) - col_w // 2, col_w
+        return nx, note_y, nw, note_h
+
     parts: list[str] = []
     parts.append(
-        f'<div class="diagram mermaid-layout" style="'
+        f'<div class="diagram mermaid-layout diagram-lifeline" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
     _seq_box_css = (
@@ -385,14 +421,14 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         parts.append(
             f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
             f'position:absolute;left:{lx}px;top:{PAD_V}px;'
-            f'width:{col_w}px;height:{HDR_H - 8}px;{_seq_box_css}">'
+            f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
         # Bottom participant box (same label, anchored to lifeline bottom)
         parts.append(
-            f'<div class="node node-rect" data-node-id="{_h(pid)}-bottom" style="'
+            f'<div class="node node-rect node-lifeline-bottom" data-node-id="{_h(pid)}-bottom" style="'
             f'position:absolute;left:{lx}px;top:{ll_bot}px;'
-            f'width:{col_w}px;height:{HDR_H - 8}px;{_seq_box_css}">'
+            f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
     parts.append(
@@ -434,16 +470,13 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             )
             row += 1; continue
         if it["type"] == "note":
-            pid = it["pid"]
-            note_x = _cx(pid) - col_w // 2
-            note_y = ll_top + row * ROW_H + 4
-            note_w, note_h = col_w, ROW_H - 8
+            nx, ny, nw, nh = _note_geom(it, row)
             fold = 10
-            pts = (f"{note_x},{note_y} "
-                   f"{note_x + note_w - fold},{note_y} "
-                   f"{note_x + note_w},{note_y + fold} "
-                   f"{note_x + note_w},{note_y + note_h} "
-                   f"{note_x},{note_y + note_h}")
+            pts = (f"{nx},{ny} "
+                   f"{nx + nw - fold},{ny} "
+                   f"{nx + nw},{ny + fold} "
+                   f"{nx + nw},{ny + nh} "
+                   f"{nx},{ny + nh}")
             parts.append(
                 f'<polygon points="{pts}" '
                 f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" '
@@ -456,7 +489,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             continue
         sx, dx2 = _cx(it["src"]), _cx(it["dst"])
         ry = ll_top + row * ROW_H + ROW_H // 2
+        arrow = it.get("arrow", "->>")
         dash = ' stroke-dasharray="6 4"' if it["dotted"] else ""
+        has_head = arrow not in ("->", "-->")
+        is_cross = arrow in ("-x", "--x")
         if sx == dx2:
             parts.append(
                 f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
@@ -464,14 +500,30 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
             ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
+            parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1.5"{dash}'
                 f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
-            ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
-        parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
+            if is_cross:
+                tip_x = dx2
+                dirn = 1 if dx2 > sx else -1
+                sz = 6
+                parts.append(
+                    f'<line x1="{tip_x - dirn * sz}" y1="{ry - sz}" '
+                    f'x2="{tip_x}" y2="{ry + sz}" '
+                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+                )
+                parts.append(
+                    f'<line x1="{tip_x - dirn * sz}" y1="{ry + sz}" '
+                    f'x2="{tip_x}" y2="{ry - sz}" '
+                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+                )
+            elif has_head:
+                ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
+                parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
         row += 1
     parts.append('</svg>')
     row = 0
@@ -498,13 +550,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 )
             row += 1; continue
         if it["type"] == "note":
-            pid = it["pid"]
-            note_x = _cx(pid) - col_w // 2
-            note_y = ll_top + row * ROW_H + 4
-            note_w = col_w
+            nx, ny, nw, nh = _note_geom(it, row)
             parts.append(
-                f'<span style="position:absolute;left:{note_x}px;top:{note_y + 4}px;'
-                f'width:{note_w}px;font-size:10px;text-align:center;overflow:hidden;'
+                f'<span style="position:absolute;left:{nx}px;top:{ny + 4}px;'
+                f'width:{nw}px;font-size:10px;text-align:center;overflow:hidden;'
                 f'color:var(--node-fg,var(--text-primary,#191A17));'
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
                 f'{_h(it["text"])}</span>'
