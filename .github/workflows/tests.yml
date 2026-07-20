@@ -61,6 +61,7 @@ jobs:
           python-version: "3.13"
           cache: "pip"
       - run: pip install -r requirements.txt
+      - run: pip install pytest
       - run: playwright install chromium --with-deps
       # Security helpers, error-wrapping, lazy-provisioning, and behavioral
       # degradation tests (test_browser.py); Playwright-contract assertions and
