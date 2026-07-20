@@ -495,12 +495,25 @@ def _render_graph_fragment(
 
     # Collect which marker IDs are needed and emit a <defs> block.
     _needed_markers = {spec["marker_id"] for spec in routed if spec.get("marker_id")}
+    # Bidir edges need a start marker too — add when any edge has bidir=True
+    _bidir_src_dst = {(e.src, e.dst) for e in edges if getattr(e, "bidir", False)}
+    if _bidir_src_dst:
+        _needed_markers.add("arrow-bidir-start")
     if _needed_markers:
         defs_parts = ["<defs>"]
         if "arrow-normal" in _needed_markers:
             defs_parts.append(
                 '<marker id="arrow-normal" viewBox="0 -4 9 8" refX="9" refY="0"'
                 ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+                '<polygon points="0,-4 9,0 0,4"'
+                ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
+            )
+        if "arrow-bidir-start" in _needed_markers:
+            # orient="auto-start-reverse" flips the marker 180° so the same triangle
+            # shape points toward the source node when used as marker-start.
+            defs_parts.append(
+                '<marker id="arrow-bidir-start" viewBox="0 -4 9 8" refX="9" refY="0"'
+                ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">'
                 '<polygon points="0,-4 9,0 0,4"'
                 ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
             )
@@ -578,9 +591,11 @@ def _render_graph_fragment(
                     stroke_w = _val
         mid = spec.get("marker_id")
         marker_attr = f' marker-end="url(#{mid})"' if mid else ""
+        _is_bidir_path = (spec.get("src"), spec.get("dst")) in _bidir_src_dst
+        _bidir_start_attr = ' marker-start="url(#arrow-bidir-start)"' if _is_bidir_path else ""
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none" '
-            f'stroke-width="{stroke_w}"{dash}{marker_attr}'
+            f'stroke-width="{stroke_w}"{dash}{_bidir_start_attr}{marker_attr}'
             f' data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}"/>'
         )
 

@@ -78,9 +78,60 @@ _SPEC_SHAPE_MAP = {
 }
 
 
+# Mermaid v11 @{ shape: ... } attribute syntax — maps shape attribute values to
+# canonical shape names.  Short aliases appear alongside the canonical names.
+_AT_SHAPE_MAP: dict[str, str] = {
+    "diam": "diamond", "diamond": "diamond", "rhombus": "diamond",
+    "circle": "circle", "f-circ": "circle", "fork": "circle", "join": "circle",
+    "rect": "rect", "rectangle": "rect", "notch-rect": "rect", "win-pane": "rect",
+    "rounded": "round", "brace": "round", "brace-l": "round", "brace-r": "round",
+    "stadium": "stadium", "pill": "stadium", "terminal": "stadium",
+    "hex": "hexagon", "hexagon": "hexagon", "odd": "hexagon",
+    "cyl": "cylinder", "cylinder": "cylinder", "lin-cyl": "cylinder",
+    "subroutine": "subroutine",
+    "trap-b": "trapezoid", "trapezoid": "trapezoid", "lean-r": "trapezoid",
+    "trap-t": "trapezoid-alt", "lean-l": "trapezoid-alt",
+    "doublecircle": "doublecircle",
+    "flag": "flag",
+}
+
+# Regex for ID@{ key: value, ... } attribute block.
+# Captures the node ID and the full attribute string for further key/value parsing.
+_AT_BLOCK_RE = re.compile(
+    r'^(?P<id>[A-Za-z_][A-Za-z0-9_\-\.]*)@\{(?P<attrs>[^}]*)\}'
+)
+
+
 def _parse_spec(spec: str) -> tuple[str, str, str]:
-    """Return (id, label, shape) from node spec like A[Label]."""
+    """Return (id, label, shape) from node spec like A[Label].
+
+    Also handles the Mermaid v11 @{ shape: ..., label: "..." } attribute syntax.
+    """
     spec = spec.strip()
+    # Mermaid v11 @{ } attribute syntax — check before bracket-based spec
+    at_m = _AT_BLOCK_RE.match(spec)
+    if at_m:
+        nid = at_m.group("id")
+        attrs_raw = at_m.group("attrs")
+        shape = "rect"
+        label = nid
+        # Parse key: value pairs (comma-separated; values may be quoted)
+        for kv in re.split(r',\s*', attrs_raw):
+            kv = kv.strip()
+            km = re.match(r'(\w[\w-]*)\s*:\s*"([^"]*)"', kv)
+            if not km:
+                km = re.match(r"(\w[\w-]*)\s*:\s*'([^']*)'", kv)
+            if not km:
+                km = re.match(r'(\w[\w-]*)\s*:\s*(\S+)', kv)
+            if not km:
+                continue
+            key, val = km.group(1).lower(), km.group(2).strip().strip('"\'')
+            if key == "shape":
+                shape = _AT_SHAPE_MAP.get(val.lower(), "rect")
+            elif key == "label":
+                label = val
+        return nid, label, shape
+
     m = _SPEC_RE.match(spec)
     if not m:
         safe = re.match(r'[A-Za-z_][A-Za-z0-9_\-\.]*', spec)
@@ -115,11 +166,12 @@ def _parse_spec_and_class(spec: str) -> tuple[str, str, str, str]:
 
 # Matches edge operators with optional label:
 #   A -- text --> B    A --> B    A ---B    A -.-> B    A ==> B    A -->|text| B
+#   A <--> B  (bidirectional — produces a single edge with bidir=True)
 _EDGE_RE = re.compile(
     r'^(?P<src_raw>.+?)\s*'
     r'(?:'
     r'--\s*(?P<mid_label>[^->=]+?)\s*(?P<arrow_long>-->|---)'   # -- text --> / -- text ---
-    r'|(?P<arrow_short>-\.->|-\.-o|-\.-x|-\.-|==>|-->|--o|--x|---)'  # plain operators (longer patterns first)
+    r'|(?P<arrow_short><-->|-\.->|-\.-o|-\.-x|-\.-|==>|-->|--o|--x|---)'  # <--> before --> (longer first)
     r')'
     r'\s*(?:\|(?P<pipe_label>[^\|]*)\|)?\s*'
     r'(?P<dst_raw>.+)$'
@@ -317,7 +369,8 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
 
 
     style = "dotted" if "-.-" in arrow else ("thick" if "==" in arrow else "solid")
-    has_arrow = arrow.endswith(">")
+    is_bidir = arrow == "<-->"
+    has_arrow = is_bidir or arrow.endswith(">")
 
     src_id, src_lbl, src_shp, src_cls = _parse_spec_and_class(src_raw)
     if not re.match(r'[A-Za-z_]', src_id):
@@ -332,13 +385,13 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
         if not re.match(r'[A-Za-z_]', dst_id):
             return
         ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
-        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow))
+        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir))
         _parse_line(dst_raw, edges, ensure_fn)
     else:
         dst_id, dst_lbl, dst_shp, dst_cls = _parse_spec_and_class(dst_raw)
         if not re.match(r'[A-Za-z_]', dst_id):
             return
         ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
-        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow))
+        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir))
 
 

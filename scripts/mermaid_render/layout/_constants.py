@@ -209,6 +209,7 @@ class _Edge:
     style: str = "solid"          # solid|dotted|thick
     arrow: bool = True
     reversed_: bool = False       # back-edge flag
+    bidir: bool = False           # True for <--> edges — renders marker-start in addition to marker-end
     cardinality_src: Optional[str] = None  # ER crow's foot: 'one'|'zero-one'|'many'|'zero-many'
     cardinality_dst: Optional[str] = None
     orig_src: Optional[str] = None  # original src for dummy-chained edges
