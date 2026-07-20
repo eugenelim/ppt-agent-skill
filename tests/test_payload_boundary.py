@@ -83,6 +83,25 @@ def test_no_test_files_in_scripts() -> None:
     )
 
 
+def test_mermaid_render_vendor_bundle_parity() -> None:
+    """mermaid_render/vendor/dom-to-svg.bundle.js must be byte-identical to scripts/vendor/.
+
+    Both copies are committed (whitelisted in .gitignore); this is a hard gate,
+    not an optional skip — if either file is absent the tree is broken.
+    """
+    orig = SCRIPTS / "vendor" / "dom-to-svg.bundle.js"
+    copy = SCRIPTS / "mermaid_render" / "vendor" / "dom-to-svg.bundle.js"
+    assert orig.exists(), (
+        "scripts/vendor/dom-to-svg.bundle.js missing — it is a committed asset"
+    )
+    assert copy.exists(), (
+        "scripts/mermaid_render/vendor/dom-to-svg.bundle.js missing — copy from scripts/vendor/"
+    )
+    assert copy.read_bytes() == orig.read_bytes(), (
+        "mermaid_render/vendor/dom-to-svg.bundle.js diverged from scripts/vendor/ — keep in sync"
+    )
+
+
 def test_all_scripts_reachable() -> None:
     """Every scripts/*.py (non-__init__) must be reachable from adopter-facing roots."""
     reachable = _reachable_scripts()
@@ -103,8 +122,10 @@ def test_all_scripts_reachable() -> None:
         pass  # handled separately if needed
 
     unreachable = all_scripts - reachable
-    # mermaid_layout package module: checked via directory reference
-    assert unreachable == set() or unreachable == {"__main__"}, (
-        f"scripts/*.py not reachable from adopter-facing roots: {sorted(unreachable)}\n"
+    # _browser is an internal shim; mermaid_render loads it indirectly.
+    # __main__ may not be referenced in docs — both are allowed.
+    _ALLOWED_UNREACHABLE = {"__main__", "_browser"}
+    assert unreachable <= _ALLOWED_UNREACHABLE, (
+        f"scripts/*.py not reachable from adopter-facing roots: {sorted(unreachable - _ALLOWED_UNREACHABLE)}\n"
         "Add a reference in SKILL.md/cli-cheatsheet/references/, or move to tools/."
     )

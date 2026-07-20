@@ -15,6 +15,7 @@ tests/smoke-results/*/screenshots/
 # Bundler runtime artifacts — except the prebuilt dom-to-svg bundle (shipped asset)
 *.bundle.js
 !scripts/vendor/dom-to-svg.bundle.js
+!scripts/mermaid_render/vendor/dom-to-svg.bundle.js
 
 # html2svg 每次转换的唯一临时目录（正常运行会自清理，此处兜底残留）
 .h2svg-*/

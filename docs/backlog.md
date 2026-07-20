@@ -192,6 +192,34 @@ contract used by `scripts/test_diagram_qa.py` (`from mermaid_layout import _disp
 Unblocked after the test suite (AC-TEST) is established — the tests act as the safety net
 for a structural split that cannot easily be undone.
 
+## mermaid-render-rearchitecture
+
+### vendor-bundle-checksum-gate
+
+**Deferred (not an AC deferral):** Add a CI step that hashes
+`scripts/mermaid_render/vendor/dom-to-svg.bundle.js` and asserts it matches a
+pinned SHA-256 in the repo. Currently the byte-parity test
+(`test_mermaid_render_vendor_bundle_parity`) guards against drift between
+`scripts/vendor/` and `scripts/mermaid_render/vendor/`, but neither the source
+bundle nor the copy is pinned to a known-good hash. Unblocked by adding a small
+`tools/check_bundle_hash.py` + updating CI to run it.
+
+### differential-parity-test
+
+**Deferred (not an AC deferral):** Render a corpus of canonical Mermaid diagrams
+through `mermaid_render.to_svg()` and diff against golden SVGs produced by the
+pre-rearchitecture `html2svg.py` pipeline. Guards against silent behavioral
+regression in the adapter wiring. Unblocked by establishing a golden baseline;
+requires Playwright + Chromium in CI (add to `render-scripts` job or a new
+`render-parity` job).
+
+### lift-seam-adr
+
+**Deferred (not an AC deferral):** Write an ADR documenting the lift seam: what
+`mermaid_render/` depends on (stdlib + playwright, nothing else), how a consumer
+would move the package to a standalone repo, and what the shim compatibility
+contract guarantees. Unblocked anytime; editorial only.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

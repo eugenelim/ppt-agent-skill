@@ -1,66 +1,12 @@
-"""CLI entry point: python3 scripts/mermaid_layout/ --source ... """
-from __future__ import annotations
+"""Backward-compat shim: python3 scripts/mermaid_layout → mermaid_render.layout.__main__.
 
-import argparse
+Delegates to the real CLI entry point in mermaid_render.layout.__main__.
+"""
 import sys
-from pathlib import Path
+import pathlib
 
-# Bootstrap: when invoked as `python3 scripts/mermaid_layout/` the package parent
-# (scripts/) may not be on sys.path, so relative imports fail. Ensure it is.
-_pkg_parent = Path(__file__).parent.parent
-if str(_pkg_parent) not in sys.path:
-    sys.path.insert(0, str(_pkg_parent))
-
-from mermaid_layout._strategies import _dispatch  # noqa: E402
-
-def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Render Mermaid source to pipeline-safe HTML/CSS fragment."
-    )
-    ap.add_argument(
-        "--source", required=True,
-        help="Mermaid source string, or @path to read from file (e.g. @diagram.mmd).",
-    )
-    ap.add_argument(
-        "--direction", choices=["TB", "LR", "RL", "BT"], default=None,
-        help="Override graph direction (default: from source directive).",
-    )
-    ap.add_argument(
-        "--width-hint", type=int, default=0, metavar="N",
-        help="Target canvas width hint in px; script scales to fit.",
-    )
-    ap.add_argument(
-        "--output", default=None, metavar="FILE",
-        help="Write HTML fragment to FILE (default: stdout).",
-    )
-    args = ap.parse_args()
-
-    # Resolve source
-    src_arg: str = args.source
-    if src_arg.startswith("@"):
-        fpath = Path(src_arg[1:])
-        try:
-            src = fpath.read_text(encoding="utf-8")
-        except OSError as exc:
-            print(f"mermaid_layout: cannot read source file: {exc}", file=sys.stderr)
-            sys.exit(1)
-    else:
-        src = src_arg.replace("\\n", "\n")
-
-    try:
-        fragment = _dispatch(src, args.direction, args.width_hint)
-    except RecursionError:
-        print("mermaid_layout: diagram too deeply nested (recursion limit)", file=sys.stderr)
-        sys.exit(1)
-    except Exception as exc:
-        print(f"mermaid_layout: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    if args.output:
-        Path(args.output).write_text(fragment, encoding="utf-8")
-    else:
-        print(fragment)
-
+sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
+from mermaid_render.layout.__main__ import main  # noqa: E402
 
 if __name__ == "__main__":
     main()
