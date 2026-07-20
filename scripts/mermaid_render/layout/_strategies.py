@@ -534,19 +534,67 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
 
 # ── T2: erDiagram ─────────────────────────────────────────────────────────────
 
+# Relationship line: entity names may contain hyphens (e.g. LINE-ITEM)
 _ER_REL_RE = re.compile(
-    r'^(?P<e1>\w+)\s+'
+    r'^(?P<e1>[\w-]+)\s+'
     r'(?P<card_src>[|o}{]{1,2})'
     r'(?P<line>-{1,2}|\.{1,2})'
     r'(?P<card_dst>[|o}{]{1,2})'
-    r'\s+(?P<e2>\w+)\s*:\s*(?P<lbl>.*)$'
+    r'\s+(?P<e2>[\w-]+)\s*:\s*(?P<lbl>.*)$'
+)
+# Entity block opening: supports hyphens (LINE-ITEM { ... })
+_ER_ENTITY_RE = re.compile(r'^([\w-]+)\s*\{')
+# Attribute row inside entity block: type name [PK|FK|UK] ["comment"]
+_ER_ATTR_RE = re.compile(
+    r'^(?P<type>\S+)\s+(?P<name>\S+)'
+    r'(?:\s+(?P<constraint>PK|FK|UK))?'
+    r'(?:\s+"(?P<comment>[^"]*)")?'
+    r'\s*$'
 )
 _ER_CARD_SRC_MAP = {"||": "one", "o|": "zero-one", "}|": "many", "}o": "zero-many"}
 _ER_CARD_DST_MAP = {"||": "one", "|o": "zero-one", "|{": "many", "o{": "zero-many"}
 
+# Entity box geometry constants (px)
+_ER_HDR_H = 34    # entity name header height
+_ER_ROW_H = 22    # attribute row height
+_ER_BOT_PAD = 8   # bottom padding below last attribute row
+
+
+def _er_entity_h(n_attrs: int) -> int:
+    """Pixel height of an entity box with n_attrs attribute rows."""
+    if n_attrs == 0:
+        return max(NODE_H, _ER_HDR_H + _ER_BOT_PAD)
+    return _ER_HDR_H + 1 + n_attrs * _ER_ROW_H + _ER_BOT_PAD
+
+
+def _er_rect_edge_pt(
+    cx: float, cy: float, w: float, h: float, vx: float, vy: float
+) -> tuple[float, float]:
+    """Point on the boundary of a rect (cx+-w/2, cy+-h/2) in direction (vx, vy).
+
+    Finds the smallest t > 0 where (cx + vx*t, cy + vy*t) hits a face of the
+    rectangle.  Returns the centre when direction is zero (degenerate case).
+    """
+    hw, hh = w / 2.0, h / 2.0
+    ts: list[float] = []
+    if vx > 1e-9:
+        ts.append(hw / vx)
+    elif vx < -1e-9:
+        ts.append(-hw / vx)
+    if vy > 1e-9:
+        ts.append(hh / vy)
+    elif vy < -1e-9:
+        ts.append(-hh / vy)
+    t = min((c for c in ts if c > 0.0), default=0.0)
+    return cx + vx * t, cy + vy * t
+
 
 def _render_crow_foot(x: float, y: float, dx: float, dy: float, kind: str, color: str) -> list[str]:
-    """Return SVG strings for a crow's foot marker at (x, y) with edge direction (dx, dy)."""
+    """Return SVG strings for a crow's foot marker at (x, y) with edge direction (dx, dy).
+
+    (dx, dy) points from the entity boundary outward along the edge (toward the
+    other entity).  Markers are drawn in that outward direction.
+    """
     import math as _math
     px, py = -dy, dx  # perpendicular to edge direction
     HALF_W = 10.0
@@ -592,87 +640,303 @@ def _render_crow_foot(x: float, y: float, dx: float, dy: float, kind: str, color
 
 
 def _layout_er(src: str, direction: str, width_hint: int) -> str:
-    """erDiagram: entities as nodes, relationships as edges (graph topology reuse)."""
+    """erDiagram: entity boxes with attribute tables; SVG edges with crow's feet.
+
+    Improvements over the original:
+    - Entity boxes show entity name header + typed attribute rows (PK/FK/UK badges).
+    - Attribute comments (quoted strings) rendered as italic dim text.
+    - Hyphenated entity names (e.g. LINE-ITEM) parsed correctly.
+    - Crow's foot markers positioned at actual edge endpoints using correct
+      direction vectors (not hardcoded top/bottom centres).
+    - Non-identifying relationships (.. separator) rendered as dashed lines.
+    """
+    import math as _math
+    from collections import defaultdict
+
     content_lines = _directive_content(src)
     nodes: dict[str, _Node] = {}
     edges: list[_Edge] = []
+    # eid -> list of {type, name, constraint, comment}
+    entity_attrs: dict[str, list[dict]] = {}
     current_entity: Optional[str] = None
-    _entity_attrs: dict[str, list[str]] = {}  # eid → attribute lines
+
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
         if line == "}":
-            current_entity = None; continue
-        m = re.match(r'^(\w+)\s*\{', line)
+            current_entity = None
+            continue
+        # Entity block opening (supports hyphens: LINE-ITEM)
+        m = _ER_ENTITY_RE.match(line)
         if m:
             eid = m.group(1)
             nodes.setdefault(eid, _Node(id=eid, label=eid, shape="rect"))
-            _entity_attrs.setdefault(eid, [])
-            current_entity = eid; continue
-        if current_entity:
-            _entity_attrs.setdefault(current_entity, []).append(line)
+            entity_attrs.setdefault(eid, [])
+            current_entity = eid
             continue
+        # Attribute row inside entity block
+        if current_entity:
+            m = _ER_ATTR_RE.match(line)
+            if m:
+                entity_attrs[current_entity].append({
+                    "type": m.group("type"),
+                    "name": m.group("name"),
+                    "constraint": (m.group("constraint") or "").strip(),
+                    "comment": (m.group("comment") or "").strip(),
+                })
+            continue
+        # Relationship line (supports hyphens in entity names)
         m = _ER_REL_RE.match(line)
         if m:
-            e1 = m.group("e1")
-            card_src_tok = m.group("card_src")
-            card_dst_tok = m.group("card_dst")
-            e2 = m.group("e2")
+            e1, e2 = m.group("e1"), m.group("e2")
             lbl = m.group("lbl").strip()
             for eid in (e1, e2):
                 nodes.setdefault(eid, _Node(id=eid, label=eid, shape="rect"))
+                entity_attrs.setdefault(eid, [])
             er_style = "dotted" if m.group("line").startswith(".") else "solid"
             edges.append(_Edge(
-                src=e1, dst=e2, label=lbl, style=er_style, arrow=True,
-                cardinality_src=_ER_CARD_SRC_MAP.get(card_src_tok),
-                cardinality_dst=_ER_CARD_DST_MAP.get(card_dst_tok),
+                src=e1, dst=e2, label=lbl, style=er_style, arrow=False,
+                cardinality_src=_ER_CARD_SRC_MAP.get(m.group("card_src")),
+                cardinality_dst=_ER_CARD_DST_MAP.get(m.group("card_dst")),
             ))
+
     if not nodes:
         raise ValueError("No entities found in erDiagram.")
 
-    # Encode entity attributes into label pipe-separated tech section
-    for eid, attrs in _entity_attrs.items():
-        if eid in nodes and attrs:
-            nodes[eid].label = f"{eid}|" + "\n".join(attrs)
+    # Save original relationships before layout algorithms modify the edge list
+    # (_assign_ranks inserts dummy nodes and replaces long-span edges with chains)
+    er_rels = [
+        {
+            "src": e.src, "dst": e.dst, "label": e.label,
+            "style": e.style,
+            "card_src": e.cardinality_src,
+            "card_dst": e.cardinality_dst,
+        }
+        for e in edges
+    ]
 
     # Layout
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
-    canvas_w, canvas_h = _assign_coordinates(nodes)
+    canvas_w, _ = _assign_coordinates(nodes)
+
+    # Override y-positions with attribute-aware entity heights
+    rank_to_nids: dict[int, list[str]] = defaultdict(list)
+    for nid, n in nodes.items():
+        if not n.is_dummy:
+            rank_to_nids[n.rank].append(nid)
+
+    y_cursor = CANVAS_PAD
+    for rank in range(max(rank_to_nids.keys(), default=0) + 1):
+        nids = rank_to_nids.get(rank, [])
+        if not nids:
+            continue
+        rank_h = max(_er_entity_h(len(entity_attrs.get(nid, []))) for nid in nids)
+        for nid in nids:
+            eh = _er_entity_h(len(entity_attrs.get(nid, [])))
+            nodes[nid].y = y_cursor + (rank_h - eh) // 2
+        y_cursor += rank_h + RANK_GAP
+
+    # Scale x-positions to fit width_hint
     if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
         scale = width_hint / canvas_w
         for n in nodes.values():
             n.x = int(n.x * scale)
         canvas_w = width_hint
 
-    html = _render_graph_fragment(nodes, edges, {}, canvas_w, canvas_h)
+    # Recompute canvas dimensions from actual node positions
+    real_nids = [(nid, n) for nid, n in nodes.items() if not n.is_dummy]
+    if real_nids:
+        canvas_w = max(n.x + NODE_W for _, n in real_nids) + CANVAS_PAD
+        canvas_h = (
+            max(n.y + _er_entity_h(len(entity_attrs.get(nid, [])))
+                for nid, n in real_nids)
+            + CANVAS_PAD
+        )
+    else:
+        canvas_h = y_cursor - RANK_GAP + CANVAS_PAD
 
-    # Inject crow's foot markers into the overlay SVG
-    _er_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-    crow_parts: list[str] = []
-    for e in edges:
-        if not e.cardinality_src and not e.cardinality_dst:
+    _edge_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    _er_accent = "var(--node-title-fg,var(--accent-1,#60a5fa))"
+
+    parts: list[str] = []
+    parts.append(
+        f'<div class="diagram mermaid-layout" style="'
+        f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
+    )
+
+    # Entity boxes
+    for nid, n in nodes.items():
+        if n.is_dummy:
             continue
-        if e.src not in nodes or e.dst not in nodes:
+        attrs = entity_attrs.get(nid, [])
+        eh = _er_entity_h(len(attrs))
+
+        parts.append(
+            f'<div class="node node-rect er-entity" data-node-id="{_h(nid)}" style="'
+            f'position:absolute;left:{n.x}px;top:{n.y}px;'
+            f'width:{NODE_W}px;height:{eh}px;'
+            f'box-sizing:border-box;overflow:hidden;'
+            f'border:1px solid var(--node-border,var(--card-border,#DAD7CE));'
+            f'border-top:3px solid {_er_accent};'
+            f'border-radius:var(--node-radius,8px);'
+            f'background:linear-gradient(180deg,'
+            f'var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+            f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));'
+            f'box-shadow:var(--node-shadow,'
+            f'0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03));">'
+        )
+        # Entity name header
+        parts.append(
+            f'<div style="height:{_ER_HDR_H}px;display:flex;align-items:center;'
+            f'justify-content:center;padding:0 8px;box-sizing:border-box;">'
+            f'<span class="node-label" style="'
+            f'font-size:13px;font-weight:700;'
+            f'color:var(--node-fg,var(--text-primary,#191A17));'
+            f'font-family:{_lf};'
+            f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
+            f'{_h(nid)}</span></div>'
+        )
+        if attrs:
+            parts.append(
+                f'<div style="height:1px;'
+                f'background:var(--node-border,var(--card-border,#DAD7CE));"></div>'
+            )
+            for attr in attrs:
+                constraint = attr["constraint"]
+                if constraint == "PK":
+                    badge_html = (
+                        f'<span style="font-size:9px;font-weight:700;'
+                        f'color:var(--accent-3,#B7791F);'
+                        f'background:rgba(183,121,31,0.12);'
+                        f'border-radius:3px;padding:0 3px;margin-right:4px;'
+                        f'flex-shrink:0;font-family:{_lf};">PK</span>'
+                    )
+                elif constraint == "FK":
+                    badge_html = (
+                        f'<span style="font-size:9px;font-weight:700;'
+                        f'color:var(--accent-1,#60a5fa);'
+                        f'background:rgba(96,165,250,0.12);'
+                        f'border-radius:3px;padding:0 3px;margin-right:4px;'
+                        f'flex-shrink:0;font-family:{_lf};">FK</span>'
+                    )
+                elif constraint == "UK":
+                    badge_html = (
+                        f'<span style="font-size:9px;font-weight:700;'
+                        f'color:var(--accent-2,#34d399);'
+                        f'background:rgba(52,211,153,0.12);'
+                        f'border-radius:3px;padding:0 3px;margin-right:4px;'
+                        f'flex-shrink:0;font-family:{_lf};">UK</span>'
+                    )
+                else:
+                    badge_html = ""
+                comment_html = ""
+                if attr["comment"]:
+                    comment_html = (
+                        f'<span style="font-size:9px;font-style:italic;'
+                        f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
+                        f'margin-left:4px;overflow:hidden;text-overflow:ellipsis;'
+                        f'white-space:nowrap;flex-shrink:1;font-family:{_lf};">'
+                        f'{_h(attr["comment"])}</span>'
+                    )
+                parts.append(
+                    f'<div style="height:{_ER_ROW_H}px;display:flex;align-items:center;'
+                    f'padding:0 8px;overflow:hidden;box-sizing:border-box;">'
+                    f'{badge_html}'
+                    f'<span style="font-size:10px;'
+                    f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
+                    f'margin-right:4px;flex-shrink:0;font-family:{_lf};">'
+                    f'{_h(attr["type"])}</span>'
+                    f'<span style="font-size:11px;font-weight:500;'
+                    f'color:var(--node-fg,var(--text-primary,#191A17));'
+                    f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'
+                    f'flex:1;font-family:{_lf};">'
+                    f'{_h(attr["name"])}</span>'
+                    f'{comment_html}'
+                    f'</div>'
+                )
+        parts.append('</div>')  # close entity box
+
+    # SVG overlay: edge lines + crow's feet
+    parts.append(
+        f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
+        f'overflow:visible;pointer-events:none;">'
+    )
+
+    edge_labels: list[tuple[float, float, str]] = []
+
+    for rel in er_rels:
+        e_src, e_dst = rel["src"], rel["dst"]
+        if e_src not in nodes or e_dst not in nodes:
             continue
-        s = nodes[e.src]
-        d_node = nodes[e.dst]
-        sx = float(s.x + NODE_W // 2)
-        sy = float(s.y + _node_render_h(s))
-        dx2 = float(d_node.x + NODE_W // 2)
-        dy2 = float(d_node.y)
-        if e.cardinality_src:
-            crow_parts.extend(_render_crow_foot(sx, sy, 0.0, 1.0, e.cardinality_src, _er_color))
-        if e.cardinality_dst:
-            crow_parts.extend(_render_crow_foot(dx2, dy2, 0.0, -1.0, e.cardinality_dst, _er_color))
+        s = nodes[e_src]
+        d_node = nodes[e_dst]
+        if s.is_dummy or d_node.is_dummy:
+            continue
 
-    if crow_parts:
-        # Inject crow's foot SVG elements into the first </svg> (the overlay)
-        html = html.replace("</svg>", "\n".join(crow_parts) + "\n</svg>", 1)
+        sh = float(_er_entity_h(len(entity_attrs.get(e_src, []))))
+        dh = float(_er_entity_h(len(entity_attrs.get(e_dst, []))))
 
-    return html
+        src_cx = float(s.x + NODE_W // 2)
+        src_cy = float(s.y) + sh / 2.0
+        dst_cx = float(d_node.x + NODE_W // 2)
+        dst_cy = float(d_node.y) + dh / 2.0
+
+        vx, vy = dst_cx - src_cx, dst_cy - src_cy
+        norm = _math.hypot(vx, vy) or 1.0
+        uvx, uvy = vx / norm, vy / norm
+
+        # Exit/entry points on each entity's bounding box
+        src_ex, src_ey = _er_rect_edge_pt(src_cx, src_cy, float(NODE_W), sh, uvx, uvy)
+        dst_ex, dst_ey = _er_rect_edge_pt(dst_cx, dst_cy, float(NODE_W), dh, -uvx, -uvy)
+
+        dash = ' stroke-dasharray="6 4"' if rel["style"] == "dotted" else ""
+        parts.append(
+            f'<line x1="{src_ex:.1f}" y1="{src_ey:.1f}" '
+            f'x2="{dst_ex:.1f}" y2="{dst_ey:.1f}" '
+            f'stroke="{_edge_color}" stroke-width="1.5"{dash}'
+            f' data-src="{_h(e_src)}" data-dst="{_h(e_dst)}"/>'
+        )
+
+        # Crow's feet: direction from boundary outward toward the other entity
+        if rel["card_src"]:
+            parts.extend(_render_crow_foot(
+                src_ex, src_ey, uvx, uvy, rel["card_src"], _edge_color
+            ))
+        if rel["card_dst"]:
+            parts.extend(_render_crow_foot(
+                dst_ex, dst_ey, -uvx, -uvy, rel["card_dst"], _edge_color
+            ))
+
+        if rel["label"]:
+            edge_labels.append((
+                (src_ex + dst_ex) / 2.0,
+                (src_ey + dst_ey) / 2.0,
+                rel["label"],
+            ))
+
+    parts.append('</svg>')
+
+    # Edge labels as HTML (float above SVG)
+    for lx, ly, lbl in edge_labels:
+        parts.append(
+            f'<span class="edge-label" style="'
+            f'position:absolute;left:{lx:.0f}px;top:{ly:.0f}px;'
+            f'transform:translate(-50%,-50%);'
+            f'font-size:11px;font-weight:500;'
+            f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
+            f'background:var(--edge-label-bg,var(--node-bg-from,#F7F6F2));'
+            f'padding:1px 4px;border-radius:3px;'
+            f'font-family:{_lf};'
+            f'white-space:nowrap;pointer-events:none;z-index:2;">'
+            f'{_h(lbl)}</span>'
+        )
+
+    parts.append('</div>')
+    return "\n".join(parts)
 
 
 def _graph_from_content_nodes(
