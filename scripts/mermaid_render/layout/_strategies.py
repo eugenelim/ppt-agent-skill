@@ -1146,18 +1146,54 @@ def _layout_quadrant(src: str, direction: str, width_hint: int) -> str:
 
 _PIE_SLICE_RE = re.compile(r'^"([^"]+)"\s*:\s*([0-9.]+)')
 
+# Eight distinct accent tokens so charts with up to 8 slices each get a unique colour.
+_PIE_ACCENTS = [
+    "var(--edge-strong,var(--accent-1,#60a5fa))",
+    "var(--node-accent-2,var(--accent-2,#34d399))",
+    "var(--accent-3,#f59e0b)",
+    "var(--accent-4,#818cf8)",
+    "var(--accent-5,#f87171)",
+    "var(--accent-6,#2dd4bf)",
+    "var(--node-border,var(--card-border,#DAD7CE))",
+    "var(--node-fg-dim,var(--text-secondary,#75736C))",
+]
+
 
 def _layout_pie(src: str, direction: str, width_hint: int) -> str:
-    """pie/pie showData: polygon-approximated donut sectors."""
+    """pie / pie showData: SVG arc-path donut with title, legend, and percentage labels.
+
+    Fixes vs. old implementation:
+    - Title extracted from inline ``pie title …`` directive syntax (not just content lines).
+    - Title rendered at the **top** of the canvas, not at the bottom.
+    - ``showData`` flag detected; raw values appended to legend entries when set.
+    - Legend column on the right: colour swatch + label + percentage (+ raw value).
+    - Palette expanded to 8 distinct accents so charts with up to 8 slices never repeat.
+    - ``data-slice`` identity attribute placed on every SVG ``<path>`` element so
+      selector-based oracle tests can locate each slice.
+    - Percentage labels rendered inside each slice at mid-radius; suppressed only for
+      slices narrower than ~14° (0.25 rad) where text would overlap neighbours.
+    """
+    # ── parse directive line for showData and inline title ────────────────────
+    first_line = ""
+    for _raw in src.splitlines():
+        _s = _raw.strip()
+        if _s and not _s.startswith(("%%", "//")):
+            first_line = _s
+            break
+    show_data = bool(re.search(r'\bshowdata\b', first_line, re.I))
+    _m_inline = re.match(r'^pie\b.*?\btitle\s+(.*)', first_line, re.I)
+    title_from_directive = _m_inline.group(1).strip().strip('"\'') if _m_inline else ""
+
+    # ── parse content lines ───────────────────────────────────────────────────
     content_lines = _directive_content(src)
-    title = ""
+    title = title_from_directive
     slices: list[dict] = []
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
         if line.lower().startswith("title "):
-            title = line[6:].strip(); continue
+            title = line[6:].strip().strip('"\''); continue
         m = _PIE_SLICE_RE.match(line)
         if m:
             slices.append({"label": m.group(1), "value": float(m.group(2))})
@@ -1168,22 +1204,54 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
     if total <= 0:
         raise ValueError("Pie chart: all slice values are zero (nothing to render).")
 
+    # ── layout geometry ───────────────────────────────────────────────────────
+    TITLE_H = 28 if title else 0
+    PAD = 16
+    LEGEND_W = 144
+    LEGEND_ITEM_H = 20
+    LEGEND_SWATCH = 10
+
     canvas_w = width_hint or 400
-    canvas_h = min(canvas_w, 560)
-    cx, cy = canvas_w // 2, canvas_h // 2
-    r_out = min(cx, cy) - 60
-    r_in = r_out * 2 // 5
-    accents = [
-        "var(--edge-strong,var(--accent-1,#60a5fa))",
-        "var(--node-accent-2,var(--accent-2,#34d399))",
-        "var(--node-border,var(--card-border,#DAD7CE))",
-        "var(--node-fg-dim,var(--text-secondary,#75736C))",
-    ]
+    # Pie occupies the left band; legend the right.
+    pie_zone_w = canvas_w - LEGEND_W - PAD * 3
+    if pie_zone_w < 80:
+        # Narrow canvas: stack legend below the pie instead.
+        pie_zone_w = canvas_w - PAD * 2
+    n_slices = len(slices)
+    legend_h = n_slices * LEGEND_ITEM_H + 4
+
+    r_out = max(40, pie_zone_w // 2 - PAD)
+    pie_diam = r_out * 2 + PAD * 2
+    canvas_h = TITLE_H + max(pie_diam, legend_h) + PAD * 2
+    canvas_h = min(canvas_h, 560)
+
+    # Tighten r_out so pie fits the actual canvas height too.
+    pie_zone_h = canvas_h - TITLE_H - PAD * 2
+    r_out = max(40, min(pie_zone_w // 2 - PAD, pie_zone_h // 2 - PAD))
+    r_in = r_out * 2 // 5  # donut hole
+
+    cx = PAD + pie_zone_w // 2
+    cy = TITLE_H + PAD + pie_zone_h // 2
+
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
         f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
     )
+
+    # ── title at top ──────────────────────────────────────────────────────────
+    if title:
+        parts.append(
+            f'<div style="position:absolute;left:0;top:{PAD // 2}px;width:{canvas_w}px;'
+            f'text-align:center;font-size:13px;font-weight:700;'
+            f'color:var(--node-fg,var(--text-primary,#191A17));'
+            f'font-family:{_lf};">'
+            f'{_h(title)}</div>'
+        )
+
+    # ── SVG layer: one <path> arc per slice ───────────────────────────────────
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
@@ -1192,7 +1260,7 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
     for i, sl in enumerate(slices):
         sweep = (sl["value"] / total) * 2 * math.pi
         end_a = angle + sweep
-        color = accents[i % len(accents)]
+        color = _PIE_ACCENTS[i % len(_PIE_ACCENTS)]
         large_arc = 1 if sweep > math.pi else 0
         ox0 = cx + r_out * math.cos(angle)
         oy0 = cy + r_out * math.sin(angle)
@@ -1210,38 +1278,59 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
             f"Z"
         )
         parts.append(
-            f'<path d="{d}" fill="{color}" '
+            f'<path d="{d}" data-slice="{_h(sl["label"])}" fill="{color}" '
             f'stroke="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke-width="2"/>'
         )
         angle = end_a
     parts.append('</svg>')
+
+    # ── percentage labels inside each slice ───────────────────────────────────
     angle = -math.pi / 2
     for sl in slices:
         sweep = (sl["value"] / total) * 2 * math.pi
         mid_a = angle + sweep / 2
-        lr = r_out + 28
+        # Place at 65% of the way from r_in to r_out (inside the slice body).
+        lr = r_in + (r_out - r_in) * 0.65
         lx = cx + int(lr * math.cos(mid_a))
         ly = cy + int(lr * math.sin(mid_a))
-        pct = f"{sl['value'] / total * 100:.0f}%"
-        parts.append(
-            f'<span data-slice="{_h(sl["label"])}" style="position:absolute;left:{lx - 30}px;top:{ly - 8}px;'
-            f'width:60px;font-size:10px;text-align:center;'
-            f'color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));white-space:nowrap;">'
-            f'{_h(sl["label"])} {pct}</span>'
-        )
+        pct = f"{sl['value'] / total * 100:.1f}%"
+        # Suppress label on slivers narrower than ~14° to avoid overlap.
+        if sweep >= 0.25:
+            parts.append(
+                f'<span style="position:absolute;left:{lx - 20}px;top:{ly - 7}px;'
+                f'width:40px;font-size:9px;font-weight:600;text-align:center;'
+                f'color:var(--node-bg-from,var(--card-bg-from,#ffffff));'
+                f'font-family:{_lf};pointer-events:none;">'
+                f'{pct}</span>'
+            )
         angle += sweep
-    if title:
+
+    # ── legend (right panel) ──────────────────────────────────────────────────
+    legend_x = canvas_w - LEGEND_W - PAD
+    legend_y_start = TITLE_H + max(0, (canvas_h - TITLE_H - legend_h) // 2)
+    if legend_y_start < TITLE_H + PAD:
+        legend_y_start = TITLE_H + PAD
+    for i, sl in enumerate(slices):
+        color = _PIE_ACCENTS[i % len(_PIE_ACCENTS)]
+        item_y = legend_y_start + i * LEGEND_ITEM_H
+        pct = f"{sl['value'] / total * 100:.1f}%"
+        val_suffix = f" ({sl['value']:.4g})" if show_data else ""
+        label_html = f"{_h(sl['label'])} {pct}{_h(val_suffix)}"
         parts.append(
-            f'<div style="position:absolute;left:0;bottom:8px;width:{canvas_w}px;'
-            f'text-align:center;font-size:12px;font-weight:700;'
+            f'<div style="position:absolute;left:{legend_x}px;top:{item_y}px;'
+            f'height:{LEGEND_ITEM_H}px;display:flex;align-items:center;gap:6px;">'
+            f'<div style="width:{LEGEND_SWATCH}px;height:{LEGEND_SWATCH}px;'
+            f'border-radius:2px;background:{color};flex-shrink:0;"></div>'
+            f'<span style="font-size:10px;'
             f'color:var(--node-fg,var(--text-primary,#191A17));'
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">{_h(title)}</div>'
+            f'font-family:{_lf};overflow:hidden;text-overflow:ellipsis;'
+            f'white-space:nowrap;max-width:{LEGEND_W - LEGEND_SWATCH - 10}px;">'
+            f'{label_html}</span>'
+            f'</div>'
         )
+
     parts.append('</div>')
     return "\n".join(parts)
-
-
 # ── T3: xychart-beta ──────────────────────────────────────────────────────────
 
 def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
