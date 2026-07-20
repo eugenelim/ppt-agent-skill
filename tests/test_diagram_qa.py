@@ -251,9 +251,9 @@ if __name__ == "__main__":
         check("subgraph ID[\"Label\"] extracts label text", grp.label == "Database Layer")
 
         # AC-3: COL_GAP and GROUP_PAD constants are at target values
-        check("COL_GAP is 32px", COL_GAP == 32)
-        check("GROUP_PAD_X is 16px", GROUP_PAD_X == 16)
-        check("GROUP_PAD_Y_TOP is 28px", GROUP_PAD_Y_TOP == 28)
+        check("COL_GAP is 56px", COL_GAP == 56)
+        check("GROUP_PAD_X is 28px", GROUP_PAD_X == 28)
+        check("GROUP_PAD_Y_TOP is 36px", GROUP_PAD_Y_TOP == 36)
 
         # AC-4: :::external class parsing
         _, _, _, css_class = _parse_spec_and_class("A[Service]:::external")

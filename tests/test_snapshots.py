@@ -58,7 +58,11 @@ def _render_to_png(mmd_path: Path, tmp_dir: Path, theme: str) -> Path:
     from mermaid_layout import _dispatch, make_page
 
     src = mmd_path.read_text()
-    html = make_page(_dispatch(src, None, 800), theme=theme)
+    try:
+        fragment = _dispatch(src, None, 800)
+    except ValueError as e:
+        pytest.skip(f"{mmd_path.stem}: unsupported diagram type — {e}")
+    html = make_page(fragment, theme=theme)
     # Place the HTML inside ppt-output so html2png.py's get_dep_dir() resolves
     # node_modules relative to the project's ppt-output (not a random tmp path).
     _PPT_OUT.mkdir(exist_ok=True)

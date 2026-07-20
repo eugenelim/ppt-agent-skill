@@ -1,0 +1,8 @@
+gantt
+    title Multi-After Dependencies
+    dateFormat YYYY-MM-DD
+    section Track A
+        Alpha  :a1, 2024-01-01, 4d
+        Beta   :a2, 2024-01-01, 6d
+    section Track B
+        Merge  :after a1 a2, 3d

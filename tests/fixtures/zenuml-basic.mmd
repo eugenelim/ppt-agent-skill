@@ -1,0 +1,17 @@
+zenuml
+  @Actor Alice
+  @Database DB
+  @Service API
+
+  Alice.login(credentials) {
+    API.authenticate(credentials) {
+      DB.query("SELECT * FROM users WHERE email=?")
+      return user
+    }
+    if (user.active) {
+      return token
+    } else {
+      throw AuthError
+    }
+  }
+  Alice->logout()

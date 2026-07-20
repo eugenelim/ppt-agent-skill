@@ -88,8 +88,7 @@ def _to_png_from_html_file(html_path: Path, scale: float = 1.0) -> bytes:
                     }));
                 }"""
             )
-            return page.screenshot(type="png", full_page=False,
-                                   clip={"x": 0, "y": 0, "width": 1280, "height": 720})
+            return page.screenshot(type="png", full_page=True)
         finally:
             try:
                 page.close()
