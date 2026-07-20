@@ -46,10 +46,13 @@ jobs:
       - run: pip install pytest
       # Guards run without playwright installed so the playwright-cleanliness
       # test is meaningful. Includes sibling-import AST scan, adaptive-theme
-      # unit tests, vendor bundle parity, and the full mermaid_layout shim
-      # regression suite (playwright-free). test_svg2pptx_shapes needs lxml +
-      # python-pptx (requirements.txt) so it runs in render-scripts, not here.
-      - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py -q
+      # unit tests, vendor bundle parity, the full mermaid_layout shim
+      # regression suite (playwright-free), icon catalog drift lint, and
+      # top-level CLI smoke tests (playwright-free subcommands).
+      # test_svg2pptx_shapes needs lxml + python-pptx (requirements.txt)
+      # so it runs in render-scripts, not here.
+      - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py tests/test_mermaid_render_cli.py -q
+      - run: python3 tests/test_icon_search.py
 
   render-scripts:
     name: render scripts (Playwright)
@@ -66,7 +69,8 @@ jobs:
       # Security helpers, error-wrapping, lazy-provisioning, and behavioral
       # degradation tests (test_browser.py); Playwright-contract assertions and
       # the out-of-root image confinement test (test_html2svg_tmp_isolation.py);
-      # source-level contract checks for html2png and build_pdf.
+      # source-level contract checks for html2png and build_pdf; top-level CLI
+      # svg/png subcommand smoke tests (test_mermaid_render_cli_playwright.py).
       # Snapshot pixel-comparison tests are skipped — baselines are captured on
       # macOS and cross-platform pixel-exact comparison is unreliable in CI.
-      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py tests/test_svg2pptx_shapes.py -q
+      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py tests/test_svg2pptx_shapes.py tests/test_mermaid_render_cli_playwright.py -q

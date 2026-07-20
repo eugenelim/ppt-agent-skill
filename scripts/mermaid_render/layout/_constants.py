@@ -8,7 +8,7 @@ from typing import Optional
 
 # ── icon loader ───────────────────────────────────────────────────────────────
 
-_ICON_DIR = Path(__file__).parent.parent.parent.parent / "assets" / "icons"
+_ICON_DIR = Path(__file__).parent.parent / "icons"
 _icon_cache: dict[str, str] = {}
 
 
@@ -195,7 +195,7 @@ class _Node:
     y: int = 0
     is_dummy: bool = False
     bary: float = 0.0
-    icon: str = ""                # icon name from assets/icons/ (without .svg)
+    icon: str = ""                # icon name from mermaid_render/icons/ (without .svg)
     css_class: str = ""           # semantic class, e.g. "external"
 
 

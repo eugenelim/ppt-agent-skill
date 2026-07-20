@@ -134,3 +134,16 @@ def test_to_html_unknown_named_theme_raises():
     import pytest
     with pytest.raises(ValueError, match="unknown theme"):
         mermaid_render.to_html("flowchart LR\n  A --> B", theme="lite")
+
+
+def test_icon_catalog_drift():  # STUB: AC12
+    """catalog.json entries must exactly match SVG files in mermaid_render/icons/."""
+    import json
+    icons_dir = SCRIPTS / "mermaid_render" / "icons"
+    catalog = json.loads((icons_dir / "catalog.json").read_text())
+    catalog_files = {e["file"] for e in catalog.get("icons", [])}
+    actual_svgs = {p.name for p in icons_dir.glob("*.svg")}
+    missing = catalog_files - actual_svgs
+    orphans = actual_svgs - catalog_files
+    assert missing == set(), f"catalog.json references missing SVGs: {sorted(missing)}"
+    assert orphans == set(), f"SVGs without catalog.json entries: {sorted(orphans)}"
