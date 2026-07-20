@@ -268,6 +268,7 @@ class _Group:
     label: str = ""
     members: list[str] = field(default_factory=list)
     parent_group: Optional[str] = None  # set when this subgraph is nested inside another
+    direction: str = ""                 # inner layout direction override (e.g. "LR")
 
 
 
@@ -423,7 +424,7 @@ def _node_render_h(n: "_Node") -> int:
     if n.shape == "circle":
         return _CIRCLE_NODE_SIZE
     if n.shape == "doublecircle":
-        return _CIRCLE_NODE_SIZE + 20  # 100px — same visual weight as circle but with double ring
+        return _CIRCLE_NODE_SIZE  # 80px — same size as regular circle; inner ring at inset:5px
     if n.shape == "diamond":
         return _DIAMOND_SIZE
     if n.shape == "hexagon":

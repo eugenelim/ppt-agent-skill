@@ -15,7 +15,7 @@ from ._constants import (
     _node_render_h,
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
 )
-from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter
+from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
 from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
 from ._routing import _route_edges, _arrowhead
 from ._renderer import (
@@ -91,6 +91,20 @@ def _layout_graph_topology(
 
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
+
+    # Honor inner `direction LR` inside a TB subgraph: flatten all member nodes to
+    # the same rank so they appear side-by-side (same y) rather than top-to-bottom.
+    if direction.upper() in ("TB", "TD"):
+        for grp in groups.values():
+            if grp.direction.upper() in ("LR", "RL") and grp.members:
+                _member_set = set(grp.members)
+                _grp_ranks = [nodes[m].rank for m in grp.members if m in nodes]
+                if _grp_ranks:
+                    _flat_rank = min(_grp_ranks)
+                    for m in grp.members:
+                        if m in nodes:
+                            nodes[m].rank = _flat_rank
+
     _minimize_crossings(nodes, edges)
 
     # Auto-select direction (TB vs LR) when a size constraint is given and the
@@ -116,13 +130,19 @@ def _layout_graph_topology(
         elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
             direction = "LR"
 
+    _init_cfg = _parse_init_config(src)
+
     # Keep group members in adjacent column bands (reduces group bbox y-span in LR mode)
     if groups:
         _group_coherent_cols(nodes, groups)
     # Compact group column ranges before coordinate assignment (dagre-inspired)
     if groups:
         _compact_group_columns(nodes, groups)
-    canvas_w, canvas_h = _assign_coordinates(nodes, direction)
+    canvas_w, canvas_h = _assign_coordinates(
+        nodes, direction,
+        col_gap=_init_cfg.get("col_gap"),
+        rank_gap=_init_cfg.get("rank_gap"),
+    )
 
     # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:
@@ -1916,7 +1936,7 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
     # Tighten r_out so pie fits the actual canvas height too.
     pie_zone_h = canvas_h - TITLE_H - PAD * 2
     r_out = max(40, min(pie_zone_w // 2 - PAD, pie_zone_h // 2 - PAD))
-    r_in = r_out * 2 // 5  # donut hole
+    r_in = 0  # solid pie (no donut hole) — matches mermaid.js default
 
     cx = PAD + pie_zone_w // 2
     cy = TITLE_H + PAD + pie_zone_h // 2
@@ -3309,6 +3329,380 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
     return _graph_from_content_nodes(nodes, edges, groups, width_hint)
 
 
+# ── T16: journey ──────────────────────────────────────────────────────────────
+
+def _layout_journey(src: str, direction: str, width_hint: int) -> str:
+    """journey: section bands with task score cards."""
+    content_lines = _directive_content(src)
+    title = ""
+    sections: list[dict] = []
+    cur_section: dict = {"name": "", "tasks": []}
+
+    for raw in content_lines:
+        line = raw.strip()
+        if not line or line.startswith(("%%", "//")):
+            continue
+        if line.lower().startswith("title "):
+            title = line[6:].strip()
+            continue
+        if line.lower().startswith("section "):
+            if cur_section["tasks"] or cur_section["name"]:
+                sections.append(cur_section)
+            cur_section = {"name": line[8:].strip(), "tasks": []}
+            continue
+        # task: score: Actor1, Actor2
+        parts = line.split(":", 2)
+        if len(parts) >= 2:
+            task_name = parts[0].strip()
+            try:
+                score = max(1, min(5, int(parts[1].strip())))
+            except ValueError:
+                score = 3
+            actors = parts[2].strip() if len(parts) > 2 else ""
+            cur_section["tasks"].append({"name": task_name, "score": score, "actors": actors})
+
+    if cur_section["tasks"] or cur_section["name"]:
+        sections.append(cur_section)
+
+    if not sections:
+        raise ValueError("No sections or tasks found in journey diagram.")
+
+    PAD = 32
+    TITLE_H = 28
+    SECTION_LABEL_W = 120
+    TASK_W = 140
+    TASK_H = 60
+    SECTION_PAD_V = 16
+    SECTION_H = TASK_H + SECTION_PAD_V * 2
+
+    max_tasks = max((len(s["tasks"]) for s in sections), default=1)
+    canvas_w = width_hint or max(500, PAD + SECTION_LABEL_W + max_tasks * (TASK_W + 8) + PAD)
+    title_h = TITLE_H + 8 if title else 0
+    canvas_h = PAD + title_h + len(sections) * (SECTION_H + 4) + PAD
+
+    # accent palette (one colour per section, cycling)
+    _SECTION_COLORS = [
+        "#EEF2FF", "#FFF7ED", "#F0FDF4", "#FDF2F8", "#FFFBEB",
+        "#EFF6FF", "#FDF4FF", "#F0FDFA",
+    ]
+    _ACCENT_COLORS = [
+        "#4F46E5", "#EA580C", "#16A34A", "#C026D3", "#D97706",
+        "#2563EB", "#9333EA", "#0D9488",
+    ]
+
+    parts_html: list[str] = []
+    parts_html.append(
+        f'<div class="diagram mermaid-layout" style="position:relative;width:{canvas_w}px;height:{canvas_h}px;'
+        f'font-family:system-ui,sans-serif;overflow:hidden;">'
+    )
+
+    if title:
+        parts_html.append(
+            f'<div style="position:absolute;top:{PAD}px;left:{PAD}px;'
+            f'font-size:16px;font-weight:700;color:#1E293B;">{title}</div>'
+        )
+
+    y_cursor = PAD + title_h
+    for s_idx, sec in enumerate(sections):
+        bg = _SECTION_COLORS[s_idx % len(_SECTION_COLORS)]
+        accent = _ACCENT_COLORS[s_idx % len(_ACCENT_COLORS)]
+        # section band
+        parts_html.append(
+            f'<div style="position:absolute;top:{y_cursor}px;left:{PAD}px;'
+            f'width:{canvas_w - PAD * 2}px;height:{SECTION_H}px;'
+            f'background:{bg};border-radius:8px;"></div>'
+        )
+        # section label
+        label_html = (sec["name"] or f"Section {s_idx + 1}").replace("&", "&amp;").replace("<", "&lt;")
+        parts_html.append(
+            f'<div style="position:absolute;top:{y_cursor + SECTION_PAD_V}px;'
+            f'left:{PAD + 8}px;width:{SECTION_LABEL_W - 16}px;height:{TASK_H}px;'
+            f'display:flex;align-items:center;font-size:12px;font-weight:600;color:{accent};">'
+            f'{label_html}</div>'
+        )
+        # task cards
+        x_task = PAD + SECTION_LABEL_W
+        for t in sec["tasks"]:
+            score = t["score"]
+            score_pct = (score - 1) / 4  # 0..1
+            # score bar colour: green for high scores, red for low
+            score_color = f"hsl({int(score_pct * 120)},70%,45%)"
+            task_html = t["name"].replace("&", "&amp;").replace("<", "&lt;")
+            actors_html = t["actors"].replace("&", "&amp;").replace("<", "&lt;")
+            parts_html.append(
+                f'<div style="position:absolute;top:{y_cursor + SECTION_PAD_V}px;'
+                f'left:{x_task}px;width:{TASK_W - 4}px;height:{TASK_H}px;'
+                f'background:#fff;border:1.5px solid {accent};border-radius:6px;'
+                f'overflow:hidden;">'
+                f'<div style="height:4px;background:{score_color};"></div>'
+                f'<div style="padding:4px 8px;">'
+                f'<div style="font-size:11px;font-weight:600;color:#1E293B;'
+                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{task_html}</div>'
+                f'<div style="font-size:10px;color:#64748B;margin-top:2px;">'
+                f'Score: {score}/5</div>'
+                f'<div style="font-size:10px;color:#94A3B8;white-space:nowrap;'
+                f'overflow:hidden;text-overflow:ellipsis;">{actors_html}</div>'
+                f'</div></div>'
+            )
+            x_task += TASK_W + 8
+        y_cursor += SECTION_H + 4
+
+    parts_html.append("</div>")
+    return "".join(parts_html)
+
+
+# ── T17: requirementDiagram ───────────────────────────────────────────────────
+
+_REQ_REL_RE = re.compile(
+    r'^(\w+)\s*-\s*(satisfies|copies|refines|traces|contains|verifies|derives)\s*->\s*(\w+)',
+    re.I,
+)
+
+def _layout_requirement(src: str, direction: str, width_hint: int) -> str:
+    """requirementDiagram: requirement/element nodes + typed relation edges."""
+    content_lines = _directive_content(src)
+    nodes: dict[str, _Node] = {}
+    edges: list[_Edge] = []
+
+    cur_block: Optional[dict] = None  # {"id": str, "type": str, "attrs": list[str]}
+
+    for raw in content_lines:
+        line = raw.strip()
+        if not line or line.startswith(("%%", "//")):
+            continue
+
+        # Block end
+        if line == "}":
+            if cur_block is not None:
+                nid = cur_block["id"]
+                # Build label: "id\n|attrs..."
+                attr_lines = "\n".join(cur_block["attrs"][:4])  # cap at 4 attrs
+                label = nid if not attr_lines else f'{nid}\n|{attr_lines}'
+                shape = "cylinder" if cur_block["type"] == "element" else "rect"
+                n = _Node(id=nid, label=label, shape=shape)
+                n.css_class = f'req-{cur_block["type"]}'
+                nodes[nid] = n
+            cur_block = None
+            continue
+
+        # Block start: requirement/element/functionalRequirement etc.
+        _blk_m = re.match(
+            r'^(requirement|functionalrequirement|performancerequirement|'
+            r'interfacerequirement|physicalrequirement|designconstraint|element)\s+(\w+)\s*\{',
+            line, re.I,
+        )
+        if _blk_m:
+            btype = "element" if _blk_m.group(1).lower() == "element" else "requirement"
+            cur_block = {"id": _blk_m.group(2), "type": btype, "attrs": []}
+            continue
+
+        # Attribute inside block
+        if cur_block is not None:
+            _attr_m = re.match(r'^(\w+)\s*:\s*(.+)', line)
+            if _attr_m:
+                cur_block["attrs"].append(f'{_attr_m.group(1)}: {_attr_m.group(2).strip()}')
+            continue
+
+        # Relation outside block
+        m = _REQ_REL_RE.match(line)
+        if m:
+            src_id, rel_type, dst_id = m.group(1), m.group(2).lower(), m.group(3)
+            edges.append(_Edge(src=src_id, dst=dst_id, label=rel_type, style="solid", arrow=True))
+            continue
+
+    if not nodes:
+        raise ValueError("No requirements or elements found in requirementDiagram.")
+
+    return _graph_from_content_nodes(nodes, edges, {}, width_hint)
+
+
+# ── T18: gitGraph ──────────────────────────────────────────────────────────────
+
+def _layout_gitgraph(src: str, direction: str, width_hint: int) -> str:
+    """gitGraph: commits as circles on horizontal branch lanes, merges connected."""
+    content_lines = _directive_content(src)
+
+    # Parse git commands
+    branches: list[str] = ["main"]   # ordered list of known branch names
+    branch_order: dict[str, int] = {"main": 0}
+
+    commits: list[dict] = []
+    cur_branch = "main"
+    _commit_counter = 0
+
+    # map branch name → index of last commit on that branch
+    branch_head: dict[str, int] = {}
+
+    for raw in content_lines:
+        line = raw.strip()
+        if not line or line.startswith(("%%", "//")):
+            continue
+        lc = line.lower()
+
+        if lc.startswith("commit"):
+            _id = f"c{_commit_counter}"
+            _commit_counter += 1
+            _msg_m = re.search(r'id:\s*"([^"]*)"', line, re.I)
+            _msg = _msg_m.group(1) if _msg_m else ""
+            _tag_m = re.search(r'tag:\s*"([^"]*)"', line, re.I)
+            _tag = _tag_m.group(1) if _tag_m else ""
+            _type = "NORMAL"
+            for _t in ("HIGHLIGHT", "REVERSE", "MERGE"):
+                if _t in line.upper():
+                    _type = _t; break
+            parent = branch_head.get(cur_branch)
+            c = {
+                "id": _id, "branch": cur_branch, "msg": _msg, "tag": _tag,
+                "type": _type, "parent": parent, "merge_from": None,
+            }
+            commits.append(c)
+            branch_head[cur_branch] = len(commits) - 1
+            continue
+
+        _br_m = re.match(r'branch\s+(\S+)', line, re.I)
+        if _br_m:
+            bname = _br_m.group(1)
+            if bname not in branch_order:
+                branch_order[bname] = len(branches)
+                branches.append(bname)
+            continue
+
+        if lc.startswith("checkout "):
+            bname = line[9:].strip()
+            if bname not in branch_order:
+                branch_order[bname] = len(branches)
+                branches.append(bname)
+            cur_branch = bname
+            continue
+
+        _merge_m = re.match(r'merge\s+(\S+)', line, re.I)
+        if _merge_m:
+            src_branch = _merge_m.group(1)
+            _id = f"c{_commit_counter}"
+            _commit_counter += 1
+            _tag_m = re.search(r'tag:\s*"([^"]*)"', line, re.I)
+            _tag = _tag_m.group(1) if _tag_m else ""
+            parent = branch_head.get(cur_branch)
+            merge_from = branch_head.get(src_branch)
+            c = {
+                "id": _id, "branch": cur_branch, "msg": "merge", "tag": _tag,
+                "type": "MERGE", "parent": parent, "merge_from": merge_from,
+            }
+            commits.append(c)
+            branch_head[cur_branch] = len(commits) - 1
+            branch_head[src_branch] = len(commits) - 1
+            continue
+
+    if not commits:
+        raise ValueError("No commits found in gitGraph.")
+
+    # ── Geometry ───────────────────────────────────────────────────────────────
+    PAD = 32
+    LANE_H = 56
+    COMMIT_R = 10
+    COMMIT_STEP = 60
+    LABEL_W = 80
+
+    n_lanes = len(branches)
+    canvas_h = PAD + n_lanes * LANE_H + PAD
+    n_commits_per_branch = {b: sum(1 for c in commits if c["branch"] == b) for b in branches}
+    max_commits = max(n_commits_per_branch.values(), default=1)
+    canvas_w = width_hint or max(400, PAD + LABEL_W + max_commits * COMMIT_STEP + PAD)
+
+    # Assign x positions: sequential across the full timeline
+    for i, c in enumerate(commits):
+        c["_x"] = PAD + LABEL_W + i * COMMIT_STEP + COMMIT_STEP // 2
+        c["_y"] = PAD + branch_order.get(c["branch"], 0) * LANE_H + LANE_H // 2
+
+    _BRANCH_COLORS = [
+        "#4F46E5", "#16A34A", "#EA580C", "#C026D3", "#D97706",
+        "#2563EB", "#9333EA", "#0D9488", "#DC2626",
+    ]
+
+    parts: list[str] = []
+    parts.append(
+        f'<div class="diagram mermaid-layout" style="position:relative;width:{canvas_w}px;height:{canvas_h}px;'
+        f'font-family:system-ui,sans-serif;overflow:hidden;">'
+    )
+
+    # SVG overlay for lines
+    svg_lines: list[str] = []
+
+    # Branch lane lines
+    for b_idx, bname in enumerate(branches):
+        _cy = PAD + b_idx * LANE_H + LANE_H // 2
+        color = _BRANCH_COLORS[b_idx % len(_BRANCH_COLORS)]
+        svg_lines.append(
+            f'<line x1="{PAD + LABEL_W}" y1="{_cy}" x2="{canvas_w - PAD}" y2="{_cy}" '
+            f'stroke="{color}" stroke-width="2" stroke-dasharray="4 2" opacity="0.4"/>'
+        )
+
+    # Commit-to-commit edges
+    for c in commits:
+        if c["parent"] is not None:
+            p = commits[c["parent"]]
+            color = _BRANCH_COLORS[branch_order.get(c["branch"], 0) % len(_BRANCH_COLORS)]
+            svg_lines.append(
+                f'<path d="M{p["_x"]},{p["_y"]} C{(p["_x"]+c["_x"])//2},{p["_y"]} '
+                f'{(p["_x"]+c["_x"])//2},{c["_y"]} {c["_x"]},{c["_y"]}" '
+                f'fill="none" stroke="{color}" stroke-width="2"/>'
+            )
+        if c["merge_from"] is not None:
+            mf = commits[c["merge_from"]]
+            color = _BRANCH_COLORS[branch_order.get(mf["branch"], 0) % len(_BRANCH_COLORS)]
+            svg_lines.append(
+                f'<path d="M{mf["_x"]},{mf["_y"]} C{(mf["_x"]+c["_x"])//2},{mf["_y"]} '
+                f'{(mf["_x"]+c["_x"])//2},{c["_y"]} {c["_x"]},{c["_y"]}" '
+                f'fill="none" stroke="{color}" stroke-width="1.5" stroke-dasharray="4 2"/>'
+            )
+
+    svg_markup = (
+        f'<svg style="position:absolute;top:0;left:0;pointer-events:none;" '
+        f'width="{canvas_w}" height="{canvas_h}" xmlns="http://www.w3.org/2000/svg">'
+        + "".join(svg_lines) + "</svg>"
+    )
+    parts.append(svg_markup)
+
+    # Branch labels
+    for b_idx, bname in enumerate(branches):
+        _cy = PAD + b_idx * LANE_H + LANE_H // 2
+        color = _BRANCH_COLORS[b_idx % len(_BRANCH_COLORS)]
+        bname_html = bname.replace("&", "&amp;").replace("<", "&lt;")
+        parts.append(
+            f'<div style="position:absolute;top:{_cy - 10}px;left:{PAD}px;'
+            f'width:{LABEL_W - 8}px;font-size:11px;font-weight:600;color:{color};'
+            f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{bname_html}</div>'
+        )
+
+    # Commit circles
+    for c in commits:
+        cx, cy = c["_x"], c["_y"]
+        color = _BRANCH_COLORS[branch_order.get(c["branch"], 0) % len(_BRANCH_COLORS)]
+        fill = "#fff"
+        if c["type"] == "HIGHLIGHT":
+            fill = color
+        elif c["type"] == "REVERSE":
+            fill = "#6B7280"
+        parts.append(
+            f'<div data-node-id="{c["id"]}" style="position:absolute;'
+            f'top:{cy - COMMIT_R}px;left:{cx - COMMIT_R}px;'
+            f'width:{COMMIT_R * 2}px;height:{COMMIT_R * 2}px;'
+            f'border-radius:50%;background:{fill};border:2.5px solid {color};'
+            f'box-sizing:border-box;"></div>'
+        )
+        if c["msg"] or c["tag"]:
+            label = c["tag"] or c["msg"]
+            label_html = label[:12].replace("&", "&amp;").replace("<", "&lt;")
+            parts.append(
+                f'<div style="position:absolute;top:{cy - COMMIT_R - 16}px;'
+                f'left:{cx - 24}px;width:48px;font-size:9px;text-align:center;'
+                f'color:{color};font-weight:600;">{label_html}</div>'
+            )
+
+    parts.append("</div>")
+    return "".join(parts)
+
+
 # ── strategy dispatch ─────────────────────────────────────────────────────────
 
 def _dispatch(
@@ -3361,8 +3755,14 @@ def _dispatch(
         return _layout_architecture(clean, direction, width_hint)
     if d in ("c4context", "c4container", "c4component"):
         return _layout_c4(clean, direction, width_hint)
+    if d == "journey":
+        return _layout_journey(clean, direction, width_hint)
+    if d == "requirementdiagram":
+        return _layout_requirement(clean, direction, width_hint)
+    if d == "gitgraph":
+        return _layout_gitgraph(clean, direction, width_hint)
 
-    if d in ("gitgraph", "journey", "requirementdiagram", "sankey-beta", "zenuml"):
+    if d in ("sankey-beta", "zenuml"):
         raise ValueError(
             f"Mermaid directive '{directive}' is not supported by the pure-Python renderer. "
             "Use mmdc (mermaid-js CLI) for this diagram type."

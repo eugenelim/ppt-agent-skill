@@ -424,11 +424,13 @@ class TestZenUMLUnsupported:
 
 class TestGitGraphDetector:
 
-    def test_gitgraph_lowercase_raises_unsupported(self):
-        """gitgraph (lowercase) must raise ValueError, not fall through to generic layout."""
+    def test_gitgraph_lowercase_renders(self):
+        """gitgraph (lowercase) renders HTML with branch names and commit circles."""
         src = (FIXTURES_DIR / "gitgraph-basic.mmd").read_text()
-        with pytest.raises(ValueError, match="not supported"):
-            _dispatch(src, None, 800)
+        html = _dispatch(src, None, 800)
+        assert html
+        assert "main" in html
+        assert "border-radius:50%" in html
 
 
 # ── AC-3.2: C4 semantic fields ────────────────────────────────────────────────
