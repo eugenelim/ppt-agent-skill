@@ -42,6 +42,9 @@ SNAPSHOTS_LIGHT_DIR = REPO_ROOT / "tests" / "snapshots" / "light"
 SNAPSHOTS_DARK_DIR = REPO_ROOT / "tests" / "snapshots" / "dark"
 HTML2PNG = REPO_ROOT / "scripts" / "html2png.py"
 
+# Bypass pyenv shims to avoid rehash lock contention under concurrent pytest runs.
+REAL_PYTHON = os.path.realpath(sys.executable)
+
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 # Skip the entire module when Playwright+Chromium is unavailable.
@@ -86,7 +89,7 @@ def _render_to_png(mmd_path: Path, tmp_dir: Path, theme: str) -> Path:
         png_dir = tmp_dir / "png"
         png_dir.mkdir(exist_ok=True)
         subprocess.run(
-            [sys.executable, str(HTML2PNG), str(html_path), "-o", str(png_dir),
+            [REAL_PYTHON, str(HTML2PNG), str(html_path), "-o", str(png_dir),
              "--scale", "1", "--fullpage"],
             check=True,
             capture_output=True,
