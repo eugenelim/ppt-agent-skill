@@ -70,10 +70,16 @@ def _activation_boxes(html: str) -> int:
 
 
 def _has_cross_marker(html: str) -> bool:
-    """Check if any X cross marker is present (two lines for --x arrow)."""
-    # Cross is rendered as two SVG <line> elements adjacent to each other
-    return bool(re.search(r'<line x1="[^"]*" y1="[^"]*-\d+" x2="[^"]*" y2="[^"]*\+\d+"', html)
-                or len(re.findall(r'stroke="var\(--edge[^"]*"\s+stroke-width="1\.5"', html)) >= 2)
+    """Return True iff HTML contains two cross lines with mirrored y-values (X geometry)."""
+    segs = re.findall(
+        r'<line x1="(\d+)" y1="(\d+)" x2="(\d+)" y2="(\d+)"[^>]*stroke-width="1\.5"',
+        html,
+    )
+    for i, (ax1, ay1, ax2, ay2) in enumerate(segs):
+        for bx1, by1, bx2, by2 in segs[i + 1:]:
+            if ax1 == bx1 and ax2 == bx2 and ay1 == by2 and ay2 == by1:
+                return True
+    return False
 
 
 # ── FIX-SEQ-01: Bottom participant boxes ─────────────────────────────────────
@@ -290,3 +296,173 @@ def test_fixture_renders_without_error(fname):
     html = _render(fname)
     assert len(html) > 100
     assert "diagram-lifeline" in html
+
+
+# ── FIX-SEQ-08: Geometry invariants ──────────────────────────────────────────
+
+class TestGeometryInvariants:
+    """BUG-SEQ-A through BUG-SEQ-E: coordinate-system correctness.
+
+    These tests assert spatial invariants the existing tests did not check
+    (they only verified rendering without error). Each test corresponds to
+    one geometry defect described in the seq-geometry-fix spec.
+    """
+
+    def test_participant_box_center_matches_lifeline(self):
+        """BUG-SEQ-A: Each participant box center must equal its lifeline x.
+
+        When a left-of note forces _cx_offset > 0, participant boxes must
+        shift by the same amount. Uses sequence-notes-all.mmd which has a
+        left-of note that triggers the offset.
+        """
+        html = _render("sequence-notes-all.mmd")
+        col_w = int(re.search(r'class="node node-rect"[^>]+width:(\d+)px', html).group(1))
+        # Top participant boxes: class="node node-rect" (exact — not node-lifeline-bottom)
+        box_lefts = sorted(
+            int(m) for m in re.findall(
+                r'<div class="node node-rect"[^>]+left:(\d+)px', html
+            )
+        )
+        # Vertical lifeline SVG lines: x1 == x2, stroke-dasharray="5 4"
+        line_matches = re.findall(
+            r'<line x1="(\d+)" y1="(\d+)" x2="(\d+)" y2="(\d+)"[^>]*stroke-dasharray="5 4"',
+            html,
+        )
+        lifeline_xs = sorted(int(x1) for x1, _y1, x2, _y2 in line_matches if x1 == x2)
+        assert box_lefts, "No top participant boxes found"
+        assert lifeline_xs, "No lifelines found"
+        assert len(box_lefts) == len(lifeline_xs), (
+            f"Participant count mismatch: {len(box_lefts)} boxes, {len(lifeline_xs)} lifelines"
+        )
+        for box_left, lifeline_x in zip(box_lefts, lifeline_xs):
+            box_center = box_left + col_w // 2
+            assert abs(box_center - lifeline_x) <= 1, (
+                f"Box center {box_center} ≠ lifeline x {lifeline_x} "
+                f"(offset={lifeline_x - box_center}). BUG-SEQ-A not fixed."
+            )
+
+    def test_fragment_bounds_align_with_participant_columns(self):
+        """BUG-SEQ-B: Fragment rect x must track _cx(), not the hardcoded PAD_H//2=20.
+
+        Uses an inline diagram with a left-of note (forces _cx_offset > 0) AND a
+        loop block so both the no-offset and offset paths are exercised.
+        """
+        src = (
+            "sequenceDiagram\n"
+            "    participant Alice\n"
+            "    participant Bob\n"
+            "    Note left of Alice: side note\n"
+            "    loop Retry\n"
+            "        Alice->>Bob: request\n"
+            "        Bob-->>Alice: response\n"
+            "    end\n"
+        )
+        html = _dispatch(src, None, 800)
+        col_w = int(re.search(r'class="node node-rect"[^>]+width:(\d+)px', html).group(1))
+        # Fragment background rects use stroke-dasharray="5 3"
+        frag_xs = [
+            float(m) for m in re.findall(
+                r'<rect x="([^"]+)"[^>]*stroke-dasharray="5 3"', html
+            )
+        ]
+        line_matches = re.findall(
+            r'<line x1="(\d+)" y1="(\d+)" x2="(\d+)" y2="(\d+)"[^>]*stroke-dasharray="5 4"',
+            html,
+        )
+        lifeline_xs = sorted(int(x1) for x1, _y1, x2, _y2 in line_matches if x1 == x2)
+        assert frag_xs, "No fragment rects found"
+        assert lifeline_xs, "No lifelines found"
+        first_lifeline_x = min(lifeline_xs)
+        PAD_H = 40  # mirrors PAD_H in _strategies.py; update both if the constant changes
+        expected_frag_x0 = first_lifeline_x - col_w // 2 - PAD_H // 2
+        for fx in frag_xs:
+            assert fx >= 0, f"Fragment rect at negative x={fx}"
+            assert abs(fx - expected_frag_x0) <= 2, (
+                f"Fragment x={fx:.0f} ≠ expected {expected_frag_x0} "
+                f"(first_lifeline={first_lifeline_x}, col_w={col_w}, _cx_offset>0). "
+                "BUG-SEQ-B not fixed."
+            )
+
+    def test_message_label_uses_transform_centering(self):
+        """BUG-SEQ-D: Message label spans must use left:{mid_x}px + translateX(-50%)."""
+        html = _render("sequence-basic.mmd")
+        edge_label_styles = re.findall(
+            r'<span class="edge-label"[^>]+style="([^"]+)"', html
+        )
+        assert edge_label_styles, "No edge-label spans found in sequence-basic.mmd"
+        # Compute expected mid_x from lifeline positions
+        line_matches = re.findall(
+            r'<line x1="(\d+)" y1="(\d+)" x2="(\d+)" y2="(\d+)"[^>]*stroke-dasharray="5 4"',
+            html,
+        )
+        lifeline_xs = sorted(int(x1) for x1, _y1, x2, _y2 in line_matches if x1 == x2)
+        assert len(lifeline_xs) >= 2, "Expected at least two lifelines"
+        mid_x = (lifeline_xs[0] + lifeline_xs[-1]) // 2
+        for style in edge_label_styles:
+            assert "translateX(-50%)" in style, (
+                f"Edge label missing transform:translateX(-50%): …{style[:100]}… "
+                "BUG-SEQ-D not fixed."
+            )
+            assert f"left:{mid_x}px" in style, (
+                f"Edge label left={style[:60]}… expected left:{mid_x}px. "
+                "Old -30px offset regression or wrong mid_x."
+            )
+
+    def test_self_message_no_head_has_no_arrowhead(self):
+        """BUG-SEQ-E: Self-message with -> (no-head) must not get a filled arrowhead."""
+        src = "sequenceDiagram\n  Alice->Alice: think"
+        html = _dispatch(src, None, 800)
+        count = _arrow_polys(html)
+        assert count == 0, (
+            f"Self-message with -> should have 0 arrowhead polygons, got {count}. "
+            "BUG-SEQ-E not fixed."
+        )
+
+    def test_self_message_with_head_has_arrowhead(self):
+        """BUG-SEQ-E: Self-message with ->> must still get one filled arrowhead."""
+        src = "sequenceDiagram\n  Alice->>Alice: call"
+        html = _dispatch(src, None, 800)
+        count = _arrow_polys(html)
+        assert count == 1, (
+            f"Self-message with ->> should have 1 arrowhead polygon, got {count}."
+        )
+
+    def test_self_message_cross_has_no_arrowhead(self):
+        """BUG-SEQ-E: Self-message with -x must produce 0 filled polygons + 2 cross lines."""
+        src = "sequenceDiagram\n  Alice-xAlice: fail"
+        html = _dispatch(src, None, 800)
+        poly_count = _arrow_polys(html)
+        assert poly_count == 0, (
+            f"Self-message with -x should have 0 arrowhead polygons, got {poly_count}."
+        )
+        assert _has_cross_marker(html), (
+            "Self-message with -x should render two cross <line> elements."
+        )
+
+    def test_left_of_note_close_to_lifeline(self):
+        """BUG-SEQ-C: Left-of note right edge must be near the first lifeline center.
+
+        Old formula: anchor at box edge → gap ≈ 88px.
+        Fixed formula: anchor at lifeline center with SIDE_NOTE_GAP=24 → gap = 24px.
+        """
+        html = _render("sequence-notes-all.mmd")
+        line_matches = re.findall(
+            r'<line x1="(\d+)" y1="(\d+)" x2="(\d+)" y2="(\d+)"[^>]*stroke-dasharray="5 4"',
+            html,
+        )
+        lifeline_xs = sorted(int(x1) for x1, _y1, x2, _y2 in line_matches if x1 == x2)
+        assert lifeline_xs, "No lifelines found"
+        first_lifeline_x = min(lifeline_xs)
+        polys = _note_polys(html)
+        # Left-of note has its right edge strictly left of Alice's lifeline
+        left_notes = [p for p in polys if p[1] < first_lifeline_x]
+        assert len(left_notes) >= 1, (
+            f"No left-of note found left of first lifeline x={first_lifeline_x}. polys={polys}"
+        )
+        SIDE_NOTE_GAP = 24
+        for x_min, x_max in left_notes:
+            gap = first_lifeline_x - x_max
+            assert gap == SIDE_NOTE_GAP, (
+                f"Left-of note gap={gap}px ≠ SIDE_NOTE_GAP={SIDE_NOTE_GAP}px "
+                f"(note_right={x_max}, lifeline={first_lifeline_x}). BUG-SEQ-C not fixed."
+            )

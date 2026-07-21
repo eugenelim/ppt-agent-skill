@@ -264,3 +264,35 @@ requires porting the Mermaid algorithm directly.
 `_strategies.py` no longer imports it after the C4 renderer was decoupled. Remove
 it in a future `_constants.py`-touching pass.
 
+## seq-geometry-fix
+
+Deferred items from the sequenceDiagram geometry fix spec
+(`docs/specs/seq-geometry-fix/spec.md`).
+
+### seq-activation-y-tracking
+
+Exact activation y-coordinate tracking — arrival and departure rows need a
+two-pass computation that threads through nested activations so that activation
+bars start and end flush with the message arrows they bound. Currently y-offsets
+are approximate. Requires an activation prepass refactor touching `_layout_lifeline`.
+
+### seq-message-endpoint-activation
+
+Message-endpoint activation-bar adjustment — when an arrow arrives at an
+activation bar, the arrowhead should land at the bar edge, not the lifeline
+centre. Deferred until `seq-activation-y-tracking` lands (same prepass).
+
+### seq-per-fragment-bounds
+
+Per-fragment participant bounds — `loop`, `alt`, and `opt` fragment rects
+currently span all participants; they should only span the participants that
+actually appear inside the fragment. Requires parser changes to track fragment
+membership, then propagation into the `_blk_x0/_blk_x1` computation.
+
+### seq-variable-height-rows
+
+Variable-height row packing — every timeline row is currently fixed-height.
+Long note text or multi-line labels can overflow. Full fix is an architectural
+change: a two-pass row-height accumulator that feeds back into the y-layout
+before SVG is emitted.
+
