@@ -10,7 +10,8 @@ from ._constants import (
     _DIAMOND_SIZE, _HEXAGON_SIZE,
     CROSSING_PASSES, GROUP_CAP,
     _node_render_h, _measure_text_width, _load_icon,
-    _node_size_circle, _node_size_diamond_hex, _is_terminal_circle,
+    _node_size_circle, _node_size_diamond, _node_size_hexagon, _node_size_diamond_hex,
+    _is_terminal_circle,
     _TITLE_FS, _TITLE_FW,
 )
 
@@ -257,10 +258,14 @@ def _assign_coordinates(
         if n.width == 0 and not n.is_dummy:
             if n.shape in ("circle", "doublecircle"):
                 n.width = _node_size_circle(n)
+                n.height = n.width  # circle/doublecircle are square
             elif n.shape == "diamond":
-                n.width = _node_size_diamond_hex(n, _DIAMOND_SIZE)
+                n.width = _node_size_diamond(n)
+                n.height = n.width  # diamond is also square
             elif n.shape == "hexagon":
-                n.width = _node_size_diamond_hex(n, _HEXAGON_SIZE)
+                _hex_w, _hex_h = _node_size_hexagon(n)
+                n.width = _hex_w
+                n.height = _hex_h  # hexagon has independent width and height
     _fixed_shapes = {"circle", "doublecircle", "diamond", "hexagon"}
     for n in nodes.values():
         if n.width == 0 and not n.is_dummy and n.shape not in _fixed_shapes:

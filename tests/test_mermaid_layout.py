@@ -1212,9 +1212,9 @@ class TestComputeGroupBboxes:
         oy = min(b1[3], b2[3]) - max(b1[1], b2[1])
         assert not (ox > 0 and oy > 0), f"Bboxes still overlap: g1={b1} g2={b2}"
 
-    def test_compute_group_bboxes_clips_to_canvas(self):
-        """Group bbox is clipped to canvas bounds."""
-        # Group node near right edge — padded bbox would exceed canvas_w=200
+    def test_compute_group_bboxes_expands_canvas(self):
+        """Canvas expands to contain groups; bboxes are not over-clipped."""
+        # Group node near right edge — bbox extends beyond canvas_w=200
         nodes = {
             "A": _Node(id="A", label="A", x=180, y=20, group="_g1"),
         }
@@ -1223,8 +1223,11 @@ class TestComputeGroupBboxes:
         b = bboxes["_g1"]
         assert b[0] >= 0, "bbox x0 < 0"
         assert b[1] >= 0, "bbox y0 < 0"
-        assert b[2] <= 200, f"bbox x1={b[2]} > canvas_w=200"
-        assert b[3] <= 200, f"bbox y1={b[3]} > canvas_h=200"
+        # Canvas expanded to fit the group; bbox right ≥ node right edge (not clipped to 200)
+        from mermaid_render.layout._constants import GROUP_PAD_X
+        assert b[2] >= 180 + 192, (  # 192 = NODE_W
+            f"bbox x1={b[2]:.0f} clips node at x=180 (group should contain member)"
+        )
 
 
 # ── TestSeparateGroupsTB ──────────────────────────────────────────────────────
