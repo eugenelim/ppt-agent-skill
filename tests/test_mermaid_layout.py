@@ -2737,11 +2737,11 @@ class TestSequenceActivation:
             "sequenceDiagram\nA->>B: req\nactivate B\nB->>A: res\ndeactivate B",
             None, 600
         )
-        # Activation box: <rect with width="8" and fill color on the lifeline
+        # Activation box: <rect with width="10" (ACTIVATION_W) and fill color on the lifeline
         import re
         rects = re.findall(r'<rect[^>]+>', html)
-        act_rects = [r for r in rects if 'width="8"' in r]
-        assert act_rects, "activate/deactivate must produce a <rect width='8'> activation box"
+        act_rects = [r for r in rects if 'width="10"' in r and 'opacity="0.35"' in r]
+        assert act_rects, "activate/deactivate must produce a <rect width='10'> activation box"
         assert any("fill" in r for r in act_rects)
 
 

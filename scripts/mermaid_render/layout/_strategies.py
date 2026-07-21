@@ -263,18 +263,21 @@ def _directive_content(src: str) -> list[str]:
 
 _SEQ_PART_RE = re.compile(r'^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?', re.I)
 _SEQ_MSG_RE = re.compile(
-    r'^(\S+?)\s*(-->>|->>|-->|->|--x|-x|--\)|-\))\s*(\S+)\s*:\s*(.*)$'
+    r'^(\S+?)\s*(<<-->>|<<->>|-->>|->>|-->|->|--x|-x|--\)|-\))\s*(\S+)\s*:\s*(.*)$'
 )
 _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re.I)
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
 _SEQ_ACTIVATE_RE = re.compile(r'^(activate|deactivate)\s+(\S+)', re.I)
+_SEQ_SKIP_RE = re.compile(
+    r'^(autonumber|create\s+participant|create\s+actor|destroy|box|par_over)\b', re.I
+)
 # Group 1: position ("over", "left of", "right of")
 # Group 2: participant list (comma-separated)
 # Group 3: note text
 _SEQ_NOTE_RE = re.compile(
     r'^[Nn]ote\s+(over|left\s+of|right\s+of)\s+([^:]+):\s*(.+)', re.I
 )
-_SEQ_ELSE_RE = re.compile(r'^(else|and)\s*(.*)', re.I)
+_SEQ_ELSE_RE = re.compile(r'^(else|and|option)\s*(.*)', re.I)
 
 
 def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
@@ -289,11 +292,31 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             participants.append(n)
             p_label.setdefault(n, n)
 
+    # ── Arrow spec table (SEQ-012) ────────────────────────────────────────────
+    _ARROW_SPECS: "dict[str, dict]" = {
+        "->":     {"dashed": False, "start_m": None,       "end_m": None},
+        "-->":    {"dashed": True,  "start_m": None,       "end_m": None},
+        "->>":    {"dashed": False, "start_m": None,       "end_m": "triangle"},
+        "-->>":   {"dashed": True,  "start_m": None,       "end_m": "triangle"},
+        "-x":     {"dashed": False, "start_m": None,       "end_m": "cross"},
+        "--x":    {"dashed": True,  "start_m": None,       "end_m": "cross"},
+        "-)":     {"dashed": False, "start_m": None,       "end_m": "point"},
+        "--)":    {"dashed": True,  "start_m": None,       "end_m": "point"},
+        "<<->>":  {"dashed": False, "start_m": "triangle", "end_m": "triangle"},
+        "<<-->>": {"dashed": True,  "start_m": "triangle", "end_m": "triangle"},
+    }
+
     items: list[dict] = []
     block_depth = 0
     for raw in content_lines:
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
+            continue
+        if _SEQ_SKIP_RE.match(line):  # SEQ-013: silently skip unsupported constructs
+            # box/par_over open a block; increment depth so their `end` is consumed
+            # without closing an outer fragment prematurely.
+            if re.match(r'^(box|par_over)\b', line, re.I):
+                block_depth += 1
             continue
         m = _SEQ_PART_RE.match(line)
         if m:
@@ -305,12 +328,16 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         m = _SEQ_ACTIVATE_RE.match(line)
         if m:
             act_type = "activate" if m.group(1).lower() == "activate" else "deactivate"
-            items.append({"type": act_type, "pid": m.group(2).strip()})
+            _ap = m.group(2).strip()
+            _ensure_p(_ap)  # SEQ-014: activate/deactivate also register participants
+            items.append({"type": act_type, "pid": _ap})
             continue
         m = _SEQ_NOTE_RE.match(line)
         if m:
             _note_pos = m.group(1).lower().replace(" ", "_")  # "over", "left_of", "right_of"
             _note_pids = [p.strip() for p in m.group(2).strip().split(",")]
+            for _np in _note_pids:  # SEQ-014: register note participants
+                _ensure_p(_np)
             items.append({"type": "note", "pos": _note_pos,
                           "pids": _note_pids, "pid": _note_pids[0],
                           "text": m.group(3).strip()})
@@ -324,8 +351,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             sp = sp_raw.lstrip('+')
             _ensure_p(sp); _ensure_p(dp)
             items.append({"type": "msg", "src": sp, "dst": dp,
-                          "label": lbl.strip(), "dotted": arrow.startswith("--"),
-                          "arrow": arrow})
+                          "label": lbl.strip(), "arrow": arrow})
             if dp_prefix == '+':
                 items.append({"type": "activate", "pid": dp})
             elif dp_prefix == '-':
@@ -338,7 +364,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 continue
         m = _SEQ_BLOCK_RE.match(line)
         if m:
-            items.append({"type": "block", "kw": m.group(1), "label": m.group(2).strip()})
+            kw = m.group(1).lower()
+            # SEQ-013: rect is a solid fill background, not a dashed labeled fragment
+            item_type = "rect" if kw == "rect" else "block"
+            items.append({"type": item_type, "kw": m.group(1), "label": m.group(2).strip()})
             block_depth += 1
             continue
         if _SEQ_END_RE.match(line) and block_depth > 0:
@@ -348,61 +377,127 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     if not participants:
         raise ValueError("No participants found in sequenceDiagram.")
 
-    # Pre-compute span (row count) for each block so alt/loop/par boxes cover
-    # their full height rather than collapsing to a single-row band.
+    # ── Block-span prepass + fragment participant tracking (SEQ-008) ──────────
     _bstack: list[int] = []
-    _row_types = {"msg", "block", "note", "else"}
+    _frag_parts: "dict[int, set]" = {}
+    _row_types = {"msg", "block", "note", "else", "rect"}
     for _bi, _bit in enumerate(items):
-        if _bit["type"] == "block":
+        if _bit["type"] in ("block", "rect"):
             _bstack.append(_bi)
+            _frag_parts[_bi] = set()
         elif _bit["type"] == "block_end" and _bstack:
             _si = _bstack.pop()
             items[_si]["span"] = sum(
                 1 for _ji in range(_si, _bi) if items[_ji]["type"] in _row_types
             )
+            items[_si]["frag_parts"] = _frag_parts.get(_si, set())
+        elif _bit["type"] == "msg":
+            for _fsi in _bstack:
+                _frag_parts[_fsi].add(_bit["src"])
+                _frag_parts[_fsi].add(_bit["dst"])
+        elif _bit["type"] == "note":
+            for _fsi in _bstack:
+                for _np in _bit.get("pids", [_bit.get("pid", "")]):
+                    if _np:
+                        _frag_parts[_fsi].add(_np)
+        elif _bit["type"] in ("activate", "deactivate"):
+            for _fsi in _bstack:
+                _frag_parts[_fsi].add(_bit["pid"])
     for _bit in items:
-        if _bit["type"] == "block":
+        if _bit["type"] in ("block", "rect"):
             _bit.setdefault("span", 1)
+            _bit.setdefault("frag_parts", set())
 
+    # ── Column geometry ───────────────────────────────────────────────────────
     COL_W, COL_GAP, PAD_H, PAD_V = 160, 24, 40, 24
     HDR_H, ROW_H = 48, 40
+    ACTIVATION_W = 10   # px width of a single activation bar (SEQ-006)
+    ACTIVATION_DX = 4   # px x-shift per nesting depth (SEQ-006)
+    NOTE_SPAN_OVERHANG = 24  # px a spanning note extends past edge lifelines (SEQ-010)
+    SIDE_NOTE_GAP = 24
+
     col_pitch = COL_W + COL_GAP
     n_parts = len(participants)
     canvas_w = PAD_H * 2 + n_parts * col_pitch - COL_GAP
     if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
         col_pitch = int(col_pitch * width_hint / canvas_w)
         canvas_w = width_hint
-    col_w = min(COL_W, max(40, col_pitch - 8))  # header scales with pitch; min 8px gap
-    n_rows = sum(1 for it in items if it["type"] in ("msg", "block", "note", "else"))
-    BOX_H = HDR_H - 8  # actual participant box height (40 px)
-    # Geometry: top boxes → lifeline gap → messages → lifeline gap → bottom boxes
-    ll_top = PAD_V + BOX_H + 4        # lifeline start (just below top boxes)
-    ll_bot = ll_top + n_rows * ROW_H + 8  # lifeline end (just after last message row)
-    canvas_h = ll_bot + BOX_H + PAD_V    # canvas accommodates bottom boxes + padding
+    col_w = min(COL_W, max(40, col_pitch - 8))
+    n_rows = sum(1 for it in items if it["type"] in _row_types)
+    BOX_H = HDR_H - 8
+    ll_top = PAD_V + BOX_H + 4
+    ll_bot = ll_top + n_rows * ROW_H + 8
+    canvas_h = ll_bot + BOX_H + PAD_V
 
-    # Pre-compute activation spans: [(pid, start_row, end_row)]
-    _act_stacks: dict[str, list[int]] = {}
-    _act_spans: list[tuple[str, int, int]] = []
-    _row_pre = 0
-    for it in items:
-        if it["type"] in ("msg", "block", "note", "else"):
-            _row_pre += 1
-        elif it["type"] == "activate":
-            _act_stacks.setdefault(it["pid"], []).append(_row_pre)
-        elif it["type"] == "deactivate":
-            pid = it["pid"]
-            if pid in _act_stacks and _act_stacks[pid]:
-                _act_spans.append((pid, _act_stacks[pid].pop(), _row_pre))
+    # ── SEQ-014: precomputed participant index ────────────────────────────────
+    _p_index: "dict[str, int]" = {p: i for i, p in enumerate(participants)}
 
-    _cx_offset = [0]  # mutable shift applied after note-bounds pre-pass
-    SIDE_NOTE_GAP = 24  # gap between lifeline center and left-of/right-of note edge
+    _cx_offset = [0]
 
     def _cx(pid: str) -> int:
-        idx = participants.index(pid) if pid in participants else 0
+        idx = _p_index.get(pid, 0)
         return PAD_H + _cx_offset[0] + idx * col_pitch + col_pitch // 2
 
-    def _note_geom(it: dict, _row: int) -> "tuple[int,int,int,int]":
-        """Return (note_x, note_y, note_w, note_h) for a note item."""
+    # ── SEQ-006: event y-coordinate pass ─────────────────────────────────────
+    _event_y: "dict[int, float]" = {}
+    _ev_row = 0
+    for _i, _it in enumerate(items):
+        if _it["type"] == "msg":
+            _event_y[_i] = ll_top + _ev_row * ROW_H + ROW_H // 2
+            _ev_row += 1
+        elif _it["type"] in _row_types:
+            _ev_row += 1
+
+    # ── SEQ-006: activation span computation (exact message baselines) ────────
+    _act_stacks_v2: "dict[str, list]" = {}
+    _act_spans_v2: "list[tuple]" = []  # (pid, start_y, end_y, depth)
+    _last_msg_y: float = float(ll_top)
+    for _i, _it in enumerate(items):
+        if _it["type"] == "msg":
+            _last_msg_y = _event_y[_i]
+        elif _it["type"] == "activate":
+            _pid = _it["pid"]
+            _stk = _act_stacks_v2.setdefault(_pid, [])
+            _stk.append((_last_msg_y, len(_stk)))
+        elif _it["type"] == "deactivate":
+            _pid = _it["pid"]
+            _stk = _act_stacks_v2.get(_pid, [])
+            if _stk:
+                _sy, _depth = _stk.pop()
+                _act_spans_v2.append((_pid, _sy, _last_msg_y, _depth))
+    # Flush unclosed activations to lifeline bottom (SEQ-006)
+    for _pid, _stk in _act_stacks_v2.items():
+        while _stk:
+            _sy, _depth = _stk.pop()
+            _act_spans_v2.append((_pid, _sy, float(ll_bot), _depth))
+
+    # ── SEQ-007: activation-aware message endpoint resolver ───────────────────
+    def _act_bounds_at(pid: str, y: float) -> "Optional[tuple[float, float]]":
+        """Return (left, right) edges of combined active activation bars at y."""
+        cx = _cx(pid)
+        active = [(sy, ey, d) for p, sy, ey, d in _act_spans_v2 if p == pid and sy <= y <= ey]
+        if not active:
+            return None
+        lo = min(cx - ACTIVATION_W // 2 + d * ACTIVATION_DX for _, _, d in active)
+        hi = max(cx - ACTIVATION_W // 2 + d * ACTIVATION_DX + ACTIVATION_W for _, _, d in active)
+        return lo, hi
+
+    def _msg_endpoints(src: str, dst: str, y: float) -> "tuple[float, float]":
+        """Return (x_start, x_end) for a message, honoring activation bar edges."""
+        scx, dcx = float(_cx(src)), float(_cx(dst))
+        ltr = scx < dcx
+        sb = _act_bounds_at(src, y)
+        db = _act_bounds_at(dst, y)
+        if ltr:
+            sx2 = sb[1] if sb else scx
+            dx2 = db[0] if db else dcx
+        else:
+            sx2 = sb[0] if sb else scx
+            dx2 = db[1] if db else dcx
+        return sx2, dx2
+
+    # ── Note geometry ─────────────────────────────────────────────────────────
+    def _note_geom(it: dict, _row: int) -> "tuple[float, float, float, float]":
         note_y = ll_top + _row * ROW_H + 4
         note_h = ROW_H - 8
         pos = it.get("pos", "over")
@@ -415,19 +510,19 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             nw = col_w
             nx = _cx(primary) + SIDE_NOTE_GAP
         elif pos == "over" and len(pids_list) >= 2:
-            xs = [_cx(p) for p in pids_list if p in participants]
+            xs = [_cx(p) for p in pids_list if p in _p_index]
             if xs:
-                span_l = min(xs) - col_w // 2
-                span_r = max(xs) + col_w // 2
-                nx, nw = span_l, max(col_w, span_r - span_l)
+                # SEQ-010: anchor to lifeline centers + fixed overhang
+                left_cx, right_cx = float(min(xs)), float(max(xs))
+                nw = (right_cx - left_cx) + 2 * NOTE_SPAN_OVERHANG
+                nx = (left_cx + right_cx) / 2 - nw / 2
             else:
-                nx, nw = _cx(primary) - col_w // 2, col_w
+                nx, nw = float(_cx(primary) - col_w // 2), float(col_w)
         else:
-            nx, nw = _cx(primary) - col_w // 2, col_w
+            nx, nw = float(_cx(primary) - col_w // 2), float(col_w)
         return nx, note_y, nw, note_h
 
-    # Note-bounds pre-pass: find min/max x across all note polygons so we can
-    # shift participants right (left-of overflow) or expand canvas (right-of overflow).
+    # ── Note-bounds pre-pass ──────────────────────────────────────────────────
     _min_note_x = PAD_H
     _max_note_x = canvas_w - PAD_H
     for _nit in items:
@@ -436,21 +531,48 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         _npos = _nit.get("pos", "over")
         _npids = _nit.get("pids", [_nit.get("pid", "")])
         _nprimary = _npids[0] if _npids else ""
-        if _npos == "left_of" and _nprimary in participants:
+        if _npos == "left_of" and _nprimary in _p_index:
             _nx = _cx(_nprimary) - col_w - SIDE_NOTE_GAP
             _min_note_x = min(_min_note_x, _nx)
-        elif _npos == "right_of" and _nprimary in participants:
+        elif _npos == "right_of" and _nprimary in _p_index:
             _nx = _cx(_nprimary) + SIDE_NOTE_GAP
             _max_note_x = max(_max_note_x, _nx + col_w)
-    # Apply shift for left-of overflow
     if _min_note_x < PAD_H:
         _cx_offset[0] = PAD_H - _min_note_x
         _max_note_x += _cx_offset[0]
         canvas_w += _cx_offset[0]
-    # Expand canvas for right-of overflow
     if _max_note_x > canvas_w - PAD_H:
         canvas_w = _max_note_x + PAD_H
 
+    # ── SEQ-008: per-fragment x bounds ────────────────────────────────────────
+    def _frag_x_bounds(it: dict) -> "tuple[float, float]":
+        fparts = it.get("frag_parts", set())
+        if fparts:
+            pxs = sorted(_cx(p) for p in fparts if p in _p_index)
+            if pxs:
+                return (float(pxs[0]) - col_w / 2 - PAD_H / 2,
+                        float(pxs[-1]) + col_w / 2 + PAD_H / 2)
+        return (float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
+                float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2)
+
+    # Precompute else→parent fragment x bounds so labels/separators use parent bounds
+    _else_x: "dict[int, tuple[float, float]]" = {}
+    _bstk_else: "list[int]" = []
+    for _bi, _bit in enumerate(items):
+        if _bit["type"] in ("block", "rect"):
+            _bstk_else.append(_bi)
+        elif _bit["type"] == "block_end" and _bstk_else:
+            _bstk_else.pop()
+        elif _bit["type"] == "else":
+            if _bstk_else:
+                _else_x[_bi] = _frag_x_bounds(items[_bstk_else[-1]])
+            else:
+                _else_x[_bi] = (float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
+                                 float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # HTML EMISSION
+    # ─────────────────────────────────────────────────────────────────────────
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout diagram-lifeline" style="'
@@ -471,159 +593,179 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     for pid in participants:
         lx = _cx(pid) - col_w // 2
         lbl = _h(p_label.get(pid, pid))
-        # Top participant box
         parts.append(
             f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
             f'position:absolute;left:{lx}px;top:{PAD_V}px;'
             f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
-        # Bottom participant box (same label, anchored to lifeline bottom)
         parts.append(
             f'<div class="node node-rect node-lifeline-bottom" data-node-id="{_h(pid)}-bottom" style="'
             f'position:absolute;left:{lx}px;top:{ll_bot}px;'
             f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
+
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
     _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-    # Block x-extent: derived from actual participant centers so _cx_offset is honoured.
-    _blk_x0 = _cx(participants[0]) - col_w // 2 - PAD_H // 2
-    _blk_x1 = _cx(participants[-1]) + col_w // 2 + PAD_H // 2
-    _blk_w = _blk_x1 - _blk_x0
-    # Render combined-fragment (loop/alt/opt/…) backgrounds BEFORE lifeline dashes
-    # so the dashed lifeline lines are drawn on top and remain visible.
-    _row_pre = 0
+
+    # ── Pass A: fragment background rects ─────────────────────────────────────
+    _rp_a = 0
     for it in items:
-        if it["type"] == "block":
-            ry = ll_top + _row_pre * ROW_H
+        if it["type"] in ("block", "rect"):
+            x0, x1 = _frag_x_bounds(it)
+            ry = ll_top + _rp_a * ROW_H
             bh = it.get("span", 1) * ROW_H
-            parts.append(
-                f'<rect x="{_blk_x0}" y="{ry}" width="{_blk_w}" height="{bh}" '
-                f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.5" '
-                f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 3" rx="3"/>'
-            )
-        if it["type"] in ("msg", "block", "note", "else"):
-            _row_pre += 1
+            if it["type"] == "rect":
+                color = _h(it.get("label", "") or "rgba(200,200,200,0.3)")
+                parts.append(
+                    f'<rect x="{x0}" y="{ry}" width="{x1 - x0}" height="{bh}" '
+                    f'fill="{color}" opacity="0.3" rx="3"/>'
+                )
+            else:
+                parts.append(
+                    f'<rect x="{x0}" y="{ry}" width="{x1 - x0}" height="{bh}" '
+                    f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.5" '
+                    f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 3" rx="3"/>'
+                )
+        if it["type"] in _row_types:
+            _rp_a += 1
+
+    # ── Lifeline dashes ────────────────────────────────────────────────────────
     for pid in participants:
         lx = _cx(pid)
         parts.append(
             f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
             f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
         )
-    # Activation boxes (rendered below lifelines, above messages)
-    for pid, start_row, end_row in _act_spans:
-        ax = _cx(pid) - 4
-        ay = ll_top + start_row * ROW_H
-        act_h = max(ROW_H, (end_row - start_row) * ROW_H)
+
+    # ── SEQ-006: activation bars with exact y baselines ───────────────────────
+    for _pid, _sy, _ey, _depth in _act_spans_v2:
+        _cx_pid = _cx(_pid)
+        _ax = _cx_pid - ACTIVATION_W // 2 + _depth * ACTIVATION_DX
+        _act_h = max(4, _ey - _sy)
         parts.append(
-            f'<rect x="{ax}" y="{ay}" width="8" height="{act_h}" '
-            f'fill="var(--edge-strong,var(--accent-1,#60a5fa))" opacity="0.35" rx="2"/>'
+            f'<rect x="{_ax}" y="{_sy}" width="{ACTIVATION_W}" height="{_act_h}" '
+            f'fill="var(--edge-strong,var(--accent-1,#60a5fa))" opacity="0.35" rx="2"'
+            f' data-pid="{_h(_pid)}"/>'
         )
+
+    # ── Arrow marker helper ────────────────────────────────────────────────────
+    def _draw_marker(marker: "Optional[str]", x: float, y: float, dirn: int) -> str:
+        xi, yi = int(round(x)), int(round(y))
+        if marker == "triangle":
+            ah = _arrowhead(xi, yi, dirn, 0, back=10, half_w=6)
+            return f'<polygon points="{ah}" fill="{_seq_edge}"/>'
+        if marker == "cross":
+            sz = 6
+            return (
+                f'<line x1="{xi - dirn * sz}" y1="{yi - sz}" x2="{xi}" y2="{yi + sz}" '
+                f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+                f'<line x1="{xi - dirn * sz}" y1="{yi + sz}" x2="{xi}" y2="{yi - sz}" '
+                f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+            )
+        if marker == "point":
+            return (
+                f'<circle cx="{xi}" cy="{yi}" r="4" fill="none" '
+                f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+            )
+        return ""
+
+    # ── Pass B: else separators, note polygons, message lines + markers ───────
     row = 0
-    for it in items:
-        if it["type"] == "block":
-            # Background already rendered above; now render the keyword label only.
-            ry = ll_top + row * ROW_H
+    for _bi, it in enumerate(items):
+        if it["type"] == "block" or it["type"] == "rect":
             row += 1; continue
         if it["type"] == "else":
+            x0, x1 = _else_x.get(_bi, (
+                float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
+                float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2,
+            ))
             ry = ll_top + row * ROW_H
             parts.append(
-                f'<line x1="{_blk_x0}" y1="{ry}" x2="{_blk_x1}" y2="{ry}" '
+                f'<line x1="{x0}" y1="{ry}" x2="{x1}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="4 4"/>'
             )
             row += 1; continue
         if it["type"] == "note":
             nx, ny, nw, nh = _note_geom(it, row)
             fold = 10
-            pts = (f"{nx},{ny} "
-                   f"{nx + nw - fold},{ny} "
-                   f"{nx + nw},{ny + fold} "
-                   f"{nx + nw},{ny + nh} "
-                   f"{nx},{ny + nh}")
+            pts = (f"{nx},{ny} {nx + nw - fold},{ny} {nx + nw},{ny + fold} "
+                   f"{nx + nw},{ny + nh} {nx},{ny + nh}")
             parts.append(
                 f'<polygon points="{pts}" '
                 f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" '
                 f'stroke="{_seq_edge}" stroke-width="1"/>'
             )
             row += 1; continue
-        if it["type"] in ("activate", "deactivate"):
+        if it["type"] in ("activate", "deactivate", "block_end"):
             continue
         if it["type"] != "msg":
             continue
-        sx, dx2 = _cx(it["src"]), _cx(it["dst"])
+
         ry = ll_top + row * ROW_H + ROW_H // 2
         arrow = it.get("arrow", "->>")
-        dash = ' stroke-dasharray="6 4"' if it["dotted"] else ""
-        has_head = arrow not in ("->", "-->")
-        is_cross = arrow in ("-x", "--x")
-        if sx == dx2:
+        spec = _ARROW_SPECS.get(arrow, _ARROW_SPECS["->>"])
+        dash = ' stroke-dasharray="6 4"' if spec["dashed"] else ""
+        # SEQ-007: activation-aware endpoints
+        sx, dx2 = _msg_endpoints(it["src"], it["dst"], ry)
+
+        if it["src"] == it["dst"]:  # self-message: use lifeline center regardless of activation
+            scx = _cx(it["src"])
             parts.append(
-                f'<path d="M {sx} {ry - 8} C {sx + 36} {ry - 8} {sx + 36} {ry + 8} {sx} {ry + 8}" '
+                f'<path d="M {scx} {ry - 8} C {scx + 36} {ry - 8} {scx + 36} {ry + 8} {scx} {ry + 8}" '
                 f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}'
                 f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
-            if is_cross:
-                sz = 6
-                parts.append(
-                    f'<line x1="{sx - sz}" y1="{ry + 8 - sz}" x2="{sx}" y2="{ry + 8 + sz}" '
-                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
-                )
-                parts.append(
-                    f'<line x1="{sx - sz}" y1="{ry + 8 + sz}" x2="{sx}" y2="{ry + 8 - sz}" '
-                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
-                )
-            elif has_head:
-                ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
-                parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
+            parts.append(_draw_marker(spec["end_m"], scx, ry + 8, -1))
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1.5"{dash}'
                 f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
-            if is_cross:
-                tip_x = dx2
-                dirn = 1 if dx2 > sx else -1
-                sz = 6
-                parts.append(
-                    f'<line x1="{tip_x - dirn * sz}" y1="{ry - sz}" '
-                    f'x2="{tip_x}" y2="{ry + sz}" '
-                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
-                )
-                parts.append(
-                    f'<line x1="{tip_x - dirn * sz}" y1="{ry + sz}" '
-                    f'x2="{tip_x}" y2="{ry - sz}" '
-                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
-                )
-            elif has_head:
-                ah = _arrowhead(dx2, ry, 1 if dx2 > sx else -1, 0, back=10, half_w=6)
-                parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
+            dirn = 1 if dx2 > sx else -1
+            parts.append(_draw_marker(spec["end_m"], dx2, ry, dirn))
+            if spec["start_m"]:  # bidirectional (SEQ-012)
+                parts.append(_draw_marker(spec["start_m"], sx, ry, -dirn))
         row += 1
+
     parts.append('</svg>')
+
+    # ── Pass C: keyword labels, else labels, note texts, edge labels (HTML) ───
     row = 0
-    for it in items:
-        if it["type"] == "block":
+    for _bi, it in enumerate(items):
+        if it["type"] in ("block", "rect"):
             ry = ll_top + row * ROW_H
-            parts.append(
-                f'<span style="position:absolute;left:{_blk_x0 + 4}px;top:{ry + 3}px;'
-                f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
-                f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-                f'{_h(it["kw"])}{" " + _h(it["label"]) if it["label"] else ""}</span>'
-            )
+            if it["type"] == "block":
+                x0, _ = _frag_x_bounds(it)
+                parts.append(
+                    f'<span style="position:absolute;left:{x0 + 4}px;top:{ry + 3}px;'
+                    f'font-size:10px;font-weight:700;text-transform:uppercase;'
+                    f'letter-spacing:.08em;'
+                    f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
+                    f'font-family:var(--label-font,var(--font-primary,'
+                    f'-apple-system,Inter,sans-serif));">'
+                    f'{_h(it["kw"])}{" " + _h(it["label"]) if it["label"] else ""}</span>'
+                )
             row += 1; continue
         if it["type"] == "else":
             ry = ll_top + row * ROW_H
             if it["label"]:
+                x0, _ = _else_x.get(_bi, (
+                    float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
+                    0.0,
+                ))
                 parts.append(
-                    f'<span style="position:absolute;left:{_blk_x0 + 4}px;top:{ry + 3}px;'
-                    f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
+                    f'<span style="position:absolute;left:{x0 + 4}px;top:{ry + 3}px;'
+                    f'font-size:10px;font-weight:700;text-transform:uppercase;'
+                    f'letter-spacing:.08em;'
                     f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                    f'font-family:var(--label-font,var(--font-primary,'
+                    f'-apple-system,Inter,sans-serif));">'
                     f'{_h(it.get("kw", "else"))} {_h(it["label"])}</span>'
                 )
             row += 1; continue
@@ -633,24 +775,28 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'<span style="position:absolute;left:{nx}px;top:{ny + 4}px;'
                 f'width:{nw}px;font-size:10px;text-align:center;overflow:hidden;'
                 f'color:var(--node-fg,var(--text-primary,#191A17));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                f'font-family:var(--label-font,var(--font-primary,'
+                f'-apple-system,Inter,sans-serif));">'
                 f'{_h(it["text"])}</span>'
             )
             row += 1; continue
         if it["type"] not in ("msg",):
             continue
-        sx, dx2 = _cx(it["src"]), _cx(it["dst"])
+        sx_lbl = float(_cx(it["src"]))
+        dx_lbl = float(_cx(it["dst"]))
         ry = ll_top + row * ROW_H + ROW_H // 2
         lbl = _h(it["label"])
         if lbl:
-            mid_x = (sx + dx2) // 2
+            mid_x = int((sx_lbl + dx_lbl) / 2)
             parts.append(
                 f'<span class="edge-label" '
-                f'data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}" data-edge-label="{lbl}" '
+                f'data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}" '
+                f'data-edge-label="{lbl}" '
                 f'style="position:absolute;'
                 f'left:{mid_x}px;top:{ry - 18}px;transform:translateX(-50%);'
                 f'font-size:11px;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+                f'font-family:var(--label-font,var(--font-primary,'
+                f'-apple-system,Inter,sans-serif));'
                 f'background:var(--node-bg-from,var(--card-bg-from,#ffffff));'
                 f'padding:0 3px;white-space:nowrap;">{lbl}</span>'
             )

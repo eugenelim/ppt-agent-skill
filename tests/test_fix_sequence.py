@@ -8,6 +8,13 @@ Covers:
 - Arrow head styles: no-head for ->, cross for --x (FIX-SEQ-05)
 - Canvas height accommodates bottom boxes without overflow (FIX-SEQ-06)
 - diagram-lifeline class present (FIX-SEQ-07)
+- Activation bar exact baselines (SEQ-006)
+- Activation-aware message endpoints (SEQ-007)
+- Per-fragment participant bounds (SEQ-008)
+- Spanning note lifeline-anchored geometry (SEQ-010)
+- Arrow spec table: async point marker + bidirectional (SEQ-012)
+- critical/option branch + rect background (SEQ-013)
+- Note participant auto-registration (SEQ-014)
 """
 from __future__ import annotations
 
@@ -466,3 +473,413 @@ class TestGeometryInvariants:
                 f"Left-of note gap={gap}px ≠ SIDE_NOTE_GAP={SIDE_NOTE_GAP}px "
                 f"(note_right={x_max}, lifeline={first_lifeline_x}). BUG-SEQ-C not fixed."
             )
+
+
+# ── helpers for geometry tests ────────────────────────────────────────────────
+
+def _extract_activation_bars(html: str) -> "dict[str, dict]":
+    """Return {pid: {x, y, width, height}} for activation bars (keyed by data-pid)."""
+    result: "dict[str, dict]" = {}
+    for m in re.finditer(
+        r'<rect\s([^>]*)opacity="0\.35"([^>]*)/>', html
+    ):
+        full = m.group(0)
+        pid_m = re.search(r'data-pid="([^"]+)"', full)
+        if not pid_m:
+            continue
+        pid = pid_m.group(1)
+        x = float(re.search(r'\bx="([^"]+)"', full).group(1))
+        y = float(re.search(r'\by="([^"]+)"', full).group(1))
+        w = float(re.search(r'width="([^"]+)"', full).group(1))
+        h = float(re.search(r'height="([^"]+)"', full).group(1))
+        result[pid] = {"x": x, "y": y, "width": w, "height": h}
+    return result
+
+
+def _extract_message_lines(html: str) -> "list[dict]":
+    """Return [{src, dst, x1, y1, x2, y2}] for message lines (data-src/dst)."""
+    result = []
+    for m in re.finditer(
+        r'<line x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"[^>]*'
+        r'data-src="([^"]+)" data-dst="([^"]+)"',
+        html,
+    ):
+        result.append({
+            "x1": float(m.group(1)), "y1": float(m.group(2)),
+            "x2": float(m.group(3)), "y2": float(m.group(4)),
+            "src": m.group(5), "dst": m.group(6),
+        })
+    return result
+
+
+def _fragment_rects(html: str) -> "list[dict]":
+    """Return [{x, y, w, h}] for dashed fragment background rects."""
+    result = []
+    for m in re.finditer(r'<rect[^>]+stroke-dasharray="5 3"[^>]*/>', html):
+        full = m.group(0)
+        result.append({
+            "x": float(re.search(r'\bx="([^"]+)"', full).group(1)),
+            "y": float(re.search(r'\by="([^"]+)"', full).group(1)),
+            "w": float(re.search(r'width="([^"]+)"', full).group(1)),
+            "h": float(re.search(r'height="([^"]+)"', full).group(1)),
+        })
+    return result
+
+
+def _lifeline_xs(html: str) -> "list[float]":
+    """Return sorted list of x-coordinates for vertical lifeline dashes."""
+    matches = re.findall(
+        r'<line x1="([^"]+)" y1="([^"]+)" x2="([^"]+)" y2="([^"]+)"[^>]*stroke-dasharray="5 4"',
+        html,
+    )
+    return sorted(float(x1) for x1, _y1, x2, _y2 in matches if x1 == x2)
+
+
+# ── SEQ-006: Activation bar exact baselines ───────────────────────────────────
+
+class TestActivationBaselines:
+    """SEQ-006: Activation bars must begin/end at triggering message baselines."""
+
+    def test_bob_activation_top_at_request_message_y(self):
+        """Bob's activation bar top must equal the Alice→Bob request message y."""
+        html = _render("sequence-activation.mmd")
+        bars = _extract_activation_bars(html)
+        msgs = _extract_message_lines(html)
+        assert "Bob" in bars, f"No activation bar for Bob. bars={list(bars)}"
+        req = next((m for m in msgs if m["src"] == "Alice" and m["dst"] == "Bob"), None)
+        assert req, "Request message Alice→Bob not found"
+        assert abs(bars["Bob"]["y"] - req["y1"]) <= 2, (
+            f"Bob activation top={bars['Bob']['y']} ≠ request y={req['y1']} (SEQ-006)"
+        )
+
+    def test_bob_activation_bottom_at_final_response_y(self):
+        """Bob's activation bar bottom must equal the Bob→Alice final response y."""
+        html = _render("sequence-activation.mmd")
+        bars = _extract_activation_bars(html)
+        msgs = _extract_message_lines(html)
+        assert "Bob" in bars
+        bob = bars["Bob"]
+        resp = next((m for m in reversed(msgs) if m["src"] == "Bob" and m["dst"] == "Alice"), None)
+        assert resp, "Final response Bob→Alice not found"
+        bob_bottom = bob["y"] + bob["height"]
+        assert abs(bob_bottom - resp["y1"]) <= 2, (
+            f"Bob activation bottom={bob_bottom} ≠ final response y={resp['y1']} (SEQ-006)"
+        )
+
+    def test_carol_activation_aligns_with_forward_and_response(self):
+        """Carol's activation bar spans from Forward to Response messages."""
+        html = _render("sequence-activation.mmd")
+        bars = _extract_activation_bars(html)
+        msgs = _extract_message_lines(html)
+        assert "Carol" in bars, f"No activation bar for Carol. bars={list(bars)}"
+        carol = bars["Carol"]
+        fwd = next((m for m in msgs if m["src"] == "Bob" and m["dst"] == "Carol"), None)
+        resp = next((m for m in msgs if m["src"] == "Carol" and m["dst"] == "Bob"), None)
+        assert fwd and resp
+        assert abs(carol["y"] - fwd["y1"]) <= 2, (
+            f"Carol activation top={carol['y']} ≠ forward y={fwd['y1']} (SEQ-006)"
+        )
+        carol_bottom = carol["y"] + carol["height"]
+        assert abs(carol_bottom - resp["y1"]) <= 2, (
+            f"Carol activation bottom={carol_bottom} ≠ response y={resp['y1']} (SEQ-006)"
+        )
+
+    def test_unclosed_activation_flushes_to_lifeline_bottom(self):
+        """An unclosed activate extends to the lifeline bottom, not zero height."""
+        src = (
+            "sequenceDiagram\n"
+            "    Alice->>Bob: start\n"
+            "    activate Bob\n"
+            "    Alice->>Bob: continue\n"
+        )
+        html = _dispatch(src, None, 800)
+        bars = _extract_activation_bars(html)
+        assert "Bob" in bars, "No activation bar for unclosed Bob"
+        bob = bars["Bob"]
+        assert bob["height"] > 30, (
+            f"Unclosed activation height={bob['height']} too small; should extend to ll_bot (SEQ-006)"
+        )
+
+    def test_nested_activations_have_different_x(self):
+        """Two nested activations on the same participant must have different x offsets."""
+        src = (
+            "sequenceDiagram\n"
+            "    Alice->>Bob: outer call\n"
+            "    activate Bob\n"
+            "    Bob->>Bob: inner call\n"
+            "    activate Bob\n"
+            "    Bob-->>Bob: inner return\n"
+            "    deactivate Bob\n"
+            "    Bob-->>Alice: outer return\n"
+            "    deactivate Bob\n"
+        )
+        html = _dispatch(src, None, 800)
+        all_bars = [b for b in re.findall(r'<rect[^>]+opacity="0\.35"[^>]*/>', html)
+                    if 'data-pid="Bob"' in b]
+        assert len(all_bars) >= 2, f"Expected ≥2 Bob activation bars, got {len(all_bars)}"
+        xs = [float(re.search(r'\bx="([^"]+)"', b).group(1)) for b in all_bars]
+        assert len(set(xs)) >= 2, (
+            f"Nested activation bars have same x={xs}; depths not offset (SEQ-006)"
+        )
+
+
+# ── SEQ-007: Activation-aware message endpoints ───────────────────────────────
+
+class TestActivationAwareEndpoints:
+    """SEQ-007: Messages must terminate at activation bar edges, not lifeline centers."""
+
+    def test_request_to_bob_ends_at_activation_left_edge(self):
+        """Alice→Bob request x2 must touch Bob's activation left edge."""
+        html = _render("sequence-activation.mmd")
+        bars = _extract_activation_bars(html)
+        msgs = _extract_message_lines(html)
+        assert "Bob" in bars, f"No Bob activation bar in sequence-activation.mmd. bars={list(bars)}"
+        bob_left = bars["Bob"]["x"]
+        req = next((m for m in msgs if m["src"] == "Alice" and m["dst"] == "Bob"), None)
+        assert req, "Request message Alice→Bob not found"
+        assert abs(req["x2"] - bob_left) <= 2, (
+            f"Alice→Bob x2={req['x2']} ≠ Bob activation left={bob_left} (SEQ-007)"
+        )
+
+    def test_forward_message_starts_at_bob_activation_right(self):
+        """Bob→Carol forward x1 must start at Bob's activation right edge."""
+        html = _render("sequence-activation.mmd")
+        bars = _extract_activation_bars(html)
+        msgs = _extract_message_lines(html)
+        assert "Bob" in bars, f"No Bob activation bar. bars={list(bars)}"
+        bob_right = bars["Bob"]["x"] + bars["Bob"]["width"]
+        fwd = next((m for m in msgs if m["src"] == "Bob" and m["dst"] == "Carol"), None)
+        assert fwd, "Forward message Bob→Carol not found"
+        assert abs(fwd["x1"] - bob_right) <= 2, (
+            f"Bob→Carol x1={fwd['x1']} ≠ Bob activation right={bob_right} (SEQ-007)"
+        )
+
+    def test_forward_message_ends_at_carol_activation_left(self):
+        """Bob→Carol forward x2 must end at Carol's activation left edge."""
+        html = _render("sequence-activation.mmd")
+        bars = _extract_activation_bars(html)
+        msgs = _extract_message_lines(html)
+        assert "Carol" in bars, f"No Carol activation bar. bars={list(bars)}"
+        carol_left = bars["Carol"]["x"]
+        fwd = next((m for m in msgs if m["src"] == "Bob" and m["dst"] == "Carol"), None)
+        assert fwd, "Forward message Bob→Carol not found"
+        assert abs(fwd["x2"] - carol_left) <= 2, (
+            f"Bob→Carol x2={fwd['x2']} ≠ Carol activation left={carol_left} (SEQ-007)"
+        )
+
+
+# ── SEQ-008: Per-fragment participant bounds ──────────────────────────────────
+
+class TestFragmentParticipantBounds:
+    """SEQ-008: Each fragment rect must span only its own participants."""
+
+    def test_loop_excludes_client_participant(self):
+        """loop Retry around Server+DB must not extend to Client's x."""
+        html = _render("sequence-blocks.mmd")
+        xs = _lifeline_xs(html)
+        assert len(xs) >= 2, "Expected at least 2 lifelines"
+        client_x = xs[0]  # Client is the leftmost participant
+        frags = _fragment_rects(html)
+        loop_frags = [f for f in frags if f["h"] == 120]  # loop spans 3 rows = 120px
+        if not loop_frags:
+            pytest.skip("Loop fragment not found at expected height")
+        loop = loop_frags[0]
+        loop_right = loop["x"] + loop["w"]
+        assert loop["x"] > client_x, (
+            f"Loop fragment x={loop['x']} extends left of Client lifeline at {client_x} (SEQ-008)"
+        )
+
+    def test_alt_excludes_db_participant(self):
+        """alt Success/Error around Client+Server must not extend to DB's x."""
+        html = _render("sequence-blocks.mmd")
+        xs = _lifeline_xs(html)
+        assert len(xs) >= 3, "Expected at least 3 lifelines"
+        db_x = xs[-1]  # DB is the rightmost participant
+        frags = _fragment_rects(html)
+        alt_frags = [f for f in frags if f["h"] == 160]  # alt spans 4 rows = 160px
+        if not alt_frags:
+            pytest.skip("Alt fragment not found at expected height")
+        alt = alt_frags[0]
+        alt_right = alt["x"] + alt["w"]
+        assert alt_right < db_x, (
+            f"Alt fragment right={alt_right} extends past DB lifeline at {db_x} (SEQ-008)"
+        )
+
+    def test_nested_fragment_bounds_are_tighter(self):
+        """Inner fragment bounds must be contained within outer fragment bounds."""
+        src = (
+            "sequenceDiagram\n"
+            "    participant Client\n"
+            "    participant Server\n"
+            "    participant DB\n"
+            "    loop Retry\n"
+            "        Client->>Server: request\n"
+            "        alt Success\n"
+            "            Server->>DB: query\n"
+            "        end\n"
+            "    end\n"
+        )
+        html = _dispatch(src, None, 800)
+        frags = sorted(_fragment_rects(html), key=lambda f: f["h"])
+        assert len(frags) >= 2, f"Expected ≥2 fragment rects, got {len(frags)} (SEQ-008)"
+        inner = frags[0]  # shorter = inner (alt Success/DB)
+        outer = frags[-1]  # taller = outer (loop Retry/Client+Server+DB)
+        assert inner["x"] >= outer["x"], (
+            f"Inner x={inner['x']} < outer x={outer['x']} (SEQ-008)"
+        )
+        assert inner["x"] + inner["w"] <= outer["x"] + outer["w"], (
+            f"Inner right={inner['x']+inner['w']} > outer right={outer['x']+outer['w']} (SEQ-008)"
+        )
+
+
+# ── SEQ-010: Spanning note lifeline-anchored geometry ────────────────────────
+
+class TestSpanningNoteGeometry:
+    """SEQ-010: Spanning notes must overhang lifelines by NOTE_SPAN_OVERHANG=24px."""
+
+    def test_spanning_note_left_edge_is_24px_left_of_first_lifeline(self):
+        html = _render("sequence-notes-all.mmd")
+        xs = _lifeline_xs(html)
+        assert len(xs) >= 2
+        first_lx, last_lx = xs[0], xs[-1]
+        polys = _note_polys(html)
+        # Spanning note is the widest note polygon (covers Alice to Carol)
+        wide = [p for p in polys if (p[1] - p[0]) > 200]
+        assert wide, f"No wide spanning note found. polys={polys}"
+        NOTE_SPAN_OVERHANG = 24
+        for x_min, x_max in wide:
+            # left edge should be first_lifeline_x - 24
+            assert abs(x_min - (first_lx - NOTE_SPAN_OVERHANG)) <= 2, (
+                f"Spanning note left={x_min} ≠ lifeline {first_lx} - 24 (SEQ-010)"
+            )
+            # right edge should be last_lifeline_x + 24
+            assert abs(x_max - (last_lx + NOTE_SPAN_OVERHANG)) <= 2, (
+                f"Spanning note right={x_max} ≠ lifeline {last_lx} + 24 (SEQ-010)"
+            )
+
+
+# ── SEQ-012: Arrow spec table ─────────────────────────────────────────────────
+
+class TestArrowSpecTable:
+    """SEQ-012: Arrow spec table with point (async) and bidirectional markers."""
+
+    def test_async_arrow_renders_circle_not_triangle(self):
+        """-)  arrow must produce a <circle> endpoint, not a <polygon> arrowhead."""
+        src = "sequenceDiagram\n  Alice-)Bob: async call"
+        html = _dispatch(src, None, 800)
+        assert "<circle" in html, "async -)  arrow should render a circle marker (SEQ-012)"
+        # Must NOT render a filled triangle for it
+        arrow_polys = re.findall(r'<polygon points="[^"]+"\s+fill="var\(--edge', html)
+        assert len(arrow_polys) == 0, (
+            f"async -)  arrow rendered {len(arrow_polys)} triangle polygon(s); expected 0 (SEQ-012)"
+        )
+
+    def test_async_dotted_arrow_renders_circle(self):
+        """--) arrow must also produce a <circle> endpoint."""
+        src = "sequenceDiagram\n  Alice--)Bob: async dotted"
+        html = _dispatch(src, None, 800)
+        assert "<circle" in html, "async --)  arrow should render a circle marker (SEQ-012)"
+
+    def test_bidirectional_arrow_has_two_triangle_markers(self):
+        """<<->> must produce exactly 2 filled triangle polygons."""
+        src = "sequenceDiagram\n  Alice<<->>Bob: bidir"
+        html = _dispatch(src, None, 800)
+        arrow_polys = re.findall(r'<polygon points="[^"]+"\s+fill="var\(--edge', html)
+        assert len(arrow_polys) == 2, (
+            f"<<->> should produce 2 triangle polygons, got {len(arrow_polys)} (SEQ-012)"
+        )
+
+    def test_bidirectional_dotted_arrow_has_two_markers(self):
+        """<<-->> must produce exactly 2 filled triangle polygons."""
+        src = "sequenceDiagram\n  Alice<<-->>Bob: bidir dotted"
+        html = _dispatch(src, None, 800)
+        arrow_polys = re.findall(r'<polygon points="[^"]+"\s+fill="var\(--edge', html)
+        assert len(arrow_polys) == 2, (
+            f"<<-->> should produce 2 triangle polygons, got {len(arrow_polys)} (SEQ-012)"
+        )
+
+
+# ── SEQ-013: Parser gaps ──────────────────────────────────────────────────────
+
+class TestParserGaps:
+    """SEQ-013: critical/option and rect must render correctly."""
+
+    def test_critical_with_option_branch_renders(self):
+        """critical ... option branch must not be silently dropped."""
+        src = (
+            "sequenceDiagram\n"
+            "    critical Acquire resource\n"
+            "        Service->>DB: get lock\n"
+            "    option No resource\n"
+            "        Service-->>Client: 503\n"
+            "    end\n"
+        )
+        html = _dispatch(src, None, 800)
+        assert "option" in html.lower(), (
+            "critical/option branch keyword not in output; likely silently dropped (SEQ-013)"
+        )
+        msgs = _extract_message_lines(html)
+        assert len(msgs) == 2, (
+            f"Expected 2 messages in critical/option, got {len(msgs)} (SEQ-013)"
+        )
+
+    def test_rect_has_solid_fill_not_dashed_border(self):
+        """rect must render as a solid background region, not a dashed labeled fragment."""
+        src = (
+            "sequenceDiagram\n"
+            "    Alice->>Bob: hello\n"
+            "    rect rgb(0, 255, 0)\n"
+            "        Bob-->>Alice: response\n"
+            "    end\n"
+        )
+        html = _dispatch(src, None, 800)
+        # rect should NOT use stroke-dasharray="5 3" (that's for fragments)
+        rect_bodies = re.findall(r'<rect[^>]*/>', html)
+        for body in rect_bodies:
+            if 'opacity="0.3"' in body or 'rgb(0, 255, 0)' in body.lower():
+                assert 'stroke-dasharray' not in body, (
+                    "rect rendered with dashed border instead of solid fill (SEQ-013)"
+                )
+
+    def test_autonumber_does_not_break_render(self):
+        """autonumber directive must be silently accepted."""
+        src = (
+            "sequenceDiagram\n"
+            "    autonumber\n"
+            "    Alice->>Bob: ping\n"
+            "    Bob-->>Alice: pong\n"
+        )
+        html = _dispatch(src, None, 800)
+        assert "Alice" in html and "Bob" in html
+
+
+# ── SEQ-014: Note participant auto-registration ───────────────────────────────
+
+class TestNoteParticipantRegistration:
+    """SEQ-014: Participants referenced only in notes must be auto-registered."""
+
+    def test_note_participant_not_in_message_gets_lifeline(self):
+        """A participant only in a note (not in any message) must still appear."""
+        src = (
+            "sequenceDiagram\n"
+            "    Alice->>Bob: hello\n"
+            "    Note over Carol: observer\n"
+        )
+        html = _dispatch(src, None, 800)
+        xs = _lifeline_xs(html)
+        # 3 participants: Alice, Bob, Carol → 3 lifelines
+        assert len(xs) == 3, (
+            f"Expected 3 lifelines (Alice, Bob, Carol), got {len(xs)} (SEQ-014)"
+        )
+
+    def test_spanning_note_registers_both_participants(self):
+        """Note over A,B auto-registers both A and B as participants."""
+        src = (
+            "sequenceDiagram\n"
+            "    Note over X,Y: spanning\n"
+            "    X->>Y: message\n"
+        )
+        html = _dispatch(src, None, 800)
+        assert "X" in html and "Y" in html
+        xs = _lifeline_xs(html)
+        assert len(xs) == 2, f"Expected 2 lifelines, got {len(xs)} (SEQ-014)"

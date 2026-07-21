@@ -271,28 +271,26 @@ Deferred items from the sequenceDiagram geometry fix spec
 
 ### seq-activation-y-tracking
 
-Exact activation y-coordinate tracking — arrival and departure rows need a
-two-pass computation that threads through nested activations so that activation
-bars start and end flush with the message arrows they bound. Currently y-offsets
-are approximate. Requires an activation prepass refactor touching `_layout_lifeline`.
+**Implemented** in `docs/specs/seq-geometry-fix-p2/spec.md` (SEQ-006/007).
+Two-pass approach: `_event_y` assigns exact y per message; `_act_spans_v2`
+computes activation spans from `_last_msg_y` at activate/deactivate events.
+Activation-aware message endpoints via `_msg_endpoints` / `_act_bounds_at`.
 
 ### seq-message-endpoint-activation
 
-Message-endpoint activation-bar adjustment — when an arrow arrives at an
-activation bar, the arrowhead should land at the bar edge, not the lifeline
-centre. Deferred until `seq-activation-y-tracking` lands (same prepass).
+**Implemented** in `docs/specs/seq-geometry-fix-p2/spec.md` (SEQ-007).
+See `seq-activation-y-tracking` above.
 
 ### seq-per-fragment-bounds
 
-Per-fragment participant bounds — `loop`, `alt`, and `opt` fragment rects
-currently span all participants; they should only span the participants that
-actually appear inside the fragment. Requires parser changes to track fragment
-membership, then propagation into the `_blk_x0/_blk_x1` computation.
+**Implemented** in `docs/specs/seq-geometry-fix-p2/spec.md` (SEQ-008).
+`_frag_parts` tracks msg src/dst, note pids, and activate/deactivate pids
+during block-span prepass. `_frag_x_bounds()` uses per-fragment participant set.
 
 ### seq-variable-height-rows
 
 Variable-height row packing — every timeline row is currently fixed-height.
 Long note text or multi-line labels can overflow. Full fix is an architectural
-change: a two-pass row-height accumulator that feeds back into the y-layout
-before SVG is emitted.
+change: a two-pass row-height accumulator requiring browser text measurement
+(Playwright) that feeds back into the y-layout before SVG is emitted.
 
