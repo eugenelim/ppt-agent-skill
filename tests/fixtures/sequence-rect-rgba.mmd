@@ -1,0 +1,9 @@
+sequenceDiagram
+    participant A
+    participant B
+    A->>B: before
+    rect rgba(0, 128, 255, 0.2)
+        A->>B: inside colored block
+        B-->>A: response
+    end
+    A->>B: after
