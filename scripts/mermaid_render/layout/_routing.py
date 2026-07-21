@@ -39,6 +39,28 @@ def _node_render_w(n: "_Node") -> int:
     return n.width or NODE_W
 
 
+def _side_port(node: "_Node", side: "str | None") -> "tuple[int, int] | None":
+    """Return face-center (x, y) for a named port side, or None if side is not set.
+
+    Side codes: L(eft), R(ight), T(op), B(ottom) — case-insensitive.
+    Used by architecture-beta edges with explicit port annotations (A:R --> L:B).
+    """
+    if not side:
+        return None
+    nw = _node_render_w(node)
+    nh = _node_render_h(node)
+    s = side.upper()
+    if s == "L":
+        return (node.x, node.y + nh // 2)
+    if s == "R":
+        return (node.x + nw, node.y + nh // 2)
+    if s == "T":
+        return (node.x + nw // 2, node.y)
+    if s == "B":
+        return (node.x + nw // 2, node.y + nh)
+    return None
+
+
 # ── A* obstacle-avoiding orthogonal router ────────────────────────────────────
 
 def _build_routing_grid(
@@ -985,11 +1007,23 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             y1 = s.y + out_offset
             x2 = d.x
             y2 = d.y + in_offset
+
+            # Architecture-beta explicit port overrides (A:R --> L:B syntax).
+            # When set, pin the endpoint to the named face-center and force A*.
+            _src_port = _side_port(s, getattr(e, "src_side", None))
+            _dst_port = _side_port(d, getattr(e, "dst_side", None))
+            _has_fixed_port = _src_port is not None or _dst_port is not None
+            if _src_port:
+                x1, y1 = _src_port
+            if _dst_port:
+                x2, y2 = _dst_port
+
             # 3-segment fast path (right → vertical → right); fall back to A* if blocked.
+            # Skip fast path when ports are pinned to non-standard faces.
             _cross_row = abs(y1 - y2) > _node_render_h(s) // 2 and rank_gap == 1
             bend_x = int(x1 + (x2 - x1) * 3 // 4 if _cross_row else (x1 + x2) // 2)
             _fast_lr = [(int(x1), int(y1)), (bend_x, int(y1)), (bend_x, int(y2)), (int(x2), int(y2))]
-            if _try_3seg_clear(_fast_lr, _routing_obs):
+            if not _has_fixed_port and _try_3seg_clear(_fast_lr, _routing_obs):
                 _pts_lr = _fast_lr
             else:
                 _pts_lr = _astar_route(int(x1), int(y1), int(x2), int(y2),
@@ -1055,6 +1089,15 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         x2 = d.x + in_offset
         y2 = d.y
 
+        # Architecture-beta explicit port overrides.
+        _src_port_tb = _side_port(s, getattr(e, "src_side", None))
+        _dst_port_tb = _side_port(d, getattr(e, "dst_side", None))
+        _has_fixed_port_tb = _src_port_tb is not None or _dst_port_tb is not None
+        if _src_port_tb:
+            x1, y1 = _src_port_tb
+        if _dst_port_tb:
+            x2, y2 = _dst_port_tb
+
         # Clip to diamond face for diamond-shaped source/destination nodes
         if s.shape == "diamond":
             _sh = _node_render_h(s)
@@ -1068,9 +1111,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                                        float(_node_render_w(d)), float(_dh), 0, 0)
 
         # Route: 3-segment fast path (down → across → down); fall back to A* if blocked.
+        # Skip fast path when ports are pinned to non-standard faces.
         mid_y = (int(y1) + int(y2)) // 2
         _fast = [(int(x1), int(y1)), (int(x1), mid_y), (int(x2), mid_y), (int(x2), int(y2))]
-        if _try_3seg_clear(_fast, _routing_obs):
+        if not _has_fixed_port_tb and _try_3seg_clear(_fast, _routing_obs):
             _pts = _fast
         else:
             _pts = _astar_route(int(x1), int(y1), int(x2), int(y2),

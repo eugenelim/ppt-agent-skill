@@ -25,21 +25,54 @@ def _strip_frontmatter(src: str) -> str:
 _INIT_RE = re.compile(r'%%\s*\{(.+?)\}\s*%%', re.DOTALL)
 
 
+def _parse_mermaid_init_block(raw: str) -> dict:
+    """Parse a %%{...}%% block body into a dict.
+
+    Handles unquoted-key Mermaid format: init: {"flowchart": {...}}
+    and standard JSON: {"init": {"flowchart": {...}}}.
+    """
+    raw = raw.strip()
+    raw_dq = re.sub(r"'([^']*)'", r'"\1"', raw)
+    # Try standard JSON
+    try:
+        obj = json.loads(raw_dq)
+        if isinstance(obj, dict):
+            return obj
+    except (json.JSONDecodeError, ValueError):
+        pass
+    # Mermaid's "init: {...}" format
+    init_m = re.match(r'^init\s*:\s*(\{.+\})\s*$', raw_dq, re.DOTALL)
+    if init_m:
+        try:
+            inner = json.loads(init_m.group(1))
+            if isinstance(inner, dict):
+                return {"init": inner}
+        except (json.JSONDecodeError, ValueError):
+            pass
+    # Fallback: try wrapping
+    try:
+        obj = json.loads("{" + raw_dq + "}")
+        if isinstance(obj, dict):
+            return obj
+    except (json.JSONDecodeError, ValueError):
+        pass
+    return {}
+
+
 def _parse_init_config(src: str) -> dict[str, int]:
     """Extract layout overrides from %%{init:{...}}%% directives.
 
-    Recognises the flowchart config keys `nodeSpacing` (→ col_gap) and
-    `rankSpacing` (→ rank_gap).  Ignores unknown keys and unparseable JSON.
-    Returns a dict with zero or more of: {"col_gap": int, "rank_gap": int}.
+    Recognises flowchart config keys:
+      nodeSpacing    → col_gap
+      rankSpacing    → rank_gap
+      diagramPadding → diagram_padding
+
+    Ignores unknown keys and unparseable JSON.
     """
     overrides: dict[str, int] = {}
     for m in _INIT_RE.finditer(src):
-        raw = m.group(1).strip()
-        # Allow single-quoted JSON-like syntax (Mermaid accepts it)
-        raw_json = re.sub(r"'([^']*)'", r'"\1"', raw)
-        try:
-            obj = json.loads("{" + raw_json + "}")
-        except json.JSONDecodeError:
+        obj = _parse_mermaid_init_block(m.group(1))
+        if not obj:
             continue
         fc = obj.get("flowchart") or obj.get("init", {}).get("flowchart", {})
         if isinstance(fc, dict):
@@ -51,6 +84,11 @@ def _parse_init_config(src: str) -> dict[str, int]:
             if "rankSpacing" in fc:
                 try:
                     overrides["rank_gap"] = int(fc["rankSpacing"])
+                except (TypeError, ValueError):
+                    pass
+            if "diagramPadding" in fc:
+                try:
+                    overrides["diagram_padding"] = int(fc["diagramPadding"])
                 except (TypeError, ValueError):
                     pass
     return overrides

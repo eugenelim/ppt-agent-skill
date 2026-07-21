@@ -245,19 +245,22 @@ def _assign_coordinates(
     direction: str = "TB",
     col_gap: int | None = None,
     rank_gap: int | None = None,
+    canvas_pad: int | None = None,
 ) -> tuple[int, int]:
     """Assign x/y pixel positions; return (canvas_width, canvas_height).
 
     TB (default): rank→Y (row), col→X (column). Row heights are variable based on
     actual node render heights (mirrors LR's variable column heights — dagre parity).
     LR: rank→X (column), col→Y (row) with variable Y pitch based on node height.
-    col_gap / rank_gap override the module constants (used by %%{init:...}%% config).
+    col_gap / rank_gap / canvas_pad override the module constants (%%{init:...}%% config).
     """
     if not nodes:
-        return 2 * CANVAS_PAD, 2 * CANVAS_PAD
+        _cp = canvas_pad if canvas_pad is not None else CANVAS_PAD
+        return 2 * _cp, 2 * _cp
 
     _col_gap = col_gap if col_gap is not None else COL_GAP
     _rank_gap = rank_gap if rank_gap is not None else RANK_GAP
+    _CANVAS_PAD = canvas_pad if canvas_pad is not None else CANVAS_PAD
 
     is_lr = direction.upper() in ("LR", "RL")
     # Compute per-node display widths from label text (skip special-shape fixed sizes).
@@ -316,7 +319,7 @@ def _assign_coordinates(
             for c in all_cols
         }
         col_left: dict[int, int] = {}
-        _cursor = CANVAS_PAD
+        _cursor = _CANVAS_PAD
         for c in all_cols:
             col_left[c] = _cursor
             _cursor += col_width[c] + _col_gap
@@ -350,7 +353,7 @@ def _assign_coordinates(
         rank_to_nodes: dict[int, list] = {}
         for n in nodes.values():
             rank_to_nodes.setdefault(n.rank, []).append(n)
-        y_cursor = CANVAS_PAD
+        y_cursor = _CANVAS_PAD
         for rank in sorted(rank_to_nodes):
             rank_h = max(_node_render_h(n) for n in rank_to_nodes[rank])
             for n in rank_to_nodes[rank]:
@@ -359,8 +362,8 @@ def _assign_coordinates(
 
         # Recompute canvas_w using actual node x positions (dummies may have shifted)
         max_x_right = max(n.x + (n.width or col_width.get(n.col, NODE_W)) for n in nodes.values())
-        canvas_w = max_x_right + CANVAS_PAD
-        canvas_h = y_cursor + CANVAS_PAD - _rank_gap
+        canvas_w = max_x_right + _CANVAS_PAD
+        canvas_h = y_cursor + _CANVAS_PAD - _rank_gap
         return canvas_w, canvas_h
 
     # LR: per-rank x-positions using each rank's own max node width.
@@ -373,27 +376,27 @@ def _assign_coordinates(
         for r in all_ranks
     }
     rank_left: dict[int, int] = {}
-    _cursor = CANVAS_PAD
+    _cursor = _CANVAS_PAD
     for r in all_ranks:
         rank_left[r] = _cursor
         _cursor += rank_width[r] + _rank_gap
     for n in nodes.values():
-        n.x = rank_left.get(n.rank, CANVAS_PAD)
+        n.x = rank_left.get(n.rank, _CANVAS_PAD)
 
     # Group nodes by col, accumulate Y positions top-to-bottom.
     # Nodes shorter than col_h are centered vertically within the band.
     col_to_nodes: dict[int, list] = {}
     for n in nodes.values():
         col_to_nodes.setdefault(n.col, []).append(n)
-    y_cursor = CANVAS_PAD
+    y_cursor = _CANVAS_PAD
     for col in sorted(col_to_nodes):
         col_h = max(_node_render_h(n) for n in col_to_nodes[col])
         for n in col_to_nodes[col]:
             n.y = y_cursor + (col_h - _node_render_h(n)) // 2
         y_cursor += col_h + _col_gap
 
-    canvas_w = _cursor - _rank_gap + CANVAS_PAD
-    canvas_h = y_cursor + CANVAS_PAD - _col_gap
+    canvas_w = _cursor - _rank_gap + _CANVAS_PAD
+    canvas_h = y_cursor + _CANVAS_PAD - _col_gap
     return canvas_w, canvas_h
 
 

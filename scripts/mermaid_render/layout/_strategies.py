@@ -166,6 +166,7 @@ def _layout_graph_topology(
         nodes, direction,
         col_gap=_init_cfg.get("col_gap"),
         rank_gap=_init_cfg.get("rank_gap"),
+        canvas_pad=_init_cfg.get("diagram_padding"),
     )
 
     # Push overlapping group bounding boxes apart after coordinate assignment
@@ -3353,9 +3354,13 @@ _ARCH_GRP_RE = re.compile(
 _ARCH_JCT_RE = re.compile(r'^junction\s+(\w+)', re.I)
 # Edge syntax: "src[:side] (<-->|-->|<--|--) [side:]dst [: label]"
 # Operator order: <--> before <-- before -- to avoid prefix shadowing.
+# Side codes: L(eft) R(ight) T(op) B(ottom)
 _ARCH_EDGE_RE = re.compile(
-    r'^(\w+)(?::\w+)?\s*(<-->|-->|<--|--)\s*(?:\w+:)?(\w+)(?::\w+)?'
-    r'(?:\s*:\s*(.*))?$'
+    r'^(\w+)(?::([LRTBrlbt]))?'        # group 1: src_id, group 2: src_side
+    r'\s*(<-->|-->|<--|--)\s*'          # group 3: operator
+    r'(?:([LRTBrlbt]):)?(\w+)'          # group 4: dst_side, group 5: dst_id
+    r'(?::\w+)?'                        # trailing annotation (ignore)
+    r'(?:\s*:\s*(.*))?$'                # group 6: edge label
 )
 
 
@@ -3440,23 +3445,29 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
         m = _ARCH_EDGE_RE.match(line)
         if m:
             src_id = m.group(1)
-            op = m.group(2)
-            dst_id = m.group(3)
-            lbl = (m.group(4) or "").strip()
+            src_side = (m.group(2) or "").upper() or None
+            op = m.group(3)
+            dst_side = (m.group(4) or "").upper() or None
+            dst_id = m.group(5)
+            lbl = (m.group(6) or "").strip()
             if op == "<-->":
                 # Bidirectional: emit forward + reverse edges so both ends get arrowheads.
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=True))
+                                   style="solid", arrow=True,
+                                   src_side=src_side, dst_side=dst_side))
                 edges.append(_Edge(src=dst_id, dst=src_id, label="",
-                                   style="solid", arrow=True))
+                                   style="solid", arrow=True,
+                                   src_side=dst_side, dst_side=src_side))
             elif op == "<--":
                 # Reverse arrow: swap src/dst so layout flows correctly.
                 edges.append(_Edge(src=dst_id, dst=src_id, label=lbl,
-                                   style="solid", arrow=True))
+                                   style="solid", arrow=True,
+                                   src_side=dst_side, dst_side=src_side))
             else:
                 # --> (directed) or -- (undirected)
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=(op == "-->")))
+                                   style="solid", arrow=(op == "-->"),
+                                   src_side=src_side, dst_side=dst_side))
 
     if not nodes:
         raise ValueError("No services found in architecture-beta.")
