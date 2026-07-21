@@ -250,6 +250,8 @@ class _Edge:
     orig_src: Optional[str] = None  # original src for dummy-chained edges
     orig_dst: Optional[str] = None  # original dst for dummy-chained edges
     extra_css: str = ""           # inline CSS overrides (from `linkStyle N stroke:...`)
+    src_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
+    dst_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
 
 
 @dataclass

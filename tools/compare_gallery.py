@@ -5,16 +5,24 @@ Usage:
     python3 tools/compare_gallery.py                 # all fixtures in tests/fixtures/
     python3 tools/compare_gallery.py --open          # open in default browser after build
     python3 tools/compare_gallery.py path/to/my.mmd  # specific file(s)
+    python3 tools/compare_gallery.py --output-dir PATH       # write gallery to PATH/
+    python3 tools/compare_gallery.py --metadata-only         # write only metadata.json
+    python3 tools/compare_gallery.py --width-hint 800        # force renderer width hint
 
 Output:
-    ppt-output/compare/index.html    -- side-by-side gallery (open in browser)
-    ppt-output/compare/ours/<name>.html  -- our impl HTML
-    ppt-output/compare/mmdc/<name>.svg   -- mmdc SVG output
+    <output-dir>/index.html          -- side-by-side gallery (open in browser)
+    <output-dir>/ours/<name>.html    -- our impl HTML
+    <output-dir>/mmdc/<name>.svg     -- mmdc SVG output
+    <output-dir>/metadata.json       -- provenance record for this gallery run
 """
 from __future__ import annotations
 
 import argparse
+import datetime
+import hashlib
 import html as _html_mod
+import json
+import platform
 import subprocess
 import sys
 import tempfile
@@ -28,6 +36,82 @@ OUT_DIR = ROOT / "ppt-output" / "compare"
 
 sys.path.insert(0, str(ROOT / "scripts"))
 import mermaid_render
+
+
+def _collect_metadata(
+    mmd_files: list[Path],
+    out_dir: Path,
+    width_hint: int,
+    cli_args: list[str],
+) -> dict:
+    """Gather provenance data for the current gallery run."""
+    import PIL
+    sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT
+    ).stdout.strip()
+    dirty_out = subprocess.run(
+        ["git", "status", "--short"], capture_output=True, text=True, cwd=ROOT
+    ).stdout.strip()
+    mmdc_ver = subprocess.run(
+        ["mmdc", "--version"], capture_output=True, text=True
+    ).stdout.strip()
+
+    # Chromium version via playwright (best-effort)
+    chromium_version = None
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            b = p.chromium.launch()
+            chromium_version = b.version
+            b.close()
+    except Exception:
+        pass
+
+    # Playwright version (best-effort)
+    playwright_version = None
+    try:
+        import playwright
+        playwright_version = playwright.__version__
+    except Exception:
+        pass
+
+    # Resolved font path and family (best-effort via _text module if present)
+    resolved_font_path = None
+    resolved_font_family = None
+    try:
+        from mermaid_render.layout._text import resolve_font
+        fp, fam = resolve_font()
+        resolved_font_path = str(fp) if fp else None
+        resolved_font_family = fam
+    except Exception:
+        pass
+
+    fixture_records = []
+    for f in mmd_files:
+        data = f.read_bytes()
+        fixture_records.append({
+            "path": str(f.relative_to(ROOT)),
+            "sha256": hashlib.sha256(data).hexdigest(),
+        })
+
+    return {
+        "git_sha": sha,
+        "git_dirty": bool(dirty_out),
+        "generation_timestamp_utc": datetime.datetime.utcnow().isoformat() + "Z",
+        "python_version": platform.python_version(),
+        "pillow_version": PIL.__version__,
+        "playwright_version": playwright_version,
+        "chromium_version": chromium_version,
+        "mmdc_version": mmdc_ver,
+        "platform": platform.platform(),
+        "renderer_width_hint": width_hint,
+        "output_dir": str(out_dir),
+        "fixture_paths": [r["path"] for r in fixture_records],
+        "fixture_sha256": {r["path"]: r["sha256"] for r in fixture_records},
+        "resolved_font_path": resolved_font_path,
+        "resolved_font_family": resolved_font_family,
+        "command_line_args": cli_args,
+    }
 
 
 _PAGE_CSS = """
@@ -243,10 +327,10 @@ def _run_mmdc(src: str, out_svg: Path) -> tuple[bool, str]:
         tmp.unlink(missing_ok=True)
 
 
-def _render_ours(src: str) -> tuple[str | None, str]:
+def _render_ours(src: str, width_hint: int = 0) -> tuple[str | None, str]:
     """Return (full_html, error_msg). full_html is None on error."""
     try:
-        return mermaid_render.to_html(src, width_hint=0), ""
+        return mermaid_render.to_html(src, width_hint=width_hint), ""
     except Exception as e:
         return None, str(e)
 
@@ -256,7 +340,7 @@ def _diagram_type(name: str) -> str:
     return name.split("-")[0]
 
 
-def _build_gallery(mmd_files: list[Path], out_dir: Path) -> "tuple[Path, bool]":
+def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) -> "tuple[Path, bool]":
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "ours").mkdir(exist_ok=True)
     (out_dir / "mmdc").mkdir(exist_ok=True)
@@ -274,7 +358,7 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> "tuple[Path, bool]":
         src = mmd_path.read_text(encoding="utf-8").strip()
         print(f"  [{i + 1}/{n_total}] {name} ...", end=" ", flush=True)
 
-        ours_html, ours_err = _render_ours(src)
+        ours_html, ours_err = _render_ours(src, width_hint=width_hint)
         render_exc: "BaseException | None" = None if ours_html is not None else Exception(ours_err)
         if ours_html:
             (out_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
@@ -445,7 +529,15 @@ def main() -> None:
     ap.add_argument("--open", action="store_true", help="Open result in browser")
     ap.add_argument("--type", dest="diagram_type", metavar="TYPE",
                     help="Only include diagrams of this type prefix (e.g. flowchart, sequence, c4)")
+    ap.add_argument("--output-dir", dest="output_dir", metavar="PATH", default=None,
+                    help="Write gallery files to this directory (default: ppt-output/compare/)")
+    ap.add_argument("--metadata-only", action="store_true",
+                    help="Write only metadata.json to --output-dir; skip gallery HTML")
+    ap.add_argument("--width-hint", dest="width_hint", type=int, default=0,
+                    help="Renderer width hint in px (default: 0 = auto); does not alter gallery CSS")
     args = ap.parse_args()
+
+    out_dir = Path(args.output_dir).resolve() if args.output_dir else OUT_DIR
 
     if args.files:
         mmd_files = [Path(f).resolve() for f in args.files]
@@ -462,8 +554,17 @@ def main() -> None:
         print("No .mmd files found.", file=sys.stderr)
         sys.exit(1)
 
+    # Always write metadata.json first so provenance is recorded even on failures.
+    out_dir.mkdir(parents=True, exist_ok=True)
+    metadata = _collect_metadata(mmd_files, out_dir, args.width_hint, sys.argv[1:])
+    (out_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    print(f"Metadata: {out_dir}/metadata.json")
+
+    if args.metadata_only:
+        return
+
     print(f"Building comparison gallery for {len(mmd_files)} diagram(s)...")
-    index_path, has_failures = _build_gallery(mmd_files, OUT_DIR)
+    index_path, has_failures = _build_gallery(mmd_files, out_dir, width_hint=args.width_hint)
     print(f"Gallery: file://{index_path}")
 
     if args.open:

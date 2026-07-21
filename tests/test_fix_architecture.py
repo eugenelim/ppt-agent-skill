@@ -60,33 +60,34 @@ class TestArchRegexes:
     """Unit-level checks on the three compiled regexes."""
 
     def test_edge_re_forward_with_sides(self):
+        # Groups: 1=src_id, 2=src_side, 3=operator, 4=dst_side, 5=dst_id, 6=label
         m = _ARCH_EDGE_RE.match("api:R --> L:lambda")
         assert m is not None
         assert m.group(1) == "api"
-        assert m.group(2) == "-->"
-        assert m.group(3) == "lambda"
+        assert m.group(3) == "-->"
+        assert m.group(5) == "lambda"
 
     def test_edge_re_reverse(self):
         m = _ARCH_EDGE_RE.match("api <-- lambda")
         assert m is not None
         assert m.group(1) == "api"
-        assert m.group(2) == "<--"
-        assert m.group(3) == "lambda"
+        assert m.group(3) == "<--"
+        assert m.group(5) == "lambda"
 
     def test_edge_re_bidirectional(self):
         m = _ARCH_EDGE_RE.match("api <--> lambda")
         assert m is not None
-        assert m.group(2) == "<-->"
+        assert m.group(3) == "<-->"
 
     def test_edge_re_undirected(self):
         m = _ARCH_EDGE_RE.match("api -- lambda")
         assert m is not None
-        assert m.group(2) == "--"
+        assert m.group(3) == "--"
 
     def test_edge_re_with_label(self):
         m = _ARCH_EDGE_RE.match("api:R --> L:db : HTTPS")
         assert m is not None
-        assert m.group(4) == "HTTPS"
+        assert m.group(6) == "HTTPS"
 
     def test_group_re_no_longer_matches_junction(self):
         """After the fix _ARCH_GRP_RE must NOT match 'junction' lines."""

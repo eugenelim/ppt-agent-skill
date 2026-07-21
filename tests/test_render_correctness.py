@@ -19,8 +19,8 @@ from mermaid_render.layout._strategies import _dispatch
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 
 # Fixture files that the renderer explicitly marks unsupported (raise on dispatch).
+# Note: gitgraph, journey, and requirementDiagram are now handled by the dispatcher.
 _UNSUPPORTED = {
-    "gitgraph-basic.mmd", "journey-basic.mmd", "requirement-basic.mmd",
     "sankey-basic.mmd", "zenuml-basic.mmd",
 }
 
@@ -31,6 +31,8 @@ _NO_PATHS = {
     "block-basic.mmd",
     "er-basic.mmd", "er-cardinality-all.mmd", "er-ecommerce.mmd", "er-identifying.mmd",
     "gantt-after-multi.mmd", "gantt-basic.mmd", "gantt-modifiers.mmd",
+    "gitgraph-basic.mmd",
+    "journey-basic.mmd",
     "kanban-basic.mmd", "kanban-empty-col.mmd", "kanban-metadata.mmd",
     "kanban-quoted-labels.mmd",
     "mindmap-basic.mmd", "mindmap-deep.mmd",

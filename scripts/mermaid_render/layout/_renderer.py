@@ -166,7 +166,9 @@ def _render_graph_fragment(
     zoom_css = f" zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
     extra_style = (" " + style_overrides.strip()) if style_overrides else ""
     parts.append(
-        f'<div class="diagram mermaid-layout" style="'
+        f'<div class="diagram mermaid-layout"'
+        f' data-diagram-w="{canvas_w}" data-diagram-h="{effective_h}"'
+        f' style="'
         f'position:relative; width:{canvas_w}px; height:{effective_h}px; '
         f'--node-w:{NODE_W}px; --node-h:{NODE_H}px; '
         f'--rank-gap:{RANK_GAP}px; --col-gap:{COL_GAP}px; '
@@ -1072,7 +1074,7 @@ def _separate_groups_lr(
             "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
             "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
             "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
-            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "gx_right": max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X,
         }
 
     for _pass in range(GROUP_CAP):
@@ -1121,7 +1123,7 @@ def _separate_groups_tb(
             return None
         return {
             "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
-            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "gx_right": max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X,
             "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
             "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
         }
@@ -1453,3 +1455,122 @@ def _compute_group_bboxes(
 
     return bboxes
 
+
+
+# ── Serialization-only renderer (Stage 9) ────────────────────────────────────
+
+def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-defined]
+    """Serialize a FinalizedLayout to an HTML fragment.
+
+    This function MUST NOT perform any geometry work:
+      - no _route_edges call
+      - no _compute_group_bboxes call
+      - no node-size recalculation
+      - no port selection
+      - no text re-wrapping
+
+    All geometry is read directly from the immutable FinalizedLayout.
+    """
+    from ._geometry import FinalizedLayout, RoutedEdge, NodeLayout, GroupLayout
+
+    cw = int(layout.canvas_bounds.w)
+    ch = int(layout.canvas_bounds.h)
+
+    parts: list[str] = []
+    parts.append(
+        f'<div class="diagram mermaid-layout finalized"'
+        f' data-diagram-w="{cw}" data-diagram-h="{ch}"'
+        f' style="position:relative; width:{cw}px; height:{ch}px;">'
+    )
+
+    # Group boundaries first (rendered behind nodes)
+    for gid, gl in layout.group_layouts.items():
+        b = gl.boundary_bounds
+        lbl = (
+            _h(gl.label_layout.lines[0].runs[0].text)
+            if gl.label_layout and gl.label_layout.lines and gl.label_layout.lines[0].runs
+            else ""
+        )
+        parts.append(
+            f'<div data-group-id="{_h(gid)}"'
+            f' style="position:absolute;'
+            f' left:{int(b.x)}px; top:{int(b.y)}px;'
+            f' width:{int(b.w)}px; height:{int(b.h)}px;'
+            f' border:1.5px dashed rgba(100,116,139,0.4);'
+            f' border-radius:6px; box-sizing:border-box;">'
+        )
+        if lbl:
+            parts.append(
+                f'<div style="position:absolute; top:4px; left:8px;'
+                f' font-size:11px; opacity:0.7; white-space:nowrap;">{lbl}</div>'
+            )
+        parts.append("</div>")
+
+    # Nodes
+    for nid, nl in layout.node_layouts.items():
+        if nl.is_dummy:
+            continue
+        b = nl.outer_bounds
+        label = nl.title_layout.lines[0].runs[0].text if (
+            nl.title_layout and nl.title_layout.lines
+            and nl.title_layout.lines[0].runs
+        ) else ""
+        parts.append(
+            f'<div data-node-id="{_h(nid)}"'
+            f' class="node"'
+            f' style="position:absolute;'
+            f' left:{int(b.x)}px; top:{int(b.y)}px;'
+            f' width:{int(b.w)}px; height:{int(b.h)}px;'
+            f' box-sizing:border-box;'
+            f' {nl.extra_css}">'
+            f'<div style="display:flex; align-items:center; justify-content:center;'
+            f' width:100%; height:100%; text-align:center;">'
+            f'{_h(label)}</div>'
+            f'</div>'
+        )
+
+    # SVG overlay for routed edges (geometry pre-computed, no routing calls)
+    parts.append(
+        f'<svg style="position:absolute; inset:0;'
+        f' width:{cw}px; height:{ch}px;'
+        f' overflow:visible; pointer-events:none;">'
+    )
+    parts.append("<defs>"
+                 '<marker id="fn-arrow" viewBox="0 -4 9 8" refX="9" refY="0"'
+                 ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+                 '<polygon points="0,-4 9,0 0,4"'
+                 ' fill="rgba(100,116,139,0.7)"/></marker>'
+                 "</defs>")
+
+    for re_obj in layout.routed_edges:
+        if not re_obj.waypoints:
+            continue
+        pts = re_obj.waypoints
+        d_parts = [f"M {pts[0].x:.1f} {pts[0].y:.1f}"]
+        for p in pts[1:]:
+            d_parts.append(f"L {p.x:.1f} {p.y:.1f}")
+        d = " ".join(d_parts)
+        marker = ' marker-end="url(#fn-arrow)"' if re_obj.has_marker_end else ""
+        parts.append(
+            f'<path data-src="{_h(re_obj.src_node_id)}"'
+            f' data-dst="{_h(re_obj.dst_node_id)}"'
+            f' d="{d}" fill="none"'
+            f' stroke="rgba(100,116,139,0.7)" stroke-width="1.5"{marker}/>'
+        )
+
+    parts.append("</svg>")
+
+    # Edge labels
+    for re_obj in layout.routed_edges:
+        if re_obj.label_layout and re_obj.label_layout.text:
+            lb = re_obj.label_layout.bounds
+            parts.append(
+                f'<div style="position:absolute;'
+                f' left:{int(lb.x)}px; top:{int(lb.y)}px;'
+                f' width:{int(lb.w)}px; font-size:11px;'
+                f' text-align:center; pointer-events:none;">'
+                f'{_h(re_obj.label_layout.text)}</div>'
+            )
+
+    parts.append("</div>")
+    return "\n".join(parts)

@@ -36,6 +36,7 @@ class C4Item:
     label: str
     description: str
     is_external: bool
+    technology: str = ""  # for Container/Component: third arg (e.g. "Java", "PostgreSQL")
     boundary: Optional[str] = None
 
 
@@ -207,11 +208,27 @@ _C4_TYPE_DISPLAY: dict[str, str] = {
     "person_ext": "Person [Ext]",
     "system": "Software System",
     "system_ext": "Software System [Ext]",
+    "system_db": "System DB",
+    "system_db_ext": "System DB [Ext]",
+    "system_queue": "System Queue",
+    "system_queue_ext": "System Queue [Ext]",
     "systemdb": "System DB",
     "container": "Container",
     "container_ext": "Container [Ext]",
+    "container_db": "Container DB",
+    "container_db_ext": "Container DB [Ext]",
+    "container_queue": "Container Queue",
+    "container_queue_ext": "Container Queue [Ext]",
     "containerdb": "Container DB",
+    "containerqueue": "Container Queue",
     "component": "Component",
+    "component_ext": "Component [Ext]",
+    "component_db": "Component DB",
+    "component_db_ext": "Component DB [Ext]",
+    "component_queue": "Component Queue",
+    "component_queue_ext": "Component Queue [Ext]",
+    "componentdb": "Component DB",
+    "componentqueue": "Component Queue",
 }
 
 # Default accent for C4 nodes not inside a named boundary
@@ -258,6 +275,16 @@ def _render_c4_node(item: C4Item, box: C4Box) -> str:
         f'line-height:1.3;">'
         f'{label_html}</span>'
     )
+    tech_html = _h(item.technology) if item.technology else ""
+    tech_part = ""
+    if tech_html:
+        tech_part = (
+            f'<span class="c4-technology" style="'
+            f'display:block; font-size:10px; font-weight:400; opacity:0.7; '
+            f'font-family:var(--label-font,-apple-system,Inter,sans-serif); '
+            f'line-height:1.3; margin-top:2px; font-style:italic;">'
+            f'[{tech_html}]</span>'
+        )
     desc_part = ""
     if desc_html:
         desc_part = (
@@ -268,7 +295,7 @@ def _render_c4_node(item: C4Item, box: C4Box) -> str:
             f'{desc_html}</span>'
         )
 
-    inner = stereotype_part + label_part + desc_part
+    inner = stereotype_part + label_part + tech_part + desc_part
 
     return (
         f'<div class="node c4-node {_h(kind_css)}" data-node-id="{_h(item.alias)}" style="'
@@ -373,6 +400,36 @@ def _render_c4_edges(
 
 # ── Fragment renderer ─────────────────────────────────────────────────────────
 
+_C4_BOUNDARY_PAD = 24   # padding around boundary members inside boundary box
+
+
+def _render_c4_boundary_box(bnd: "C4Boundary", member_boxes: list["C4Box"]) -> str:
+    """Render a dashed boundary box enclosing the given member boxes."""
+    if not member_boxes:
+        return ""
+    xs = [b.x for b in member_boxes]
+    ys = [b.y for b in member_boxes]
+    x2s = [b.x + b.width for b in member_boxes]
+    y2s = [b.y + b.height for b in member_boxes]
+    bx = int(min(xs)) - _C4_BOUNDARY_PAD
+    by = int(min(ys)) - _C4_BOUNDARY_PAD - 20  # extra 20px for label
+    bw = int(max(x2s)) - int(min(xs)) + 2 * _C4_BOUNDARY_PAD
+    bh = int(max(y2s)) - int(min(ys)) + 2 * _C4_BOUNDARY_PAD + 20
+    return (
+        f'<div class="c4-boundary" data-boundary-id="{_h(bnd.id)}" style="'
+        f'position:absolute; left:{bx}px; top:{by}px; '
+        f'width:{bw}px; height:{bh}px; '
+        f'border:2px dashed var(--node-border,#DAD7CE); '
+        f'border-radius:8px; box-sizing:border-box;">'
+        f'<span style="'
+        f'position:absolute; top:4px; left:10px; '
+        f'font-size:11px; font-weight:600; opacity:0.6; '
+        f'font-family:var(--label-font,-apple-system,Inter,sans-serif); '
+        f'white-space:nowrap;">{_h(bnd.label)}</span>'
+        f'</div>'
+    )
+
+
 def _render_c4_fragment(
     title: str,
     items: list[C4Item],
@@ -384,29 +441,45 @@ def _render_c4_fragment(
 
     Layout always uses C4_LAYOUT_WIDTH (832) for packing — independent of
     width_hint — then scales the rendered canvas to fit width_hint via zoom.
+
+    Boundary-grouped items are packed consecutively so that the boundary
+    bounding-box overlay aligns with its member cards.
     """
     if not items:
         raise ValueError("No elements found in C4 diagram.")
 
-    # Box dimensions (Mermaid 11.15 defaults)
-    boxes: list[C4Box] = []
-    for item in items:
-        h = C4_PERSON_H if "person" in item.kind else C4_SYSTEM_H
-        boxes.append(C4Box(alias=item.alias, width=C4_NODE_W, height=h))
+    # Separate ungrouped items from boundary-grouped ones; preserve insertion order.
+    ungrouped = [it for it in items if not it.boundary]
+    # Collect boundary ids in declaration order (preserves groups dict order).
+    boundary_ids = list(groups.keys())
+    boundary_item_map: dict[str, list[C4Item]] = {
+        bid: [it for it in items if it.boundary == bid]
+        for bid in boundary_ids
+    }
 
-    # Run shelf packer
+    # Ordered packing sequence: ungrouped first, then each boundary in order.
+    packing_order: list[C4Item] = list(ungrouped)
+    for bid in boundary_ids:
+        packing_order.extend(boundary_item_map.get(bid, []))
+
+    # Box dimensions (Mermaid 11.15 defaults)
+    def _item_box(item: C4Item) -> C4Box:
+        h = C4_PERSON_H if "person" in item.kind else C4_SYSTEM_H
+        return C4Box(alias=item.alias, width=C4_NODE_W, height=h)
+
     start_y = C4_TITLE_H if title else 0
     bounds = C4Bounds(
-        start_x=2 * C4_SHAPE_MARGIN,  # = 100, matching Mermaid's global boundary offset
+        start_x=2 * C4_SHAPE_MARGIN,
         start_y=start_y,
         width_limit=C4_LAYOUT_WIDTH,
         shape_margin=C4_SHAPE_MARGIN,
         shapes_per_row=C4_SHAPES_PER_ROW,
     )
     box_map: dict[str, C4Box] = {}
-    for box in boxes:
+    for item in packing_order:
+        box = _item_box(item)
         bounds.insert(box)
-        box_map[box.alias] = box
+        box_map[item.alias] = box
 
     # Canvas width is pinned to the packing canvas (832 px) so sparse diagrams
     # don't produce a narrow, tightly-cropped render.  Height stays content-tight.
@@ -437,9 +510,17 @@ def _render_c4_fragment(
             f'{_h(title)}</div>'
         )
 
-    # Nodes
-    for item, box in zip(items, boxes):
-        parts.append(_render_c4_node(item, box))
+    # Boundary boxes (rendered before nodes so nodes appear on top)
+    for bid, bnd in groups.items():
+        member_boxes = [box_map[alias] for alias in bnd.members if alias in box_map]
+        if member_boxes:
+            parts.append(_render_c4_boundary_box(bnd, member_boxes))
+
+    # Nodes (in original insertion order for stable data-node-id ordering)
+    for item in packing_order:
+        box = box_map.get(item.alias)
+        if box:
+            parts.append(_render_c4_node(item, box))
 
     # Relationships (SVG overlay)
     if relationships:

@@ -1,0 +1,28 @@
+C4Container
+    title E-Commerce Platform — Container View
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+
+    Person(customer, "Customer", "Online shopper")
+    Person_Ext(admin, "Admin", "Back-office staff")
+
+    System_Boundary(web, "Web Tier") {
+        Container(spa, "SPA", "React", "Single-page application")
+        Container(api, "API Gateway", "Node.js", "Routes and authenticates requests")
+    }
+
+    System_Boundary(data, "Data Tier") {
+        ContainerDb(db, "Main DB", "PostgreSQL", "Stores orders and accounts")
+        ContainerQueue(queue, "Message Bus", "RabbitMQ", "Async order processing")
+        ContainerDb(cache, "Cache", "Redis", "Session and catalogue cache")
+    }
+
+    System_Ext(payment, "Payment Gateway", "External payment processor")
+
+    Rel(customer, spa, "Browses")
+    Rel(spa, api, "API calls", "HTTPS/JSON")
+    Rel(api, db, "Reads/writes")
+    Rel(api, queue, "Publishes orders")
+    Rel(api, cache, "Reads cache")
+    Rel(api, payment, "Charges card")
+    Rel(admin, api, "Manages")

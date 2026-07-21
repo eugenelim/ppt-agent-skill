@@ -245,19 +245,22 @@ def _assign_coordinates(
     direction: str = "TB",
     col_gap: int | None = None,
     rank_gap: int | None = None,
+    canvas_pad: int | None = None,
 ) -> tuple[int, int]:
     """Assign x/y pixel positions; return (canvas_width, canvas_height).
 
     TB (default): rank→Y (row), col→X (column). Row heights are variable based on
     actual node render heights (mirrors LR's variable column heights — dagre parity).
     LR: rank→X (column), col→Y (row) with variable Y pitch based on node height.
-    col_gap / rank_gap override the module constants (used by %%{init:...}%% config).
+    col_gap / rank_gap / canvas_pad override the module constants (%%{init:...}%% config).
     """
     if not nodes:
-        return 2 * CANVAS_PAD, 2 * CANVAS_PAD
+        _cp = canvas_pad if canvas_pad is not None else CANVAS_PAD
+        return 2 * _cp, 2 * _cp
 
     _col_gap = col_gap if col_gap is not None else COL_GAP
     _rank_gap = rank_gap if rank_gap is not None else RANK_GAP
+    _CANVAS_PAD = canvas_pad if canvas_pad is not None else CANVAS_PAD
 
     is_lr = direction.upper() in ("LR", "RL")
     # Compute per-node display widths from label text (skip special-shape fixed sizes).
@@ -316,7 +319,7 @@ def _assign_coordinates(
             for c in all_cols
         }
         col_left: dict[int, int] = {}
-        _cursor = CANVAS_PAD
+        _cursor = _CANVAS_PAD
         for c in all_cols:
             col_left[c] = _cursor
             _cursor += col_width[c] + _col_gap
@@ -350,7 +353,7 @@ def _assign_coordinates(
         rank_to_nodes: dict[int, list] = {}
         for n in nodes.values():
             rank_to_nodes.setdefault(n.rank, []).append(n)
-        y_cursor = CANVAS_PAD
+        y_cursor = _CANVAS_PAD
         for rank in sorted(rank_to_nodes):
             rank_h = max(_node_render_h(n) for n in rank_to_nodes[rank])
             for n in rank_to_nodes[rank]:
@@ -359,8 +362,8 @@ def _assign_coordinates(
 
         # Recompute canvas_w using actual node x positions (dummies may have shifted)
         max_x_right = max(n.x + (n.width or col_width.get(n.col, NODE_W)) for n in nodes.values())
-        canvas_w = max_x_right + CANVAS_PAD
-        canvas_h = y_cursor + CANVAS_PAD - _rank_gap
+        canvas_w = max_x_right + _CANVAS_PAD
+        canvas_h = y_cursor + _CANVAS_PAD - _rank_gap
         return canvas_w, canvas_h
 
     # LR: per-rank x-positions using each rank's own max node width.
@@ -373,27 +376,27 @@ def _assign_coordinates(
         for r in all_ranks
     }
     rank_left: dict[int, int] = {}
-    _cursor = CANVAS_PAD
+    _cursor = _CANVAS_PAD
     for r in all_ranks:
         rank_left[r] = _cursor
         _cursor += rank_width[r] + _rank_gap
     for n in nodes.values():
-        n.x = rank_left.get(n.rank, CANVAS_PAD)
+        n.x = rank_left.get(n.rank, _CANVAS_PAD)
 
     # Group nodes by col, accumulate Y positions top-to-bottom.
     # Nodes shorter than col_h are centered vertically within the band.
     col_to_nodes: dict[int, list] = {}
     for n in nodes.values():
         col_to_nodes.setdefault(n.col, []).append(n)
-    y_cursor = CANVAS_PAD
+    y_cursor = _CANVAS_PAD
     for col in sorted(col_to_nodes):
         col_h = max(_node_render_h(n) for n in col_to_nodes[col])
         for n in col_to_nodes[col]:
             n.y = y_cursor + (col_h - _node_render_h(n)) // 2
         y_cursor += col_h + _col_gap
 
-    canvas_w = _cursor - _rank_gap + CANVAS_PAD
-    canvas_h = y_cursor + CANVAS_PAD - _col_gap
+    canvas_w = _cursor - _rank_gap + _CANVAS_PAD
+    canvas_h = y_cursor + _CANVAS_PAD - _col_gap
     return canvas_w, canvas_h
 
 
@@ -474,3 +477,104 @@ def _compact_group_columns(
                 break
         if not moved:
             break
+
+
+# ── inner-direction recursive position fixup ─────────────────────────────────
+
+def _apply_inner_direction_positions(
+    nodes: dict[str, _Node],
+    edges: list[_Edge],
+    groups: dict[str, _Group],
+    outer_direction: str,
+    col_gap: int | None = None,
+) -> None:
+    """Post-process inner-direction subgraph member positions after outer layout.
+
+    Replaces the rank-flattening hack: after `_assign_coordinates` places all
+    nodes in pixel space, for each group whose declared direction differs from
+    the outer direction, re-orders its members' x (or y) positions according to
+    the topological ordering of intra-group edges rather than leaving them in
+    bary-sort order.
+
+    TB outer + LR inner: members share the same y (from rank-flattening); this
+    re-assigns x positions so data-flow goes left-to-right within the group.
+
+    LR outer + TB inner: members share the same x; re-assigns y positions.
+
+    Processes groups bottom-up (leaf groups first) so nested inner groups get
+    positioned before their parents pick up their corrected positions.
+    """
+    _col_gap = col_gap if col_gap is not None else COL_GAP
+    is_outer_tb = outer_direction.upper() in ("TB", "TD")
+
+    def _topo_order(member_ids: list[str], intra_edges: list[tuple[str, str]]) -> list[str]:
+        """Topological sort of members by intra-group forward-edge flow."""
+        in_degree: dict[str, int] = {m: 0 for m in member_ids}
+        adj: dict[str, list[str]] = {m: [] for m in member_ids}
+        for src, dst in intra_edges:
+            adj[src].append(dst)
+            in_degree[dst] += 1
+        queue = [m for m in member_ids if in_degree[m] == 0]
+        result: list[str] = []
+        while queue:
+            queue.sort(key=lambda n: nodes[n].x if is_outer_tb else nodes[n].y)
+            cur = queue.pop(0)
+            result.append(cur)
+            for nb in adj[cur]:
+                in_degree[nb] -= 1
+                if in_degree[nb] == 0:
+                    queue.append(nb)
+        # Append any nodes not reached (cycles) in stable order
+        seen = set(result)
+        for m in member_ids:
+            if m not in seen:
+                result.append(m)
+        return result
+
+    # Build group tree to process bottom-up
+    def _is_leaf_group(gid: str) -> bool:
+        return not any(g.parent_group == gid for g in groups.values())
+
+    def _process_group(gid: str) -> None:
+        grp = groups[gid]
+        if not grp.members or not grp.direction:
+            return
+        inner_dir = grp.direction.upper()
+        if is_outer_tb and inner_dir not in ("LR", "RL"):
+            return
+        if not is_outer_tb and inner_dir not in ("TB", "TD"):
+            return
+
+        member_set = set(grp.members)
+        member_ids = [m for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        if len(member_ids) < 2:
+            return
+
+        intra = [
+            (e.src, e.dst) for e in edges
+            if e.src in member_set and e.dst in member_set and not e.reversed_
+        ]
+        ordered = _topo_order(member_ids, intra)
+        if inner_dir in ("RL", "BT"):
+            ordered = list(reversed(ordered))
+
+        if is_outer_tb:
+            # Re-assign x positions; y stays the same (from rank-flattening)
+            start_x = min(nodes[m].x for m in member_ids)
+            for i, m in enumerate(ordered):
+                nw = nodes[m].width or NODE_W
+                nodes[m].x = start_x + i * (nw + _col_gap)
+        else:
+            # Re-assign y positions; x stays the same
+            start_y = min(nodes[m].y for m in member_ids)
+            for i, m in enumerate(ordered):
+                nh = _node_render_h(nodes[m])
+                nodes[m].y = start_y + i * (nh + _col_gap)
+
+    # Process groups: leaf groups first (bottom-up)
+    all_gids = list(groups.keys())
+    # Leaf groups first
+    leaves = [g for g in all_gids if _is_leaf_group(g)]
+    non_leaves = [g for g in all_gids if not _is_leaf_group(g)]
+    for gid in leaves + non_leaves:
+        _process_group(gid)

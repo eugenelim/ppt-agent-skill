@@ -35,7 +35,7 @@ from ._constants import (
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
-from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
+from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols, _apply_inner_direction_positions
 from ._routing import _route_edges, _arrowhead
 from ._c4 import _render_c4_fragment, C4Item, C4Relationship, C4Boundary
 from ._renderer import (
@@ -166,7 +166,17 @@ def _layout_graph_topology(
         nodes, direction,
         col_gap=_init_cfg.get("col_gap"),
         rank_gap=_init_cfg.get("rank_gap"),
+        canvas_pad=_init_cfg.get("diagram_padding"),
     )
+
+    # Recursive inner-direction fixup: re-order member x/y positions for groups
+    # whose declared direction differs from the outer direction (replaces the
+    # flat rank-flattening that was the only prior mechanism).
+    if groups:
+        _apply_inner_direction_positions(
+            nodes, edges, groups, direction,
+            col_gap=_init_cfg.get("col_gap"),
+        )
 
     # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:
@@ -3353,9 +3363,13 @@ _ARCH_GRP_RE = re.compile(
 _ARCH_JCT_RE = re.compile(r'^junction\s+(\w+)', re.I)
 # Edge syntax: "src[:side] (<-->|-->|<--|--) [side:]dst [: label]"
 # Operator order: <--> before <-- before -- to avoid prefix shadowing.
+# Side codes: L(eft) R(ight) T(op) B(ottom)
 _ARCH_EDGE_RE = re.compile(
-    r'^(\w+)(?::\w+)?\s*(<-->|-->|<--|--)\s*(?:\w+:)?(\w+)(?::\w+)?'
-    r'(?:\s*:\s*(.*))?$'
+    r'^(\w+)(?::([LRTBrlbt]))?'        # group 1: src_id, group 2: src_side
+    r'\s*(<-->|-->|<--|--)\s*'          # group 3: operator
+    r'(?:([LRTBrlbt]):)?(\w+)'          # group 4: dst_side, group 5: dst_id
+    r'(?::\w+)?'                        # trailing annotation (ignore)
+    r'(?:\s*:\s*(.*))?$'                # group 6: edge label
 )
 
 
@@ -3440,23 +3454,29 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
         m = _ARCH_EDGE_RE.match(line)
         if m:
             src_id = m.group(1)
-            op = m.group(2)
-            dst_id = m.group(3)
-            lbl = (m.group(4) or "").strip()
+            src_side = (m.group(2) or "").upper() or None
+            op = m.group(3)
+            dst_side = (m.group(4) or "").upper() or None
+            dst_id = m.group(5)
+            lbl = (m.group(6) or "").strip()
             if op == "<-->":
                 # Bidirectional: emit forward + reverse edges so both ends get arrowheads.
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=True))
+                                   style="solid", arrow=True,
+                                   src_side=src_side, dst_side=dst_side))
                 edges.append(_Edge(src=dst_id, dst=src_id, label="",
-                                   style="solid", arrow=True))
+                                   style="solid", arrow=True,
+                                   src_side=dst_side, dst_side=src_side))
             elif op == "<--":
                 # Reverse arrow: swap src/dst so layout flows correctly.
                 edges.append(_Edge(src=dst_id, dst=src_id, label=lbl,
-                                   style="solid", arrow=True))
+                                   style="solid", arrow=True,
+                                   src_side=dst_side, dst_side=src_side))
             else:
                 # --> (directed) or -- (undirected)
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=(op == "-->")))
+                                   style="solid", arrow=(op == "-->"),
+                                   src_side=src_side, dst_side=dst_side))
 
     if not nodes:
         raise ValueError("No services found in architecture-beta.")
@@ -3476,9 +3496,20 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
 # ── T3: C4 diagrams ──────────────────────────────────────────────────────────
 
 _C4_ELEM_RE = re.compile(
-    r'^(Person|System|Container|Component|SystemDb|ContainerDb|'
-    r'Person_Ext|System_Ext|Container_Ext)\s*'
-    r'\(\s*(\w+)\s*,\s*"([^"]+)"(?:\s*,\s*"([^"]*)")?', re.I
+    r'^(Person|System|Container|Component'
+    r'|SystemDb|System_Db|SystemQueue|System_Queue'
+    r'|ContainerDb|Container_Db|ContainerQueue|Container_Queue'
+    r'|ComponentDb|Component_Db|ComponentQueue|Component_Queue'
+    r'|Person_Ext|System_Ext|SystemDb_Ext|System_Db_Ext'
+    r'|SystemQueue_Ext|System_Queue_Ext'
+    r'|Container_Ext|ContainerDb_Ext|Container_Db_Ext'
+    r'|ContainerQueue_Ext|Container_Queue_Ext'
+    r'|Component_Ext|ComponentDb_Ext|Component_Db_Ext'
+    r'|ComponentQueue_Ext|Component_Queue_Ext)\s*'
+    r'\(\s*(\w+)\s*,\s*"([^"]+)"'    # alias, label
+    r'(?:\s*,\s*"([^"]*)")?'           # arg3: technology or description
+    r'(?:\s*,\s*"([^"]*)")?',          # arg4: description (for container/component)
+    re.I
 )
 _C4_BOUNDARY_RE = re.compile(
     r'^(?:Enterprise_Boundary|System_Boundary|Container_Boundary|Boundary)'
@@ -3512,15 +3543,25 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
             groups.setdefault(bid, C4Boundary(id=bid, label=blbl))
             boundary_stack.append(bid)
             continue
-        if line.startswith(")") and boundary_stack:
+        if line.startswith((")", "}")) and boundary_stack:
             boundary_stack.pop()
             continue
         m = _C4_ELEM_RE.match(line)
         if m:
-            elem_type = m.group(1).lower()
+            elem_type = m.group(1).lower().replace("-", "_")
             eid, elbl = m.group(2), m.group(3)
-            desc = m.group(4) or ""
+            arg3 = m.group(4) or ""
+            arg4 = m.group(5) or ""
             is_ext = elem_type.endswith("_ext")
+            # Container/Component have signature (alias, label, technology, description).
+            # Person/System have signature (alias, label, description).
+            _base = re.sub(r"_(ext|db|queue)$", "", elem_type)
+            if _base in ("container", "component") and arg4:
+                tech, desc = arg3, arg4
+            elif _base in ("container", "component"):
+                tech, desc = arg3, ""
+            else:
+                tech, desc = "", arg3
             gin = boundary_stack[-1] if boundary_stack else None
             items.append(C4Item(
                 alias=eid,
@@ -3528,6 +3569,7 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
                 label=elbl,
                 description=desc,
                 is_external=is_ext,
+                technology=tech,
                 boundary=gin,
             ))
             if gin:
