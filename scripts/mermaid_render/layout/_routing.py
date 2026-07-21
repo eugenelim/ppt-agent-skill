@@ -215,7 +215,9 @@ def _astar_route(
                 heapq.heappush(heap, (ng + nh, ctr, nxi, nyi, nd))
                 ctr += 1
 
-    # No path found
+    # No path found — record failure and return None; caller uses _route_perimeter
+    if _failures is not None:
+        _failures.append((sx, sy, dx, dy))
     return None
 
 
