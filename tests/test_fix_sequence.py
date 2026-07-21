@@ -1195,12 +1195,14 @@ class TestNaturalHorizontalLayout:
                 f"Participant label must not clip text: {style}"
             )
 
-    def test_spanning_note_text_widens_column_gap(self):
-        """A long spanning-note text forces the gap between noted participants to widen."""
-        long_note = "a spanning note with very long text that needs extra space to fit"
+    def test_spanning_note_long_word_widens_column_gap(self):
+        """A spanning note with a very long single word forces the column gap to widen."""
+        # Use an extremely long single unbreakable word (no spaces) so min_content_width
+        # exceeds the natural adjacent-box gap and forces the constraint to fire.
+        long_word = "A" * 60  # 60-char word; measured width ~450px at 10px font
         src_long = (
             "sequenceDiagram\n"
-            f"  note over Alice, Bob: {long_note}\n"
+            f"  note over Alice, Bob: {long_word}\n"
             "  Alice->>Bob: x"
         )
         src_short = (
@@ -1211,7 +1213,7 @@ class TestNaturalHorizontalLayout:
         gap_long = self._lifeline_gap(_dispatch(src_long, None, 0))
         gap_short = self._lifeline_gap(_dispatch(src_short, None, 0))
         assert gap_long > gap_short, (
-            f"Long spanning note should widen gap: {gap_long}px vs {gap_short}px"
+            f"Long single-word note should widen column gap: {gap_long}px vs {gap_short}px"
         )
 
     def test_fragment_header_label_widens_column_gap(self):

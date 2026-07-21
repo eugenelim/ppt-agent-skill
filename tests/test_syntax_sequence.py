@@ -464,10 +464,10 @@ class TestGeometryValidation:
         assert vr.geometry == "unvalidated"
 
     def test_geometry_pass_implies_no_violations(self):
-        """When geometry='pass' the errors tuple must be empty."""
+        """When geometry='pass' the warnings tuple (geometry violations) must be empty."""
         vr = validate(_seq("  Alice->>Bob: msg\n  Bob->>Alice: ack"))
         if vr.geometry == "pass":
-            assert vr.errors == (), f"geometry=pass but errors={vr.errors}"
+            assert vr.warnings == (), f"geometry=pass but warnings={vr.warnings}"
 
     def test_complex_diagram_geometry_pass(self):
         """A realistic multi-feature diagram must pass all geometry invariants."""
@@ -484,3 +484,40 @@ class TestGeometryValidation:
             "  note over Client, Server: HTTP/1.1\n"
         ))
         assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_geometry_fail_on_inverted_activation_bar(self):
+        """INV-11: inverted activation bar (top > bottom) yields geometry='fail'."""
+        import sys
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        from mermaid_render.layout._geometry import SequenceGeometry, Diagnostic
+        from mermaid_render.layout._strategies import _validate_sequence_geometry
+        bad_geom = SequenceGeometry(
+            participant_centers=(("A", 100.0), ("B", 200.0)),
+            lifeline_x=(("A", 100.0), ("B", 200.0)),
+            activation_bars=(("A", 200.0, 100.0),),  # inverted: top > bottom
+            message_ys=(150.0,),
+            message_endpoints=((100.0, 150.0, 200.0, 150.0),),
+            canvas=(400.0, 300.0),
+        )
+        violations = _validate_sequence_geometry(bad_geom)
+        assert any("INV-11" in v for v in violations), (
+            f"Expected INV-11 violation for inverted bar, got: {violations}"
+        )
+
+    def test_geometry_fail_on_non_monotone_message_ys(self):
+        """INV-6: decreasing message_ys yields a geometry violation."""
+        import sys
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        from mermaid_render.layout._geometry import SequenceGeometry
+        from mermaid_render.layout._strategies import _validate_sequence_geometry
+        bad_geom = SequenceGeometry(
+            participant_centers=(("A", 100.0), ("B", 200.0)),
+            lifeline_x=(("A", 100.0), ("B", 200.0)),
+            message_ys=(200.0, 100.0),  # non-monotone
+            message_endpoints=((100.0, 200.0, 200.0, 200.0), (200.0, 100.0, 100.0, 100.0)),
+            canvas=(400.0, 300.0),
+        )
+        violations = _validate_sequence_geometry(bad_geom)
+        assert any("INV-6" in v for v in violations), (
+            f"Expected INV-6 violation for non-monotone ys, got: {violations}"
+        )

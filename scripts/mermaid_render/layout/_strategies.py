@@ -510,12 +510,14 @@ def _layout_lifeline(
                 _nlo, _nhi = min(_nidxs), max(_nidxs)
                 _ntxt = _it.get("text", "")
                 if _ntxt:
-                    _ntw = _MEASURER.layout(_ntxt, _NOTE_STYLE_C, max_width=float("inf")).max_content_width
-                    # span between centers must accommodate text minus the boxes and overhangs
-                    _ngap = _ntw - _half_w[_nlo] - _half_w[_nhi] - 2 * NOTE_SPAN_OVERHANG
+                    _ntl = _MEASURER.layout(_ntxt, _NOTE_STYLE_C, max_width=float("inf"))
+                    # Ensure the longest unbreakable word fits inside the usable note width.
+                    # Note width = (cx_hi - cx_lo) + 2*NOTE_SPAN_OVERHANG; usable = note_w - 8.
+                    # → cx_hi - cx_lo >= min_content_width - 2*NOTE_SPAN_OVERHANG + 8
+                    _ngap = _ntl.min_content_width - 2 * NOTE_SPAN_OVERHANG + 8
                     if _ngap > 0:
                         _col_constraints.append((_nlo, _nhi, _ngap))
-        elif _itype in ("block", "rect"):
+        elif _itype == "block":
             _fps = _it.get("frag_parts", set())
             _fps_idxs = [_p_index[p] for p in _fps if p in _p_index]
             if _fps_idxs:
@@ -4380,7 +4382,7 @@ def _dispatch_validate(src: str) -> "ValidationResult":
             diagnostics=diagnostics,
             syntax_coverage=sc,
             geometry=geom_status,
-            errors=tuple(violations),
+            warnings=tuple(violations),  # geometry violations go in warnings, not errors
         )
     return ValidationResult(geometry="unvalidated")
 

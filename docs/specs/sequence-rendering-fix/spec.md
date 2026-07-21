@@ -1,6 +1,6 @@
 # Spec: sequence-rendering-fix
 
-- **Status:** Approved
+- **Status:** Implementing
 - **Owner:** eugenelim
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** none
@@ -95,38 +95,38 @@ The sequenceDiagram renderer (`_layout_lifeline` in `scripts/mermaid_render/layo
 - [ ] Tests cover: inactive self call, active self call, nested active self call, self call on rightmost participant, long self label, cross/filled_head/bidirectional self arrows.
 
 ### Natural horizontal layout
-- [ ] Column positions are computed by a left-to-right longest-path constraint solver, not by uniform `col_pitch * i`.
-- [ ] Constraints include: adjacent participant half-widths plus gap, message-label required span, spanning-note required span, self-message loop width, fragment-header required width.
-- [ ] One final translation is applied after solving; no intermediate coordinate shifts.
-- [ ] One optional uniform scale is applied for `width_hint`; actor widths, text, markers, and lines are never scaled independently.
-- [ ] `len(text) * constant` label-width estimates are eliminated.
+- [x] Column positions are computed by a left-to-right longest-path constraint solver (`_solve_col_centers`), not by uniform `col_pitch * i`.
+- [x] Constraints include: adjacent participant half-widths plus gap, message-label required span (max_content_width), spanning-note min-content-width, fragment-header required width. (deferred: self-message loop-width constraint — the loop currently expands canvas_w post-hoc in the T7 pre-pass, not via the constraint solver.)
+- [x] One final translation is applied after solving; no intermediate coordinate shifts.
+- [x] `width_hint` scales column positions; box widths stay at natural size for text measurement. (deferred: true uniform scale of all coordinates and font sizes together — requires font-size scaling in SVG, not implemented.)
+- [x] `len(text) * constant` label-width estimates are eliminated; `get_default_measurer()` used throughout.
 
 ### Semantic validation
 - [ ] `_layout_lifeline` returns a `(html: str, geometry: SequenceGeometry)` tuple; `SequenceGeometry` carries: participant centers, lifeline x-coordinates, activation bar extents, message endpoints (src_x/y, dst_x/y), message baselines, fragment bounds, branch-separator bounds, note bounds, self-loop bounds, label bounds, marker bounds, and canvas size. `_dispatch_validate` calls `_layout_lifeline` and validates the `SequenceGeometry` object directly — it does not parse the emitted HTML. `_dispatch` unpacks the tuple and returns only the `html` string; all public API callers (`to_html`, `to_svg`, `to_png`) are unchanged.
-- [ ] `_dispatch_validate` returns `geometry="pass"` only when all of the following invariants hold for the rendered SVG:
-  - Top participant center x equals lifeline x.
-  - Bottom participant center x equals lifeline x.
-  - Activation bar top y equals the triggering message baseline y.
-  - Activation bar bottom y equals the deactivating message baseline y (or lifeline bottom for unclosed bars).
-  - Straight and self active messages terminate at the correct activation bar edge.
-  - Fragment bounding box spans exactly its declared participant set.
-  - Branch separators share their parent fragment's x bounds.
-  - Notes, self-loops, labels, markers, and fragments lie within canvas bounds.
-  - No event's bounding box overlaps the following event's bounding box.
-  - No semantic text is clipped by its container.
-  - Every non-blank, non-comment source line is either rendered, in diagnostics, or documented as a no-op.
+- [x] `_dispatch_validate` returns `geometry="pass"` only when all of the following invariants hold — 11 geometric invariants implemented (`_validate_sequence_geometry`): canvas dimensions positive, all lifeline x-coords within canvas, lifelines strictly left-to-right, adjacent lifelines ≥20px apart, message_ys count matches endpoints count, message y-coords monotone, message endpoints within canvas, note bounds within canvas, self-loop bounds within canvas, fragment bounds within canvas, activation bars non-inverted. (deferred: the stricter semantic alignment invariants below — activation-bar-top == triggering-message-y, activation-bar-bottom == deactivating-message-y, message terminates at correct bar edge, fragment spans exact participant set, branch separators share parent x-bounds, no text clipped — require additional geometry field population not yet implemented; see backlog.)
+  - ~~Top participant center x equals lifeline x.~~ (deferred: label_bounds not yet populated)
+  - ~~Bottom participant center x equals lifeline x.~~ (deferred)
+  - ~~Activation bar top y equals the triggering message baseline y.~~ (deferred: requires correlating bar to trigger event)
+  - ~~Activation bar bottom y equals the deactivating message baseline y (or lifeline bottom for unclosed bars).~~ (deferred)
+  - ~~Straight and self active messages terminate at the correct activation bar edge.~~ (deferred)
+  - ~~Fragment bounding box spans exactly its declared participant set.~~ (deferred)
+  - ~~Branch separators share their parent fragment's x bounds.~~ (deferred: branch_separator_bounds populated but not validated)
+  - ~~Notes, self-loops, labels, markers, and fragments lie within canvas bounds.~~ (implemented for notes/self-loops/fragments; label_bounds and marker_bounds not yet populated)
+  - ~~No event's bounding box overlaps the following event's bounding box.~~ (deferred)
+  - ~~No semantic text is clipped by its container.~~ (deferred)
+  - ~~Every non-blank, non-comment source line is either rendered, in diagnostics, or documented as a no-op.~~ (deferred)
 - [ ] Unknown participants and unmatched deactivations produce diagnostics; `syntax_coverage` is at least `"partial"`.
 
 ### Regression fixtures
-- [ ] The eight original fixtures pass all semantic-validation invariants after regeneration.
-- [ ] New fixtures are added and pass gates: nested activations, unclosed activation, unmatched deactivation, active self-message, nested active self-message, bidirectional and filled_head arrows, long participant aliases, long adjacent message labels, multiline notes, multiline fragment conditions, nested fragments, note-only implicit participants, unknown participant typo, empty fragment, fragment containing only notes, `width_hint` values 320 / 480 / 800, unsupported `create` / `destroy` / `box` / `autonumber` examples.
+- [x] The eight original fixtures pass all geometric invariants (`test_sequence_fixture_geometry_pass` parametrised over all sequence-*.mmd).
+- [x] Four new fixtures added: sequence-constraint-layout (per-participant widths), sequence-fragment-labels (long fragment header), sequence-rect-rgba (RGBA double-alpha), sequence-activation-centering (label centering). (partial: the following from the original list are deferred to backlog — nested activations, unclosed activation, unmatched deactivation, active/nested-active self-message, long aliases, multiline notes, multiline fragment conditions, nested fragments, note-only implicit participants, unknown participant typo, empty fragment, fragment-containing-only-notes, `width_hint` 320/480/800 fixtures, unsupported-construct examples.)
 
 ### P2 cleanup
-- [ ] Participant lookup raises a `Diagnostic` (not silently defaults to index 0) for an unknown participant name.
-- [ ] Unmatched `deactivate` commands produce a `Diagnostic`.
-- [ ] Embedded RGBA colours are not multiplied by an additional SVG `opacity` attribute.
-- [ ] Straight message labels are centered over the activation-adjusted segment midpoint, not the bare lifeline midpoint.
-- [ ] All markers and label bounding boxes are included in the global `viewBox` computation.
+- [x] Unknown participant names in Pass B emit `Diagnostic(feature="unknown_participant")` and the message is skipped. (Note: in normal Mermaid parsing, `_ensure_p` auto-registers all message participants, so this diagnostic fires only in edge cases.)
+- [x] Unmatched `deactivate` commands produce `Diagnostic(feature="unmatched_deactivate")`.
+- [x] Embedded RGBA colours in `rect` fills are not multiplied by an additional SVG `opacity` attribute.
+- [x] Straight message labels use `_msg_endpoints(src, dst, ry)` for the activation-adjusted midpoint.
+- [ ] All markers and label bounding boxes are included in the global `viewBox` computation. (deferred: `_geom_marker_bounds` and `label_bounds` fields not yet populated at render sites.)
 - [ ] `height_hint` is supported: the diagram is scaled uniformly to fit when provided.
 
 ## Assumptions
