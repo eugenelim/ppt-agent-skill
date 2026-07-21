@@ -48,7 +48,7 @@ def to_svg(src: str, *, theme: Theme = None, width_hint: int = 0, faithful: bool
     from .native_svg import _use_native, dispatch_native
 
     if _use_native():
-        return dispatch_native(src, theme=theme, width_hint=width_hint)
+        return dispatch_native(src, theme=theme, faithful=faithful, width_hint=width_hint)
 
     # Legacy DOM path (Playwright)
     resolved = theme if theme is not None else "adaptive-light"
