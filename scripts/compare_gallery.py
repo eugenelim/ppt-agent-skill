@@ -15,11 +15,12 @@ from __future__ import annotations
 
 import argparse
 import html as _html_mod
-import re
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = ROOT / "tests" / "fixtures"
@@ -90,6 +91,15 @@ nav a:hover { background: #e8e5e0; }
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
+}
+.comparison-grid > * {
+    min-width: 0;
+}
+.mmdc-frame {
+    width: 100%;
+    border: none;
+    display: block;
+    min-height: 80px;
 }
 .pane-header {
     font-size: 11px;
@@ -162,6 +172,35 @@ details pre {
 .badge-ok { background: #d4edda; color: #1e6e34; }
 .badge-err { background: #f8d7da; color: #842029; }
 """
+
+
+def _svg_aspect(svg_path: Path) -> tuple[float, float] | None:
+    """Return (w, h) from root <svg> viewBox or width/height attributes, or None."""
+    def _px(s: str) -> float:
+        s = s.strip()
+        for unit in ("px", "pt", "em", "rem", "%"):
+            if s.endswith(unit):
+                s = s[: -len(unit)]
+                break
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+
+    try:
+        root = ET.parse(svg_path).getroot()
+        vb = root.get("viewBox")
+        if vb:
+            parts = [float(x) for x in vb.strip().replace(",", " ").split()]
+            if len(parts) >= 4 and parts[2] and parts[3]:
+                return parts[2], parts[3]
+        w = _px(root.get("width") or "0")
+        h = _px(root.get("height") or "0")
+        if w and h:
+            return w, h
+    except Exception:
+        pass
+    return None
 
 
 def _run_mmdc(src: str, out_svg: Path) -> tuple[bool, str]:
@@ -293,14 +332,25 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
                     ours_content = f'<div class="error-box">{_html_mod.escape(ours_err)}</div>'
 
                 if mmdc_ok:
-                    svg_content = mmdc_svg_path.read_text(encoding="utf-8")
-                    if svg_content.startswith("<?xml"):
-                        svg_content = svg_content[svg_content.index("<svg"):]
-                    svg_content = re.sub(r'\bwidth="[^"]*"', 'width="100%"', svg_content, count=1)
-                    svg_content = re.sub(r'\bheight="[^"]*"', 'height="auto"', svg_content, count=1)
-                    mmdc_content = f'<div class="render-box">{svg_content}</div>'
+                    mmdc_url = f"mmdc/{quote(mmdc_svg_path.name)}"
+                    aspect = _svg_aspect(mmdc_svg_path)
+                    ar_style = (
+                        f' style="aspect-ratio: {aspect[0]} / {aspect[1]};"'
+                        if aspect else ""
+                    )
+                    mmdc_content = (
+                        '<div class="render-box">'
+                        f'<iframe class="mmdc-frame" src="{mmdc_url}"{ar_style}'
+                        f' title="mmdc rendering of {_html_mod.escape(name, quote=True)}">'
+                        '</iframe>'
+                        '</div>'
+                    )
                 else:
-                    mmdc_content = f'<div class="error-box">{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}</div>'
+                    mmdc_content = (
+                        '<div class="error-box">'
+                        f'{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}'
+                        '</div>'
+                    )
 
                 f.write(f"""
 <div class="diagram-section" id="{name}">
