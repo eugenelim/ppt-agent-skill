@@ -486,11 +486,15 @@ def _layout_lifeline(
         return _half_w[_idx] if _idx < len(_half_w) else BOX_MIN_W / 2.0
 
     # Collect constraints: adjacent participant spacing + message label spans
+    # + spanning-note text widths + fragment-header text widths (T8b)
     _col_constraints: "list[tuple[int, int, float]]" = []
     for _ci in range(n_parts - 1):
         _col_constraints.append((_ci, _ci + 1, _half_w[_ci] + COL_GAP + _half_w[_ci + 1]))
+    _NOTE_STYLE_C = TextStyle(font_size=10)
+    _FRAG_HDR_STYLE = TextStyle(font_size=11, font_weight=700)
     for _it in items:
-        if _it.get("type") == "msg" and _it.get("src") != _it.get("dst"):
+        _itype = _it.get("type")
+        if _itype == "msg" and _it.get("src") != _it.get("dst"):
             _si = _p_index.get(_it.get("src", ""), -1)
             _di = _p_index.get(_it.get("dst", ""), -1)
             if _si >= 0 and _di >= 0:
@@ -499,6 +503,32 @@ def _layout_lifeline(
                 if _lbl:
                     _lw = _MEASURER.layout(_lbl, _LABEL_STYLE, max_width=float("inf")).max_content_width
                     _col_constraints.append((_lo, _hi, _lw + LABEL_PAD))
+        elif _itype == "note" and _it.get("pos") == "over":
+            _npids = _it.get("pids", [])
+            _nidxs = [_p_index[p] for p in _npids if p in _p_index]
+            if len(_nidxs) >= 2:
+                _nlo, _nhi = min(_nidxs), max(_nidxs)
+                _ntxt = _it.get("text", "")
+                if _ntxt:
+                    _ntw = _MEASURER.layout(_ntxt, _NOTE_STYLE_C, max_width=float("inf")).max_content_width
+                    # span between centers must accommodate text minus the boxes and overhangs
+                    _ngap = _ntw - _half_w[_nlo] - _half_w[_nhi] - 2 * NOTE_SPAN_OVERHANG
+                    if _ngap > 0:
+                        _col_constraints.append((_nlo, _nhi, _ngap))
+        elif _itype in ("block", "rect"):
+            _fps = _it.get("frag_parts", set())
+            _fps_idxs = [_p_index[p] for p in _fps if p in _p_index]
+            if _fps_idxs:
+                _flo, _fhi = min(_fps_idxs), max(_fps_idxs)
+            else:
+                _flo, _fhi = 0, max(0, n_parts - 1)
+            _fhdr = (_it.get("kw", "") + " " + _it.get("label", "")).strip()
+            if _fhdr and _flo < _fhi:
+                _ftw = _MEASURER.layout(_fhdr, _FRAG_HDR_STYLE, max_width=float("inf")).max_content_width
+                # frag width = cx(hi)-cx(lo) + half_w[lo] + half_w[hi] + PAD_H >= ftw + LABEL_PAD
+                _fgap = _ftw + LABEL_PAD - _half_w[_flo] - _half_w[_fhi] - PAD_H
+                if _fgap > 0:
+                    _col_constraints.append((_flo, _fhi, _fgap))
 
     # Longest-path left-to-right solver (O(n) over sorted constraints)
     def _solve_col_centers(constraints: "list[tuple[int, int, float]]", n: int) -> "list[float]":

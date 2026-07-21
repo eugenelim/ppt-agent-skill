@@ -1195,6 +1195,46 @@ class TestNaturalHorizontalLayout:
                 f"Participant label must not clip text: {style}"
             )
 
+    def test_spanning_note_text_widens_column_gap(self):
+        """A long spanning-note text forces the gap between noted participants to widen."""
+        long_note = "a spanning note with very long text that needs extra space to fit"
+        src_long = (
+            "sequenceDiagram\n"
+            f"  note over Alice, Bob: {long_note}\n"
+            "  Alice->>Bob: x"
+        )
+        src_short = (
+            "sequenceDiagram\n"
+            "  note over Alice, Bob: short\n"
+            "  Alice->>Bob: x"
+        )
+        gap_long = self._lifeline_gap(_dispatch(src_long, None, 0))
+        gap_short = self._lifeline_gap(_dispatch(src_short, None, 0))
+        assert gap_long > gap_short, (
+            f"Long spanning note should widen gap: {gap_long}px vs {gap_short}px"
+        )
+
+    def test_fragment_header_label_widens_column_gap(self):
+        """A long fragment-header label forces the spanned columns wider."""
+        long_label = "this is a very long loop condition that needs room"
+        src_long = (
+            "sequenceDiagram\n"
+            f"  loop {long_label}\n"
+            "    Alice->>Bob: x\n"
+            "  end\n"
+        )
+        src_short = (
+            "sequenceDiagram\n"
+            "  loop short\n"
+            "    Alice->>Bob: x\n"
+            "  end\n"
+        )
+        gap_long = self._lifeline_gap(_dispatch(src_long, None, 0))
+        gap_short = self._lifeline_gap(_dispatch(src_short, None, 0))
+        assert gap_long > gap_short, (
+            f"Long fragment header should widen gap: {gap_long}px vs {gap_short}px"
+        )
+
 
 # ── T11: P2 cleanup ───────────────────────────────────────────────────────────
 
