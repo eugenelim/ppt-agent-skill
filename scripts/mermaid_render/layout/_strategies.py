@@ -3487,9 +3487,20 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
 # ── T3: C4 diagrams ──────────────────────────────────────────────────────────
 
 _C4_ELEM_RE = re.compile(
-    r'^(Person|System|Container|Component|SystemDb|ContainerDb|'
-    r'Person_Ext|System_Ext|Container_Ext)\s*'
-    r'\(\s*(\w+)\s*,\s*"([^"]+)"(?:\s*,\s*"([^"]*)")?', re.I
+    r'^(Person|System|Container|Component'
+    r'|SystemDb|System_Db|SystemQueue|System_Queue'
+    r'|ContainerDb|Container_Db|ContainerQueue|Container_Queue'
+    r'|ComponentDb|Component_Db|ComponentQueue|Component_Queue'
+    r'|Person_Ext|System_Ext|SystemDb_Ext|System_Db_Ext'
+    r'|SystemQueue_Ext|System_Queue_Ext'
+    r'|Container_Ext|ContainerDb_Ext|Container_Db_Ext'
+    r'|ContainerQueue_Ext|Container_Queue_Ext'
+    r'|Component_Ext|ComponentDb_Ext|Component_Db_Ext'
+    r'|ComponentQueue_Ext|Component_Queue_Ext)\s*'
+    r'\(\s*(\w+)\s*,\s*"([^"]+)"'    # alias, label
+    r'(?:\s*,\s*"([^"]*)")?'           # arg3: technology or description
+    r'(?:\s*,\s*"([^"]*)")?',          # arg4: description (for container/component)
+    re.I
 )
 _C4_BOUNDARY_RE = re.compile(
     r'^(?:Enterprise_Boundary|System_Boundary|Container_Boundary|Boundary)'
@@ -3523,15 +3534,25 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
             groups.setdefault(bid, C4Boundary(id=bid, label=blbl))
             boundary_stack.append(bid)
             continue
-        if line.startswith(")") and boundary_stack:
+        if line.startswith((")", "}")) and boundary_stack:
             boundary_stack.pop()
             continue
         m = _C4_ELEM_RE.match(line)
         if m:
-            elem_type = m.group(1).lower()
+            elem_type = m.group(1).lower().replace("-", "_")
             eid, elbl = m.group(2), m.group(3)
-            desc = m.group(4) or ""
+            arg3 = m.group(4) or ""
+            arg4 = m.group(5) or ""
             is_ext = elem_type.endswith("_ext")
+            # Container/Component have signature (alias, label, technology, description).
+            # Person/System have signature (alias, label, description).
+            _base = re.sub(r"_(ext|db|queue)$", "", elem_type)
+            if _base in ("container", "component") and arg4:
+                tech, desc = arg3, arg4
+            elif _base in ("container", "component"):
+                tech, desc = arg3, ""
+            else:
+                tech, desc = "", arg3
             gin = boundary_stack[-1] if boundary_stack else None
             items.append(C4Item(
                 alias=eid,
@@ -3539,6 +3560,7 @@ def _layout_c4(src: str, direction: str, width_hint: int) -> str:
                 label=elbl,
                 description=desc,
                 is_external=is_ext,
+                technology=tech,
                 boundary=gin,
             ))
             if gin:
