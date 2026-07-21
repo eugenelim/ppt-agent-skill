@@ -3058,7 +3058,7 @@ classDiagram
         """Return list of (left, top, width) for each non-dummy node div."""
         results = []
         for m in re.finditer(
-            r'<div class="node[^"]*" data-node-id="[^"]*" style="[^"]*left:(\d+)px;\s*top:(\d+)px;\s*width:(\d+)px',
+            r'<div class="node[^"]*" data-node-id="[^"]*"[^>]*? style="[^"]*left:(\d+)px;\s*top:(\d+)px;\s*width:(\d+)px',
             html,
         ):
             results.append((int(m.group(1)), int(m.group(2)), int(m.group(3))))
@@ -6608,7 +6608,7 @@ class TestBugfixSequenceBottomBoxes:
     def test_bottom_box_has_different_top(self):
         import re
         html = _dispatch(self._SRC, None, 700)
-        tops = [int(m) for m in re.findall(r'data-node-id="Alice[^"]*" style="[^"]*top:(\d+)px', html)]
+        tops = [int(m) for m in re.findall(r'data-node-id="Alice[^"]*"[^>]*? style="[^"]*top:(\d+)px', html)]
         assert len(tops) >= 2 and tops[0] != tops[1], (
             f"Top and bottom Alice boxes must be at different y positions; tops={tops}"
         )

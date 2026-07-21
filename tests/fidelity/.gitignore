@@ -1,0 +1,6 @@
+reports/
+*.png
+*.screenshot.svg
+*.projection.svg
+__pycache__/
+*.pyc

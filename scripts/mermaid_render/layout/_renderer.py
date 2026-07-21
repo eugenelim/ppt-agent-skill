@@ -175,6 +175,23 @@ def _render_graph_fragment(
         f'--canvas-pad:{CANVAS_PAD}px;{zoom_css}{extra_style}">'
     )
 
+    def _node_data_attrs(nid: str, n: "_Node") -> str:
+        import html as _html_mod
+        # Decode HTML entities then strip HTML markup (e.g. <br>, <br/>) to
+        # get plain text for the data attribute.  Prevents double-encoding.
+        _raw = _html_mod.unescape(n.label)
+        _plain = re.sub(r"<[^>]+>", "", _raw).strip()
+        label_clean = _h(_plain)
+        parent_attr = f' data-parent-id="{_h(n.group)}"' if n.group else ""
+        return (
+            f'data-node-id="{_h(nid)}"'
+            f' data-kind="node"'
+            f' data-label="{label_clean}"'
+            f' data-shape="{n.shape}"'
+            f' data-order="{n.rank}"'
+            f'{parent_attr}'
+        )
+
     # Build node → group accent index for title-color inheritance
     _grp_ids = list(groups.keys())
     _node_grp_idx: dict[str, int] = {}
@@ -193,7 +210,7 @@ def _render_graph_fragment(
         _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
         _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
         parts.append(
-            f'<div class="diagram-group" style="'
+            f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{glabel}" style="'
             f'position:absolute; left:{gx}px; top:{gy}px; '
             f'width:{gw}px; height:{gh}px; '
             f'border:1.5px dashed {_accent}; '
@@ -374,7 +391,7 @@ def _render_graph_fragment(
         if _is_terminal_circle(n):
             # UML initial/final state: small fixed-size circle, no padding, centered symbol
             parts.append(
-                f'<div class="node node-circle{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'<div class="node node-circle{extra_cls}" {_node_data_attrs(nid, n)} style="'
                 f'position:absolute; left:{n.x}px; top:{n.y}px; '
                 f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
                 f'border-radius:50%; box-sizing:border-box; '
@@ -437,7 +454,7 @@ def _render_graph_fragment(
             if n.shape == "doublecircle":
                 # Outer circle + inner concentric circle (5px inset)
                 parts.append(
-                    f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'<div class="node node-doublecircle{extra_cls}" {_node_data_attrs(nid, n)} style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:{node_h}px; height:{node_h}px; '
                     f'border-radius:50%; box-sizing:border-box; overflow:visible; '
@@ -453,7 +470,7 @@ def _render_graph_fragment(
                 # Rect with two inner vertical lines near left and right edges
                 _nw = n.width or NODE_W
                 parts.append(
-                    f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'<div class="node node-subroutine{extra_cls}" {_node_data_attrs(nid, n)} style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:{_nw}px; min-height:{node_h}px; '
                     f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
@@ -498,7 +515,7 @@ def _render_graph_fragment(
                     f'</svg>'
                 )
                 parts.append(
-                    f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'<div class="node node-cylinder{extra_cls}" {_node_data_attrs(nid, n)} style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:{_nw}px; min-height:{node_h}px; '
                     f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
@@ -516,7 +533,7 @@ def _render_graph_fragment(
                 # produced by border-radius:50% on a tall/wide rect.
                 _circ_sz = n.width if n.width > 0 else _CIRCLE_NODE_SIZE
                 parts.append(
-                    f'<div class="node node-circle{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'<div class="node node-circle{extra_cls}" {_node_data_attrs(nid, n)} style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:{_circ_sz}px; height:{_circ_sz}px; '
                     f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
@@ -549,7 +566,7 @@ def _render_graph_fragment(
                 parts.append(
                     # Outer container: no clip-path, no overflow:hidden, no box-shadow
                     # (box-shadow goes on the background div so it follows the polygon outline)
-                    f'<div class="node node-{_h(n.shape)}{extra_cls}" data-node-id="{_h(nid)}" style="'
+                    f'<div class="node node-{_h(n.shape)}{extra_cls}" {_node_data_attrs(nid, n)} style="'
                     f'position:absolute; left:{n.x}px; top:{n.y}px; '
                     f'width:{_nw}px; min-height:{node_h}px; '
                     f'box-sizing:border-box; overflow:visible; '
@@ -682,7 +699,7 @@ def _render_graph_fragment(
         defs_parts.append("</defs>")
         parts.append("".join(defs_parts))
 
-    for spec in routed:
+    for _ei, spec in enumerate(routed):
         d = spec["d"]
         style = spec["style"]
         if style == "thick":
@@ -723,10 +740,13 @@ def _render_graph_fragment(
             _src_marker_attr = ""
         _is_bidir_path = (spec.get("src"), spec.get("dst")) in _bidir_src_dst
         _bidir_start_attr = ' marker-start="url(#arrow-bidir-start)"' if _is_bidir_path else ""
+        _rel_id = f'{_h(spec["src"])}__{_h(spec["dst"])}__{_ei}'
+        _arrow_val = _h(spec.get("marker_id") or ("arrow" if spec.get("ah") else "none"))
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none" '
             f'stroke-width="{stroke_w}"{dash}{_bidir_start_attr}{_src_marker_attr}{marker_attr}'
-            f' data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}"/>'
+            f' data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}"'
+            f' data-relation-id="{_rel_id}" data-arrow="{_arrow_val}"/>'
         )
 
     parts.append('</svg>')
@@ -761,14 +781,15 @@ def _render_graph_fragment(
             )
 
     # Edge labels as absolutely-positioned HTML siblings (not inside SVG)
-    for spec in routed:
+    for _ei, spec in enumerate(routed):
         if spec["label"]:
             lx, ly = spec["lx"], spec["ly"]
             rot = spec.get("rot", 0)
             rot_part = f" rotate({rot}deg)" if rot else ""
+            _rel_id = f'{_h(spec["src"])}__{_h(spec["dst"])}__{_ei}'
             parts.append(
                 f'<span class="edge-label" '
-                f'data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}" data-edge-label="{_h(spec["label"])}" '
+                f'data-src="{_h(spec["src"])}" data-dst="{_h(spec["dst"])}" data-edge-label="{_h(spec["label"])}" data-relation-id="{_rel_id}" '
                 f'style="'
                 f'position:absolute; left:{lx}px; top:{ly}px; '
                 f'font-size:12px; font-weight:500; '
@@ -1502,7 +1523,7 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             else ""
         )
         parts.append(
-            f'<div class="diagram-group" data-group-id="{_h(gid)}" style="'
+            f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{lbl}" style="'
             f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
             f'width:{gw}px; height:{gh}px; '
             f'border:1.5px dashed {_accent}; '
@@ -1641,10 +1662,16 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'<polygon points="{_pts}" fill="none" stroke="{accent}" stroke-width="2"/></svg>'
             )
 
+        # Fidelity data attributes for this node
+        _fid_label = _h(decoded_label)
+        _fid_parent = f' data-parent-id="{_h(nl.parent_group_id)}"' if nl.parent_group_id else ""
+
         # Special full-node renderings
         if shape == "doublecircle":
             parts.append(
-                f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}"'
+                f' data-kind="node" data-label="{_fid_label}" data-shape="doublecircle"'
+                f' data-order="{nl.rank}"{_fid_parent} style="'
                 f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
                 f'width:{nh}px; height:{nh}px; '
                 f'border-radius:50%; box-sizing:border-box; overflow:visible; '
@@ -1657,7 +1684,9 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             )
         elif shape == "subroutine":
             parts.append(
-                f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}"'
+                f' data-kind="node" data-label="{_fid_label}" data-shape="subroutine"'
+                f' data-order="{nl.rank}"{_fid_parent} style="'
                 f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
                 f'width:{nw}px; min-height:{nh}px; '
                 f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
@@ -1675,7 +1704,9 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             _cyl_rx = nw // 2 - 2
             _cyl_cx = nw // 2
             parts.append(
-                f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}"'
+                f' data-kind="node" data-label="{_fid_label}" data-shape="cylinder"'
+                f' data-order="{nl.rank}"{_fid_parent} style="'
                 f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
                 f'width:{nw}px; min-height:{nh}px; '
                 f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
@@ -1705,6 +1736,8 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 )
             parts.append(
                 f'<div data-node-id="{_h(nid)}"'
+                f' data-kind="node" data-label="{_fid_label}" data-shape="{shape}"'
+                f' data-order="{nl.rank}"{_fid_parent}'
                 f' class="node{extra_cls}"'
                 f' style="position:absolute;'
                 f' left:{int(b.x)}px; top:{int(b.y)}px;'
@@ -1768,7 +1801,7 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
     defs_parts.append("</defs>")
     parts.append("".join(defs_parts))
 
-    for re_obj in layout.routed_edges:
+    for _rei, re_obj in enumerate(layout.routed_edges):
         if not re_obj.waypoints:
             continue
         pts = re_obj.waypoints
@@ -1789,23 +1822,29 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
             stroke_w = "1.5"
         dash = ' stroke-dasharray="6 4"' if re_obj.edge_style == "dotted" else ""
+        _re_rel_id = f'{_h(re_obj.src_node_id)}__{_h(re_obj.dst_node_id)}__{_rei}'
+        _re_arrow = _mid if re_obj.has_marker_end else "none"
         parts.append(
             f'<path d="{d}" stroke="{stroke_color}" fill="none"'
             f' stroke-width="{stroke_w}"{dash}'
             f' data-src="{_h(re_obj.src_node_id)}"'
             f' data-dst="{_h(re_obj.dst_node_id)}"'
+            f' data-relation-id="{_re_rel_id}"'
+            f' data-arrow="{_re_arrow}"'
             f'{marker_start}{marker_end}/>'
         )
 
     parts.append("</svg>")
 
     # Edge labels
-    for re_obj in layout.routed_edges:
+    for _eli, re_obj in enumerate(layout.routed_edges):
         if re_obj.label_layout and re_obj.label_layout.text:
             lb = re_obj.label_layout.bounds
+            _el_rel_id = f'{_h(re_obj.src_node_id)}__{_h(re_obj.dst_node_id)}__{_eli}'
             parts.append(
                 f'<div class="edge-label"'
                 f' data-src="{_h(re_obj.src_node_id)}" data-dst="{_h(re_obj.dst_node_id)}"'
+                f' data-relation-id="{_el_rel_id}"'
                 f' style="position:absolute;'
                 f' left:{int(lb.x)}px; top:{int(lb.y)}px;'
                 f' width:{int(lb.w)}px; font-size:11px;'

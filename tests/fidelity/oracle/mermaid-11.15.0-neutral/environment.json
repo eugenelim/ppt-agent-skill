@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "reference_id": "mermaid-11.15.0-neutral",
+  "implementation": {
+    "name": "mermaid-cli",
+    "version": "11.15.0",
+    "mermaid_version": "^11.14.0",
+    "profile_id": "mermaid-neutral",
+    "adapter_version": "1.0.0"
+  },
+  "environment": {
+    "mermaid_version": "11.15.0",
+    "playwright_version": "1.61.0",
+    "chromium_revision": "1228",
+    "viewport_width": 1200,
+    "viewport_height": 900,
+    "device_scale_factor": 1,
+    "locale": "en-US",
+    "timezone": "UTC",
+    "reduced_motion": true,
+    "mermaid_config_hash": "",
+    "css_profile_hash": "",
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    }
+  },
+  "notes": [
+    "Mermaid base theme, neutral font, no shadows or gradients.",
+    "Captured with mmdc 11.15.0 (mermaid ^11.14.0, Playwright 1.61.0, Chromium r1228).",
+    "Profile: mermaid-neutral.json. No external network access.",
+    "To recapture: python -m mermaid_fidelity capture-reference --oracle-dir tests/fidelity/oracle/mermaid-11.15.0-neutral --manifest tests/fidelity/cases.toml"
+  ]
+}

@@ -30,6 +30,21 @@ from pathlib import Path
 # ── Project layout ────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parent.parent
 
+# ── Shared geometry quality tolerances (canonical source: compare/quality.py) ─
+# Import from the fidelity core so both tools use identical constants.
+try:
+    sys.path.insert(0, str(ROOT / "tools"))
+    from mermaid_fidelity.compare.quality import QualityTolerances as _QT
+    _TOL = _QT()
+except ImportError:
+    # Fallback if core not yet on path (shouldn't happen in normal operation)
+    class _FallbackTol:
+        overflow_tolerance = 4.0
+        outside_canvas_tolerance = 8.0
+        min_canvas_width = 50.0
+        min_canvas_height = 20.0
+    _TOL = _FallbackTol()
+
 # scripts/ on sys.path so bare `from _browser import` resolves
 sys.path.insert(0, str(ROOT / "scripts"))
 from _browser import _setup_page, get_browser
@@ -58,7 +73,7 @@ _DOM_INSPECT_JS = r"""() => {
             return { gapPx: Math.round(gapToBottom), isAtBottom: gapToBottom < 30 };
         })(),
 
-        // Node overflow: any node where scrollWidth > clientWidth + 4 or scrollHeight > clientHeight + 4
+        // Node overflow: any node where scrollWidth > clientWidth + 4 (tolerance from QualityTolerances.overflow)
         overflowNodes: (() => {
             const bad = [];
             document.querySelectorAll('.node').forEach(n => {
@@ -69,7 +84,7 @@ _DOM_INSPECT_JS = r"""() => {
             return bad;
         })(),
 
-        // Nodes outside diagram canvas bounds
+        // Nodes outside diagram canvas bounds (tolerance from QualityTolerances.outside_canvas = 8)
         outsideNodes: (() => {
             const canvas = document.querySelector('.diagram.mermaid-layout');
             if (!canvas) return [];
@@ -85,7 +100,7 @@ _DOM_INSPECT_JS = r"""() => {
             return bad;
         })(),
 
-        // Canvas dimensions (sanity check non-zero)
+        // Canvas dimensions (min_canvas_w=50, min_canvas_h=20 from QualityTolerances)
         canvasSize: (() => {
             const c = document.querySelector('.diagram.mermaid-layout');
             if (!c) return null;
@@ -249,11 +264,11 @@ def _evaluate(case: DiagramCase, dom: dict) -> list[Finding]:
     if outside:
         fail("DIAG-07", f"nodes outside canvas bounds: {outside}")
 
-    # DIAG-08: canvas has non-zero size
+    # DIAG-08: canvas has non-zero size (using QualityTolerances.min_canvas_w/h)
     cs = dom.get("canvasSize")
     if cs is None:
         fail("DIAG-08", "canvas element not found (canvasSize is null)")
-    elif cs.get("w", 0) <= 50 or cs.get("h", 0) <= 20:
+    elif cs.get("w", 0) <= _TOL.min_canvas_width or cs.get("h", 0) <= _TOL.min_canvas_height:
         fail("DIAG-08", f"canvas has near-zero size: {cs}")
 
     # DIAG-09: unexpected legend
