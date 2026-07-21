@@ -289,8 +289,20 @@ during block-span prepass. `_frag_x_bounds()` uses per-fragment participant set.
 
 ### seq-variable-height-rows
 
-Variable-height row packing — every timeline row is currently fixed-height.
-Long note text or multi-line labels can overflow. Full fix is an architectural
-change: a two-pass row-height accumulator requiring browser text measurement
-(Playwright) that feeds back into the y-layout before SVG is emitted.
+**Implemented** in `docs/specs/seq-variable-height-rows/spec.md`. Two-pass
+heuristic accumulator: note row heights are estimated from character count ×
+5.5 px / note width; all downstream y-positions (messages, activation bars,
+fragment rects, canvas height) use per-row prefix sums. Pixel-accurate
+Playwright text measurement was declined (browser startup cost in the hot
+path) and is tracked below.
+
+### seq-variable-height-rows-playwright
+
+**Deferred from `seq-variable-height-rows`:** Replace the character-count
+heuristic in `_note_row_h()` with a Playwright text-measurement call that
+returns the actual rendered line count at the exact note width. The
+accumulator architecture (`_row_h_list` / `_row_top_list`) is already in
+place; only `_note_row_h` needs to call `page.evaluate()` and return the
+measured height. Unblocked by adding a shared Playwright page handle to
+`_layout_lifeline`'s call site (or a separate pre-render measurement pass).
 
