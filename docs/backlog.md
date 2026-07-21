@@ -307,6 +307,27 @@ produces negative SVG path coordinates that overflow the canvas left edge.
 Unblocked by adding a finalization pass after `_assign_coordinates` that
 offsets the entire layout so all coordinates are ≥ `CANVAS_PAD`.
 
+### adt-pure-python-layout
+
+**Deferred from `flowchart-pipeline-finish` spec:** Record the decision to use
+only pure-Python algorithms for graph layout (no Dagre, ELK, NetworkX, Graphviz,
+PyGraphviz, pydot, subprocess-based layout engines) as a formal Architecture
+Decision Record in `docs/adr/`. The constraint itself is enforced in the spec
+and by AST import tests (Task 12); this item tracks creating the accompanying
+rationale document (tradeoffs: portability vs algorithm maturity, no Node.js
+runtime dependency, deterministic output). Unblocked when `docs/adr/` has an
+ADR-format record titled "Pure-Python Layout Engine".
+
+### strategies-module-split
+
+**Deferred from `flowchart-pipeline-finish` Task 5:** `scripts/mermaid_render/layout/_strategies.py`
+will grow past ~3,500 lines after `_compile_flowchart` is added. The module
+should be split into at least `_pipeline.py` (compile/validate/dispatch) and
+`_diagram_types.py` (per-type renderers: sequence, Gantt, ER, class, etc.).
+The `CONVENTIONS.md` line-count exception for `mermaid_layout/` is stale (the
+package moved to `mermaid_render/`) and should be updated at split time.
+Unblocked by any future PR that needs to modify `_strategies.py`.
+
 ### seq-variable-height-rows-playwright
 
 **Deferred from `seq-variable-height-rows`:** Replace the character-count

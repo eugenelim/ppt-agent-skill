@@ -9,6 +9,7 @@ from __future__ import annotations
 import enum
 import math
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Mapping, Optional, Sequence, Tuple
 
 
@@ -270,6 +271,10 @@ class NodeLayout:
     css_classes: tuple[str, ...]
     extra_css: str
     is_dummy: bool = False
+    rank: int = 0
+    is_external: bool = False
+    icon_svg: str = ""
+    accent_color: str = ""
 
 
 @dataclass(frozen=True)
@@ -311,12 +316,28 @@ class RoutedEdge:
     route_diagnostics: str = ""    # "ok" | "fallback" | "failed:..."
 
 
+# ── Routing failure (typed result for an edge that could not be routed) ───────
+
+@dataclass(frozen=True, slots=True)
+class RoutingFailure:
+    """A parsed edge that could not be routed successfully.
+
+    Produced by _route_edges() when no valid path exists. Stored in
+    FinalizedLayout.routing_failures and reported as an error by
+    validate_finalized_layout().
+    """
+    edge_id: str
+    src_node_id: str
+    dst_node_id: str
+    reason: str   # human-readable failure description
+
+
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
 class LayoutDiagnostics:
     unsupported_options: tuple[str, ...]  # unknown init-config keys
-    route_failures: tuple[str, ...]       # edge ids that used fallback routing
+    route_failures: tuple[str, ...]       # edge ids that used fallback routing (legacy)
     warnings: tuple[str, ...]
 
 
@@ -324,18 +345,30 @@ class LayoutDiagnostics:
 
 @dataclass(frozen=True)
 class FinalizedLayout:
-    """Immutable geometry produced by finalize_graph_layout().
+    """Immutable geometry produced by _compile_flowchart().
 
     The renderer must accept this and perform no geometry work.
+    node_layouts and group_layouts are always MappingProxyType — __post_init__
+    wraps any plain dict passed in at construction time.
+    routing_failures has a default of () for backwards compatibility with
+    existing test construction sites.
     """
-    node_layouts: dict[str, NodeLayout]          # node_id → NodeLayout
-    group_layouts: dict[str, GroupLayout]         # group_id → GroupLayout
+    node_layouts: MappingProxyType  # MappingProxyType[str, NodeLayout]
+    group_layouts: MappingProxyType  # MappingProxyType[str, GroupLayout]
     routed_edges: tuple[RoutedEdge, ...]
-    visible_bounds: Rect    # bounding box of all rendered content
+    visible_bounds: Rect
     diagram_padding: float
-    canvas_bounds: Rect     # visible_bounds + padding on all sides
+    canvas_bounds: Rect
     direction: str          # "TB" | "LR" | "RL" | "BT"
     diagnostics: LayoutDiagnostics
+    routing_failures: tuple["RoutingFailure", ...] = ()  # default for compat; always set by pipeline
+
+    def __post_init__(self) -> None:
+        # Wrap plain dicts in MappingProxyType for immutability
+        if not isinstance(self.node_layouts, MappingProxyType):
+            object.__setattr__(self, "node_layouts", MappingProxyType(self.node_layouts))
+        if not isinstance(self.group_layouts, MappingProxyType):
+            object.__setattr__(self, "group_layouts", MappingProxyType(self.group_layouts))
 
 
 def _empty_diagnostics() -> LayoutDiagnostics:
@@ -346,17 +379,220 @@ def _empty_diagnostics() -> LayoutDiagnostics:
     )
 
 
-# ── Pipeline stubs (used by _strategies.py and __init__.py) ──────────────────
+# ── Layout metadata (accompanies FinalizedLayout in CompiledFlowchart) ────────
 
 @dataclass(frozen=True, slots=True)
-class LayoutResult:
-    """Complete layout result for a diagram (stub — full pipeline deferred)."""
-    node_boxes: Mapping[str, Rect]
-    groups: Mapping[str, GroupLayout]
-    edges: Tuple[RoutedEdge, ...]
-    decoration_boxes: Tuple[Rect, ...]
-    canvas: Rect
+class LayoutMetadata:
+    """Metadata about the layout pass — algorithm used, counts, direction."""
+    direction: str          # "TB" | "LR" | "RL" | "BT"
+    node_count: int
+    group_count: int
+    edge_count: int         # original parsed edge count (before routing)
+    algorithm: str          # e.g. "LongestPathRanker+BarycentricTransposeOrderer+IsotonicCoordinateAssigner"
 
+
+# ── Compiled flowchart (shared result of _compile_flowchart) ──────────────────
+
+@dataclass(frozen=True, slots=True)
+class CompiledFlowchart:
+    """Result of _compile_flowchart() — shared by to_html() and validate()."""
+    layout: FinalizedLayout
+    validation: "ValidationResult"
+    metadata: LayoutMetadata
+
+
+# ── Geometry validation ────────────────────────────────────────────────────────
+
+def validate_finalized_layout(
+    layout: FinalizedLayout,
+    metadata: "LayoutMetadata | None" = None,
+    clearance_threshold: float = 4.0,
+) -> "ValidationResult":
+    """Validate a FinalizedLayout against geometry constraints.
+
+    Returns a ValidationResult with errors (hard violations) and warnings
+    (soft concerns). All checks operate on the immutable IR only — no HTML parsing.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    cw, ch = layout.canvas_bounds.w, layout.canvas_bounds.h
+
+    # 1. Canvas must be positive
+    if cw <= 0 or ch <= 0:
+        errors.append(f"Non-positive canvas: {cw}×{ch}")
+        return ValidationResult(errors=tuple(errors), warnings=tuple(warnings))
+
+    canvas = layout.canvas_bounds
+
+    # 2. routing_failures → one error each
+    for rf in layout.routing_failures:
+        errors.append(
+            f"RoutingFailure for edge {rf.edge_id!r} "
+            f"({rf.src_node_id} → {rf.dst_node_id}): {rf.reason}"
+        )
+
+    # 2b. Edge-count reconciliation
+    if metadata is not None:
+        accounted = len(layout.routed_edges) + len(layout.routing_failures)
+        if accounted < metadata.edge_count:
+            missing = metadata.edge_count - accounted
+            errors.append(
+                f"Missing route: {missing} edge(s) from parsed source absent from "
+                f"routed_edges ({len(layout.routed_edges)}) and routing_failures ({len(layout.routing_failures)})"
+            )
+
+    # 3. Each node outer_bounds inside canvas
+    for nid, nl in layout.node_layouts.items():
+        if nl.is_dummy:
+            continue
+        if not canvas.contains(nl.outer_bounds):
+            errors.append(
+                f"Node {nid!r} outer_bounds {nl.outer_bounds} outside canvas {canvas}"
+            )
+
+    # 4. Each group boundary_bounds inside canvas
+    for gid, gl in layout.group_layouts.items():
+        if not canvas.contains(gl.boundary_bounds):
+            errors.append(
+                f"Group {gid!r} boundary_bounds {gl.boundary_bounds} outside canvas {canvas}"
+            )
+
+    # 5–6. Label bounds and route waypoint checks
+    for re_obj in layout.routed_edges:
+        for lbl in (re_obj.label_layout, re_obj.src_label_layout, re_obj.dst_label_layout):
+            if lbl is not None and not canvas.contains(lbl.bounds):
+                errors.append(
+                    f"Edge {re_obj.edge_id!r} label {lbl.text!r} bounds {lbl.bounds} outside canvas"
+                )
+
+        # 13. Route validity
+        wps = re_obj.waypoints
+        if len(wps) < 2:
+            errors.append(f"Edge {re_obj.edge_id!r} has fewer than 2 waypoints")
+        else:
+            for i in range(len(wps) - 1):
+                if wps[i].x == wps[i + 1].x and wps[i].y == wps[i + 1].y:
+                    errors.append(
+                        f"Edge {re_obj.edge_id!r} has zero-length segment at index {i}"
+                    )
+
+    # 7. No two ordinary non-dummy node outer_bounds overlap
+    real_nodes = [(nid, nl) for nid, nl in layout.node_layouts.items() if not nl.is_dummy]
+    for i in range(len(real_nodes)):
+        for j in range(i + 1, len(real_nodes)):
+            nid_a, nl_a = real_nodes[i]
+            nid_b, nl_b = real_nodes[j]
+            if nl_a.outer_bounds.overlaps(nl_b.outer_bounds):
+                errors.append(
+                    f"Node overlap: {nid_a!r} {nl_a.outer_bounds} overlaps {nid_b!r} {nl_b.outer_bounds}"
+                )
+
+    # 8. Each child node inside parent group boundary
+    for gid, gl in layout.group_layouts.items():
+        for mid in gl.member_ids:
+            nl = layout.node_layouts.get(mid)
+            if nl is not None and not nl.is_dummy:
+                if not gl.boundary_bounds.contains(nl.outer_bounds):
+                    errors.append(
+                        f"Node {mid!r} outer_bounds {nl.outer_bounds} outside "
+                        f"parent group {gid!r} boundary {gl.boundary_bounds}"
+                    )
+
+    # 9. Intersecting group-title boxes
+    group_label_bounds: list[tuple[str, Rect]] = []
+    for gid, gl in layout.group_layouts.items():
+        if gl.label_layout is not None:
+            # Derive title strip rect: top of boundary, full width, title height
+            tb = gl.boundary_bounds
+            title_h = gl.label_layout.height + 4.0
+            title_rect = Rect(tb.x, tb.y, tb.w, title_h)
+            group_label_bounds.append((gid, title_rect))
+    for i in range(len(group_label_bounds)):
+        for j in range(i + 1, len(group_label_bounds)):
+            gid_a, rect_a = group_label_bounds[i]
+            gid_b, rect_b = group_label_bounds[j]
+            if rect_a.overlaps(rect_b):
+                errors.append(
+                    f"Group-title overlap: {gid_a!r} title box overlaps {gid_b!r} title box"
+                )
+
+    # 10. Port not on declared boundary
+    for nid, nl in layout.node_layouts.items():
+        for port in nl.ports:
+            if not nl.outer_bounds.contains_point(port.position, tolerance=2.0):
+                errors.append(
+                    f"Node {nid!r} port at {port.position} is not on the node boundary {nl.outer_bounds}"
+                )
+
+    # 11. Route through unrelated node interior (rough check: any waypoint inside a non-endpoint node)
+    all_node_ids_for_edges = {
+        (re_obj.src_node_id, re_obj.dst_node_id) for re_obj in layout.routed_edges
+    }
+    for re_obj in layout.routed_edges:
+        endpoint_ids = {re_obj.src_node_id, re_obj.dst_node_id}
+        for nid, nl in layout.node_layouts.items():
+            if nl.is_dummy or nid in endpoint_ids:
+                continue
+            inner = nl.outer_bounds.inflate(-4.0)
+            for wp in re_obj.waypoints[1:-1]:  # skip endpoints
+                if inner.contains_point(wp):
+                    errors.append(
+                        f"Edge {re_obj.edge_id!r} waypoint {wp} passes through "
+                        f"unrelated node {nid!r} interior"
+                    )
+                    break
+
+    # 12. Label intersecting unrelated node, title, or another label
+    all_labels: list[tuple[str, Rect]] = []
+    for re_obj in layout.routed_edges:
+        for lbl in (re_obj.label_layout, re_obj.src_label_layout, re_obj.dst_label_layout):
+            if lbl is not None:
+                all_labels.append((re_obj.edge_id, lbl.bounds))
+
+    for edge_id, lbl_bounds in all_labels:
+        # Check against unrelated node bounds
+        for nid, nl in layout.node_layouts.items():
+            if nl.is_dummy:
+                continue
+            if lbl_bounds.overlaps(nl.outer_bounds):
+                errors.append(
+                    f"Edge {edge_id!r} label bounds {lbl_bounds} intersect "
+                    f"node {nid!r} outer_bounds {nl.outer_bounds}"
+                )
+
+    # Label-label collision
+    for i in range(len(all_labels)):
+        for j in range(i + 1, len(all_labels)):
+            eid_a, lb_a = all_labels[i]
+            eid_b, lb_b = all_labels[j]
+            if lb_a.overlaps(lb_b):
+                errors.append(
+                    f"Label collision: edge {eid_a!r} label overlaps edge {eid_b!r} label"
+                )
+
+    # 14. Clearance warning
+    for i in range(len(real_nodes)):
+        for j in range(i + 1, len(real_nodes)):
+            _, nl_a = real_nodes[i]
+            _, nl_b = real_nodes[j]
+            ia = nl_a.outer_bounds.intersection_area(nl_b.outer_bounds)
+            if ia == 0.0:
+                # Approximate minimum gap
+                dx = max(0.0, max(nl_a.outer_bounds.x, nl_b.outer_bounds.x) -
+                         min(nl_a.outer_bounds.x1, nl_b.outer_bounds.x1))
+                dy = max(0.0, max(nl_a.outer_bounds.y, nl_b.outer_bounds.y) -
+                         min(nl_a.outer_bounds.y1, nl_b.outer_bounds.y1))
+                gap = min(dx, dy) if dx > 0 and dy > 0 else (dx + dy)
+                if 0 < gap < clearance_threshold:
+                    warnings.append(
+                        f"Tight clearance ({gap:.1f}px) between nodes"
+                    )
+
+    return ValidationResult(errors=tuple(errors), warnings=tuple(warnings))
+
+
+# ── Validation result ─────────────────────────────────────────────────────────
 
 @dataclass(frozen=True, slots=True)
 class ValidationResult:

@@ -5890,7 +5890,7 @@ class TestRendererStructural:
 
     def test_diagram_container_present(self):
         html = _dispatch_ok("flowchart TB\n  A-->B")
-        assert 'class="diagram mermaid-layout"' in html
+        assert 'class="diagram mermaid-layout' in html
 
     def test_svg_overlay_present(self):
         """Edge routing produces an SVG overlay element."""

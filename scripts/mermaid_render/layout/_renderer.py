@@ -489,9 +489,9 @@ def _render_graph_fragment(
                     f' stroke="{accent_color}" stroke-width="1.5"/>'
                     f'<line x1="{_nw - 2}" y1="{_cyl_ry}" x2="{_nw - 2}" y2="{node_h - _cyl_ry}"'
                     f' stroke="{accent_color}" stroke-width="1.5"/>'
-                    # Bottom cap arc (front half only)
-                    f'<path d="M 2 {node_h - _cyl_ry} A {_cyl_rx} {_cyl_ry} 0 0 0 {_nw - 2} {node_h - _cyl_ry}"'
-                    f' fill="none" stroke="{accent_color}" stroke-width="1.5"/>'
+                    # Bottom cap ellipse (outline only — back half hidden behind body)
+                    f'<ellipse cx="{_cyl_cx}" cy="{node_h - _cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
+                    f' fill="none" stroke="{accent_color}" stroke-width="1.5" opacity="0.6"/>'
                     # Top cap ellipse (filled to cover rectangular div edge)
                     f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
                     f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent_color}" stroke-width="1.5"/>'
@@ -1471,10 +1471,17 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
 
     All geometry is read directly from the immutable FinalizedLayout.
     """
+    import html as _html_mod
     from ._geometry import FinalizedLayout, RoutedEdge, NodeLayout, GroupLayout
 
     cw = int(layout.canvas_bounds.w)
     ch = int(layout.canvas_bounds.h)
+
+    def _decode_label(text: str) -> str:
+        """Decode HTML entities and normalize <br> variants before _render_label_html."""
+        import re as _re
+        _br = _re.sub(r'<br\s*/?>', '<br>', text, flags=_re.IGNORECASE).replace("\\n", "\n").replace("\n", "<br>")
+        return _html_mod.unescape(_br)
 
     parts: list[str] = []
     parts.append(
@@ -1484,25 +1491,35 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
     )
 
     # Group boundaries first (rendered behind nodes)
-    for gid, gl in layout.group_layouts.items():
+    for _gi, (gid, gl) in enumerate(layout.group_layouts.items()):
         b = gl.boundary_bounds
+        gw, gh = max(1, int(b.w)), max(1, int(b.h))
+        _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
+        _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
         lbl = (
             _h(gl.label_layout.lines[0].runs[0].text)
             if gl.label_layout and gl.label_layout.lines and gl.label_layout.lines[0].runs
             else ""
         )
         parts.append(
-            f'<div data-group-id="{_h(gid)}"'
-            f' style="position:absolute;'
-            f' left:{int(b.x)}px; top:{int(b.y)}px;'
-            f' width:{int(b.w)}px; height:{int(b.h)}px;'
-            f' border:1.5px dashed rgba(100,116,139,0.4);'
-            f' border-radius:6px; box-sizing:border-box;">'
+            f'<div class="diagram-group" data-group-id="{_h(gid)}" style="'
+            f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
+            f'width:{gw}px; height:{gh}px; '
+            f'border:1.5px dashed {_accent}; '
+            f'background:{_tint}; '
+            f'border-radius:var(--group-radius,12px); '
+            f'box-sizing:border-box; overflow:visible;">'
         )
         if lbl:
             parts.append(
-                f'<div style="position:absolute; top:4px; left:8px;'
-                f' font-size:11px; opacity:0.7; white-space:nowrap;">{lbl}</div>'
+                f'<span class="group-label" style="'
+                f'position:absolute; top:8px; left:10px; '
+                f'font-size:11px; color:{_accent}; '
+                f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
+                f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
+                f'display:block; overflow-wrap:break-word; word-break:break-word; '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                f'{lbl}</span>'
             )
         parts.append("</div>")
 
@@ -1511,23 +1528,196 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         if nl.is_dummy:
             continue
         b = nl.outer_bounds
-        label = nl.title_layout.lines[0].runs[0].text if (
+        raw_label = nl.title_layout.lines[0].runs[0].text if (
             nl.title_layout and nl.title_layout.lines
             and nl.title_layout.lines[0].runs
         ) else ""
-        parts.append(
-            f'<div data-node-id="{_h(nid)}"'
-            f' class="node"'
-            f' style="position:absolute;'
-            f' left:{int(b.x)}px; top:{int(b.y)}px;'
-            f' width:{int(b.w)}px; height:{int(b.h)}px;'
-            f' box-sizing:border-box;'
-            f' {nl.extra_css}">'
-            f'<div style="display:flex; align-items:center; justify-content:center;'
-            f' width:100%; height:100%; text-align:center;">'
-            f'{_h(label)}</div>'
-            f'</div>'
-        )
+        # Split tech sub-label on first "|"
+        if "|" in raw_label:
+            main_label_raw, tech_label = (p.strip() for p in raw_label.split("|", 1))
+        else:
+            main_label_raw, tech_label = raw_label, ""
+        decoded_label = _decode_label(main_label_raw)
+        main_html = _render_label_html(decoded_label)
+
+        extra_cls = (" " + " ".join(nl.css_classes)) if nl.css_classes else ""
+        nw, nh = int(b.w), int(b.h)
+        accent = nl.accent_color or "var(--node-title-fg,var(--accent-1,#60a5fa))"
+        is_ext = nl.is_external
+
+        # Depth wash tint
+        if is_ext:
+            _depth_wash = "rgba(0,0,0,0)"
+        else:
+            _depth_idx = min(nl.rank, len(_DEPTH_TINTS) - 1)
+            _depth_wash = _DEPTH_TINTS[_depth_idx]
+
+        fg_var = "var(--node-fg-dim,var(--text-secondary,#75736C))" if is_ext else "var(--node-fg,var(--text-primary,#191A17))"
+        border_var = "var(--node-fg-dim,var(--text-secondary,#75736C))" if is_ext else "var(--node-border,var(--card-border,#DAD7CE))"
+        _bg = (f'linear-gradient({_depth_wash},{_depth_wash}),'
+               f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+               f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)))')
+        _shadow = 'var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03))'
+
+        # Shape CSS
+        shape = nl.semantic_shape or "rect"
+        shape_css = _NODE_CSS.get(shape, _NODE_CSS["rect"])
+
+        # Border CSS per shape
+        if is_ext:
+            _border_css = f'border:1.5px dashed {border_var};'
+        elif shape == "diamond":
+            _border_css = ""
+        elif shape in ("hexagon", "trapezoid", "trapezoid-alt"):
+            _border_css = ""
+        elif shape == "stadium":
+            _border_css = f'border:1.5px solid {accent};'
+        else:
+            _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent};'
+
+        # Tech sub-label HTML
+        tech_span = ""
+        if tech_label:
+            tech_span = (
+                f'<span class="node-tech" style="'
+                f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
+                f'color:{fg_var}; opacity:0.6; '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                f'line-height:1.3; margin-top:7px; padding-top:7px; '
+                f'border-top:1px solid {border_var}; text-align:left; width:100%;">'
+                f'{_h(tech_label)}</span>'
+            )
+
+        # Inner label / icon layout
+        if nl.icon_svg:
+            inner = (
+                f'<div class="node-header" style="display:flex; flex-direction:row; '
+                f'align-items:center; width:100%;">'
+                f'<span class="node-icon" style="'
+                f'display:block; flex-shrink:0; width:24px; height:24px; '
+                f'margin-right:10px; color:{accent};">'
+                f'{nl.icon_svg}</span>'
+                f'<div class="node-text" style="min-width:0; flex:1; overflow-wrap:break-word; word-break:break-word;">'
+                f'<span class="node-label" style="display:block; font-size:var(--node-fs,13px); '
+                f'font-weight:600; color:{accent}; '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                f'line-height:1.3;">{main_html}</span>'
+                f'{tech_span}</div></div>'
+            )
+        else:
+            inner = (
+                f'<span class="node-label" style="display:block; font-size:var(--node-fs,13px); '
+                f'font-weight:600; color:{accent}; '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                f'line-height:1.3;">{main_html}</span>'
+                f'{tech_span}'
+            )
+
+        # Shape-specific SVG/HTML overlays
+        shape_overlay = ""
+        if shape == "diamond":
+            _hw = nw // 2
+            shape_overlay = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                f'width="{nw}" height="{nh}">'
+                f'<polygon points="{_hw},1 {nw-1},{_hw} {_hw},{nh-1} 1,{_hw}" '
+                f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        elif shape == "hexagon":
+            shape_overlay = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                f'width="{nw}" height="{nh}">'
+                f'<polygon points="{nw//4},1 {3*nw//4},1 {nw-1},{nh//2} {3*nw//4},{nh-1} {nw//4},{nh-1} 1,{nh//2}" '
+                f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        elif shape in ("trapezoid", "trapezoid-alt"):
+            if shape == "trapezoid":
+                _pts = f'{int(nw*0.15)},1 {nw-1},1 {int(nw*0.85)},{nh-1} 1,{nh-1}'
+            else:
+                _pts = f'1,1 {int(nw*0.85)},1 {nw-1},{nh-1} {int(nw*0.15)},{nh-1}'
+            shape_overlay = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                f'width="{nw}" height="{nh}">'
+                f'<polygon points="{_pts}" fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+
+        # Special full-node renderings
+        if shape == "doublecircle":
+            parts.append(
+                f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
+                f'width:{nh}px; height:{nh}px; '
+                f'border-radius:50%; box-sizing:border-box; overflow:visible; '
+                f'border:2px solid {accent}; '
+                f'background:{_bg}; box-shadow:{_shadow}; '
+                f'display:flex; align-items:center; justify-content:center;">'
+                f'<div style="position:absolute; inset:5px; border-radius:50%; '
+                f'border:2px solid {accent}; pointer-events:none;"></div>'
+                f'{inner}</div>'
+            )
+        elif shape == "subroutine":
+            parts.append(
+                f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
+                f'width:{nw}px; min-height:{nh}px; '
+                f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                f'box-sizing:border-box; overflow:visible; '
+                f'{_border_css} {shape_css} background:{_bg}; box-shadow:{_shadow}; '
+                f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center;">'
+                f'{inner}'
+                f'<svg style="position:absolute;inset:0;width:{nw}px;height:{nh}px;pointer-events:none;overflow:visible;">'
+                f'<line x1="8" y1="0" x2="8" y2="{nh}" stroke="{accent}" stroke-width="1.5"/>'
+                f'<line x1="{nw - 8}" y1="0" x2="{nw - 8}" y2="{nh}" stroke="{accent}" stroke-width="1.5"/>'
+                f'</svg></div>'
+            )
+        elif shape == "cylinder":
+            _cyl_ry = min(10, nh // 5)
+            _cyl_rx = nw // 2 - 2
+            _cyl_cx = nw // 2
+            parts.append(
+                f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}" style="'
+                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
+                f'width:{nw}px; min-height:{nh}px; '
+                f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
+                f'box-sizing:border-box; overflow:visible; border:none; '
+                f'background:{_bg}; box-shadow:{_shadow}; '
+                f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center;">'
+                f'{inner}'
+                f'<svg style="position:absolute;inset:0;width:{nw}px;height:{nh}px;pointer-events:none;overflow:visible;">'
+                f'<line x1="2" y1="{_cyl_ry}" x2="2" y2="{nh - _cyl_ry}" stroke="{accent}" stroke-width="1.5"/>'
+                f'<line x1="{nw - 2}" y1="{_cyl_ry}" x2="{nw - 2}" y2="{nh - _cyl_ry}" stroke="{accent}" stroke-width="1.5"/>'
+                f'<ellipse cx="{_cyl_cx}" cy="{nh - _cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
+                f' fill="none" stroke="{accent}" stroke-width="1.5" opacity="0.6"/>'
+                f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
+                f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent}" stroke-width="1.5"/>'
+                f'</svg></div>'
+            )
+        else:
+            # Standard node (includes diamond, hexagon, trapezoid overlays)
+            # Clip-path shapes need a background overlay div (so text isn't clipped)
+            clip_css = _CLIP_PATH_CSS.get(shape, "")
+            bg_overlay = ""
+            if clip_css:
+                bg_overlay = (
+                    f'<div style="position:absolute; inset:0; {clip_css} '
+                    f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                    f'var(--node-bg-to,var(--card-bg-to,#F7F6F2))); pointer-events:none;"></div>'
+                )
+            parts.append(
+                f'<div data-node-id="{_h(nid)}"'
+                f' class="node{extra_cls}"'
+                f' style="position:absolute;'
+                f' left:{int(b.x)}px; top:{int(b.y)}px;'
+                f' width:{nw}px; height:{nh}px;'
+                f' {_border_css} {shape_css}'
+                f' background:{_bg}; box-shadow:{_shadow};'
+                f' box-sizing:border-box; overflow:visible;'
+                f' display:flex; flex-direction:column; align-items:flex-start; justify-content:center;'
+                f' padding:var(--node-pad-v,12px) var(--node-pad-h,12px);'
+                f' {nl.extra_css}">'
+                f'{shape_overlay}{bg_overlay}{inner}'
+                f'</div>'
+            )
 
     # SVG overlay for routed edges (geometry pre-computed, no routing calls)
     parts.append(
@@ -1535,12 +1725,48 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         f' width:{cw}px; height:{ch}px;'
         f' overflow:visible; pointer-events:none;">'
     )
-    parts.append("<defs>"
-                 '<marker id="fn-arrow" viewBox="0 -4 9 8" refX="9" refY="0"'
-                 ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
-                 '<polygon points="0,-4 9,0 0,4"'
-                 ' fill="rgba(100,116,139,0.7)"/></marker>'
-                 "</defs>")
+
+    # Determine needed marker IDs
+    _style_to_marker = {"thick": "arrow-thick", "dotted": "arrow-open"}
+    _needed_markers: set[str] = set()
+    for re_obj in layout.routed_edges:
+        if re_obj.has_marker_end or re_obj.has_marker_start:
+            mid = _style_to_marker.get(re_obj.edge_style, "arrow-normal")
+            _needed_markers.add(mid)
+        if re_obj.has_marker_start:
+            _needed_markers.add("arrow-bidir-start")
+
+    defs_parts = ["<defs>"]
+    if "arrow-normal" in _needed_markers:
+        defs_parts.append(
+            '<marker id="arrow-normal" viewBox="0 -4 9 8" refX="9" refY="0"'
+            ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+            '<polygon points="0,-4 9,0 0,4"'
+            ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
+        )
+    if "arrow-bidir-start" in _needed_markers:
+        defs_parts.append(
+            '<marker id="arrow-bidir-start" viewBox="0 -4 9 8" refX="9" refY="0"'
+            ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">'
+            '<polygon points="0,-4 9,0 0,4"'
+            ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
+        )
+    if "arrow-thick" in _needed_markers:
+        defs_parts.append(
+            '<marker id="arrow-thick" viewBox="0 -5 11 10" refX="11" refY="0"'
+            ' markerWidth="11" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
+            '<polygon points="0,-5 11,0 0,5"'
+            ' fill="var(--edge-strong,var(--accent-1,#60a5fa))"/></marker>'
+        )
+    if "arrow-open" in _needed_markers:
+        defs_parts.append(
+            '<marker id="arrow-open" viewBox="0 -4 9 8" refX="9" refY="0"'
+            ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+            '<path d="M 0,-4 L 9,0 L 0,4" fill="none"'
+            ' stroke="var(--accent-4,var(--amber,#E8924A))" stroke-width="1.5"/></marker>'
+        )
+    defs_parts.append("</defs>")
+    parts.append("".join(defs_parts))
 
     for re_obj in layout.routed_edges:
         if not re_obj.waypoints:
@@ -1550,12 +1776,25 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         for p in pts[1:]:
             d_parts.append(f"L {p.x:.1f} {p.y:.1f}")
         d = " ".join(d_parts)
-        marker = ' marker-end="url(#fn-arrow)"' if re_obj.has_marker_end else ""
+        _mid = _style_to_marker.get(re_obj.edge_style, "arrow-normal")
+        marker_end = f' marker-end="url(#{_mid})"' if re_obj.has_marker_end else ""
+        marker_start = ' marker-start="url(#arrow-bidir-start)"' if re_obj.has_marker_start else ""
+        if re_obj.edge_style == "thick":
+            stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
+            stroke_w = "2"
+        elif re_obj.edge_style == "dotted":
+            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
+            stroke_w = "1.5"
+        else:
+            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+            stroke_w = "1.5"
+        dash = ' stroke-dasharray="6 4"' if re_obj.edge_style == "dotted" else ""
         parts.append(
-            f'<path data-src="{_h(re_obj.src_node_id)}"'
+            f'<path d="{d}" stroke="{stroke_color}" fill="none"'
+            f' stroke-width="{stroke_w}"{dash}'
+            f' data-src="{_h(re_obj.src_node_id)}"'
             f' data-dst="{_h(re_obj.dst_node_id)}"'
-            f' d="{d}" fill="none"'
-            f' stroke="rgba(100,116,139,0.7)" stroke-width="1.5"{marker}/>'
+            f'{marker_start}{marker_end}/>'
         )
 
     parts.append("</svg>")
@@ -1565,7 +1804,9 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         if re_obj.label_layout and re_obj.label_layout.text:
             lb = re_obj.label_layout.bounds
             parts.append(
-                f'<div style="position:absolute;'
+                f'<div class="edge-label"'
+                f' data-src="{_h(re_obj.src_node_id)}" data-dst="{_h(re_obj.dst_node_id)}"'
+                f' style="position:absolute;'
                 f' left:{int(lb.x)}px; top:{int(lb.y)}px;'
                 f' width:{int(lb.w)}px; font-size:11px;'
                 f' text-align:center; pointer-events:none;">'

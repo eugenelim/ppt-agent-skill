@@ -855,7 +855,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
             continue
 
         rank_gap = d.rank - s.rank
@@ -908,7 +908,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                    "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
                 else:
                     lane_y = bottom_lane_y + 32 * be_lane
                     sx = s.x + _node_render_w(s) // 2
@@ -935,7 +935,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                    "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
             else:
                 lane_x = right_lane_x + 12 * be_lane
                 sx = s.x + _node_render_w(s)
@@ -962,7 +962,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                                "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
             continue
 
         # TB skip-rank forward edge: rank_gap > 1 means this edge bypasses intermediate
@@ -1000,7 +1000,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
             continue
 
         if is_lr:
@@ -1082,7 +1082,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
             continue
 
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
@@ -1177,7 +1177,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                        "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
                        "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
 
     return result
 
