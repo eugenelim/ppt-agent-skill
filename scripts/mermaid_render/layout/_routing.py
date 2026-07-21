@@ -129,6 +129,9 @@ def _blocked_segs(
     return blocked
 
 
+_ASTAR_FALLBACK = object()  # sentinel: A* used the L-shaped fallback
+
+
 def _astar_route(
     sx: int, sy: int,
     dx: int, dy: int,
@@ -136,6 +139,7 @@ def _astar_route(
     grid_ys: "list[int]",
     blocked: "set[tuple]",
     occupied: "set[tuple] | None" = None,
+    _failures: "list | None" = None,
 ) -> "list[tuple[int, int]]":
     """Obstacle-avoiding A* on sparse orthogonal routing grid.
 
@@ -485,7 +489,19 @@ _LABEL_CHAR_W = 6.8   # average char width at 12px Inter regular (empirical)
 
 
 def _est_label_w(text: str) -> int:
-    return min(450, max(30, int(len(text) * _LABEL_CHAR_W)))
+    """Estimate rendered edge-label chip width in px.
+
+    Uses the TextLayout measurer (Pillow FreeType when available) for accuracy;
+    falls back to character-bucketing heuristic when measurement fails.
+    """
+    if not text:
+        return 0
+    try:
+        from ._text import get_default_measurer, TextStyle
+        run = get_default_measurer().measure_run(text, TextStyle(font_size=11))
+        return min(450, max(30, int(run.width)))
+    except Exception:
+        return min(450, max(30, int(len(text) * _LABEL_CHAR_W)))
 
 
 def _label_chip_bbox(lx: int, ly: int, text: str) -> tuple:
@@ -568,8 +584,13 @@ def _best_label_pos(
 
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                  direction: str = "TB",
-                 group_bboxes: "dict | None" = None) -> list[dict]:
-    """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot)."""
+                 group_bboxes: "dict | None" = None,
+                 route_failures: "list | None" = None) -> list[dict]:
+    """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot).
+
+    route_failures: if provided, mutable list where (src, dst) pairs are appended
+    whenever A* fails to find an obstacle-free path and the L-shaped fallback is used.
+    """
     is_lr = direction.upper() in ("LR", "RL")
 
     # Count fan-in/fan-out per node using REAL endpoints.
