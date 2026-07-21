@@ -257,7 +257,7 @@ class TestBreakCyclesInvariants:
         edges = [_Edge(s, d) for s, d in pairs]
         return nodes, edges
 
-    def test_greedy_fas_correctness(self):
+    def test_cycle_break_correctness(self):
         """No directed cycles in forward-edge subgraph after _break_cycles."""
         from mermaid_render.layout._layout import _break_cycles
         from collections import defaultdict
@@ -288,7 +288,7 @@ class TestBreakCyclesInvariants:
                 dfs(n)
         assert not found_cycle
 
-    def test_greedy_fas_deterministic(self):
+    def test_cycle_break_deterministic(self):
         """Same graph → same reversed set every time."""
         from mermaid_render.layout._layout import _break_cycles
 
@@ -305,7 +305,7 @@ class TestBreakCyclesInvariants:
         assert [(e.src, e.dst) for e in edges1 if e.reversed_] == \
                [(e.src, e.dst) for e in edges2 if e.reversed_]
 
-    def test_greedy_fas_single_cycle(self):
+    def test_cycle_break_single_cycle(self):
         """Simple 3-cycle: exactly 1 edge reversed."""
         from mermaid_render.layout._layout import _break_cycles
         nodes, edges = self._make(
@@ -314,3 +314,30 @@ class TestBreakCyclesInvariants:
         )
         _break_cycles(nodes, edges)
         assert sum(1 for e in edges if e.reversed_) == 1
+
+
+# ── AC-P4.1 (end-to-end): edge omitted when all routing paths fail ────────────
+
+class TestRouteEdgesOmitOnFailure:
+    """_route_edges skips an edge (no append to result) when A* + all perimeter retries return None."""
+
+    def test_edge_omitted_when_all_routing_fails(self):
+        """Edge S→D is absent from the result when fast path, A*, and perimeter all fail."""
+        from unittest.mock import patch
+        from mermaid_render.layout._routing import _route_edges
+        from mermaid_render.layout._constants import _Node, _Edge
+
+        s = _Node(id="S", label="S")
+        s.x, s.y, s.rank, s.col = 0, 0, 0, 0
+        d = _Node(id="D", label="D")
+        d.x, d.y, d.rank, d.col = 0, 200, 1, 0
+        nodes = {"S": s, "D": d}
+        edges = [_Edge("S", "D")]
+
+        mod = "mermaid_render.layout._routing"
+        with patch(f"{mod}._try_3seg_clear", return_value=False), \
+             patch(f"{mod}._astar_route", return_value=None), \
+             patch(f"{mod}._route_perimeter", return_value=None):
+            result = _route_edges(nodes, edges, canvas_w=800, direction="TB")
+
+        assert result == [], f"expected no edges in result, got {result}"

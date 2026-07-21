@@ -501,15 +501,13 @@ class TestDirectionAwareSelfLoops:
             assert min(ys) >= -5, f"path y={min(ys):.0f} exceeds canvas top (y<-5)"
             assert max(ys) <= canvas_h + 5, f"path y={max(ys):.0f} exceeds canvas_h={canvas_h}+5"
 
-    def test_tb_left_face_loop_canvas_clamped(self):
-        """TB left-face self-loop: provisional negative x coords are accepted pending finalization pass.
+    def test_tb_left_face_loop_renders_without_error(self):
+        """TB left-face self-loop: provisional coordinates are accepted pending finalization pass.
 
-        The left-face loop calculates loop_x = max(0, lx_face - extent) which clamps to canvas
-        at layout time, but label candidates at (loop_x - label_w - 4) can still be negative.
-        A dedicated finalization pass (backlog) will normalize all provisional coordinates to
-        canvas-positive before render. Until then, we just verify the diagram renders without error.
+        Label candidates at (loop_x - label_w - 4) can be negative; a finalization pass
+        (backlog: self-loop-finalization-pass) will normalize them. Until then, verify the
+        diagram renders without crashing.
         """
-        import re
         src = (
             "flowchart TD\n"
             "    A[Hub]\n"

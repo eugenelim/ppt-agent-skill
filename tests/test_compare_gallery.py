@@ -53,3 +53,25 @@ class TestGalleryExitCode:
             _, has_failures = gallery._build_gallery([mmd], tmp_path / "out")
 
         assert has_failures is False
+
+    def test_main_exits_1_on_invalid_status(self, tmp_path, monkeypatch):
+        """main() calls sys.exit(1) when has_failures is True."""
+        import pytest
+        gallery = _import_gallery()
+
+        mmd = tmp_path / "flowchart-test.mmd"
+        mmd.write_text("flowchart TD\n    A --> B\n", encoding="utf-8")
+        out = tmp_path / "out"
+
+        monkeypatch.setattr(gallery, "_classify_status", lambda **kw: "invalid")
+        monkeypatch.setattr(gallery, "_run_mmdc", lambda *a, **kw: (False, ""))
+        monkeypatch.setattr(gallery, "FIXTURES_DIR", tmp_path)
+        monkeypatch.setattr(gallery, "OUT_DIR", out)
+
+        import sys as _sys
+        monkeypatch.setattr(_sys, "argv", ["compare_gallery"])
+
+        with patch.object(gallery, "_build_gallery", return_value=(out / "index.html", True)):
+            with pytest.raises(SystemExit) as exc:
+                gallery.main()
+        assert exc.value.code == 1

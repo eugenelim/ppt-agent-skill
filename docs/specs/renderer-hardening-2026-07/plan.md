@@ -1,6 +1,6 @@
 # Renderer Hardening 2026-07 — plan
 
-**Status:** Executing
+**Status:** Done
 
 ## Assumption trio
 
@@ -412,12 +412,12 @@ def test_reverse_edge_detection_center(self):
 
 ---
 
-### Task 10 — Greedy feedback-arc ordering (P2.1)
+### Task 10 — Robust cycle-breaking: iterative DFS (P2.1)
 
 **AC:** AC-P2.1  
 **Mode:** TDD  
 **Depends on:** Task 9  
-**Touches:** `scripts/mermaid_render/layout/_layout.py`, `tests/test_flowchart_geometry.py`
+**Touches:** `scripts/mermaid_render/layout/_layout.py`, `tests/test_routing_astar.py`
 
 **Tests (write first):**
 ```python
@@ -489,15 +489,34 @@ def test_greedy_fas_single_cycle(self):
 ```
 
 **Approach:**
-Replace DFS `_break_cycles` in `_layout.py` with Eades-style greedy FAS:
-1. Compute in-degree and out-degree for each node.
-2. Maintain max-heap on `out_degree - in_degree` (use negated heap value for Python's min-heap).
-3. While nodes remain: remove all sinks to a `right_list`, remove all sources to a `left_list`; if neither exists, pop the max `out_degree - in_degree` node to `left_list`.
-4. `order = left_list + list(reversed(right_list))`.
-5. For each edge, if `order.index(dst) <= order.index(src)`, mark `reversed_ = True`.
-6. Use declaration order (node id insertion order) as tie-breaker.
+Replace recursive DFS `_break_cycles` with iterative DFS to avoid Python's recursion limit on large graphs.
 
-**Done when:** Both new FAS tests pass; all existing flowchart/routing tests pass (regression free).
+An Eades-style greedy FAS was prototyped but caused a regression: for `statediagram-complex`, the greedy ordering placed `Auth` before `Idle` (delta=1), reversing `Idle→Auth` instead of the back-edge `Auth→Idle`. This produced a 4-rank layout instead of the correct 6-rank layout, making the canvas too narrow for the right-lane back-edge routing path (canvas_w=344, path reached x=356). The iterative DFS matches the recursive DFS exactly (both traverse in node declaration order) so it produces identical rank assignments with no regression.
+
+**Implementation:**
+```python
+for start in list(nodes.keys()):
+    if color[start] != WHITE:
+        continue
+    stack = [(start, 0)]  # (node, adj_list_index)
+    color[start] = GRAY
+    while stack:
+        u, idx = stack[-1]
+        if idx < len(adj[u]):
+            stack[-1] = (u, idx + 1)
+            ei = adj[u][idx]
+            v = edges[ei].dst
+            if color.get(v) == GRAY:
+                edges[ei].reversed_ = True
+            elif color.get(v) == WHITE:
+                color[v] = GRAY
+                stack.append((v, 0))
+        else:
+            color[u] = BLACK
+            stack.pop()
+```
+
+**Done when:** All three invariant tests pass (`TestBreakCyclesInvariants` in `tests/test_routing_astar.py`); all existing flowchart/routing tests pass (regression free).
 
 ---
 

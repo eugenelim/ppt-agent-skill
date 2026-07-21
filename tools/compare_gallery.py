@@ -2,9 +2,9 @@
 """compare_gallery.py -- side-by-side mermaid_render vs mmdc comparison gallery.
 
 Usage:
-    python3 scripts/compare_gallery.py                 # all fixtures in tests/fixtures/
-    python3 scripts/compare_gallery.py --open          # open in default browser after build
-    python3 scripts/compare_gallery.py path/to/my.mmd  # specific file(s)
+    python3 tools/compare_gallery.py                 # all fixtures in tests/fixtures/
+    python3 tools/compare_gallery.py --open          # open in default browser after build
+    python3 tools/compare_gallery.py path/to/my.mmd  # specific file(s)
 
 Output:
     ppt-output/compare/index.html    -- side-by-side gallery (open in browser)
@@ -256,7 +256,7 @@ def _diagram_type(name: str) -> str:
     return name.split("-")[0]
 
 
-def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
+def _build_gallery(mmd_files: list[Path], out_dir: Path) -> "tuple[Path, bool]":
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "ours").mkdir(exist_ok=True)
     (out_dir / "mmdc").mkdir(exist_ok=True)

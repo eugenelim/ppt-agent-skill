@@ -296,6 +296,17 @@ fragment rects, canvas height) use per-row prefix sums. Pixel-accurate
 Playwright text measurement was declined (browser startup cost in the hot
 path) and is tracked below.
 
+### self-loop-finalization-pass
+
+**Deferred from `renderer-hardening-2026-07` AC-P0.3:** Remove the provisional
+`max(0, lx_face - extent)` / `max(0, y_face - extent)` clamping in
+`_routing.py` self-loop geometry and replace it with a post-layout finalization
+pass that normalizes all provisional negative coordinates to canvas-positive
+before rendering. Until the finalization pass exists, removing the clamping
+produces negative SVG path coordinates that overflow the canvas left edge.
+Unblocked by adding a finalization pass after `_assign_coordinates` that
+offsets the entire layout so all coordinates are ≥ `CANVAS_PAD`.
+
 ### seq-variable-height-rows-playwright
 
 **Deferred from `seq-variable-height-rows`:** Replace the character-count
