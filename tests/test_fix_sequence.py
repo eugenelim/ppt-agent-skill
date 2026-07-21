@@ -883,3 +883,107 @@ class TestNoteParticipantRegistration:
         assert "X" in html and "Y" in html
         xs = _lifeline_xs(html)
         assert len(xs) == 2, f"Expected 2 lifelines, got {len(xs)} (SEQ-014)"
+
+
+# ── helpers for variable-height row tests ─────────────────────────────────────
+
+def _note_poly_heights(html: str) -> "list[float]":
+    """Return list of heights (max_y - min_y) for each note polygon."""
+    result = []
+    for pts in re.findall(r'<polygon points="([^"]+)"[^>]+fill="var\(--node-bg', html):
+        ys = [float(p.split(",")[1]) for p in pts.strip().split()]
+        result.append(max(ys) - min(ys))
+    return result
+
+
+def _note_poly_bottoms(html: str) -> "list[float]":
+    """Return list of max-y for each note polygon."""
+    result = []
+    for pts in re.findall(r'<polygon points="([^"]+)"[^>]+fill="var\(--node-bg', html):
+        ys = [float(p.split(",")[1]) for p in pts.strip().split()]
+        result.append(max(ys))
+    return result
+
+
+# ── SEQ-009: Variable-height row packing ──────────────────────────────────────
+
+class TestVariableHeightRows:
+    """SEQ-009: long note text expands its row; subsequent y-positions shift."""
+
+    # 80 chars triggers ≥ 3 lines at font-size 10px / col_w 160px heuristic
+    _LONG_NOTE = "A" * 80
+
+    def test_long_note_polygon_taller_than_row_h_interior(self):
+        """AC-1: A note with ≥80 chars must produce a note polygon taller than ROW_H−8 (32 px)."""
+        src = (
+            "sequenceDiagram\n"
+            f"    Alice->>Bob: go\n"
+            f"    Note over Alice: {self._LONG_NOTE}\n"
+        )
+        html = _dispatch(src, None, 800)
+        note_hs = _note_poly_heights(html)
+        ROW_H_INTERIOR = 32  # ROW_H(40) - 8
+        assert note_hs, "No note polygons found"
+        assert any(nh > ROW_H_INTERIOR for nh in note_hs), (
+            f"Long note must produce polygon taller than {ROW_H_INTERIOR}px; "
+            f"got heights {note_hs} (SEQ-009 AC-1)"
+        )
+
+    def test_message_y_shifts_below_long_note(self):
+        """AC-2: Message after a long note shifts further down than after a short note;
+        and it remains below the note polygon's bottom edge."""
+        short_src = "sequenceDiagram\n    Note over Alice: hi\n    Alice->>Bob: go\n"
+        long_src = (
+            "sequenceDiagram\n"
+            f"    Note over Alice: {self._LONG_NOTE}\n"
+            "    Alice->>Bob: go\n"
+        )
+        short_html = _dispatch(short_src, None, 800)
+        long_html = _dispatch(long_src, None, 800)
+        short_msgs = _extract_message_lines(short_html)
+        long_msgs = _extract_message_lines(long_html)
+        assert short_msgs and long_msgs, "Messages not found in rendered output"
+        # Primary: downstream rows shift further down with a tall note
+        assert long_msgs[0]["y1"] > short_msgs[0]["y1"], (
+            f"Message after long note (y={long_msgs[0]['y1']}) must be lower than "
+            f"after short note (y={short_msgs[0]['y1']}) (SEQ-009 AC-2)"
+        )
+        # Geometric invariant: message y is always below the note polygon bottom
+        long_note_bottoms = _note_poly_bottoms(long_html)
+        assert long_note_bottoms, "No note polygon in long diagram"
+        assert long_msgs[0]["y1"] > max(long_note_bottoms), (
+            f"Message y={long_msgs[0]['y1']} must exceed note bottom={max(long_note_bottoms)} "
+            f"(SEQ-009 AC-2 geometric invariant)"
+        )
+
+    def test_canvas_height_grows_with_long_note(self):
+        """AC-3: A diagram with a long note must have a taller canvas than one with a short note."""
+        short_src = "sequenceDiagram\n    Note over Alice: hi\n    Alice->>Bob: go\n"
+        long_src = (
+            "sequenceDiagram\n"
+            f"    Note over Alice: {self._LONG_NOTE}\n"
+            "    Alice->>Bob: go\n"
+        )
+        h_short = _canvas_height(_dispatch(short_src, None, 800))
+        h_long = _canvas_height(_dispatch(long_src, None, 800))
+        assert h_long > h_short, (
+            f"Long-note canvas h={h_long} must exceed short-note canvas h={h_short} (SEQ-009 AC-3)"
+        )
+
+    def test_block_height_grows_when_containing_long_note(self):
+        """AC-4: A loop block containing a long note must have a taller background rect."""
+        short_src = "sequenceDiagram\n    loop L\n        Note over Alice: hi\n    end\n"
+        long_src = (
+            "sequenceDiagram\n"
+            "    loop L\n"
+            f"        Note over Alice: {self._LONG_NOTE}\n"
+            "    end\n"
+        )
+        short_hs = _block_heights(_dispatch(short_src, None, 800))
+        long_hs = _block_heights(_dispatch(long_src, None, 800))
+        assert short_hs, "No block rects in short diagram"
+        assert long_hs, "No block rects in long diagram"
+        assert max(long_hs) > max(short_hs), (
+            f"Long-note block h={max(long_hs)} must exceed short-note block h={max(short_hs)} "
+            f"(SEQ-009 AC-4)"
+        )

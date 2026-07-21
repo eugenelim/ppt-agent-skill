@@ -447,11 +447,8 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         col_pitch = int(col_pitch * width_hint / canvas_w)
         canvas_w = width_hint
     col_w = min(COL_W, max(40, col_pitch - 8))
-    n_rows = sum(1 for it in items if it["type"] in _row_types)
     BOX_H = HDR_H - 8
     ll_top = PAD_V + BOX_H + 4
-    ll_bot = ll_top + n_rows * ROW_H + 8
-    canvas_h = ll_bot + BOX_H + PAD_V
 
     # ── SEQ-014: precomputed participant index ────────────────────────────────
     _p_index: "dict[str, int]" = {p: i for i, p in enumerate(participants)}
@@ -462,12 +459,50 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         idx = _p_index.get(pid, 0)
         return PAD_H + _cx_offset[0] + idx * col_pitch + col_pitch // 2
 
+    # ── SEQ-009: row-height accumulator ──────────────────────────────────────
+    # Heuristic: average character width at font-size 10px and 1.4× line height
+    _CHAR_W_10PX = 5.5
+    _LINE_H_10PX = 14
+
+    def _note_row_h(it: dict) -> int:
+        text = it.get("text", "")
+        if not text:
+            return ROW_H
+        pids_list = it.get("pids", [it.get("pid", "")])
+        pos = it.get("pos", "over")
+        if pos in ("left_of", "right_of"):
+            nw = float(col_w)
+        elif pos == "over" and len(pids_list) >= 2:
+            valid_idxs = [_p_index[p] for p in pids_list if p in _p_index]
+            if valid_idxs:
+                span_cols = max(valid_idxs) - min(valid_idxs)
+                nw = float(span_cols * col_pitch + 2 * NOTE_SPAN_OVERHANG)
+            else:
+                nw = float(col_w)
+        else:
+            nw = float(col_w)
+        usable_w = max(1.0, nw - 8)
+        n_lines = max(1, math.ceil(len(text) * _CHAR_W_10PX / usable_w))
+        return max(ROW_H, n_lines * _LINE_H_10PX + 8)
+
+    _row_h_list: "list[int]" = [
+        _note_row_h(it) if it["type"] == "note" else ROW_H
+        for it in items if it["type"] in _row_types
+    ]
+    _row_top_list: "list[int]" = []
+    _acc = 0
+    for _rh in _row_h_list:
+        _row_top_list.append(_acc)
+        _acc += _rh
+    ll_bot = ll_top + _acc + 8
+    canvas_h = ll_bot + BOX_H + PAD_V
+
     # ── SEQ-006: event y-coordinate pass ─────────────────────────────────────
     _event_y: "dict[int, float]" = {}
     _ev_row = 0
     for _i, _it in enumerate(items):
         if _it["type"] == "msg":
-            _event_y[_i] = ll_top + _ev_row * ROW_H + ROW_H // 2
+            _event_y[_i] = ll_top + _row_top_list[_ev_row] + _row_h_list[_ev_row] // 2
             _ev_row += 1
         elif _it["type"] in _row_types:
             _ev_row += 1
@@ -522,8 +557,8 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
 
     # ── Note geometry ─────────────────────────────────────────────────────────
     def _note_geom(it: dict, _row: int) -> "tuple[float, float, float, float]":
-        note_y = ll_top + _row * ROW_H + 4
-        note_h = ROW_H - 8
+        note_y = ll_top + _row_top_list[_row] + 4
+        note_h = _row_h_list[_row] - 8
         pos = it.get("pos", "over")
         pids_list = it.get("pids", [it.get("pid", "")])
         primary = pids_list[0] if pids_list else ""
@@ -641,8 +676,8 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     for it in items:
         if it["type"] in ("block", "rect"):
             x0, x1 = _frag_x_bounds(it)
-            ry = ll_top + _rp_a * ROW_H
-            bh = it.get("span", 1) * ROW_H
+            ry = ll_top + _row_top_list[_rp_a]
+            bh = sum(_row_h_list[_rp_a: _rp_a + it.get("span", 1)])
             if it["type"] == "rect":
                 color = _h(it.get("label", "") or "rgba(200,200,200,0.3)")
                 parts.append(
@@ -708,7 +743,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
                 float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2,
             ))
-            ry = ll_top + row * ROW_H
+            ry = ll_top + _row_top_list[row]
             parts.append(
                 f'<line x1="{x0}" y1="{ry}" x2="{x1}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="4 4"/>'
@@ -730,7 +765,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if it["type"] != "msg":
             continue
 
-        ry = ll_top + row * ROW_H + ROW_H // 2
+        ry = ll_top + _row_top_list[row] + _row_h_list[row] // 2
         arrow = it.get("arrow", "->>")
         spec = _ARROW_SPECS.get(arrow, _ARROW_SPECS["->>"])
         dash = ' stroke-dasharray="6 4"' if spec["dashed"] else ""
@@ -763,7 +798,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     row = 0
     for _bi, it in enumerate(items):
         if it["type"] in ("block", "rect"):
-            ry = ll_top + row * ROW_H
+            ry = ll_top + _row_top_list[row]
             if it["type"] == "block":
                 x0, _ = _frag_x_bounds(it)
                 parts.append(
@@ -777,7 +812,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 )
             row += 1; continue
         if it["type"] == "else":
-            ry = ll_top + row * ROW_H
+            ry = ll_top + _row_top_list[row]
             if it["label"]:
                 x0, _ = _else_x.get(_bi, (
                     float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
@@ -798,6 +833,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             parts.append(
                 f'<span style="position:absolute;left:{nx}px;top:{ny + 4}px;'
                 f'width:{nw}px;font-size:10px;text-align:center;overflow:hidden;'
+                f'overflow-wrap:break-word;'
                 f'color:var(--node-fg,var(--text-primary,#191A17));'
                 f'font-family:var(--label-font,var(--font-primary,'
                 f'-apple-system,Inter,sans-serif));">'
@@ -808,7 +844,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             continue
         sx_lbl = float(_cx(it["src"]))
         dx_lbl = float(_cx(it["dst"]))
-        ry = ll_top + row * ROW_H + ROW_H // 2
+        ry = ll_top + _row_top_list[row] + _row_h_list[row] // 2
         lbl = _h(it["label"])
         if lbl:
             mid_x = int((sx_lbl + dx_lbl) / 2)
