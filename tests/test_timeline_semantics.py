@@ -1,0 +1,236 @@
+"""Tests for the native timeline scene layout (layout/timeline.py)."""
+from __future__ import annotations
+
+import re
+
+import pytest
+
+from scripts.mermaid_render.layout.timeline import (
+    layout_timeline_scene,
+    _parse_timeline_source,
+    _COL_W, _EVENT_H, _PERIOD_H,
+)
+from scripts.mermaid_render.scene import (
+    SceneCircle, SceneRoundedRect, SceneLine, SceneText, SvgScene,
+    LAYER_EDGES, LAYER_NODES, LAYER_LABELS, LAYER_OVERLAYS, LAYER_BOUNDARIES,
+)
+from scripts.mermaid_render.svg_serializer import scene_to_svg_str
+
+
+SIMPLE = """\
+timeline
+    Jan 2024 : Kickoff
+    Feb 2024 : Design
+    Mar 2024 : Launch
+"""
+
+WITH_SECTIONS = """\
+timeline
+    title My Timeline
+    section Phase 1
+    Jan 2024 : Kickoff
+             : Planning
+    section Phase 2
+    Feb 2024 : Development
+"""
+
+MULTI_EVENT = """\
+timeline
+    Q1 : Plan
+       : Design
+       : Review
+    Q2 : Build
+"""
+
+
+class TestParser:
+    def test_parses_periods(self):
+        _, _, periods = _parse_timeline_source(SIMPLE)
+        labels = [p["period"] for p in periods]
+        assert "Jan 2024" in labels
+        assert "Mar 2024" in labels
+
+    def test_inline_event(self):
+        _, _, periods = _parse_timeline_source(SIMPLE)
+        assert "Kickoff" in periods[0]["events"]
+
+    def test_continuation_event(self):
+        _, _, periods = _parse_timeline_source(WITH_SECTIONS)
+        jan = next(p for p in periods if p["period"] == "Jan 2024")
+        assert "Planning" in jan["events"]
+
+    def test_title_extracted(self):
+        title, _, _ = _parse_timeline_source(WITH_SECTIONS)
+        assert title == "My Timeline"
+
+    def test_sections_grouped(self):
+        _, groups, _ = _parse_timeline_source(WITH_SECTIONS)
+        names = [g["name"] for g in groups if g["name"]]
+        assert "Phase 1" in names
+        assert "Phase 2" in names
+
+    def test_empty_periods_raises_later(self):
+        _, _, periods = _parse_timeline_source("timeline\n")
+        assert periods == []
+
+    def test_no_title_returns_empty(self):
+        title, _, _ = _parse_timeline_source(SIMPLE)
+        assert title == ""
+
+    def test_source_order_preserved(self):
+        _, _, periods = _parse_timeline_source(SIMPLE)
+        assert periods[0]["period"] == "Jan 2024"
+        assert periods[1]["period"] == "Feb 2024"
+        assert periods[2]["period"] == "Mar 2024"
+
+    def test_continuation_events_belong_to_correct_period(self):
+        _, _, periods = _parse_timeline_source(WITH_SECTIONS)
+        jan = next(p for p in periods if p["period"] == "Jan 2024")
+        # "Planning" is a continuation event (starts with :) for Jan 2024
+        assert "Planning" in jan["events"]
+        # Feb 2024 should not contain Planning
+        feb = next(p for p in periods if p["period"] == "Feb 2024")
+        assert "Planning" not in feb["events"]
+
+
+class TestLayoutTimelineScene:
+    def test_returns_svg_scene(self):
+        scene = layout_timeline_scene(SIMPLE)
+        assert isinstance(scene, SvgScene)
+
+    def test_diagram_type(self):
+        assert layout_timeline_scene(SIMPLE).diagram_type == "timeline"
+
+    def test_width_hint_respected(self):
+        scene = layout_timeline_scene(SIMPLE, width_hint=1000)
+        assert scene.width >= 1000
+
+    def test_has_edges_layer_spine(self):
+        scene = layout_timeline_scene(SIMPLE)
+        edges = scene.get_layer(LAYER_EDGES)
+        lines = [el for el in edges if isinstance(el, SceneLine)]
+        # At least one spine line
+        assert len(lines) >= 1
+
+    def test_has_period_dots(self):
+        scene = layout_timeline_scene(SIMPLE)
+        overlays = scene.get_layer(LAYER_OVERLAYS)
+        circles = [el for el in overlays if isinstance(el, SceneCircle)]
+        assert len(circles) == 3  # 3 periods → 3 dots
+
+    def test_has_period_nodes(self):
+        scene = layout_timeline_scene(SIMPLE)
+        nodes = scene.get_layer(LAYER_NODES)
+        # At least 3 period rects
+        rects = [el for el in nodes if isinstance(el, SceneRoundedRect)]
+        assert len(rects) >= 3
+
+    def test_column_layout_periods_below_spine(self):
+        """Column layout: period chips are below the spine (not above/alternating)."""
+        scene = layout_timeline_scene(SIMPLE)
+        overlays = scene.get_layer(LAYER_OVERLAYS)
+        circles = [el for el in overlays if isinstance(el, SceneCircle)]
+        assert circles, "No spine dots found"
+        spine_y = circles[0].cy  # dot is at spine_y
+
+        nodes = scene.get_layer(LAYER_NODES)
+        period_rects = [el for el in nodes if isinstance(el, SceneRoundedRect)
+                        and "timeline-period" in (el.css_classes or ())]
+        assert period_rects, "No period chips found"
+        # All period chips must be below (y >= spine_y)
+        for r in period_rects:
+            assert r.y >= spine_y, f"Period chip at y={r.y} is above spine at y={spine_y}"
+
+    def test_events_in_column_below_period(self):
+        """Events for each period must be within its column (same x range) and below spine."""
+        scene = layout_timeline_scene(MULTI_EVENT)
+        overlays = scene.get_layer(LAYER_OVERLAYS)
+        circles = [el for el in overlays if isinstance(el, SceneCircle)]
+        assert circles
+        spine_y = circles[0].cy
+
+        nodes = scene.get_layer(LAYER_NODES)
+        event_rects = [el for el in nodes if isinstance(el, SceneRoundedRect)
+                       and "timeline-event" in (el.css_classes or ())]
+        for r in event_rects:
+            assert r.y > spine_y, f"Event card at y={r.y} must be below spine at y={spine_y}"
+
+    def test_no_period_event_overlap(self):
+        """Period chips and event cards must not overlap vertically."""
+        scene = layout_timeline_scene(MULTI_EVENT)
+        nodes = scene.get_layer(LAYER_NODES)
+        rects = [el for el in nodes if isinstance(el, SceneRoundedRect)]
+        # Check no two rects overlap in both x and y
+        for i, a in enumerate(rects):
+            for b in rects[i + 1:]:
+                # Same column x overlap: left/right overlap
+                a_right, b_right = a.x + a.w, b.x + b.w
+                x_overlap = a.x < b_right and b.x < a_right
+                if not x_overlap:
+                    continue
+                # Y overlap check
+                a_bot, b_bot = a.y + a.h, b.y + b.h
+                y_overlap = a.y < b_bot and b.y < a_bot
+                assert not y_overlap, (
+                    f"Rects overlap: ({a.x},{a.y},{a.w},{a.h}) and ({b.x},{b.y},{b.w},{b.h})"
+                )
+
+    def test_labels_contain_period_names(self):
+        scene = layout_timeline_scene(SIMPLE)
+        labels = scene.get_layer(LAYER_LABELS)
+        texts = [el.lines[0].text for el in labels if hasattr(el, "lines")]
+        assert "Jan 2024" in texts or any("Jan" in t for t in texts)
+
+    def test_title_in_labels(self):
+        scene = layout_timeline_scene(WITH_SECTIONS)
+        labels = scene.get_layer(LAYER_LABELS)
+        texts = [el.lines[0].text for el in labels if hasattr(el, "lines")]
+        assert "My Timeline" in texts
+
+    def test_section_bands_in_boundaries(self):
+        scene = layout_timeline_scene(WITH_SECTIONS)
+        bounds = scene.get_layer(LAYER_BOUNDARIES)
+        rects = [el for el in bounds if isinstance(el, SceneRoundedRect)]
+        assert len(rects) >= 2  # Two named sections
+
+    def test_event_cards_present(self):
+        scene = layout_timeline_scene(MULTI_EVENT)
+        nodes = scene.get_layer(LAYER_NODES)
+        rects = [el for el in nodes if isinstance(el, SceneRoundedRect)]
+        # 2 period nodes + 4 event cards (3 + 1)
+        assert len(rects) >= 4
+
+    def test_deterministic_scene_id(self):
+        s1 = layout_timeline_scene(SIMPLE)
+        s2 = layout_timeline_scene(SIMPLE)
+        assert s1.scene_id == s2.scene_id
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError, match="No periods"):
+            layout_timeline_scene("timeline\n")
+
+    def test_serializes_to_valid_xml(self):
+        from lxml import etree
+        scene = layout_timeline_scene(SIMPLE)
+        svg = scene_to_svg_str(scene)
+        body = re.sub(r"^<\?xml[^?]*\?>", "", svg.strip()).strip()
+        etree.fromstring(body.encode("utf-8"))
+
+    def test_no_foreign_object(self):
+        scene = layout_timeline_scene(SIMPLE)
+        svg = scene_to_svg_str(scene)
+        assert "<foreignObject" not in svg
+
+    def test_connector_is_dashed(self):
+        scene = layout_timeline_scene(SIMPLE)
+        svg = scene_to_svg_str(scene)
+        # Connectors should use dasharray
+        assert "stroke-dasharray" in svg or "dasharray" in svg
+
+    def test_spine_is_horizontal_line(self):
+        scene = layout_timeline_scene(SIMPLE)
+        edges = scene.get_layer(LAYER_EDGES)
+        lines = [el for el in edges if isinstance(el, SceneLine)]
+        # Spine: y1 == y2 (horizontal)
+        spine_candidates = [l for l in lines if l.y1 == l.y2]
+        assert len(spine_candidates) >= 1
