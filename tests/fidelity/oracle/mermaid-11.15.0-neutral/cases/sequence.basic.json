@@ -1,0 +1,65 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:01:33.570717+00:00",
+  "case_id": "sequence.basic",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 347.0,
+      "width": 450.0,
+      "x": -50.0,
+      "y": -10.0
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "-50 -10 450 347"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "sequencediagram",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "sequence",
+    "direction": null,
+    "entities": [],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": []
+  },
+  "status": "PASS"
+}

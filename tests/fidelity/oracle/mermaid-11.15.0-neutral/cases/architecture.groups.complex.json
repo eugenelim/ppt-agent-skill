@@ -1,0 +1,152 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:02:16.925407+00:00",
+  "case_id": "architecture.groups.complex",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 463.4316,
+      "width": 679.6112,
+      "x": -293.3056,
+      "y": -166.2158
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "-293.3056182861328 -166.21580505371094 679.6112060546875 463.431640625"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "architecture",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "architecture",
+    "direction": null,
+    "entities": [
+      {
+        "attributes": {},
+        "id": "lb",
+        "kind": "service",
+        "label": "Load Balancer",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "api",
+        "kind": "service",
+        "label": "API Server",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "db",
+        "kind": "service",
+        "label": "Database",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "cache",
+        "kind": "service",
+        "label": "Cache",
+        "order": 3,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "queue",
+        "kind": "service",
+        "label": "Message Queue",
+        "order": 4,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": [
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "lb__api__0",
+        "kind": "edge",
+        "label": "",
+        "order": 0,
+        "source": "lb",
+        "target": "api"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "api__db__1",
+        "kind": "edge",
+        "label": "",
+        "order": 1,
+        "source": "api",
+        "target": "db"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "api__cache__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "api",
+        "target": "cache"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "api__queue__3",
+        "kind": "edge",
+        "label": "",
+        "order": 3,
+        "source": "api",
+        "target": "queue"
+      }
+    ]
+  },
+  "status": "PASS"
+}

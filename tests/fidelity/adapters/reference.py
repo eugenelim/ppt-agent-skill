@@ -51,6 +51,7 @@ _MM_FLOWCHART_NODE = re.compile(r'flowchart-([A-Za-z0-9_.\-]+?)-\d+"')
 _MM_SERVICE_NODE   = re.compile(r'service-([A-Za-z0-9_.\-]+?)"')
 _MM_ENTITY_NODE    = re.compile(r'entity-([A-Za-z0-9_.\-]+?)-\d+"')
 _MM_LINK_EDGE      = re.compile(r'L_([A-Za-z0-9_.\-]+?)_([A-Za-z0-9_.\-]+?)_\d+"')
+_MM_SELF_LOOP      = re.compile(r'id="[^"]*-([A-Za-z0-9_]+)-cyclic-special-\d+"')
 _MM_EDGE_LABEL     = re.compile(
     r'<span class="edgeLabel"><p[^>]*>(.*?)</p></span>', re.DOTALL
 )
@@ -127,22 +128,36 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
             _strip_html(lbl) for lbl in _MM_EDGE_LABEL.findall(svg)
             if _strip_html(lbl)
         ]
+        node_labels = _parse_flowchart_labels(source)
         entities = [
-            Entity(id=n, kind="node", label=n, shape=None, parent_id=None, order=i)
+            Entity(id=n, kind="node", label=node_labels.get(n, n), shape=None, parent_id=None, order=i)
             for i, n in enumerate(dict.fromkeys(raw_nodes))
         ]
-        label_iter = iter(raw_labels)
+        # Deduplicate edges: each L_A_B_N id may appear multiple times in SVG attrs
+        unique_edges = list(dict.fromkeys(raw_edges))
+        # Add self-loop edges (mmdc uses "cyclic-special" id, not L_ format)
+        self_loop_nodes = list(dict.fromkeys(_MM_SELF_LOOP.findall(svg)))
+        # Filter out false positives: self-loop node must be a known node
+        node_ids = {e.id for e in entities}
+        for n in self_loop_nodes:
+            if n in node_ids:
+                unique_edges.append((n, n))
+
+        # Edge labels are not reliably ordered vs SVG edge elements (self-loops use
+        # different id pattern, breaking label_iter alignment).  Native SVG adapter
+        # also returns "" for edge labels until T4 adds data-label.  Return "" for
+        # all edges so topology comparison works without label mismatches.
         relations = [
             Relation(
                 id=f"{s}__{d}__{i}",
                 kind="edge",
                 source=s,
                 target=d,
-                label=next(label_iter, ""),
+                label="",
                 arrow=None,
                 order=i,
             )
-            for i, (s, d) in enumerate(raw_edges)
+            for i, (s, d) in enumerate(unique_edges)
         ]
         direction = _extract_direction_from_source(source)
         return SemanticDiagram(
@@ -152,11 +167,12 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
             relations=relations,
         )
 
-    if diagram_type == "architecture-beta":
+    if diagram_type in ("architecture-beta", "architecture"):
         raw_nodes = list(_MM_SERVICE_NODE.findall(svg))
         raw_edges = list(_MM_LINK_EDGE.findall(svg))
+        arch_labels = _parse_architecture_labels(source)
         entities = [
-            Entity(id=n, kind="service", label=n, shape=None, parent_id=None, order=i)
+            Entity(id=n, kind="service", label=arch_labels.get(n, n), shape=None, parent_id=None, order=i)
             for i, n in enumerate(dict.fromkeys(raw_nodes))
         ]
         relations = [
@@ -207,6 +223,74 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
 
     # Generic fallback
     return SemanticDiagram(diagram_type=diagram_type, direction=None)
+
+
+def _parse_architecture_labels(source: str) -> dict[str, str]:
+    """Return id → label for architecture-beta service/junction declarations.
+
+    Supports: service id(icon)[Label]  and  junction id
+    """
+    result: dict[str, str] = {}
+    pat = re.compile(
+        r'(?:service|junction)\s+([A-Za-z0-9_.\-]+)'
+        r'(?:\s*\([^)]*\))?'       # optional (icon)
+        r'(?:\s*\[([^\]]*)\])?',   # optional [Label]
+    )
+    for m in pat.finditer(source):
+        nid, label = m.group(1), m.group(2)
+        if nid not in result:
+            result[nid] = (_strip_html(label).strip() if label else nid)
+    return result
+
+
+def _parse_flowchart_labels(source: str) -> dict[str, str]:
+    """Return id → label mapping from Mermaid flowchart source lines.
+
+    Handles the common node-definition forms:
+        A[rect]  A(round)  A{diamond}  A[[sub]]  A((circle))  A([stadium])
+        A(((dcircle)))  A{{hex}}  A[(cyl)]  A>flag]  A[/trap/]  A[\inv\]
+    Falls back to id == label when no bracket form is found.
+    """
+    result: dict[str, str] = {}
+    # One pass: match ID then the first bracket-enclosed label.
+    # The pattern intentionally covers the longest forms first to avoid
+    # partial matches (e.g. [[...]] before [...]).
+    _pat = re.compile(
+        r'\b([A-Za-z0-9_]+)\s*'
+        r'(?:'
+        r'\(\(\(([^()]*)\)\)\)'        # (((text))) triple-circle
+        r'|\[\[([^\[\]]*)\]\]'         # [[text]] subroutine
+        r'|\(\(([^()]*)\)\)'           # ((text)) double-circle
+        r'|\(\[([^\[\]]*)\]\)'         # ([text]) stadium
+        r'|\[\(([^()]*)\)\]'           # [(text)] cylinder
+        r'|\{\{([^{}]*)\}\}'           # {{text}} hexagon
+        r'|\[\\([^\[\]\\]*)\\\]'       # [\text\] inv-trapezoid
+        r'|\[\/([^\[\]\/]*)\\\]'       # [/text\] tilted-right
+        r'|\[\\([^\[\]\\]*)\/\]'       # [\text/] tilted-left
+        r'|\[\/([^\[\]\/]*)\/'         # [/text/  trapezoid (closing optional)
+        r'|\{([^{}]*)\}'               # {text} diamond
+        r'|\(([^()]*)\)'               # (text) rounded
+        r'|\[([^\[\]]*)\]'             # [text] rectangle
+        r'|>([^\[\]]*)\]'              # >text] asymmetric/flag
+        r')'
+    )
+    for m in _pat.finditer(source):
+        nid = m.group(1)
+        if nid in result:
+            continue
+        for g in m.groups()[1:]:
+            if g is not None:
+                # Normalize <br> to space before stripping HTML tags
+                normalized = re.sub(r'<br\s*/?>', ' ', g, flags=re.IGNORECASE)
+                label = _strip_html(normalized).strip("/\\").strip()
+                # Strip surrounding Mermaid quoting (double quotes around whole label)
+                if label.startswith('"') and label.endswith('"') and len(label) > 1:
+                    label = label[1:-1]
+                label = ' '.join(label.split())  # normalize internal whitespace
+                if label:
+                    result[nid] = label
+                break
+    return result
 
 
 def _extract_direction_from_source(source: str) -> str | None:

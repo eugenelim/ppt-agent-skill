@@ -1,0 +1,84 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:02:23.328655+00:00",
+  "case_id": "er.basic",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 364.5,
+      "width": 146.3125,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "0 0 146.3125 364.5"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "erdiagram",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "er",
+    "direction": null,
+    "entities": [
+      {
+        "attributes": {},
+        "id": "Customer",
+        "kind": "entity",
+        "label": "Customer",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Order",
+        "kind": "entity",
+        "label": "Order",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": []
+  },
+  "status": "PASS"
+}

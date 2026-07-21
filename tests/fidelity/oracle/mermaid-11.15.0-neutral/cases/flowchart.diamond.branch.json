@@ -1,0 +1,210 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:00:42.823084+00:00",
+  "case_id": "flowchart.diamond.branch",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 616.0469,
+      "width": 439.125,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "0 0 439.125 616.046875"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "flowchart",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "flowchart",
+    "direction": "TB",
+    "entities": [
+      {
+        "attributes": {},
+        "id": "Start",
+        "kind": "node",
+        "label": "Start",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Check",
+        "kind": "node",
+        "label": "Valid Input?",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Process",
+        "kind": "node",
+        "label": "Process Data",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Error",
+        "kind": "node",
+        "label": "Show Error",
+        "order": 3,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Notify",
+        "kind": "node",
+        "label": "Send Notification",
+        "order": 4,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Retry",
+        "kind": "node",
+        "label": "Retry?",
+        "order": 5,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Done",
+        "kind": "node",
+        "label": "Done",
+        "order": 6,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": [
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Start__Check__0",
+        "kind": "edge",
+        "label": "",
+        "order": 0,
+        "source": "Start",
+        "target": "Check"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Check__Process__1",
+        "kind": "edge",
+        "label": "",
+        "order": 1,
+        "source": "Check",
+        "target": "Process"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Check__Error__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "Check",
+        "target": "Error"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Process__Notify__3",
+        "kind": "edge",
+        "label": "",
+        "order": 3,
+        "source": "Process",
+        "target": "Notify"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Error__Retry__4",
+        "kind": "edge",
+        "label": "",
+        "order": 4,
+        "source": "Error",
+        "target": "Retry"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Retry__Check__5",
+        "kind": "edge",
+        "label": "",
+        "order": 5,
+        "source": "Retry",
+        "target": "Check"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Retry__Done__6",
+        "kind": "edge",
+        "label": "",
+        "order": 6,
+        "source": "Retry",
+        "target": "Done"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Notify__Done__7",
+        "kind": "edge",
+        "label": "",
+        "order": 7,
+        "source": "Notify",
+        "target": "Done"
+      }
+    ]
+  },
+  "status": "PASS"
+}

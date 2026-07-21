@@ -1,7 +1,13 @@
-"""Native adapter: observes scripts/mermaid_render/ output.
+"""Native HTML adapter (secondary emitter-consistency lane).
 
-Uses the public to_html() API, then extracts semantics and geometry
-from the actual emitted HTML via Playwright.
+Uses the public to_html() API to verify emitter consistency:
+    parser/native semantic intent
+        == native SVG semantic projection
+        == native HTML semantic projection
+
+The PRIMARY adapter for Phase 1 native-vs-reference comparison is
+adapters/native_svg.py (NativeSvgAdapter), which calls to_svg().
+This adapter is retained for HTML emitter consistency checks only.
 """
 from __future__ import annotations
 
@@ -124,7 +130,7 @@ def _env_identity(profile: RenderProfile) -> EnvironmentIdentity:
     )
 
 
-class NativeAdapter:
+class NativeHtmlAdapter:
     """Fidelity adapter for the native scripts/mermaid_render/ renderer.
 
     Extracts semantics from data-* annotations on the emitted HTML
@@ -524,6 +530,9 @@ def _extract_geometry_and_quality(
 
     return geo, quality
 
+
+# Backward-compatibility alias for existing test imports
+NativeAdapter = NativeHtmlAdapter
 
 def _bbox_contains(container: BoundingBox, item: BoundingBox, tolerance: float = 8.0) -> bool:
     return (

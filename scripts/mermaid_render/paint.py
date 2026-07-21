@@ -598,6 +598,7 @@ def graph_to_scene(
         ),
         definitions=tuple(marker_defs),
         layers=layers,
+        direction=direction.upper() if direction else "",
     )
 
 

@@ -64,12 +64,18 @@ class TestComparisonStatus:
 
     def test_all_values(self):
         expected = {
-            "PASS", "PARSE_MISMATCH", "SEMANTIC_MISMATCH", "QUALITY_FAILURE",
+            "PASS", "PARSE_MISMATCH", "SEMANTIC_MISMATCH",
+            "RELATIVE_LAYOUT_MISMATCH", "QUALITY_FAILURE",
             "EXTRACTOR_GAP", "REFERENCE_RENDER_FAILURE", "NATIVE_UNSUPPORTED",
-            "NONDETERMINISTIC", "INTERNAL_ERROR",
+            "NONDETERMINISTIC", "STALE_ORACLE", "INVALID_MANIFEST", "INTERNAL_ERROR",
         }
         actual = {s.value for s in ComparisonStatus}
         assert actual == expected
+
+    def test_new_statuses_exist(self):
+        assert ComparisonStatus.RELATIVE_LAYOUT_MISMATCH.value == "RELATIVE_LAYOUT_MISMATCH"
+        assert ComparisonStatus.STALE_ORACLE.value == "STALE_ORACLE"
+        assert ComparisonStatus.INVALID_MANIFEST.value == "INVALID_MANIFEST"
 
 
 class TestObservation:

@@ -99,16 +99,23 @@ def cmd_run(
 
     _print_failures(summary)
 
-    # Exit nonzero for strict failures
+    # Hard-fail statuses — nonzero exit for any of these.
+    # Scored metric differences alone do not gate CI (Phase 1).
+    _HARD_FAIL_STATUSES = {
+        ComparisonStatus.PARSE_MISMATCH,
+        ComparisonStatus.SEMANTIC_MISMATCH,
+        ComparisonStatus.RELATIVE_LAYOUT_MISMATCH,
+        ComparisonStatus.QUALITY_FAILURE,
+        ComparisonStatus.EXTRACTOR_GAP,
+        ComparisonStatus.STALE_ORACLE,
+        ComparisonStatus.INVALID_MANIFEST,
+        ComparisonStatus.NATIVE_UNSUPPORTED,
+        ComparisonStatus.NONDETERMINISTIC,
+        ComparisonStatus.INTERNAL_ERROR,
+    }
     strict_failures = [
         r for r in summary.results
-        if r.final_status in (
-            ComparisonStatus.SEMANTIC_MISMATCH,
-            ComparisonStatus.PARSE_MISMATCH,
-            ComparisonStatus.NATIVE_UNSUPPORTED,
-            ComparisonStatus.NONDETERMINISTIC,
-            ComparisonStatus.INTERNAL_ERROR,
-        )
+        if r.final_status in _HARD_FAIL_STATUSES
     ]
     if strict_failures:
         print(f"\n✗ {len(strict_failures)} strict failure(s)", file=sys.stderr)

@@ -355,6 +355,7 @@ class SvgScene:
     diagnostics: Tuple[str, ...] = ()
     theme_id: str = "default"
     renderer_backend: str = "native-svg"
+    direction: str = ""
 
     def __post_init__(self) -> None:
         vb = self.view_box
