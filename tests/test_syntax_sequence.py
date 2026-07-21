@@ -20,7 +20,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from mermaid_render import to_html  # pure-Python, no Playwright
+from mermaid_render import to_html, validate  # pure-Python, no Playwright
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -73,28 +73,34 @@ class TestSequenceParticipants:
         assert html
         assert "C" in html
 
-    def test_destroy_participant_renders(self):
-        """`destroy P` is accepted without raising."""
-        html = to_html(_seq(
+    def test_destroy_participant_renders_and_emits_diagnostic(self):
+        """`destroy P` renders without raising and emits a Diagnostic."""
+        src = _seq(
             "  participant A\n"
             "  participant B\n"
             "  A->>B: ping\n"
             "  destroy B\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "A" in html
+        vr = validate(src)
+        assert any(d.feature == "destroy" for d in vr.diagnostics)
 
     def test_create_then_destroy_roundtrip(self):
-        """Full create/use/destroy lifecycle renders without error."""
-        html = to_html(_seq(
+        """Full create/use/destroy lifecycle renders; create_participant emits Diagnostic."""
+        src = _seq(
             "  participant Alice\n"
             "  create participant Token\n"
             "  Alice->>Token: init\n"
             "  Token-->>Alice: ready\n"
             "  destroy Token\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "Alice" in html
+        vr = validate(src)
+        assert any(d.feature == "create_participant" for d in vr.diagnostics)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -334,16 +340,20 @@ class TestSequenceBlocks:
 class TestSequenceSequencing:
     """Directives that affect numbering or grouping: autonumber, box."""
 
-    def test_autonumber_renders(self):
-        """`autonumber` is silently accepted; diagram still renders."""
-        html = to_html(_seq(
+    def test_autonumber_renders_and_emits_diagnostic(self):
+        """`autonumber` renders the diagram and emits a Diagnostic."""
+        src = _seq(
             "  autonumber\n"
             "  Alice->>Bob: first\n"
             "  Bob-->>Alice: second\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "Alice" in html
         assert "Bob" in html
+        vr = validate(src)
+        assert any(d.feature == "autonumber" for d in vr.diagnostics)
+        assert vr.syntax_coverage == "partial"
 
     def test_autonumber_does_not_create_phantom_participant(self):
         """`autonumber` must not appear as a participant name."""
@@ -351,12 +361,11 @@ class TestSequenceSequencing:
             "  autonumber\n"
             "  A->>B: msg\n"
         ))
-        assert "autonumber" not in html.lower() or html.lower().count("autonumber") == 0 or \
-               "data-node-id=\"autonumber\"" not in html
+        assert "data-node-id=\"autonumber\"" not in html
 
-    def test_box_grouping_renders(self):
-        """`box Title … end` groups are accepted; participants render."""
-        html = to_html(_seq(
+    def test_box_grouping_renders_and_emits_diagnostic(self):
+        """`box Title … end` renders participants and emits a Diagnostic."""
+        src = _seq(
             "  box Frontend\n"
             "    participant Browser\n"
             "    participant UI\n"
@@ -366,10 +375,14 @@ class TestSequenceSequencing:
             "  end\n"
             "  Browser->>API: fetch\n"
             "  API-->>Browser: response\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "Browser" in html
         assert "API" in html
+        vr = validate(src)
+        box_diags = [d for d in vr.diagnostics if d.feature == "box"]
+        assert len(box_diags) == 2, f"Expected 2 box diagnostics, got {box_diags}"
 
     def test_box_single_participant(self):
         """`box` with a single participant renders the participant."""

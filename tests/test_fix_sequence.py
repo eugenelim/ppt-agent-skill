@@ -27,7 +27,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from mermaid_render.layout._strategies import _dispatch
+from mermaid_render.layout._strategies import _dispatch, _dispatch_validate, _layout_lifeline
+from mermaid_render.layout._geometry import Diagnostic, SequenceGeometry
 
 FIXTURES = REPO_ROOT / "tests" / "fixtures"
 
@@ -512,16 +513,29 @@ def _extract_message_lines(html: str) -> "list[dict]":
     return result
 
 
-def _fragment_rects(html: str) -> "list[dict]":
-    """Return [{x, y, w, h}] for dashed fragment background rects."""
+def _fragment_rects(html: str, kind: "str | None" = None) -> "list[dict]":
+    """Return [{x, y, w, h, kind, fid, participants}] for fragment background rects.
+
+    If ``kind`` is given, only rects with that data-fragment-kind are returned.
+    Falls back to stroke-dasharray matching for rects without data-fragment-kind.
+    """
     result = []
     for m in re.finditer(r'<rect[^>]+stroke-dasharray="5 3"[^>]*/>', html):
         full = m.group(0)
+        fkind_m = re.search(r'data-fragment-kind="([^"]*)"', full)
+        fkind = fkind_m.group(1) if fkind_m else ""
+        if kind is not None and fkind != kind:
+            continue
+        fid_m = re.search(r'data-fragment-id="([^"]*)"', full)
+        pids_m = re.search(r'data-participants="([^"]*)"', full)
         result.append({
             "x": float(re.search(r'\bx="([^"]+)"', full).group(1)),
             "y": float(re.search(r'\by="([^"]+)"', full).group(1)),
             "w": float(re.search(r'width="([^"]+)"', full).group(1)),
             "h": float(re.search(r'height="([^"]+)"', full).group(1)),
+            "kind": fkind,
+            "fid": fid_m.group(1) if fid_m else "",
+            "participants": pids_m.group(1) if pids_m else "",
         })
     return result
 
@@ -679,12 +693,9 @@ class TestFragmentParticipantBounds:
         xs = _lifeline_xs(html)
         assert len(xs) >= 2, "Expected at least 2 lifelines"
         client_x = xs[0]  # Client is the leftmost participant
-        frags = _fragment_rects(html)
-        loop_frags = [f for f in frags if f["h"] == 120]  # loop spans 3 rows = 120px
-        if not loop_frags:
-            pytest.skip("Loop fragment not found at expected height")
+        loop_frags = _fragment_rects(html, kind="loop")
+        assert loop_frags, "No loop fragment found (data-fragment-kind='loop') (SEQ-008)"
         loop = loop_frags[0]
-        loop_right = loop["x"] + loop["w"]
         assert loop["x"] > client_x, (
             f"Loop fragment x={loop['x']} extends left of Client lifeline at {client_x} (SEQ-008)"
         )
@@ -695,15 +706,22 @@ class TestFragmentParticipantBounds:
         xs = _lifeline_xs(html)
         assert len(xs) >= 3, "Expected at least 3 lifelines"
         db_x = xs[-1]  # DB is the rightmost participant
-        frags = _fragment_rects(html)
-        alt_frags = [f for f in frags if f["h"] == 160]  # alt spans 4 rows = 160px
-        if not alt_frags:
-            pytest.skip("Alt fragment not found at expected height")
+        alt_frags = _fragment_rects(html, kind="alt")
+        assert alt_frags, "No alt fragment found (data-fragment-kind='alt') (SEQ-008)"
         alt = alt_frags[0]
         alt_right = alt["x"] + alt["w"]
         assert alt_right < db_x, (
             f"Alt fragment right={alt_right} extends past DB lifeline at {db_x} (SEQ-008)"
         )
+
+    def test_fragment_data_attributes_present(self):
+        """Fragment rects carry data-fragment-id, data-fragment-kind, data-participants."""
+        html = _render("sequence-blocks.mmd")
+        frags = _fragment_rects(html)
+        assert frags, "No fragment rects found"
+        for frag in frags:
+            assert frag["fid"], f"Fragment missing data-fragment-id: {frag}"
+            assert frag["kind"], f"Fragment missing data-fragment-kind: {frag}"
 
     def test_nested_fragment_bounds_are_tighter(self):
         """Inner fragment bounds must be contained within outer fragment bounds."""
@@ -729,6 +747,13 @@ class TestFragmentParticipantBounds:
         )
         assert inner["x"] + inner["w"] <= outer["x"] + outer["w"], (
             f"Inner right={inner['x']+inner['w']} > outer right={outer['x']+outer['w']} (SEQ-008)"
+        )
+
+    def test_branch_condition_on_else_separator(self):
+        """else separator line must carry data-branch-condition with the branch label."""
+        html = _render("sequence-blocks.mmd")
+        assert 'data-branch-condition="Error"' in html, (
+            "else separator missing data-branch-condition='Error' (T5)"
         )
 
 
@@ -763,22 +788,29 @@ class TestSpanningNoteGeometry:
 class TestArrowSpecTable:
     """SEQ-012: Arrow spec table with point (async) and bidirectional markers."""
 
-    def test_async_arrow_renders_circle_not_triangle(self):
-        """-)  arrow must produce a <circle> endpoint, not a <polygon> arrowhead."""
+    def test_async_arrow_renders_filled_head_not_circle(self):
+        """-)  arrow must produce a filled-head <polygon> (Mermaid 11.15), not a <circle>."""
         src = "sequenceDiagram\n  Alice-)Bob: async call"
         html = _dispatch(src, None, 800)
-        assert "<circle" in html, "async -)  arrow should render a circle marker (SEQ-012)"
-        # Must NOT render a filled triangle for it
         arrow_polys = re.findall(r'<polygon points="[^"]+"\s+fill="var\(--edge', html)
-        assert len(arrow_polys) == 0, (
-            f"async -)  arrow rendered {len(arrow_polys)} triangle polygon(s); expected 0 (SEQ-012)"
+        assert len(arrow_polys) == 1, (
+            f"async -)  arrow should render exactly 1 filled-head polygon, got {len(arrow_polys)} (SEQ-012)"
+        )
+        assert "<circle" not in html, (
+            "async -)  arrow should not render a hollow circle (Mermaid 11.15 uses filled_head) (SEQ-012)"
         )
 
-    def test_async_dotted_arrow_renders_circle(self):
-        """--) arrow must also produce a <circle> endpoint."""
+    def test_async_dotted_arrow_renders_filled_head_not_circle(self):
+        """--) arrow must also produce a filled-head <polygon> (Mermaid 11.15)."""
         src = "sequenceDiagram\n  Alice--)Bob: async dotted"
         html = _dispatch(src, None, 800)
-        assert "<circle" in html, "async --)  arrow should render a circle marker (SEQ-012)"
+        arrow_polys = re.findall(r'<polygon points="[^"]+"\s+fill="var\(--edge', html)
+        assert len(arrow_polys) == 1, (
+            f"async --)  arrow should render exactly 1 filled-head polygon, got {len(arrow_polys)} (SEQ-012)"
+        )
+        assert "<circle" not in html, (
+            "async --)  arrow should not render a hollow circle (Mermaid 11.15 uses filled_head) (SEQ-012)"
+        )
 
     def test_bidirectional_arrow_has_two_triangle_markers(self):
         """<<->> must produce exactly 2 filled triangle polygons."""
@@ -842,7 +874,7 @@ class TestParserGaps:
                 )
 
     def test_autonumber_does_not_break_render(self):
-        """autonumber directive must be silently accepted."""
+        """autonumber directive must not crash and emits a Diagnostic."""
         src = (
             "sequenceDiagram\n"
             "    autonumber\n"
@@ -851,6 +883,72 @@ class TestParserGaps:
         )
         html = _dispatch(src, None, 800)
         assert "Alice" in html and "Bob" in html
+
+
+# ── SEQ-013/T4: Unsupported syntax diagnostics ───────────────────────────────
+
+class TestUnsupportedSyntaxDiagnostics:
+    """T4: Unsupported constructs emit Diagnostic objects instead of silently dropping."""
+
+    def _validate(self, src: str):
+        return _dispatch_validate("sequenceDiagram\n" + src)
+
+    def test_autonumber_emits_diagnostic(self):
+        vr = self._validate("autonumber\nA->>B: hi")
+        assert len(vr.diagnostics) == 1
+        d = vr.diagnostics[0]
+        assert d.feature == "autonumber"
+        assert d.line_number == 1
+        assert d.source_text == "autonumber"
+
+    def test_create_participant_emits_diagnostic(self):
+        vr = self._validate("create participant Token\nA->>B: hi")
+        assert any(d.feature == "create_participant" for d in vr.diagnostics)
+
+    def test_create_actor_emits_diagnostic(self):
+        vr = self._validate("create actor Robot\nA->>B: hi")
+        assert any(d.feature == "create_actor" for d in vr.diagnostics)
+
+    def test_destroy_emits_diagnostic(self):
+        vr = self._validate("A->>B: hi\ndestroy B")
+        assert any(d.feature == "destroy" for d in vr.diagnostics)
+
+    def test_par_over_emits_diagnostic(self):
+        vr = self._validate("A->>B: hi\npar_over")
+        assert any(d.feature == "par_over" for d in vr.diagnostics)
+
+    def test_unrecognized_line_emits_diagnostic(self):
+        vr = self._validate("A->>B: hi\ngobbledygook XYZ")
+        assert any(d.feature == "unrecognized_line" for d in vr.diagnostics)
+
+    def test_syntax_coverage_partial_when_diagnostics(self):
+        vr = self._validate("autonumber\nA->>B: hi")
+        assert vr.syntax_coverage == "partial"
+
+    def test_syntax_coverage_pass_when_no_diagnostics(self):
+        vr = self._validate("A->>B: hi")
+        assert vr.syntax_coverage == "pass"
+        assert vr.diagnostics == ()
+
+    def test_render_fails_returns_syntax_coverage_fail(self):
+        """A diagram that raises (no participants) → render=fail, syntax_coverage=fail."""
+        vr = _dispatch_validate("sequenceDiagram\n%%only a comment")
+        assert vr.render == "fail"
+        assert vr.syntax_coverage == "fail"
+
+    def test_box_emits_diagnostic_and_renders(self):
+        src = (
+            "sequenceDiagram\n"
+            "    box Frontend\n"
+            "        participant Alice\n"
+            "    end\n"
+            "    Alice->>Bob: hi\n"
+        )
+        vr = _dispatch_validate(src)
+        assert any(d.feature == "box" for d in vr.diagnostics)
+        assert vr.syntax_coverage == "partial"
+        html = _dispatch(src, None, 800)
+        assert "Alice" in html
 
 
 # ── SEQ-014: Note participant auto-registration ───────────────────────────────
@@ -910,8 +1008,8 @@ def _note_poly_bottoms(html: str) -> "list[float]":
 class TestVariableHeightRows:
     """SEQ-009: long note text expands its row; subsequent y-positions shift."""
 
-    # 80 chars triggers ≥ 3 lines at font-size 10px / col_w 160px heuristic
-    _LONG_NOTE = "A" * 80
+    # Long note with spaces so the measurer can wrap to ≥3 lines at font-size 10px / col_w 160px
+    _LONG_NOTE = "long note text " * 6
 
     def test_long_note_polygon_taller_than_row_h_interior(self):
         """AC-1: A note with ≥80 chars must produce a note polygon taller than ROW_H−8 (32 px)."""
@@ -987,3 +1085,66 @@ class TestVariableHeightRows:
             f"Long-note block h={max(long_hs)} must exceed short-note block h={max(short_hs)} "
             f"(SEQ-009 AC-4)"
         )
+
+
+# ── T7: SequenceGeometry return type and self-message anchor ─────────────────
+
+class TestSequenceGeometryReturn:
+    """T7: _layout_lifeline returns (html, SequenceGeometry); self-message geometry."""
+
+    def _layout(self, src: str):
+        return _layout_lifeline(src, "LR", 900)
+
+    def test_return_is_two_tuple_with_sequence_geometry(self):
+        src = "sequenceDiagram\n  Alice->>Bob: hi"
+        result = self._layout(src)
+        assert isinstance(result, tuple) and len(result) == 2
+        html, geom = result
+        assert isinstance(html, str) and html
+        assert isinstance(geom, SequenceGeometry)
+
+    def test_participant_centers_populated(self):
+        src = "sequenceDiagram\n  Alice->>Bob: hi"
+        _, geom = self._layout(src)
+        pids = [pid for pid, _ in geom.participant_centers]
+        assert "Alice" in pids and "Bob" in pids
+
+    def test_canvas_populated(self):
+        src = "sequenceDiagram\n  Alice->>Bob: hi"
+        _, geom = self._layout(src)
+        w, h = geom.canvas
+        assert w > 0 and h > 0
+
+    def test_diagnostics_in_geometry(self):
+        src = "sequenceDiagram\n  autonumber\n  A->>B: hi"
+        _, geom = self._layout(src)
+        assert any(d.feature == "autonumber" for d in geom.diagnostics)
+
+    def test_self_loop_inactive_anchors_at_lifeline_cx(self):
+        """Inactive self-message loop must start at lifeline center x."""
+        src = "sequenceDiagram\n  Alice->>Alice: think"
+        _, geom = self._layout(src)
+        assert geom.self_loop_bounds, "Expected self_loop_bounds to be populated"
+        # participant center for Alice
+        cx = dict(geom.participant_centers).get("Alice", None)
+        assert cx is not None
+        # loop anchor x (left edge) should equal cx when inactive
+        ax = geom.self_loop_bounds[0][0]
+        assert abs(ax - cx) < 1.0, f"Inactive self-loop anchor {ax} != lifeline cx {cx}"
+
+    def test_self_loop_canvas_fits(self):
+        """Self-loop on rightmost participant must stay within canvas width."""
+        src = "sequenceDiagram\n  Alice->>Alice: this is a long self-message label"
+        html, geom = self._layout(src)
+        if geom.self_loop_bounds:
+            ax, _, loop_w, _ = geom.self_loop_bounds[0]
+            canvas_w = geom.canvas[0]
+            assert ax + loop_w <= canvas_w, (
+                f"Self-loop right edge {ax + loop_w} exceeds canvas_w {canvas_w}"
+            )
+
+    def test_self_loop_path_in_html(self):
+        """Self-message must render as an SVG <path> (cubic Bezier)."""
+        src = "sequenceDiagram\n  Alice->>Alice: call"
+        html = _dispatch(src, None, 800)
+        assert '<path d="M' in html, "Self-message should render as SVG <path>"

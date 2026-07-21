@@ -317,3 +317,12 @@ place; only `_note_row_h` needs to call `page.evaluate()` and return the
 measured height. Unblocked by adding a shared Playwright page handle to
 `_layout_lifeline`'s call site (or a separate pre-render measurement pass).
 
+
+## sequence-rendering-fix
+
+Deferred items from the sequenceDiagram rendering fix spec
+(`docs/specs/sequence-rendering-fix/spec.md`).
+
+### seq-mmdc-oracle-comparison
+
+**Deferred from `sequence-rendering-fix` AC (Validation four-status model):** The `mmdc_oracle` status field in `ValidationResult` defaults to `"unvalidated"` and is displayed as a grey badge. Computing a real oracle comparison requires: running `mmdc` on each diagram, comparing our SVG geometry to mmdc's SVG (participant positions, lifeline x-coords, activation bar extents), and classifying the result as `pass`/`warning`/`fail`. Unblocked once the `SequenceGeometry` return value (T7 in `sequence-rendering-fix`) is stable enough to compare against parsed mmdc SVG coordinates.

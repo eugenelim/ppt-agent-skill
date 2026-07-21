@@ -37,6 +37,24 @@ OUT_DIR = ROOT / "ppt-output" / "compare"
 sys.path.insert(0, str(ROOT / "scripts"))
 import mermaid_render
 
+_RENDERER_SCHEMA_VERSION = "2026-07-21"
+
+
+def _assert_module_provenance(repo_root: Path) -> None:
+    """Exit with an error if the imported mermaid_render is not from this checkout."""
+    module_file = Path(mermaid_render.__file__).resolve()
+    repo_resolved = repo_root.resolve()
+    try:
+        module_file.relative_to(repo_resolved)
+    except ValueError:
+        print(
+            f"ERROR: mermaid_render imported from {module_file} "
+            f"which is outside the repository root {repo_resolved}. "
+            "Gallery generation aborted to prevent stale-source results.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
 
 def _collect_metadata(
     mmd_files: list[Path],
@@ -94,17 +112,29 @@ def _collect_metadata(
             "sha256": hashlib.sha256(data).hexdigest(),
         })
 
+    # SHA256 of key renderer source files
+    strategies_file = ROOT / "scripts" / "mermaid_render" / "layout" / "_strategies.py"
+    text_file = ROOT / "scripts" / "mermaid_render" / "layout" / "_text.py"
+    strategies_sha = hashlib.sha256(strategies_file.read_bytes()).hexdigest() if strategies_file.exists() else None
+    text_sha = hashlib.sha256(text_file.read_bytes()).hexdigest() if text_file.exists() else None
+    module_path = str(Path(mermaid_render.__file__).resolve())
+
     return {
         "git_sha": sha,
         "git_dirty": bool(dirty_out),
         "generation_timestamp_utc": datetime.datetime.utcnow().isoformat() + "Z",
         "python_version": platform.python_version(),
+        "python_executable": sys.executable,
         "pillow_version": PIL.__version__,
         "playwright_version": playwright_version,
         "chromium_version": chromium_version,
         "mmdc_version": mmdc_ver,
         "platform": platform.platform(),
         "renderer_width_hint": width_hint,
+        "renderer_schema_version": _RENDERER_SCHEMA_VERSION,
+        "mermaid_render_module_path": module_path,
+        "strategies_sha256": strategies_sha,
+        "text_sha256": text_sha,
         "output_dir": str(out_dir),
         "fixture_paths": [r["path"] for r in fixture_records],
         "fixture_sha256": {r["path"]: r["sha256"] for r in fixture_records},
@@ -255,6 +285,9 @@ details pre {
 }
 .badge-ok { background: #d4edda; color: #1e6e34; }
 .badge-err { background: #f8d7da; color: #842029; }
+.badge-unvalidated { background: #e9ecef; color: #6c757d; }
+.badge-partial { background: #fff3cd; color: #856404; }
+.status-lanes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 """
 
 
@@ -340,15 +373,47 @@ def _diagram_type(name: str) -> str:
     return name.split("-")[0]
 
 
-def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) -> "tuple[Path, bool]":
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "ours").mkdir(exist_ok=True)
-    (out_dir / "mmdc").mkdir(exist_ok=True)
+def _lane_badge_cls(status: str) -> str:
+    """Return a CSS badge class for a four-status lane value."""
+    if status == "pass":
+        return "badge-ok"
+    if status in ("fail",):
+        return "badge-err"
+    if status in ("partial", "warning"):
+        return "badge-partial"
+    return "badge-unvalidated"
 
+
+def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) -> "tuple[Path, bool]":
+    import shutil
     from collections import defaultdict
-    # Tuple: (name, src, ours_status, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err)
-    # ours_status: str from _classify_status ("ok" / "warning" / "invalid" / "error")
-    # ours_html is NOT held in memory — written to disk and re-read per section below.
+    from mermaid_render.layout._geometry import ValidationResult
+
+    # Build into a temp directory; atomically replace dest at the end.
+    tmp_dir = Path(tempfile.mkdtemp(prefix="gallery_tmp_"))
+    try:
+        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint)
+    except Exception:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
+
+
+def _build_gallery_into(
+    mmd_files: list[Path],
+    tmp_dir: Path,
+    dest_dir: Path,
+    width_hint: int,
+) -> "tuple[Path, bool]":
+    import shutil
+    from collections import defaultdict
+    from mermaid_render.layout._geometry import ValidationResult
+
+    (tmp_dir / "ours").mkdir(exist_ok=True)
+    (tmp_dir / "mmdc").mkdir(exist_ok=True)
+
+    # Tuple: (name, src, vr, ours_err, mmdc_svg_path_in_tmp, mmdc_ok, mmdc_err)
+    # vr: ValidationResult with four-status lanes.
+    # ours_html is NOT held in memory — written to disk, re-read per section.
     type_results: dict[str, list[tuple]] = defaultdict(list)
 
     sorted_files = sorted(mmd_files)
@@ -359,57 +424,56 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) ->
         print(f"  [{i + 1}/{n_total}] {name} ...", end=" ", flush=True)
 
         ours_html, ours_err = _render_ours(src, width_hint=width_hint)
-        render_exc: "BaseException | None" = None if ours_html is not None else Exception(ours_err)
         if ours_html:
-            (out_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
+            (tmp_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
             vr = mermaid_render.validate(src)
-            ours_status = _classify_status(
-                geometry_errors=bool(vr.errors),
-                geometry_warnings=bool(vr.warnings),
-            )
         else:
-            ours_status = _classify_status(render_exception=render_exc)
+            vr = ValidationResult(render="fail", syntax_coverage="fail")
 
-        mmdc_svg_path = out_dir / "mmdc" / f"{name}.svg"
+        mmdc_svg_path = tmp_dir / "mmdc" / f"{name}.svg"
         mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
 
-        print(f"ours:{ours_status}  mmdc:{'ok' if mmdc_ok else 'err'}")
+        print(
+            f"render:{vr.render}  syntax:{vr.syntax_coverage}  "
+            f"geometry:{vr.geometry}  oracle:{vr.mmdc_oracle}  "
+            f"mmdc:{'ok' if mmdc_ok else 'err'}"
+        )
 
         dtype = _diagram_type(name)
-        type_results[dtype].append((name, src, ours_status, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
+        type_results[dtype].append((name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
 
     # Build nav — requires all results, so collected first.
     nav_parts: list[str] = []
     for dtype in sorted(type_results):
         items = type_results[dtype]
-        n_ok = sum(1 for _, _, st, _, _, _, _ in items if st == "ok")
+        n_render_ok = sum(1 for _, _, vr, _, _, _, _ in items if vr.render == "pass")
         n_items = len(items)
-        group_status = "ok" if n_ok == n_items else ("err" if n_ok == 0 else "warn")
+        group_status = "ok" if n_render_ok == n_items else ("err" if n_render_ok == 0 else "warn")
         badge_cls = "badge-ok" if group_status == "ok" else ("badge-err" if group_status == "err" else "badge-warn")
         nav_parts.append(
             f'<div class="nav-group">'
             f'<span class="nav-type">{_html_mod.escape(dtype)}'
-            f'<span class="status-badge {badge_cls}">{n_ok}/{n_items}</span></span>'
+            f'<span class="status-badge {badge_cls}">{n_render_ok}/{n_items}</span></span>'
         )
-        for name, _, ours_status, _, _, mmdc_ok, _ in items:
+        for name, _, vr, _, _, mmdc_ok, _ in items:
             short = name[len(dtype):].lstrip("-") or name
-            _obadge = "ok" if ours_status == "ok" else ("warn" if ours_status == "warning" else "err")
+            _obadge = _lane_badge_cls(vr.render)
             nav_parts.append(
                 f'<a href="#{name}">{_html_mod.escape(short)}'
-                f'<span class="status-badge badge-{_obadge}">O</span>'
+                f'<span class="status-badge {_obadge}">O</span>'
                 f'<span class="status-badge badge-{"ok" if mmdc_ok else "err"}">M</span>'
                 f'</a>'
             )
         nav_parts.append('</div>')
 
     total_diags = sum(len(v) for v in type_results.values())
-    n_ours_ok = sum(1 for items in type_results.values() for _, _, st, _, _, _, _ in items if st == "ok")
+    n_ours_ok = sum(1 for items in type_results.values() for _, _, vr, _, _, _, _ in items if vr.render == "pass")
     n_mmdc_ok = sum(m for items in type_results.values() for _, _, _, _, _, m, _ in items)
     n_types = len(type_results)
     nav_html = "\n".join(nav_parts)
 
     # Stream index.html — write one section at a time to avoid holding all HTML in memory.
-    index_path = out_dir / "index.html"
+    index_path = tmp_dir / "index.html"
     with index_path.open("w", encoding="utf-8") as f:
         f.write(f"""<!DOCTYPE html>
 <html lang="en">
@@ -422,8 +486,7 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) ->
   <header>
     <h1>mermaid_render vs mmdc comparison</h1>
     <span>{total_diags} diagrams &nbsp;·&nbsp; {n_types} types &nbsp;·&nbsp;
-      ours {n_ours_ok}/{total_diags} ok &nbsp;·&nbsp; mmdc {n_mmdc_ok}/{total_diags} ok &nbsp;|&nbsp;
-      O = ours &nbsp;|&nbsp; M = mmdc &nbsp;|&nbsp; green = ok, red = error</span>
+      render-ok {n_ours_ok}/{total_diags} &nbsp;·&nbsp; mmdc {n_mmdc_ok}/{total_diags} ok</span>
   </header>
   <nav>{nav_html}</nav>
 """)
@@ -431,12 +494,11 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) ->
         for dtype in sorted(type_results):
             items = type_results[dtype]
             f.write(f'  <div class="type-group-header" id="type-{dtype}">{_html_mod.escape(dtype)}</div>\n')
-            for name, src, ours_status, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
-                _ours_badge = "ok" if ours_status == "ok" else ("warn" if ours_status == "warning" else "err")
+            for name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
                 mmdc_status = "ok" if mmdc_ok else "err"
 
-                if ours_status in ("ok", "warning", "invalid"):
-                    ours_html = (out_dir / "ours" / f"{name}.html").read_text(encoding="utf-8")
+                if vr.render == "pass":
+                    ours_html = (tmp_dir / "ours" / f"{name}.html").read_text(encoding="utf-8")
                     ours_srcdoc = _html_mod.escape(ours_html, quote=True)
                     ours_content = (
                         '<div class="render-box">'
@@ -469,10 +531,14 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) ->
 
                 f.write(f"""
 <div class="diagram-section" id="{name}">
-  <h2>{_html_mod.escape(name)}
-    <span class="status-badge badge-{_ours_badge}">ours: {ours_status}</span>
-    <span class="status-badge badge-{mmdc_status}">mmdc: {mmdc_status}</span>
-  </h2>
+  <h2>{_html_mod.escape(name)}</h2>
+  <div class="status-lanes">
+    <span class="status-badge {_lane_badge_cls(vr.render)} badge-render">render: {vr.render}</span>
+    <span class="status-badge {_lane_badge_cls(vr.syntax_coverage)} badge-syntax">syntax: {vr.syntax_coverage}</span>
+    <span class="status-badge {_lane_badge_cls(vr.geometry)} badge-geometry">geometry: {vr.geometry}</span>
+    <span class="status-badge {_lane_badge_cls(vr.mmdc_oracle)} badge-oracle">oracle: {vr.mmdc_oracle}</span>
+    <span class="status-badge badge-{"ok" if mmdc_ok else "err"}">mmdc: {mmdc_status}</span>
+  </div>
   <div class="comparison-grid">
     <div class="pane-ours">
       <div class="pane-header">Our renderer</div>
@@ -516,11 +582,18 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) ->
 </html>""")
 
     has_failures = any(
-        st in ("invalid", "error")
+        vr.render == "fail" or vr.geometry == "fail"
         for items in type_results.values()
-        for _, _, st, _, _, _, _ in items
+        for _, _, vr, _, _, _, _ in items
     )
-    return index_path, has_failures
+
+    # Atomically replace destination with tmp_dir.
+    import shutil
+    if dest_dir.exists():
+        shutil.rmtree(dest_dir)
+    shutil.move(str(tmp_dir), str(dest_dir))
+
+    return dest_dir / "index.html", has_failures
 
 
 def main() -> None:
@@ -553,6 +626,9 @@ def main() -> None:
     if not mmd_files:
         print("No .mmd files found.", file=sys.stderr)
         sys.exit(1)
+
+    # Assert module provenance before generating any output.
+    _assert_module_provenance(ROOT)
 
     # Always write metadata.json first so provenance is recorded even on failures.
     out_dir.mkdir(parents=True, exist_ok=True)
