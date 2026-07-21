@@ -596,6 +596,12 @@ def _layout_lifeline(
             if _stk:
                 _sy, _depth = _stk.pop()
                 _act_spans_v2.append((_pid, _sy, _last_msg_y, _depth))
+            else:
+                _diagnostics.append(Diagnostic(
+                    feature="unmatched_deactivate",
+                    line_number=0,
+                    source_text=f"deactivate {_pid}",
+                ))
     # Flush unclosed activations to lifeline bottom (SEQ-006)
     for _pid, _stk in _act_stacks_v2.items():
         while _stk:
@@ -802,9 +808,11 @@ def _layout_lifeline(
             span = it.get("span", 1)
             if it["type"] == "rect":
                 color = _h(it.get("label", "") or "rgba(200,200,200,0.3)")
+                # T11: don't add opacity when fill already has rgba() — avoids double-alpha
+                _rect_opacity = "" if "rgba(" in color.lower() else ' opacity="0.3"'
                 parts.append(
                     f'<rect x="{x0}" y="{ry}" width="{x1 - x0}" height="{bh}" '
-                    f'fill="{color}" opacity="0.3" rx="3"/>'
+                    f'fill="{color}"{_rect_opacity} rx="3"/>'
                 )
             else:
                 fid = _frag_id.get(_bi_a, "")
@@ -924,21 +932,32 @@ def _layout_lifeline(
         if it["type"] != "msg":
             continue
 
+        # T11: strict participant lookup — unknown names emit Diagnostic and skip
+        _msg_src, _msg_dst = it.get("src", ""), it.get("dst", "")
+        for _unknown in [p for p in (_msg_src, _msg_dst) if p and p not in _p_index]:
+            _diagnostics.append(Diagnostic(
+                feature="unknown_participant",
+                line_number=0,
+                source_text=f"{_unknown}",
+            ))
+        if _msg_src not in _p_index or _msg_dst not in _p_index:
+            row += 1; continue
+
         ry = ll_top + _row_top_list[row] + _row_h_list[row] // 2
         _geom_msg_ys.append(float(ry))
         arrow = it.get("arrow", "->>")
         spec = _ARROW_SPECS.get(arrow, _ARROW_SPECS["->>"])
         dash = ' stroke-dasharray="6 4"' if spec["dashed"] else ""
         # SEQ-007: activation-aware endpoints
-        sx, dx2 = _msg_endpoints(it["src"], it["dst"], ry)
+        sx, dx2 = _msg_endpoints(_msg_src, _msg_dst, ry)
 
-        if it["src"] == it["dst"]:
+        if _msg_src == _msg_dst:
             # T7: anchor self-loop at right edge of active activation bar (or lifeline cx)
             sl_data = _self_loop_data.get(_bi)
             if sl_data:
                 ax_right, loop_w, _sl_ry = sl_data
             else:
-                ax_right = activation_bounds_at(it["src"], ry)[1]
+                ax_right = activation_bounds_at(_msg_src, ry)[1]
                 loop_w = 36
             loop_top = ry - 8
             loop_bot = ry + 8
@@ -946,7 +965,7 @@ def _layout_lifeline(
                 f'<path d="M {ax_right} {loop_top} C {ax_right + loop_w} {loop_top} '
                 f'{ax_right + loop_w} {loop_bot} {ax_right} {loop_bot}" '
                 f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}'
-                f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
+                f' data-src="{_h(_msg_src)}" data-dst="{_h(_msg_dst)}"/>'
             )
             parts.append(_draw_marker(spec["end_m"], ax_right, loop_bot, -1))
             _geom_self_loops.append((float(ax_right), float(loop_top), float(loop_w), 16.0))
@@ -955,7 +974,7 @@ def _layout_lifeline(
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1.5"{dash}'
-                f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
+                f' data-src="{_h(_msg_src)}" data-dst="{_h(_msg_dst)}"/>'
             )
             dirn = 1 if dx2 > sx else -1
             parts.append(_draw_marker(spec["end_m"], dx2, ry, dirn))
@@ -1015,9 +1034,16 @@ def _layout_lifeline(
             row += 1; continue
         if it["type"] not in ("msg",):
             continue
-        sx_lbl = float(_cx(it["src"]))
-        dx_lbl = float(_cx(it["dst"]))
+        _lbl_src, _lbl_dst = it.get("src", ""), it.get("dst", "")
+        if _lbl_src not in _p_index or _lbl_dst not in _p_index:
+            row += 1; continue
         ry = ll_top + _row_top_list[row] + _row_h_list[row] // 2
+        # T11: center label over activation-adjusted segment midpoint, not bare lifeline cx
+        if _lbl_src == _lbl_dst:
+            sx_lbl = float(_cx(_lbl_src))
+            dx_lbl = sx_lbl
+        else:
+            sx_lbl, dx_lbl = _msg_endpoints(_lbl_src, _lbl_dst, float(ry))
         lbl = _h(it["label"])
         if lbl:
             mid_x = int((sx_lbl + dx_lbl) / 2)

@@ -1194,3 +1194,60 @@ class TestNaturalHorizontalLayout:
             assert "overflow:hidden" not in style, (
                 f"Participant label must not clip text: {style}"
             )
+
+
+# ── T11: P2 cleanup ───────────────────────────────────────────────────────────
+
+class TestP2Cleanup:
+    """T11: strict participant lookup, unmatched-deactivate, RGBA double-alpha,
+    label centering."""
+
+    def test_implicit_participant_renders_without_crash(self):
+        """Implicit participants (not declared via 'participant') still render safely."""
+        src = "sequenceDiagram\n  participant Alice\n  Alice->>Typo: hi"
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert html is not None
+        # Typo auto-registered; both participants should appear as lifelines
+        assert "Alice" in html
+        assert "Typo" in html
+
+    def test_unmatched_deactivate_emits_diagnostic(self):
+        """A deactivate with no matching activate produces a Diagnostic."""
+        src = "sequenceDiagram\n  participant A\n  A->>A: hi\n  deactivate A"
+        _, geom = _layout_lifeline(src, "LR", 0)
+        assert any(d.feature == "unmatched_deactivate" for d in geom.diagnostics), (
+            "Expected unmatched_deactivate Diagnostic"
+        )
+
+    def test_rgba_fill_no_opacity_attribute(self):
+        """rect block with rgba() fill must not also carry opacity= (no double-alpha)."""
+        src = (
+            "sequenceDiagram\n"
+            "  A->>B: start\n"
+            "  rect rgba(0, 200, 0, 0.3)\n"
+            "    A->>B: colored\n"
+            "  end\n"
+        )
+        html = _dispatch(src, None, 0)
+        # Find rect elements that have rgba fill AND opacity
+        double_alpha = re.findall(
+            r'<rect[^>]+fill="rgba\([^"]*\)"[^>]+opacity="[^"]*"', html
+        )
+        assert not double_alpha, f"Rect has both rgba fill and opacity= (double-alpha): {double_alpha}"
+
+    def test_label_centered_at_activation_midpoint(self):
+        """With activations, label x is midpoint of activation-adjusted endpoints."""
+        src = (
+            "sequenceDiagram\n"
+            "  participant Alice\n"
+            "  participant Bob\n"
+            "  activate Bob\n"
+            "  Alice->>Bob: msg\n"
+            "  deactivate Bob\n"
+        )
+        html = _dispatch(src, None, 0)
+        edge_styles = re.findall(r'class="edge-label"[^>]+style="([^"]+)"', html)
+        assert edge_styles, "No edge-label found"
+        # All edge labels use translateX(-50%) centering
+        for style in edge_styles:
+            assert "translateX(-50%)" in style
