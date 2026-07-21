@@ -31,7 +31,7 @@ from ._constants import (
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _ARCH_ICON_MAP, _LABEL_ICON_KEYWORDS,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
-    _node_render_h,
+    _node_render_h, _load_icon,
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
@@ -44,6 +44,9 @@ from ._renderer import (
     _separate_groups_lr,
     _separate_groups_tb,
     _push_nonmembers_out_of_groups_lr,
+    _compute_group_bboxes,
+    render_finalized,
+    _ACCENT_CYCLE,
 )
 
 # ── label-based icon inference ────────────────────────────────────────────────
@@ -79,188 +82,51 @@ def _layout_graph_topology(
     style_overrides: str = "",
     opts: "RenderOptions | None" = None,
 ) -> str:
+    """Produce the HTML fragment for flowchart/graph/stateDiagram sources.
+
+    Delegates geometry to _compile_flowchart, serializes via render_finalized.
+    """
     _opts = opts if opts is not None else RenderOptions()
-    lines = src.splitlines()
-    # Skip up to and including the directive line (first non-blank, non-comment line)
-    directive_index = 0
-    for i, line in enumerate(lines):
-        s = line.strip()
-        if s and not s.startswith(("%%", "//")):
-            directive_index = i
-            break
-    content_lines = lines[directive_index + 1:]
 
-    nodes, edges, groups = _parse_graph_source(content_lines)
-    if not _opts.faithful_mermaid and _opts.infer_icons:
-        _infer_label_icons(nodes)
-
-    if len(nodes) > NODE_CAP:
-        raise ValueError(
-            f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}). "
-            "Split the diagram into smaller slides."
-        )
-    if len(edges) > EDGE_CAP:
-        raise ValueError(
-            f"Cap exceeded: {len(edges)} edges (cap {EDGE_CAP}). "
-            "Split the diagram into smaller slides."
-        )
-    if len(groups) > GROUP_CAP:
-        raise ValueError(
-            f"Cap exceeded: {len(groups)} subgraphs (cap {GROUP_CAP})."
-        )
-
-    if not nodes:
-        raise ValueError("No nodes found in diagram source.")
-
-    _break_cycles(nodes, edges)
-    _assign_ranks(nodes, edges)
-
-    # Honor inner `direction LR` inside a TB subgraph: flatten all member nodes to
-    # the same rank so they appear side-by-side (same y) rather than top-to-bottom.
-    if direction.upper() in ("TB", "TD"):
-        for grp in groups.values():
-            if grp.direction.upper() in ("LR", "RL") and grp.members:
-                _member_set = set(grp.members)
-                _grp_ranks = [nodes[m].rank for m in grp.members if m in nodes]
-                if _grp_ranks:
-                    _flat_rank = min(_grp_ranks)
-                    for m in grp.members:
-                        if m in nodes:
-                            nodes[m].rank = _flat_rank
-
-    _minimize_crossings(nodes, edges)
-
-    # Auto-select direction (TB vs LR) when a size constraint is given and the
-    # source direction was not explicitly overridden by the caller.  Estimate the
-    # canvas footprint for both orientations and choose the one that requires
-    # less shrinkage (i.e. fits best inside width_hint × height_hint).
-    # Disabled when opts.auto_direction is False or opts.faithful_mermaid is True.
-    if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
-        max_rank = max((n.rank for n in nodes.values()), default=0)
-        from collections import Counter
-        rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
-        max_cols = max(rank_counts.values(), default=1)
-        # Use actual average node height (accounts for sub-labels, icons, multi-line)
-        real_ns = [n for n in nodes.values() if not n.is_dummy]
-        avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
-        lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
-        lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
-        tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
-        tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
-        lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
-        tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
-        if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
-            direction = "TB"
-        elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
-            direction = "LR"
-
-    _init_cfg = _parse_init_config(src)
-
-    # Keep group members in adjacent column bands (reduces group bbox y-span in LR mode)
-    if groups:
-        _group_coherent_cols(nodes, groups)
-    # Compact group column ranges before coordinate assignment (dagre-inspired)
-    if groups:
-        _compact_group_columns(nodes, groups)
-    canvas_w, canvas_h = _assign_coordinates(
-        nodes, direction,
-        col_gap=_init_cfg.get("col_gap"),
-        rank_gap=_init_cfg.get("rank_gap"),
-        canvas_pad=_init_cfg.get("diagram_padding"),
-    )
-
-    # Recursive inner-direction fixup: re-order member x/y positions for groups
-    # whose declared direction differs from the outer direction (replaces the
-    # flat rank-flattening that was the only prior mechanism).
-    if groups:
-        _apply_inner_direction_positions(
-            nodes, edges, groups, direction,
-            col_gap=_init_cfg.get("col_gap"),
-        )
-
-    # Push overlapping group bounding boxes apart after coordinate assignment
-    if direction.upper() in ("LR", "RL") and groups:
-        _separate_groups_lr(nodes, groups)
-        # Snap dummy node y-positions to match their non-dummy chain-source so
-        # the horizontal routing segment stays in the source's y band instead of
-        # cutting across intermediate groups after _separate_groups_lr shifts them.
-        _pred: dict[str, str] = {}
-        for _e in edges:
-            if _e.src in nodes and _e.dst in nodes:
-                _pred[_e.dst] = _e.src
-
-        def _chain_src_y(nid: str) -> int:
-            """Walk predecessor chain to first non-dummy node; return its y."""
-            visited: set[str] = set()
-            cur = nid
-            while cur in _pred and nodes.get(cur) is not None:
-                cur = _pred[cur]
-                if cur in visited:
-                    break
-                visited.add(cur)
-                if not nodes[cur].is_dummy:
-                    return nodes[cur].y
-            return nodes[nid].y  # fallback: keep original
-
-        for _nid, _n in nodes.items():
-            if _n.is_dummy:
-                _n.y = _chain_src_y(_nid)
-
-        # Also push non-member nodes that visually land inside a group bbox downward
-        _push_nonmembers_out_of_groups_lr(nodes, groups)
-    elif direction.upper() in ("TB", "TD") and groups:
-        canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
-
-    # Recompute canvas dimensions using actual rendered node heights after any group shifts
-    real_nodes = [n for n in nodes.values() if not n.is_dummy]
-    if real_nodes:
-        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
-        canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
-
-    # Center terminal-circle nodes (start ● / end ◎) within their TB column slot.
-    # _assign_coordinates places terminal circles at col_left[col] with no centering
-    # offset (other nodes are centered within their per-column slot by _assign_coordinates).
-    # Terminal circles are _TERMINAL_NODE_SIZE (32 px) wide; without this shift their centre
-    # is col_left[col] + 16, producing a visible horizontal jog vs adjacent rect state nodes.
-    # _eff_nw uses the global max node width as an approximation of the column width, which
-    # is exact when all real nodes share one column (typical state diagrams); multi-column
-    # diagrams with terminal circles in a narrower column may show a slight jog (P1 fix).
-    # Canvas dimensions are already finalised above, so this shift does not affect sizing.
-    if direction.upper() not in ("LR", "RL"):
-        _eff_nw = max(
-            (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
-            default=NODE_W,
-        )
-        _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
-        for _n in nodes.values():
-            if not _n.is_dummy and _is_terminal_circle(_n):
-                _n.x += _circ_shift
+    compiled = _compile_flowchart(
+        src, width_hint, _opts,
+        direction_override=direction,
+        height_hint=height_hint,
+        style_overrides=style_overrides,
+    )  # options= accepted as positional arg
+    layout = compiled.layout
+    canvas_w = int(layout.canvas_bounds.w)
+    canvas_h = int(layout.canvas_bounds.h)
 
     # Scale to fit width/height constraints via CSS zoom.
-    # Without height_hint: scale down only (never scale up — a tall diagram
-    # scaled up to fill width overflows the slide height).
-    # With height_hint: scale to fit both dimensions, capped at 1.4× scale-up.
     zoom = 1.0
     if width_hint and canvas_w > 0:
         w_zoom = width_hint / canvas_w
         if height_hint and canvas_h > 0:
             h_zoom = height_hint / canvas_h
-            zoom = min(w_zoom, h_zoom, 1.4)  # fit both, cap scale-up
+            zoom = min(w_zoom, h_zoom, 1.4)
         else:
-            zoom = min(w_zoom, 1.0)  # scale down only; avoids height overflow
+            zoom = min(w_zoom, 1.0)
 
-    fragment = _render_graph_fragment(
-        nodes, edges, groups, canvas_w, canvas_h, direction, zoom,
-        style_overrides=style_overrides,
-        show_legend=False,
-    )
+    # Core fragment from render_finalized (not _render_graph_fragment)
+    fragment = render_finalized(layout)
 
-    # Wrap with metadata chip (type + title) and auto-legend
+    # Apply zoom + style via a wrapper div when needed
+    zoom_css = f" zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
+    extra_style = (" " + style_overrides.strip()) if style_overrides else ""
+    if zoom_css or extra_style:
+        fragment = (
+            f'<div class="diagram-zoom-wrapper"'
+            f' style="display:contents;{zoom_css}{extra_style}">'
+            f'{fragment}</div>'
+        )
+
+    # Metadata chip and legend
     directive, _ = _detect_directive(src)
     title = _extract_diagram_title(src)
     meta_html = _render_metadata_chip(directive, title)
     _show_legend = _opts.inferred_legend and not _opts.faithful_mermaid
-    legend_html = _render_legend(edges, groups) if _show_legend else ""
+    legend_html = _render_legend_from_layout(layout) if _show_legend else ""
 
     if legend_html:
         return (
@@ -3960,6 +3826,387 @@ def _layout_gitgraph(src: str, direction: str, width_hint: int) -> str:
 
     parts.append("</div>")
     return "".join(parts)
+
+
+# ── compile-flowchart pipeline ───────────────────────────────────────────────
+
+def _make_text_layout_ir(text: str) -> "TextLayout":
+    """Minimal single-run TextLayout for building NodeLayout / GroupLayout IR."""
+    from ._geometry import TextLayout, TextLine, TextRun, TextStyle
+    style = TextStyle()
+    w = float(max(len(text) * 8, 30))
+    run = TextRun(text=text, style=style, width=w, height=18.0)
+    line = TextLine(runs=(run,), width=w, height=18.0, baseline=14.0)
+    return TextLayout(
+        lines=(line,),
+        width=w,
+        height=18.0,
+        line_height=18.0,
+        min_content_width=min(w, 40.0),
+        max_content_width=w,
+        resolved_font_path=None,
+        resolved_font_family="sans-serif",
+    )
+
+
+def _build_node_layouts_ir(
+    nodes: "dict[str, _Node]",
+    groups: "dict[str, _Group] | None" = None,
+) -> "dict[str, NodeLayout]":
+    from ._geometry import NodeLayout, Rect
+    # Build node→group-index map for accent color computation
+    _node_grp_idx: dict[str, int] = {}
+    if groups:
+        for _gi, gid in enumerate(groups.keys()):
+            for _nid in groups[gid].members:
+                _node_grp_idx[_nid] = _gi
+    result: dict = {}
+    for nid, n in nodes.items():
+        nw = n.width or NODE_W
+        nh = _node_render_h(n)
+        outer = Rect(x=float(n.x), y=float(n.y), w=float(nw), h=float(nh))
+        content = Rect(
+            x=float(n.x + 8), y=float(n.y + 4),
+            w=float(max(nw - 16, 20)), h=float(max(nh - 8, 10)),
+        )
+        title = _make_text_layout_ir(n.label) if not n.is_dummy else None
+        shape = n.shape or "rect"
+        is_ext = getattr(n, "css_class", "") == "external"
+        css_cls_list = [f"node-{shape}"]
+        if is_ext:
+            css_cls_list.append("node-external")
+        shape_cls = tuple(css_cls_list)
+        icon_svg = (_load_icon(n.icon) if getattr(n, "icon", "") else
+                    (_load_icon(n.css_class) if getattr(n, "css_class", "") else ""))
+        if is_ext:
+            accent = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+        elif nid in _node_grp_idx:
+            accent = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
+        else:
+            accent = "var(--node-title-fg,var(--accent-1,#60a5fa))"
+        result[nid] = NodeLayout(
+            node_id=nid,
+            semantic_shape=shape,
+            outer_bounds=outer,
+            content_bounds=content,
+            title_layout=title,
+            subtitle_layout=None,
+            member_layouts=(),
+            icon_bounds=None,
+            ports=(),
+            css_classes=shape_cls,
+            extra_css="",
+            is_dummy=n.is_dummy,
+            rank=getattr(n, "rank", 0) or 0,
+            is_external=is_ext,
+            icon_svg=icon_svg,
+            accent_color=accent,
+        )
+    return result
+
+
+def _build_group_layouts_ir(
+    groups: "dict[str, _Group]",
+    group_bboxes: "dict[str, tuple[int, int, int, int]]",
+) -> "dict[str, GroupLayout]":
+    from ._geometry import GroupLayout, Rect
+    result: dict = {}
+    for gid, grp in groups.items():
+        if gid not in group_bboxes:
+            continue
+        bx1, by1, bx2, by2 = group_bboxes[gid]
+        boundary = Rect(
+            x=float(bx1), y=float(by1),
+            w=float(bx2 - bx1), h=float(by2 - by1),
+        )
+        label_layout = _make_text_layout_ir(grp.label) if grp.label else None
+        result[gid] = GroupLayout(
+            group_id=gid,
+            parent_group_id=None,
+            boundary_bounds=boundary,
+            label_layout=label_layout,
+            member_ids=tuple(grp.members),
+            child_group_ids=(),
+            local_direction=getattr(grp, "direction", "TB") or "TB",
+        )
+    return result
+
+
+def _extract_waypoints_from_path(d: str) -> "tuple[Point, ...]":
+    """Extract geometric waypoints from an SVG path string (M, L, Q commands)."""
+    from ._geometry import Point
+    pts: list[Point] = []
+    for cmd, num_str in re.findall(r'([MLQZ])\s*((?:[-\d.]+\s*)*)', d):
+        nums = [float(x) for x in num_str.split() if x]
+        if cmd == 'M' and len(nums) >= 2:
+            pts.append(Point(nums[0], nums[1]))
+        elif cmd == 'L' and len(nums) >= 2:
+            pts.append(Point(nums[0], nums[1]))
+        elif cmd == 'Q' and len(nums) >= 4:
+            pts.append(Point(nums[2], nums[3]))
+    return tuple(pts)
+
+
+def _build_routed_edges_ir(route_results: "list[dict]") -> "tuple[RoutedEdge, ...]":
+    """Convert _route_edges() result dicts to typed RoutedEdge IR objects."""
+    from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect
+    results: list = []
+    seen_pairs: dict = {}
+    for spec in route_results:
+        src = spec.get("src", "")
+        dst = spec.get("dst", "")
+        pair = (src, dst)
+        idx = seen_pairs.get(pair, 0)
+        seen_pairs[pair] = idx + 1
+        edge_id = f"{src}->{dst}" if idx == 0 else f"{src}->{dst}#{idx}"
+
+        waypoints = _extract_waypoints_from_path(spec.get("d", ""))
+        src_pos = waypoints[0] if waypoints else Point(0.0, 0.0)
+        dst_pos = waypoints[-1] if waypoints else Point(0.0, 0.0)
+
+        src_port = PortLayout(node_id=src, side=PortSide.AUTO, position=src_pos, direction=Point(0.0, 1.0))
+        dst_port = PortLayout(node_id=dst, side=PortSide.AUTO, position=dst_pos, direction=Point(0.0, -1.0))
+
+        raw_style = spec.get("style", "")
+        if raw_style == "thick":
+            edge_style = "thick"
+        elif "dotted" in raw_style or raw_style == "dotted":
+            edge_style = "dotted"
+        else:
+            edge_style = "solid"
+
+        mid = spec.get("marker_id") or ""
+        has_marker_end = bool(mid) and not mid.endswith("-rev")
+        has_marker_start = bool(spec.get("bidir")) or (bool(mid) and mid.endswith("-rev"))
+
+        label_text = spec.get("label", "") or ""
+        if label_text:
+            lx, ly = float(spec.get("lx", 0)), float(spec.get("ly", 0))
+            label_tl = _make_text_layout_ir(label_text)
+            label_layout = EdgeLabelLayout(
+                text=label_text,
+                layout=label_tl,
+                bounds=Rect(x=lx, y=ly, w=label_tl.width, h=label_tl.height),
+                anchor_point=src_pos,
+            )
+        else:
+            label_layout = None
+
+        results.append(RoutedEdge(
+            edge_id=edge_id,
+            src_node_id=src,
+            dst_node_id=dst,
+            src_port=src_port,
+            dst_port=dst_port,
+            waypoints=waypoints,
+            edge_style=edge_style,
+            has_marker_end=has_marker_end,
+            has_marker_start=has_marker_start,
+            label_layout=label_layout,
+            src_label_layout=None,
+            dst_label_layout=None,
+        ))
+    return tuple(results)
+
+
+def _render_legend_from_layout(layout: "FinalizedLayout") -> str:
+    """Generate legend HTML from a FinalizedLayout (proxy for _render_legend)."""
+    class _EdgeProxy:
+        __slots__ = ("style", "reversed_")
+        def __init__(self, style: str, rev: bool) -> None:
+            self.style = style
+            self.reversed_ = rev
+    stubs = [_EdgeProxy(re.edge_style, re.is_reversed) for re in layout.routed_edges]
+    return _render_legend(stubs, layout.group_layouts)
+
+
+def _compile_flowchart(
+    src: str,
+    width_hint: int,
+    options: "RenderOptions | None",
+    *,
+    direction_override: "Optional[str]" = None,
+    height_hint: int = 0,
+    style_overrides: str = "",
+) -> "CompiledFlowchart":
+    """Run the full flowchart layout pipeline and return a CompiledFlowchart.
+
+    This is the single authoritative entry point for flowchart/graph/stateDiagram
+    geometry. All layout, routing, IR construction, and validation happen here.
+    """
+    from ._geometry import (
+        CompiledFlowchart, FinalizedLayout, LayoutMetadata,
+        NodeLayout, GroupLayout, RoutedEdge,
+        validate_finalized_layout, _empty_diagnostics, Rect, Point,
+    )
+
+    _opts = options if options is not None else RenderOptions()
+    clean = _strip_frontmatter(src)
+    _, auto_direction = _detect_directive(clean)
+    direction = (direction_override or auto_direction).upper()
+
+    lines = clean.splitlines()
+    directive_index = 0
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s and not s.startswith(("%%", "//")):
+            directive_index = i
+            break
+    content_lines = lines[directive_index + 1:]
+
+    nodes, edges, groups = _parse_graph_source(content_lines)
+    if not _opts.faithful_mermaid and _opts.infer_icons:
+        _infer_label_icons(nodes)
+
+    if len(nodes) > NODE_CAP:
+        raise ValueError(f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}).")
+    if len(edges) > EDGE_CAP:
+        raise ValueError(f"Cap exceeded: {len(edges)} edges (cap {EDGE_CAP}).")
+    if len(groups) > GROUP_CAP:
+        raise ValueError(f"Cap exceeded: {len(groups)} subgraphs (cap {GROUP_CAP}).")
+    if not nodes:
+        raise ValueError("No nodes found in diagram source.")
+
+    _break_cycles(nodes, edges)
+    _assign_ranks(nodes, edges)
+
+    # Honor inner direction LR inside a TB subgraph
+    if direction.upper() in ("TB", "TD"):
+        for grp in groups.values():
+            if getattr(grp, "direction", "").upper() in ("LR", "RL") and grp.members:
+                _grp_ranks = [nodes[m].rank for m in grp.members if m in nodes]
+                if _grp_ranks:
+                    _flat_rank = min(_grp_ranks)
+                    for m in grp.members:
+                        if m in nodes:
+                            nodes[m].rank = _flat_rank
+
+    _minimize_crossings(nodes, edges)
+
+    # Auto-select direction (TB vs LR) when both size hints are given
+    if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
+        from collections import Counter
+        max_rank = max((n.rank for n in nodes.values()), default=0)
+        rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
+        max_cols = max(rank_counts.values(), default=1)
+        real_ns = [n for n in nodes.values() if not n.is_dummy]
+        avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
+        lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
+        lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
+        tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
+        tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
+        lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
+        tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
+        if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
+            direction = "TB"
+        elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
+            direction = "LR"
+
+    _init_cfg = _parse_init_config(src)
+
+    if groups:
+        _group_coherent_cols(nodes, groups)
+        _compact_group_columns(nodes, groups)
+
+    canvas_w, canvas_h = _assign_coordinates(
+        nodes, direction,
+        col_gap=_init_cfg.get("col_gap"),
+        rank_gap=_init_cfg.get("rank_gap"),
+        canvas_pad=_init_cfg.get("diagram_padding"),
+    )
+
+    if groups:
+        _apply_inner_direction_positions(
+            nodes, edges, groups, direction,
+            col_gap=_init_cfg.get("col_gap"),
+        )
+
+    if direction.upper() in ("LR", "RL") and groups:
+        _separate_groups_lr(nodes, groups)
+        _pred: dict[str, str] = {}
+        for _e in edges:
+            if _e.src in nodes and _e.dst in nodes:
+                _pred[_e.dst] = _e.src
+
+        def _chain_src_y(nid: str) -> int:
+            visited: set[str] = set()
+            cur = nid
+            while cur in _pred and nodes.get(cur) is not None:
+                cur = _pred[cur]
+                if cur in visited:
+                    break
+                visited.add(cur)
+                if not nodes[cur].is_dummy:
+                    return nodes[cur].y
+            return nodes[nid].y
+
+        for _nid, _n in nodes.items():
+            if _n.is_dummy:
+                _n.y = _chain_src_y(_nid)
+        _push_nonmembers_out_of_groups_lr(nodes, groups)
+    elif direction.upper() in ("TB", "TD") and groups:
+        canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
+
+    # Recompute canvas after group adjustments
+    real_nodes = [n for n in nodes.values() if not n.is_dummy]
+    if real_nodes:
+        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+        canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
+
+    # Terminal circle centering
+    if direction.upper() not in ("LR", "RL"):
+        _eff_nw = max(
+            (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
+            default=NODE_W,
+        )
+        _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
+        for _n in nodes.values():
+            if not _n.is_dummy and _is_terminal_circle(_n):
+                _n.x += _circ_shift
+
+    # Group bboxes
+    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+    if _grp_bboxes:
+        _max_right = max(b[2] for b in _grp_bboxes.values())
+        _max_bot = max(b[3] for b in _grp_bboxes.values())
+        if _max_right > canvas_w - CANVAS_PAD:
+            canvas_w = int(_max_right) + CANVAS_PAD
+            _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+        if _max_bot > canvas_h - CANVAS_PAD:
+            canvas_h = int(_max_bot) + CANVAS_PAD
+
+    # Route edges
+    route_results = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
+
+    # Build typed IR
+    node_layouts = _build_node_layouts_ir(nodes, groups)
+    group_layouts = _build_group_layouts_ir(groups, _grp_bboxes)
+    routed_edges_ir = _build_routed_edges_ir(route_results)
+
+    canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
+
+    finalized = FinalizedLayout(
+        node_layouts=node_layouts,
+        group_layouts=group_layouts,
+        routed_edges=routed_edges_ir,
+        visible_bounds=canvas_bounds,
+        diagram_padding=float(_init_cfg.get("diagram_padding") or CANVAS_PAD),
+        canvas_bounds=canvas_bounds,
+        direction=direction,
+        diagnostics=_empty_diagnostics(),
+    )
+
+    metadata = LayoutMetadata(
+        direction=direction,
+        node_count=len(real_nodes),
+        group_count=len(groups),
+        edge_count=len(route_results),
+        algorithm="SlackTighteningRanker+BarycentricTransposeOrderer+IsotonicCoordinateAssigner",
+    )
+
+    validation = validate_finalized_layout(finalized, metadata=metadata)
+
+    return CompiledFlowchart(layout=finalized, validation=validation, metadata=metadata)
 
 
 # ── strategy dispatch ─────────────────────────────────────────────────────────

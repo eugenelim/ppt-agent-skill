@@ -323,7 +323,7 @@ flowchart TD
         html = _dispatch(self._DEEP_NESTING, None, 800)
         import re
         # Extract canvas height (from the outer diagram div height)
-        m = re.search(r'class="diagram mermaid-layout"[^>]*height:(\d+)px', html)
+        m = re.search(r'data-diagram-h="(\d+)"', html)
         assert m, "could not find canvas height in HTML"
         canvas_h = int(m.group(1))
         # Extract all group bottom positions
@@ -359,7 +359,7 @@ flowchart TD
         """Canvas width must be >= max group bbox right edge."""
         html = _dispatch(self._WIDE_GROUP, None, 1200)
         import re
-        m = re.search(r'class="diagram mermaid-layout"[^>]*width:(\d+)px', html)
+        m = re.search(r'data-diagram-w="(\d+)"', html)
         assert m, "could not find canvas width in HTML"
         canvas_w = int(m.group(1))
         group_rights = []
@@ -489,8 +489,8 @@ class TestDirectionAwareSelfLoops:
         import re
         src = "flowchart LR\n    A[Worker] -->|retry| A\n    A --> B[Next]\n"
         html = _dispatch(src, None, 800)
-        m_w = re.search(r'class="diagram mermaid-layout"[^>]*width:(\d+)px', html)
-        m_h = re.search(r'class="diagram mermaid-layout"[^>]*height:(\d+)px', html)
+        m_w = re.search(r'data-diagram-w="(\d+)"', html)
+        m_h = re.search(r'data-diagram-h="(\d+)"', html)
         canvas_w = int(m_w.group(1)) if m_w else 0
         canvas_h = int(m_h.group(1)) if m_h else 0
         xs = [float(v) for v in re.findall(r'(?:M|L)\s+([\d.]+)\s+[\d.]+', html)]

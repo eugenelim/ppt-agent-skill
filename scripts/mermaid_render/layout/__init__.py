@@ -62,6 +62,16 @@ from ._renderer import (
     THEME_LIGHT,
     make_page,
 )
+from ._geometry import (
+    Point, Size, Insets, Rect,
+    Port, PortAllocation,
+    TextStyle, TextRun, TextLine, TextLayout,
+    PortSide, PortRequest, PortLayout,
+    NodeLayout, GroupLayout, EdgeLabelLayout, RoutedEdge,
+    RoutingFailure, LayoutDiagnostics, FinalizedLayout,
+    LayoutMetadata, CompiledFlowchart, ValidationResult,
+    validate_finalized_layout, _empty_diagnostics,
+)
 from ._strategies import _dispatch
 
 __all__ = [
