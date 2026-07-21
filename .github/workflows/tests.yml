@@ -74,3 +74,47 @@ jobs:
       # Snapshot pixel-comparison tests are skipped — baselines are captured on
       # macOS and cross-platform pixel-exact comparison is unreliable in CI.
       - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py tests/test_svg2pptx_shapes.py tests/test_mermaid_render_cli_playwright.py -q
+
+  fidelity-unit:
+    name: fidelity harness unit tests (no browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install pytest
+      # Core library boundary, data model, manifest, comparators, mutations.
+      # No browser or mmdc required.
+      - run: python3 -m pytest tests/fidelity/test_models.py tests/fidelity/test_manifest.py tests/fidelity/test_core_boundary.py tests/fidelity/test_comparators.py tests/fidelity/test_mutations.py -q
+
+  fidelity-annotations:
+    name: fidelity renderer data annotations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: pip install pytest
+      # Verifies that to_html() emits data-kind, data-label, data-shape,
+      # data-order, data-parent-id, data-group-id, data-relation-id, data-arrow.
+      - run: python3 -m pytest tests/test_fidelity_annotations.py -q
+
+  fidelity-phase1:
+    name: fidelity phase 1 end-to-end (no browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: pip install pytest
+      # End-to-end harness tests: serialization stability, canonical form,
+      # manifest integration. Reference adapter tests are skipped (no mmdc).
+      - run: python3 -m pytest tests/fidelity/test_phase1.py -q -k "not TestReferenceAdapter"

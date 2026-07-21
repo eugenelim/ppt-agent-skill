@@ -1,0 +1,71 @@
+/*
+ * native-neutral.css — test-only stylesheet injected after to_html().
+ *
+ * Purpose: neutralize avoidable presentation differences between the native
+ * renderer and the Mermaid reference so that geometry comparisons surface
+ * real rank, order, sizing, and containment differences rather than palette
+ * or decoration differences.
+ *
+ * Rules:
+ * - Fixed plain background and fills.
+ * - Fixed basic stroke.
+ * - No shadows, gradients, or transitions.
+ * - Consistent font request.
+ * - Does NOT override geometry (positions, sizes, margins, padding).
+ */
+
+/* Reset theme variables to neutral values */
+:root {
+  --bg-primary: #ffffff;
+  --node-bg-from: #f0f0f0;
+  --node-bg-to: #f0f0f0;
+  --card-bg-from: #f0f0f0;
+  --card-bg-to: #f0f0f0;
+  --card-border: #888888;
+  --node-border: #888888;
+  --text-primary: #000000;
+  --text-secondary: #333333;
+  --node-fg: #000000;
+  --node-fg-dim: #444444;
+  --accent-1: #4466aa;
+  --accent-2: #4466aa;
+  --accent-3: #4466aa;
+  --accent-4: #4466aa;
+  --edge: #666666;
+  --edge-strong: #333333;
+  --group-border: #4466aa;
+  --font-primary: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --label-font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --node-shadow: none;
+}
+
+/* Neutralize box shadows */
+.node,
+.diagram-group,
+[class*="node-"] {
+  box-shadow: none !important;
+}
+
+/* Plain background */
+.diagram.mermaid-layout,
+.diagram-lifeline {
+  background: #ffffff !important;
+}
+
+/* No transitions or animations */
+* {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* Normalize font rendering */
+.node-label,
+.node-sub,
+.node-tech,
+.node-member,
+.group-label,
+.edge-label,
+.mult-label {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+  -webkit-font-smoothing: auto;
+}

@@ -1,0 +1,37 @@
+{
+  "profile_id": "mermaid-neutral",
+  "description": "Neutral Mermaid reference profile for fidelity comparison",
+  "viewport": {
+    "width": 1200,
+    "height": 900
+  },
+  "device_scale_factor": 1,
+  "locale": "en-US",
+  "timezone": "UTC",
+  "reduced_motion": true,
+  "mermaid_init": {
+    "theme": "base",
+    "themeVariables": {
+      "fontFamily": "Helvetica Neue, Helvetica, Arial, sans-serif",
+      "fontSize": "15px"
+    },
+    "startOnLoad": false,
+    "securityLevel": "loose"
+  },
+  "puppeteer_args": [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-web-security",
+    "--disable-extensions",
+    "--no-first-run",
+    "--disable-default-apps"
+  ],
+  "network_idle_timeout_ms": 5000,
+  "notes": [
+    "Uses Mermaid 'base' theme (closest to plain / no-decoration).",
+    "No external network access; all resources served locally by mmdc.",
+    "Font family matches native-neutral.css request.",
+    "Deterministic IDs where supported by the Mermaid version.",
+    "No PNG output in Phase 1 (SVG only)."
+  ]
+}

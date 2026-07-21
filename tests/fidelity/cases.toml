@@ -1,0 +1,230 @@
+schema_version = 1
+
+# ── Flowchart (11 cases) ───────────────────────────────────────────────────────
+
+[[case]]
+id = "flowchart.shapes.all"
+source = "../fixtures/flowchart-all-shapes.mmd"
+diagram = "flowchart"
+tags = ["shapes", "variety"]
+strict = ["parse", "diagram-type", "entities", "labels"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+notes = "Wide variety of Mermaid shape types; shape-category mapping may differ."
+
+[[case]]
+id = "flowchart.diamond.branch"
+source = "../fixtures/flowchart-diamond-branch.mmd"
+diagram = "flowchart"
+tags = ["diamond", "branch", "conditional"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "edge-endpoints"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "flowchart.groups.complex"
+source = "../fixtures/flowchart-groups-complex.mmd"
+diagram = "flowchart"
+tags = ["groups", "containment", "edges"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "containment", "edge-endpoints"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths", "text-lines"]
+ignored = ["palette", "shadow", "corner-radius", "raw-dom-structure", "raw-pixels"]
+
+[[case]]
+id = "flowchart.html.entities"
+source = "../fixtures/flowchart-html-entities.mmd"
+diagram = "flowchart"
+tags = ["html", "labels", "encoding"]
+strict = ["parse", "diagram-type", "entities", "labels"]
+scored = ["entity-centers", "entity-sizes"]
+ignored = ["palette", "shadow", "corner-radius"]
+notes = "HTML entities in labels must survive round-trip through canonical_label."
+
+[[case]]
+id = "flowchart.label.formatting"
+source = "../fixtures/flowchart-label-formatting.mmd"
+diagram = "flowchart"
+tags = ["labels", "formatting", "markdown"]
+strict = ["parse", "diagram-type", "entities", "labels"]
+scored = ["entity-centers", "entity-sizes", "text-lines"]
+ignored = ["palette", "shadow", "corner-radius"]
+notes = "Label formatting; strict label comparison uses canonical_label normalization."
+
+[[case]]
+id = "flowchart.text.metrics.lr"
+source = "../fixtures/flowchart-lr-text-metrics.mmd"
+diagram = "flowchart"
+tags = ["text-metrics", "lr", "sizing"]
+strict = ["parse", "diagram-type", "entities", "relations", "direction"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "text-lines"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "flowchart.text.metrics.tb"
+source = "../fixtures/flowchart-tb-text-metrics.mmd"
+diagram = "flowchart"
+tags = ["text-metrics", "tb", "sizing"]
+strict = ["parse", "diagram-type", "entities", "relations", "direction"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "text-lines"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "flowchart.multiline.br"
+source = "../fixtures/flowchart-multiline-br.mmd"
+diagram = "flowchart"
+tags = ["multiline", "br", "labels"]
+strict = ["parse", "diagram-type", "entities", "labels"]
+scored = ["entity-centers", "entity-sizes", "text-lines"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "flowchart.parallel.links"
+source = "../fixtures/flowchart-parallel-links.mmd"
+diagram = "flowchart"
+tags = ["parallel-edges", "routing"]
+strict = ["parse", "diagram-type", "entities", "relations", "edge-endpoints"]
+scored = ["entity-centers", "canvas-aspect", "connector-paths", "bend-count"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "flowchart.self.loops"
+source = "../fixtures/flowchart-self-loops.mmd"
+diagram = "flowchart"
+tags = ["self-loops", "routing"]
+strict = ["parse", "diagram-type", "entities", "relations", "edge-endpoints"]
+scored = ["entity-centers", "canvas-aspect", "bend-count"]
+ignored = ["palette", "shadow", "corner-radius"]
+notes = "Self-loops known to differ in reference vs native; edge-endpoints strict for detection."
+
+[[case]]
+id = "flowchart.shapes.new"
+source = "../fixtures/flowchart-shapes-new.mmd"
+diagram = "flowchart"
+tags = ["shapes", "new-shapes"]
+strict = ["parse", "diagram-type", "entities", "labels"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+notes = "Newer Mermaid shape syntax; shape-category mapping narrowed to avoid extractor gaps."
+
+# ── Sequence (7 cases) ────────────────────────────────────────────────────────
+
+[[case]]
+id = "sequence.basic"
+source = "../fixtures/sequence-basic.mmd"
+diagram = "sequence"
+tags = ["sequence", "basic", "messages"]
+strict = ["parse", "diagram-type", "entities", "message-order", "labels"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "sequence.activation"
+source = "../fixtures/sequence-activation.mmd"
+diagram = "sequence"
+tags = ["sequence", "activation"]
+strict = ["parse", "diagram-type", "entities", "message-order"]
+scored = ["entity-centers", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "sequence.arrow.types"
+source = "../fixtures/sequence-all-arrowtypes.mmd"
+diagram = "sequence"
+tags = ["sequence", "arrows"]
+strict = ["parse", "diagram-type", "entities", "message-order"]
+scored = ["entity-centers", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "sequence.blocks"
+source = "../fixtures/sequence-blocks.mmd"
+diagram = "sequence"
+tags = ["sequence", "blocks", "fragments"]
+strict = ["parse", "diagram-type", "entities", "message-order"]
+scored = ["entity-centers", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "sequence.notes.all"
+source = "../fixtures/sequence-notes-all.mmd"
+diagram = "sequence"
+tags = ["sequence", "notes"]
+strict = ["parse", "diagram-type", "entities", "message-order"]
+scored = ["entity-centers", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "sequence.messages.self"
+source = "../fixtures/sequence-self-message.mmd"
+diagram = "sequence"
+tags = ["sequence", "self-message"]
+strict = ["parse", "diagram-type", "entities", "message-order"]
+scored = ["entity-centers", "canvas-aspect", "bend-count"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "sequence.complex"
+source = "../fixtures/sequence-complex.mmd"
+diagram = "sequence"
+tags = ["sequence", "complex", "multi-actor"]
+strict = ["parse", "diagram-type", "entities", "actor-order", "message-order"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "text-lines"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+# ── Architecture (2 cases) ────────────────────────────────────────────────────
+
+[[case]]
+id = "architecture.basic"
+source = "../fixtures/architecture-basic.mmd"
+diagram = "architecture"
+tags = ["architecture", "services"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "edge-endpoints"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "architecture.groups.complex"
+source = "../fixtures/architecture-complex.mmd"
+diagram = "architecture"
+tags = ["architecture", "groups", "containment"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "containment", "edge-endpoints"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+# ── ER (4 cases) ──────────────────────────────────────────────────────────────
+
+[[case]]
+id = "er.basic"
+source = "../fixtures/er-basic.mmd"
+diagram = "er"
+tags = ["er", "entities", "relationships"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "cardinality"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "er.cardinality.all"
+source = "../fixtures/er-cardinality-all.mmd"
+diagram = "er"
+tags = ["er", "cardinality"]
+strict = ["parse", "diagram-type", "entities", "relations", "cardinality"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "er.ecommerce"
+source = "../fixtures/er-ecommerce.mmd"
+diagram = "er"
+tags = ["er", "complex", "real-world"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
+
+[[case]]
+id = "er.identifying"
+source = "../fixtures/er-identifying.mmd"
+diagram = "er"
+tags = ["er", "identifying", "cardinality"]
+strict = ["parse", "diagram-type", "entities", "relations", "cardinality", "identifying"]
+scored = ["entity-centers", "entity-sizes", "canvas-aspect"]
+ignored = ["palette", "shadow", "corner-radius"]
