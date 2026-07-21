@@ -393,7 +393,94 @@ class SvgScene:
         )
 
 
-# ── Capability matrix ─────────────────────────────────────────────────────────
+# ── Native renderer capability registry ──────────────────────────────────────
+
+import enum
+
+
+class NativeParityLevel(enum.Enum):
+    FULL = "full"                   # Full semantic parity with mmdc oracle
+    PARTIAL = "partial"             # Renders real content; some features missing
+    NOT_IMPLEMENTED = "not-implemented"  # Will be implemented; currently raises NativeRenderError
+    UNSUPPORTED = "unsupported"     # Explicitly unsupported (Sankey, ZenUML)
+
+
+@dataclass(frozen=True)
+class NativeRendererSpec:
+    directive: str
+    parity: NativeParityLevel
+    supported_features: Tuple[str, ...] = ()
+    unsupported_features: Tuple[str, ...] = ()
+
+
+NATIVE_RENDERER_REGISTRY: dict = {}  # populated below
+
+
+def _reg(
+    directive: str,
+    parity: NativeParityLevel,
+    supported: Tuple[str, ...] = (),
+    unsupported: Tuple[str, ...] = (),
+) -> None:
+    NATIVE_RENDERER_REGISTRY[directive] = NativeRendererSpec(
+        directive=directive,
+        parity=parity,
+        supported_features=supported,
+        unsupported_features=unsupported,
+    )
+
+
+# Partially-implemented types (render real content, some features missing)
+_reg("flowchart", NativeParityLevel.PARTIAL,
+     supported=("nodes", "edges", "groups", "labels", "basic-shapes"),
+     unsupported=("compound-layout-recursive",))
+_reg("graph", NativeParityLevel.PARTIAL,
+     supported=("nodes", "edges", "groups"),
+     unsupported=("compound-layout-recursive",))
+_reg("statediagram-v2", NativeParityLevel.PARTIAL,
+     supported=("states", "transitions"),
+     unsupported=("pseudo-states", "composite-states", "notes"))
+_reg("statediagram", NativeParityLevel.PARTIAL,
+     supported=("states", "transitions"),
+     unsupported=("pseudo-states", "composite-states", "notes"))
+_reg("classdiagram", NativeParityLevel.PARTIAL,
+     supported=("classes", "relationships"),
+     unsupported=("finalized-layout", "member-layouts"))
+_reg("timeline", NativeParityLevel.PARTIAL,
+     supported=("periods", "events", "sections"),
+     unsupported=("measured-text", "activity-line-marker", "theme-tokens"))
+_reg("mindmap", NativeParityLevel.PARTIAL,
+     supported=("radial-layout",),
+     unsupported=("tidy-tree-layout",))
+_reg("architecture-beta", NativeParityLevel.PARTIAL,
+     supported=("services", "groups", "edges"),
+     unsupported=("semantic-icons", "side-ports", "bidir-single-path"))
+_reg("c4context", NativeParityLevel.PARTIAL,
+     supported=("elements", "boundaries", "relations"),
+     unsupported=("distinct-shapes", "birel-single-path"))
+_reg("c4container", NativeParityLevel.PARTIAL,
+     supported=("elements", "boundaries", "relations"),
+     unsupported=("distinct-shapes", "birel-single-path"))
+_reg("c4component", NativeParityLevel.PARTIAL,
+     supported=("elements", "boundaries", "relations"),
+     unsupported=("distinct-shapes", "birel-single-path"))
+
+# Not-yet-implemented types (will raise NativeRenderError; use legacy-dom for now)
+for _d in (
+    "sequencediagram", "erdiagram", "gantt", "quadrantchart", "pie",
+    "xychart-beta", "block-beta", "packet-beta", "kanban", "journey",
+    "requirementdiagram", "gitgraph",
+):
+    _reg(_d, NativeParityLevel.NOT_IMPLEMENTED)
+
+# Explicitly unsupported
+_reg("sankey-beta", NativeParityLevel.UNSUPPORTED)
+_reg("zenuml", NativeParityLevel.UNSUPPORTED)
+
+del _d, _reg
+
+
+# ── Legacy capability dataclass (kept for backward compat) ────────────────────
 
 @dataclass(frozen=True)
 class RendererCapability:

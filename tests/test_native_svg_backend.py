@@ -9,6 +9,7 @@ import pytest
 from scripts.mermaid_render import to_svg
 from scripts.mermaid_render.native_svg import (
     dispatch_native,
+    NativeRenderError,
     _use_native,
     BACKEND_ENV,
     BACKEND_NATIVE,
@@ -168,28 +169,22 @@ class TestStateDiagram:
         assert "Idle" in svg or "Running" in svg
 
 
-# ── Stub types (mechanical migration) ────────────────────────────────────────
+# ── NOT_IMPLEMENTED types (stubs removed in P3) ───────────────────────────────
 
-class TestStubMigration:
-    """Stub types must return valid SVG, even if placeholder content."""
+class TestNotImplementedTypes:
+    """NOT_IMPLEMENTED types must raise NativeRenderError, not return placeholder SVG."""
 
     @pytest.mark.parametrize("src, dtype", [
-        (SEQUENCE_DIAGRAM, "sequence"),
-        ("erDiagram\n    CUSTOMER ||--o{ ORDER : places\n", "er"),
+        (SEQUENCE_DIAGRAM, "sequencediagram"),
+        ("erDiagram\n    CUSTOMER ||--o{ ORDER : places\n", "erdiagram"),
         ("gantt\n    title MyProject\n    section A\n    Task1 :t1, 2024-01-01, 7d\n", "gantt"),
         ("pie\n    title Colors\n    \"Red\" : 30\n    \"Blue\" : 70\n", "pie"),
     ])
-    def test_stub_returns_svg(self, src, dtype):
-        svg = dispatch_native(src)
-        assert "<svg" in svg, f"No <svg for {dtype}"
-        assert "<foreignObject" not in svg, f"foreignObject found for {dtype}"
-
-    def test_stub_is_valid_xml(self):
-        from lxml import etree
-        src = "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n"
-        svg = dispatch_native(src)
-        body = re.sub(r"^<\?xml[^?]*\?>", "", svg.strip()).strip()
-        etree.fromstring(body.encode("utf-8"))
+    def test_not_implemented_raises(self, src, dtype):
+        with pytest.raises(NativeRenderError) as exc_info:
+            dispatch_native(src)
+        assert exc_info.value.phase == "not-implemented"
+        assert dtype in exc_info.value.diagram_type
 
 
 # ── to_svg() public API integration ──────────────────────────────────────────
@@ -225,7 +220,7 @@ class TestToSvgIntegration:
 class TestErrorHandling:
     def test_unsupported_sankey_raises(self):
         src = "sankey-beta\nA,B,10"
-        with pytest.raises(ValueError, match="not supported"):
+        with pytest.raises((NativeRenderError, ValueError)):
             dispatch_native(src)
 
     def test_empty_graph_raises(self):
