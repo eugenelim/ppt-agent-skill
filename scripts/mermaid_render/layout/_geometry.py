@@ -275,6 +275,7 @@ class NodeLayout:
     is_external: bool = False
     icon_svg: str = ""
     accent_color: str = ""
+    parent_group_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
