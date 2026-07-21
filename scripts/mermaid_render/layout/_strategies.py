@@ -35,7 +35,7 @@ from ._constants import (
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
-from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
+from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols, _apply_inner_direction_positions
 from ._routing import _route_edges, _arrowhead
 from ._c4 import _render_c4_fragment, C4Item, C4Relationship, C4Boundary
 from ._renderer import (
@@ -168,6 +168,15 @@ def _layout_graph_topology(
         rank_gap=_init_cfg.get("rank_gap"),
         canvas_pad=_init_cfg.get("diagram_padding"),
     )
+
+    # Recursive inner-direction fixup: re-order member x/y positions for groups
+    # whose declared direction differs from the outer direction (replaces the
+    # flat rank-flattening that was the only prior mechanism).
+    if groups:
+        _apply_inner_direction_positions(
+            nodes, edges, groups, direction,
+            col_gap=_init_cfg.get("col_gap"),
+        )
 
     # Push overlapping group bounding boxes apart after coordinate assignment
     if direction.upper() in ("LR", "RL") and groups:

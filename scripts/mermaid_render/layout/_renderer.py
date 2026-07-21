@@ -1072,7 +1072,7 @@ def _separate_groups_lr(
             "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
             "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
             "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
-            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "gx_right": max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X,
         }
 
     for _pass in range(GROUP_CAP):
@@ -1121,7 +1121,7 @@ def _separate_groups_tb(
             return None
         return {
             "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
-            "gx_right": max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X,
+            "gx_right": max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X,
             "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
             "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
         }

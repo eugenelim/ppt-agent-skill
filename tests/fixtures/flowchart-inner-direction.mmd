@@ -1,0 +1,7 @@
+flowchart TB
+  subgraph pipeline["Pipeline"]
+    direction LR
+    ingest[Ingest] --> transform[Transform] --> load[Load]
+  end
+  source[Source] --> ingest
+  load --> sink[Sink]
