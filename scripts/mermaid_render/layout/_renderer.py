@@ -12,7 +12,7 @@ from ._constants import (
     _is_terminal_circle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
-from ._routing import _route_edges
+from ._routing import _route_edges, _node_render_w
 
 
 def _nh(text: str) -> str:
@@ -140,6 +140,21 @@ def _render_graph_fragment(
     pre-computed compound bboxes to skip _compute_group_bboxes entirely.
     show_legend: append a legend strip below the diagram when semantic edge styles exist.
     """
+    # Compute group bboxes before the outer div so canvas can be expanded to fit.
+    # _compute_group_bboxes applies y-shift (and x-shift) if nesting pushes groups
+    # out of bounds.  We then expand canvas_w/canvas_h to include all group extents
+    # and re-call so bboxes are clipped to the expanded (correct) canvas.
+    _grp_bboxes = group_bboxes if group_bboxes is not None else _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+    if _grp_bboxes:
+        _max_right = max(b[2] for b in _grp_bboxes.values())
+        _max_bot = max(b[3] for b in _grp_bboxes.values())
+        if _max_right > canvas_w - CANVAS_PAD:
+            canvas_w = int(_max_right) + CANVAS_PAD
+            if group_bboxes is None:
+                _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+        if _max_bot > canvas_h - CANVAS_PAD:
+            canvas_h = int(_max_bot) + CANVAS_PAD
+
     # Generate legend early so we know whether to expand height.
     legend_html = _render_legend(edges, groups) if show_legend else ""
     effective_h = canvas_h + ((_LEGEND_H) if legend_html else 0)
@@ -166,7 +181,6 @@ def _render_graph_fragment(
             _node_grp_idx[_nid] = _gi
 
     # Group containers (subgraphs) — dashed border + subtle tint per accent slot.
-    _grp_bboxes = group_bboxes if group_bboxes is not None else _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
     for _gi, (gid, grp) in enumerate(groups.items()):
         if gid not in _grp_bboxes:
             continue
@@ -1234,7 +1248,7 @@ def _compute_group_bboxes(
             continue
         x0 = float(min(n.x for n in mbrs) - GROUP_PAD_X)
         y0 = float(min(n.y for n in mbrs) - GROUP_PAD_Y_TOP)
-        x1 = float(max(n.x + NODE_W for n in mbrs) + GROUP_PAD_X)
+        x1 = float(max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X)
         y1 = float(max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT)
         bboxes[gid] = [x0, y0, x1, y1]
 
@@ -1288,6 +1302,18 @@ def _compute_group_bboxes(
             b[0] += _shift
             b[2] += _shift
         canvas_w = max(canvas_w, int(max(b[2] for b in bboxes.values()) + CANVAS_PAD))
+
+    # Symmetric y-shift: if nesting expansion pushed any bbox above y=0, shift all
+    # nodes and bboxes downward so nested group title strips don't render off-canvas.
+    _min_y = min(b[1] for b in bboxes.values())
+    if _min_y < 0:
+        _yshift = -_min_y
+        for n in nodes.values():
+            n.y += int(_yshift)
+        for b in bboxes.values():
+            b[1] += _yshift
+            b[3] += _yshift
+        canvas_h = max(canvas_h, int(max(b[3] for b in bboxes.values()) + CANVAS_PAD))
 
     member_ids = {nid for grp in groups.values() for nid in grp.members}
     _NM_GAP = 4.0  # minimum gap between group edge and intruding non-member
@@ -1410,7 +1436,15 @@ def _compute_group_bboxes(
         if not changed:
             break
 
-    # Step 4: clip to canvas bounds
+    # Expand canvas to include all group extents BEFORE clipping so that
+    # step 4 clips to the expanded (correct) dimensions, not the node-only canvas.
+    # This fixes the case where nesting expansion pushes a parent group wider/taller
+    # than the original canvas but no x/y-shift fires (no negative edges).
+    if bboxes:
+        canvas_w = max(canvas_w, int(max(b[2] for b in bboxes.values())) + CANVAS_PAD)
+        canvas_h = max(canvas_h, int(max(b[3] for b in bboxes.values())) + CANVAS_PAD)
+
+    # Step 4: clip to expanded canvas bounds (left/top only clamped to 0; right/bottom to expanded canvas)
     for b in bboxes.values():
         b[0] = max(0.0, b[0])
         b[1] = max(0.0, b[1])

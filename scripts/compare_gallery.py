@@ -174,6 +174,28 @@ details pre {
 """
 
 
+def _classify_status(
+    render_exception: "BaseException | None" = None,
+    geometry_errors: bool = False,
+    geometry_warnings: bool = False,
+) -> str:
+    """Classify a render result into one of: ok / warning / invalid / error.
+
+    Priority: error > invalid > warning > ok.
+    - error: render raised an exception
+    - invalid: geometry constraint violated (node overlap, clip, etc.)
+    - warning: soft geometry concern (label near edge, tight spacing)
+    - ok: clean render with no issues
+    """
+    if render_exception is not None:
+        return "error"
+    if geometry_errors:
+        return "invalid"
+    if geometry_warnings:
+        return "warning"
+    return "ok"
+
+
 def _svg_aspect(svg_path: Path) -> tuple[float, float] | None:
     """Return (w, h) from root <svg> viewBox or width/height attributes, or None."""
     def _px(s: str) -> float:

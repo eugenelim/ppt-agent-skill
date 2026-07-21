@@ -6,6 +6,7 @@ import math
 from ._constants import (
     _Node, _Edge,
     NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
+    BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD,
     GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
@@ -406,11 +407,22 @@ def _best_label_pos(
     above y_lo are penalised at 200px/px to prevent labels from escaping above
     group containers; positions below y_hi get a softer 10px/px nudge.
     """
+    if not candidates:
+        placed.append((0, 0, _est_label_w(label), _LABEL_CHIP_H))
+        return 0, 0
     w = _est_label_w(label)
     all_obs = obstacles + placed
-    best_lx, best_ly = candidates[0][0], candidates[0][1]
+    # Hard-reject: candidates that overlap any node obstacle are excluded in a first
+    # pass so labels never print on top of nodes even when scoring would accept them.
+    # Fall back to all candidates only if every candidate is blocked.
+    _clear = [c for c in candidates if all(
+        _overlap_area(_label_chip_bbox(max(4, min(canvas_w - w - 4, c[0])), c[1], label), obs, margin=0) == 0
+        for obs in obstacles
+    )]
+    _active_candidates = _clear if _clear else candidates
+    best_lx, best_ly = _active_candidates[0][0], _active_candidates[0][1]
     best_score = float("inf")
-    for raw_lx, ly in candidates:
+    for raw_lx, ly in _active_candidates:
         lx = max(4, min(canvas_w - w - 4, raw_lx))
         bbox = _label_chip_bbox(lx, ly, label)
         score = sum(_overlap_area(bbox, obs) for obs in all_obs)
@@ -481,10 +493,14 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     # ── Routing grid (A* obstacle avoidance) ─────────────────────────────────
     # Build once per route_edges call; used by forward edges that clip obstacles.
     _grid_xs, _grid_ys = _build_routing_grid(nodes, canvas_w)
-    # Node-body obstacles only (not group title strips) — group strips are narrow
-    # enough that routing over them is acceptable.
+    # Node-body obstacles + group title strips for the A* grid.
     _routing_obs = [(n.x, n.y, n.x + _node_render_w(n), n.y + _node_render_h(n))
                     for n in nodes.values() if not n.is_dummy]
+    if group_bboxes:
+        _routing_obs += [
+            (int(x1), int(y1), int(x2), int(y1) + GROUP_PAD_Y_TOP)
+            for x1, y1, x2, _y2 in group_bboxes.values()
+        ]
     _blocked = _blocked_segs(_grid_xs, _grid_ys, _routing_obs)
     # Tracks grid-index segments used by already-routed edges so subsequent
     # edges pay a soft CROSS penalty for reusing the same channel.
@@ -518,6 +534,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         bottom_lane_y = max(n.y + _node_render_h(n) for n in non_dummy) + 32
     else:
         bottom_lane_y = 0
+
+    # Per-node self-loop lane counter — incremented each time a self-loop is emitted
+    # for that node so multiple loops get staggered extents.
+    self_loop_lanes: dict[str, int] = {}
 
     # Build back-edge lane assignments so each back-edge uses its own stagger lane,
     # preventing multiple back-edges from collapsing onto the same routing lane.
@@ -609,29 +629,91 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         else:
             marker_id: str | None = _mid if e.arrow else None
 
-        # Self-loop: rectangular orthogonal loop exiting the right face.
-        # Uses _smooth_orthogonal_path so corners are visually rounded.
+        # Self-loop: direction-aware rectangular orthogonal loop.
+        # LR: exits top face (even lane_idx) / bottom face (odd lane_idx).
+        # TB: exits right face (even lane_idx) / left face (odd lane_idx).
+        # Extent = max(BASE_LOOP_EXTENT, label_w + 2*LABEL_PAD, 0.35*max(nw,nh)) + lane_num*LOOP_LANE_GAP
         if e.src == e.dst:
-            lx = s.x + _node_render_w(s)
+            lane_idx = self_loop_lanes.get(e.src, 0)
+            self_loop_lanes[e.src] = lane_idx + 1
+            nw = _node_render_w(s)
             nh = _node_render_h(s)
-            # Exit and return at distinct y positions (top-third / bottom-third of node)
-            y_out = int(s.y + nh * 0.33)
-            y_ret = int(s.y + nh * 0.67)
-            loop_x = lx + SELF_LOOP_DX
-            path = _smooth_orthogonal_path(
-                [(lx, y_out), (loop_x, y_out), (loop_x, y_ret), (lx, y_ret)]
-            )
-            ah = _arrowhead(lx, y_ret, -1, 0, **ah_kw) if e.arrow else None
-            mid_y = (y_out + y_ret) // 2
-            if e.label:
-                cands = [
-                    (loop_x + 4, mid_y),
-                    (loop_x + 4, y_out - _LABEL_CHIP_H - 4),
-                    (loop_x + 4, y_ret + _LABEL_CHIP_H + 4),
-                ]
-                llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+            label_w = _est_label_w(e.label) if e.label else 0
+            lane_num = lane_idx // 2  # stack multiple loops of same face
+            extent = (max(BASE_LOOP_EXTENT, label_w + 2 * LABEL_PAD, int(0.35 * max(nw, nh)))
+                      + lane_num * LOOP_LANE_GAP)
+            if is_lr:
+                # LR: top face (even) / bottom face (odd)
+                x_out = int(s.x + nw * 0.33)
+                x_ret = int(s.x + nw * 0.67)
+                if lane_idx % 2 == 0:
+                    # top face — clamp so loop stays within canvas
+                    y_face = s.y
+                    loop_y = max(0, y_face - extent)
+                    path = _smooth_orthogonal_path(
+                        [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
+                    )
+                    ah = _arrowhead(x_ret, y_face, 0, 1, **ah_kw) if e.arrow else None
+                    mid_x = (x_out + x_ret) // 2
+                    cands = [
+                        (mid_x - 20, max(0, loop_y - _LABEL_CHIP_H - 4)),
+                        (x_out - 4, loop_y),
+                        (x_ret + 4, loop_y),
+                    ]
+                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                                if e.label else (mid_x - 20, max(0, loop_y - _LABEL_CHIP_H - 4)))
+                else:
+                    # bottom face
+                    y_face = s.y + nh
+                    loop_y = y_face + extent
+                    path = _smooth_orthogonal_path(
+                        [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
+                    )
+                    ah = _arrowhead(x_ret, y_face, 0, -1, **ah_kw) if e.arrow else None
+                    mid_x = (x_out + x_ret) // 2
+                    cands = [
+                        (mid_x - 20, loop_y + 4),
+                        (x_out - 4, loop_y),
+                        (x_ret + 4, loop_y),
+                    ]
+                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                                if e.label else (mid_x - 20, loop_y + 4))
             else:
-                llx, lly = loop_x + 4, mid_y
+                # TB: right face (even lane_idx) / left face (odd lane_idx)
+                y_out = int(s.y + nh * 0.33)
+                y_ret = int(s.y + nh * 0.67)
+                if lane_idx % 2 == 0:
+                    # right face
+                    lx_face = s.x + nw
+                    loop_x = lx_face + extent
+                    path = _smooth_orthogonal_path(
+                        [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
+                    )
+                    ah = _arrowhead(lx_face, y_ret, -1, 0, **ah_kw) if e.arrow else None
+                    mid_y = (y_out + y_ret) // 2
+                    cands = [
+                        (loop_x + 4, mid_y),
+                        (loop_x + 4, y_out - _LABEL_CHIP_H - 4),
+                        (loop_x + 4, y_ret + _LABEL_CHIP_H + 4),
+                    ]
+                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                                if e.label else (loop_x + 4, mid_y))
+                else:
+                    # left face
+                    lx_face = s.x
+                    loop_x = max(0, lx_face - extent)  # clamp to canvas left edge
+                    path = _smooth_orthogonal_path(
+                        [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
+                    )
+                    ah = _arrowhead(lx_face, y_ret, 1, 0, **ah_kw) if e.arrow else None
+                    mid_y = (y_out + y_ret) // 2
+                    cands = [
+                        (loop_x - 4 - label_w, mid_y),
+                        (loop_x - 4 - label_w, y_out - _LABEL_CHIP_H - 4),
+                        (loop_x - 4 - label_w, y_ret + _LABEL_CHIP_H + 4),
+                    ]
+                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                                if e.label else (loop_x - 4 - label_w, mid_y))
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,

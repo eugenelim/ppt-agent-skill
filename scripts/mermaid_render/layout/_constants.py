@@ -168,14 +168,22 @@ _SUB_LINE_H = 16    # sub-label line height (~12px font × 1.3)
 _ICON_H = 24        # icon SVG height in card header
 _NODE_H_TECH = 17   # separator + first tech line (7px margin + 7px padding + ~12px text ÷ 2)
 _MEMBER_LINE_H = 16  # height of each additional member/attribute row after the first
-SELF_LOOP_DX = 28  # horizontal reach of self-loop arc
+SELF_LOOP_DX = 28  # horizontal reach of self-loop arc (TB-mode fallback, unused after direction-aware routing)
 MIN_FAN_STEP = 12  # minimum px between adjacent fan endpoints on a node edge
 _TERMINAL_NODE_SIZE = 32  # px square for circle nodes with symbol labels (UML start/end states)
 _CIRCLE_NODE_SIZE = 80    # px square for regular (non-terminal) circle nodes
+DOUBLE_CIRCLE_RING = 8    # extra ring clearance px added to each side for doublecircle
 _DIAMOND_SIZE = 100       # px square for diamond nodes (keeps aspect ratio 1:1)
+DIAMOND_MIN = 80          # minimum diamond side length
 _HEXAGON_SIZE = 100       # px square for hexagon nodes (keeps aspect ratio 1:1)
+HEX_MIN_W = 80            # minimum hexagon width
+HEX_MIN_H = 60            # minimum hexagon height
 ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
 NODE_MAX_W: int = 220     # upper bound for text-box node widths (circle/diamond/hexagon uncapped)
+# Self-loop direction-aware routing constants
+BASE_LOOP_EXTENT = 32     # minimum side-protrusion of a self-loop arc (px)
+LOOP_LANE_GAP = 20        # additional extent per lane index for multiple loops on one node
+LABEL_PAD = 6             # padding each side of edge label chip within the loop extent
 
 # Font constants matching _renderer.py's emitted CSS variables
 _TITLE_FS: int = 15   # var(--node-fs-title, 15px) — standard node title
@@ -348,7 +356,7 @@ def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
             # Find max prefix that fits in budget
             split_i = 1
             while (split_i < len(w) and
-                   _measure_text_width(w[:split_i + 1], 13, 500) <= width_budget):
+                   _measure_text_width(w[:split_i + 1], _TITLE_FS, _TITLE_FW) <= width_budget):
                 split_i += 1
             lines.append(w[:split_i])
             w = w[split_i:]
@@ -396,17 +404,71 @@ def _is_terminal_circle(n: "_Node") -> bool:
 
 
 def _node_size_circle(n: "_Node") -> int:
-    """Dynamic diameter for a regular circle node (hypot of label diagonal + padding)."""
+    """Dynamic diameter for a regular circle / doublecircle node.
+
+    Measures ALL label lines (not just the first) so multiline circles size correctly.
+    Doublecircle adds DOUBLE_CIRCLE_RING px per side of ring clearance.
+    """
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
-    label = n.label.split("|")[0].split("\n")[0].strip()
-    content_w = _measure_text_width(label, _TITLE_FS, _TITLE_FW)
-    content_h = _TITLE_LINE_H
-    return max(_CIRCLE_NODE_SIZE, math.ceil(math.hypot(content_w + NODE_HPAD, content_h + NODE_HPAD)))
+    raw = n.label.split("|")[0].strip()
+    # Resolve line breaks: handle \n and <br> variants
+    import re as _re
+    raw = _re.sub(r'<br\s*/?>', '\n', raw, flags=_re.IGNORECASE).replace("\\n", "\n")
+    lines = [ln.strip() for ln in raw.split("\n") if ln.strip()] or [raw]
+    content_w = max(_measure_text_width(ln, _TITLE_FS, _TITLE_FW) for ln in lines)
+    content_h = len(lines) * _TITLE_LINE_H
+    diameter = max(_CIRCLE_NODE_SIZE, math.ceil(math.hypot(content_w + NODE_HPAD, content_h + NODE_HPAD)))
+    if n.shape == "doublecircle":
+        diameter += 2 * DOUBLE_CIRCLE_RING
+    return diameter
+
+
+def _node_size_diamond(n: "_Node") -> int:
+    """Side length for a diamond node: max_line_content_w + total_content_h + padding.
+
+    Diamond has a rotated-square geometry; both content dimensions add to the
+    required side, unlike hexagon where width and height are independent.
+    All lines are measured (like circle/hexagon) so multi-line labels aren't clipped.
+    """
+    raw = n.label.split("|")[0].strip()
+    import re as _re
+    raw = _re.sub(r'<br\s*/?>', '\n', raw, flags=_re.IGNORECASE).replace("\\n", "\n")
+    lines = [ln.strip() for ln in raw.split("\n") if ln.strip()] or [raw]
+    content_w = max(_measure_text_width(ln, _TITLE_FS, _TITLE_FW) for ln in lines)
+    content_h = len(lines) * _TITLE_LINE_H
+    return max(DIAMOND_MIN, math.ceil(content_w + content_h + NODE_HPAD + _NODE_PAD_V // 2))
+
+
+def _node_size_hexagon(n: "_Node") -> tuple[int, int]:
+    """Independent (width, height) for a hexagon node.
+
+    Hexagon height is driven by content height; width adds shoulder protrusion.
+    Returns (width, height) rather than a square side to avoid conflating the axes.
+    """
+    raw = n.label.split("|")[0].strip()
+    import re as _re
+    raw = _re.sub(r'<br\s*/?>', '\n', raw, flags=_re.IGNORECASE).replace("\\n", "\n")
+    lines = [ln.strip() for ln in raw.split("\n") if ln.strip()] or [raw]
+    content_w = max(_measure_text_width(ln, _TITLE_FS, _TITLE_FW) for ln in lines)
+    content_h = len(lines) * _TITLE_LINE_H
+    height = max(HEX_MIN_H, math.ceil(content_h + 2 * _NODE_PAD_V))
+    shoulder = max(10, math.ceil(height * 0.25))
+    width = max(HEX_MIN_W, math.ceil(content_w + NODE_HPAD + 2 * shoulder))
+    return width, height
 
 
 def _node_size_diamond_hex(n: "_Node", base_size: int) -> int:
-    """Linear content-sum size for diamond/hexagon (content_w + content_h + padding)."""
+    """Backward-compat: returns a square side for diamond or hexagon.
+
+    Prefer _node_size_diamond() and _node_size_hexagon() for new call sites.
+    This shim keeps old call sites working without breakage.
+    """
+    if n.shape == "diamond":
+        return _node_size_diamond(n)
+    if n.shape == "hexagon":
+        w, _ = _node_size_hexagon(n)
+        return w
     label = n.label.split("|")[0].split("\n")[0].strip()
     content_w = _measure_text_width(label, _TITLE_FS, _TITLE_FW)
     content_h = _TITLE_LINE_H
@@ -426,7 +488,7 @@ def _node_render_h(n: "_Node") -> int:
     if n.shape == "diamond":
         return n.width if n.width > 0 else _DIAMOND_SIZE
     if n.shape == "hexagon":
-        return n.width if n.width > 0 else _HEXAGON_SIZE
+        return n.height if n.height > 0 else _HEXAGON_SIZE
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)

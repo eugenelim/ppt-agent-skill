@@ -2,8 +2,27 @@ from __future__ import annotations
 
 import math
 import re
+from dataclasses import dataclass
 from html import escape as _h
 from typing import Optional
+
+
+@dataclass(frozen=True)
+class RenderOptions:
+    """Rendering behavior flags threaded from _dispatch into strategy functions.
+
+    faithful_mermaid: when True, disables icon inference and auto-direction
+        switching so the output mirrors the Mermaid source as closely as possible.
+    infer_icons: inject keyword-matched icons into node labels (overridden to
+        False when faithful_mermaid is True).
+    auto_direction: allow TB↔LR switching when width/height hint suggests it
+        (overridden to False when faithful_mermaid is True).
+    inferred_legend: append the semantic-edge legend strip below the diagram.
+    """
+    faithful_mermaid: bool = False
+    infer_icons: bool = True
+    auto_direction: bool = True
+    inferred_legend: bool = True
 
 from ._constants import (
     _Node, _Edge, _Group,
@@ -58,7 +77,9 @@ def _infer_label_icons(nodes: "dict[str, _Node]") -> None:
 def _layout_graph_topology(
     src: str, direction: str, width_hint: int, height_hint: int = 0,
     style_overrides: str = "",
+    opts: "RenderOptions | None" = None,
 ) -> str:
+    _opts = opts if opts is not None else RenderOptions()
     lines = src.splitlines()
     # Skip up to and including the directive line (first non-blank, non-comment line)
     directive_index = 0
@@ -70,7 +91,8 @@ def _layout_graph_topology(
     content_lines = lines[directive_index + 1:]
 
     nodes, edges, groups = _parse_graph_source(content_lines)
-    _infer_label_icons(nodes)
+    if not _opts.faithful_mermaid and _opts.infer_icons:
+        _infer_label_icons(nodes)
 
     if len(nodes) > NODE_CAP:
         raise ValueError(
@@ -112,7 +134,8 @@ def _layout_graph_topology(
     # source direction was not explicitly overridden by the caller.  Estimate the
     # canvas footprint for both orientations and choose the one that requires
     # less shrinkage (i.e. fits best inside width_hint × height_hint).
-    if width_hint and height_hint:
+    # Disabled when opts.auto_direction is False or opts.faithful_mermaid is True.
+    if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
         max_rank = max((n.rank for n in nodes.values()), default=0)
         from collections import Counter
         rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
@@ -226,7 +249,8 @@ def _layout_graph_topology(
     directive, _ = _detect_directive(src)
     title = _extract_diagram_title(src)
     meta_html = _render_metadata_chip(directive, title)
-    legend_html = _render_legend(edges, groups)
+    _show_legend = _opts.inferred_legend and not _opts.faithful_mermaid
+    legend_html = _render_legend(edges, groups) if _show_legend else ""
 
     if legend_html:
         return (
@@ -3722,6 +3746,7 @@ def _dispatch(
     width_hint: int,
     height_hint: int = 0,
     style_overrides: str = "",
+    opts: "RenderOptions | None" = None,
 ) -> str:
     """Detect directive, dispatch to per-type strategy, return HTML fragment."""
     clean = _strip_frontmatter(src)
@@ -3737,6 +3762,7 @@ def _dispatch(
         return _layout_graph_topology(
             clean, direction, width_hint, effective_height,
             style_overrides=style_overrides,
+            opts=opts,
         )
     if d == "sequencediagram":
         return _layout_lifeline(clean, direction, width_hint)
