@@ -1,16 +1,20 @@
 """Smoke tests for python3 -m mermaid_render svg/png subcommands (requires Playwright)."""
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
+# Bypass pyenv shims to avoid rehash lock contention under concurrent pytest runs.
+REAL_PYTHON = os.path.realpath(sys.executable)
+
 
 def _run(*args):
     return subprocess.run(
-        [sys.executable, "-m", "mermaid_render", *args],
+        [REAL_PYTHON, "-m", "mermaid_render", *args],
         capture_output=True, cwd=str(SCRIPTS),
     )
 

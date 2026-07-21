@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,9 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO_ROOT / "scripts"
 
+# Bypass pyenv shims to avoid rehash lock contention under concurrent pytest runs.
+REAL_PYTHON = os.path.realpath(sys.executable)
+
 sys.path.insert(0, str(SCRIPTS))
 
 
@@ -25,7 +29,7 @@ def test_to_html_does_not_load_playwright():
     """to_html() must not import playwright — checked in a fresh subprocess."""
     result = subprocess.run(
         [
-            sys.executable, "-c",
+            REAL_PYTHON, "-c",
             (
                 "import sys; sys.path.insert(0, 'scripts');"
                 "import mermaid_render;"
