@@ -206,11 +206,12 @@ class TestNotePositioning:
         assert len(right_notes) >= 1, f"No right-of note found. Canvas={cw} polys={polys}"
 
     def test_spanning_note_over_multiple_participants(self):
-        """Note over Alice,Carol is wider than a single column."""
+        """Note over Alice,Carol is wider than a single participant column."""
         html = _render("sequence-notes-all.mmd")
-        col_w = 160
+        m = re.search(r'class="node node-rect"[^>]+width:(\d+)px', html)
+        col_w = int(m.group(1)) if m else 80
         polys = _note_polys(html)
-        wide_notes = [p for p in polys if (p[1] - p[0]) > col_w * 2]
+        wide_notes = [p for p in polys if (p[1] - p[0]) > col_w]
         assert len(wide_notes) >= 1, f"No spanning note found. polys={polys}"
 
     def test_single_over_note_is_single_column_width(self):
@@ -1148,3 +1149,48 @@ class TestSequenceGeometryReturn:
         src = "sequenceDiagram\n  Alice->>Alice: call"
         html = _dispatch(src, None, 800)
         assert '<path d="M' in html, "Self-message should render as SVG <path>"
+
+# ── T8a: Natural horizontal layout ───────────────────────────────────────────
+
+class TestNaturalHorizontalLayout:
+    """T8a: constraint solver produces correct column widths."""
+
+    def _lifeline_gap(self, html: str) -> int:
+        """Return the gap (px) between the two leftmost lifeline x-coordinates."""
+        lines = re.findall(
+            r'<line x1="(\d+)"[^>]*stroke-dasharray="5 4"', html
+        )
+        xs = sorted(set(int(x) for x in lines))
+        return xs[1] - xs[0] if len(xs) >= 2 else 0
+
+    def test_long_message_label_widens_column_gap(self):
+        """A long message label between adjacent participants forces a wider column gap."""
+        long_label = "a very long message label that must expand column gap"
+        src_long = f"sequenceDiagram\n  Alice->>Bob: {long_label}"
+        src_short = "sequenceDiagram\n  Alice->>Bob: hi"
+        gap_long = self._lifeline_gap(_dispatch(src_long, None, 0))
+        gap_short = self._lifeline_gap(_dispatch(src_short, None, 0))
+        assert gap_long > gap_short, (
+            f"Long label should widen column gap: got {gap_long}px vs {gap_short}px"
+        )
+
+    def test_long_participant_name_widens_box(self):
+        """A participant with a long name gets a wider box than one with a short name."""
+        src = "sequenceDiagram\n  Verylongparticipantname->>X: hi"
+        html = _dispatch(src, None, 0)
+        widths = [int(m) for m in re.findall(
+            r'class="node node-rect"[^>]+width:(\d+)px', html
+        )]
+        assert len(widths) >= 2, "Expected at least 2 participant boxes"
+        assert widths[0] > widths[1], (
+            f"Long-name box ({widths[0]}px) should be wider than short-name box ({widths[1]}px)"
+        )
+
+    def test_participant_label_no_overflow_hidden(self):
+        """Participant label spans must not use overflow:hidden (names must not clip)."""
+        html = _dispatch("sequenceDiagram\n  Alice->>Bob: hi", None, 0)
+        label_sections = re.findall(r'class="node-label"[^>]+style="([^"]+)"', html)
+        for style in label_sections:
+            assert "overflow:hidden" not in style, (
+                f"Participant label must not clip text: {style}"
+            )

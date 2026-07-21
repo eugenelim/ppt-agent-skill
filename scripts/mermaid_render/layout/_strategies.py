@@ -458,31 +458,78 @@ def _layout_lifeline(
             _bit.setdefault("frag_parts", set())
 
     # ── Column geometry ───────────────────────────────────────────────────────
-    COL_W, COL_GAP, PAD_H, PAD_V = 160, 24, 40, 24
+    COL_GAP, PAD_H, PAD_V = 24, 40, 24
     HDR_H, ROW_H = 48, 40
     ACTIVATION_W = 10   # px width of a single activation bar (SEQ-006)
     ACTIVATION_DX = 4   # px x-shift per nesting depth (SEQ-006)
     NOTE_SPAN_OVERHANG = 24  # px a spanning note extends past edge lifelines (SEQ-010)
     SIDE_NOTE_GAP = 24
+    BOX_HPAD, BOX_MIN_W, LABEL_PAD = 32, 80, 40  # T8a: constraint-based layout
 
-    col_pitch = COL_W + COL_GAP
     n_parts = len(participants)
-    canvas_w = PAD_H * 2 + n_parts * col_pitch - COL_GAP
-    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
-        col_pitch = int(col_pitch * width_hint / canvas_w)
-        canvas_w = width_hint
-    col_w = min(COL_W, max(40, col_pitch - 8))
-    BOX_H = HDR_H - 8
-    ll_top = PAD_V + BOX_H + 4
+
+    # Measure participant name widths (13px bold matches _seq_label_css)
+    _PART_STYLE = TextStyle(font_size=13, font_weight=700)
+    _LABEL_STYLE = TextStyle(font_size=12)  # message label font
+    _half_w: "list[float]" = []
+    for _pp in participants:
+        _pl = p_label.get(_pp, _pp)
+        _pw = _MEASURER.layout(_pl, _PART_STYLE, max_width=float("inf")).max_content_width
+        _half_w.append(max(_pw + BOX_HPAD, BOX_MIN_W) / 2.0)
 
     # ── SEQ-014: precomputed participant index ────────────────────────────────
     _p_index: "dict[str, int]" = {p: i for i, p in enumerate(participants)}
 
+    def _box_hw(pid: str) -> float:
+        """Half-width of the participant box for pid."""
+        _idx = _p_index.get(pid, 0)
+        return _half_w[_idx] if _idx < len(_half_w) else BOX_MIN_W / 2.0
+
+    # Collect constraints: adjacent participant spacing + message label spans
+    _col_constraints: "list[tuple[int, int, float]]" = []
+    for _ci in range(n_parts - 1):
+        _col_constraints.append((_ci, _ci + 1, _half_w[_ci] + COL_GAP + _half_w[_ci + 1]))
+    for _it in items:
+        if _it.get("type") == "msg" and _it.get("src") != _it.get("dst"):
+            _si = _p_index.get(_it.get("src", ""), -1)
+            _di = _p_index.get(_it.get("dst", ""), -1)
+            if _si >= 0 and _di >= 0:
+                _lo, _hi = min(_si, _di), max(_si, _di)
+                _lbl = _it.get("label", "")
+                if _lbl:
+                    _lw = _MEASURER.layout(_lbl, _LABEL_STYLE, max_width=float("inf")).max_content_width
+                    _col_constraints.append((_lo, _hi, _lw + LABEL_PAD))
+
+    # Longest-path left-to-right solver (O(n) over sorted constraints)
+    def _solve_col_centers(constraints: "list[tuple[int, int, float]]", n: int) -> "list[float]":
+        centers: "list[float]" = [0.0] * n
+        for _i, _j, _gap in sorted(constraints, key=lambda c: (c[0], c[1])):
+            if _i < n and _j < n:
+                centers[_j] = max(centers[_j], centers[_i] + _gap)
+        return centers
+
+    _raw_centers = _solve_col_centers(_col_constraints, n_parts) if n_parts > 0 else []
+    _col_off = PAD_H + (_half_w[0] if _half_w else 0)
+    _col_centers: "list[float]" = [c + _col_off for c in _raw_centers]
+
+    canvas_w: float = (_col_centers[-1] + _half_w[-1] + PAD_H) if _col_centers else float(2 * PAD_H)
+
+    # Apply width_hint: scale only column positions (box widths stay natural for text measurement).
+    # T8b will replace this with a full uniform scale that also adjusts font sizes.
+    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
+        _wh_scale = width_hint / canvas_w
+        _col_centers = [c * _wh_scale for c in _col_centers]
+        canvas_w = float(width_hint)
+
+    BOX_H = HDR_H - 8
+    ll_top = PAD_V + BOX_H + 4
+
     _cx_offset = [0]
 
     def _cx(pid: str) -> int:
-        idx = _p_index.get(pid, 0)
-        return PAD_H + _cx_offset[0] + idx * col_pitch + col_pitch // 2
+        _idx = _p_index.get(pid, 0)
+        _base = _col_centers[_idx] if _idx < len(_col_centers) else float(PAD_H)
+        return int(round(_base + _cx_offset[0]))
 
     # ── SEQ-009: row-height accumulator ──────────────────────────────────────
     _NOTE_STYLE = TextStyle(font_size=10)
@@ -492,18 +539,20 @@ def _layout_lifeline(
         if not text:
             return ROW_H
         pids_list = it.get("pids", [it.get("pid", "")])
+        primary = pids_list[0] if pids_list else (participants[0] if participants else "")
         pos = it.get("pos", "over")
         if pos in ("left_of", "right_of"):
-            nw = float(col_w)
+            nw = _box_hw(primary) * 2
         elif pos == "over" and len(pids_list) >= 2:
             valid_idxs = [_p_index[p] for p in pids_list if p in _p_index]
             if valid_idxs:
-                span_cols = max(valid_idxs) - min(valid_idxs)
-                nw = float(span_cols * col_pitch + 2 * NOTE_SPAN_OVERHANG)
+                lo_i, hi_i = min(valid_idxs), max(valid_idxs)
+                span_w = _col_centers[hi_i] - _col_centers[lo_i] if lo_i < len(_col_centers) and hi_i < len(_col_centers) else 0.0
+                nw = span_w + 2 * NOTE_SPAN_OVERHANG
             else:
-                nw = float(col_w)
+                nw = _box_hw(primary) * 2
         else:
-            nw = float(col_w)
+            nw = _box_hw(primary) * 2
         usable_w = max(1.0, nw - 8)
         tl = _MEASURER.layout(text, _NOTE_STYLE, max_width=usable_w)
         return max(ROW_H, int(math.ceil(tl.height)) + 8)
@@ -592,10 +641,10 @@ def _layout_lifeline(
         pids_list = it.get("pids", [it.get("pid", "")])
         primary = pids_list[0] if pids_list else ""
         if pos == "left_of":
-            nw = col_w
+            nw = _box_hw(primary) * 2
             nx = _cx(primary) - nw - SIDE_NOTE_GAP
         elif pos == "right_of":
-            nw = col_w
+            nw = _box_hw(primary) * 2
             nx = _cx(primary) + SIDE_NOTE_GAP
         elif pos == "over" and len(pids_list) >= 2:
             xs = [_cx(p) for p in pids_list if p in _p_index]
@@ -605,9 +654,11 @@ def _layout_lifeline(
                 nw = (right_cx - left_cx) + 2 * NOTE_SPAN_OVERHANG
                 nx = (left_cx + right_cx) / 2 - nw / 2
             else:
-                nx, nw = float(_cx(primary) - col_w // 2), float(col_w)
+                nw = _box_hw(primary) * 2
+                nx = float(_cx(primary) - _box_hw(primary))
         else:
-            nx, nw = float(_cx(primary) - col_w // 2), float(col_w)
+            nw = _box_hw(primary) * 2
+            nx = float(_cx(primary) - _box_hw(primary))
         return nx, note_y, nw, note_h
 
     # ── Note-bounds pre-pass ──────────────────────────────────────────────────
@@ -620,11 +671,11 @@ def _layout_lifeline(
         _npids = _nit.get("pids", [_nit.get("pid", "")])
         _nprimary = _npids[0] if _npids else ""
         if _npos == "left_of" and _nprimary in _p_index:
-            _nx = _cx(_nprimary) - col_w - SIDE_NOTE_GAP
+            _nx = _cx(_nprimary) - _box_hw(_nprimary) * 2 - SIDE_NOTE_GAP
             _min_note_x = min(_min_note_x, _nx)
         elif _npos == "right_of" and _nprimary in _p_index:
             _nx = _cx(_nprimary) + SIDE_NOTE_GAP
-            _max_note_x = max(_max_note_x, _nx + col_w)
+            _max_note_x = max(_max_note_x, _nx + _box_hw(_nprimary) * 2)
     if _min_note_x < PAD_H:
         _cx_offset[0] = PAD_H - _min_note_x
         _max_note_x += _cx_offset[0]
@@ -635,13 +686,20 @@ def _layout_lifeline(
     # ── SEQ-008: per-fragment x bounds ────────────────────────────────────────
     def _frag_x_bounds(it: dict) -> "tuple[float, float]":
         fparts = it.get("frag_parts", set())
-        if fparts:
-            pxs = sorted(_cx(p) for p in fparts if p in _p_index)
-            if pxs:
-                return (float(pxs[0]) - col_w / 2 - PAD_H / 2,
-                        float(pxs[-1]) + col_w / 2 + PAD_H / 2)
-        return (float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
-                float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2)
+        valid = [p for p in fparts if p in _p_index] if fparts else []
+        if valid:
+            left_p = min(valid, key=lambda p: _p_index[p])
+            right_p = max(valid, key=lambda p: _p_index[p])
+            return (
+                float(_cx(left_p)) - _box_hw(left_p) - PAD_H / 2,
+                float(_cx(right_p)) + _box_hw(right_p) + PAD_H / 2,
+            )
+        l_p = participants[0] if participants else ""
+        r_p = participants[-1] if participants else ""
+        return (
+            float(_cx(l_p)) - _box_hw(l_p) - PAD_H / 2,
+            float(_cx(r_p)) + _box_hw(r_p) + PAD_H / 2,
+        )
 
     # Precompute else→parent fragment x bounds so labels/separators use parent bounds
     _else_x: "dict[int, tuple[float, float]]" = {}
@@ -655,8 +713,12 @@ def _layout_lifeline(
             if _bstk_else:
                 _else_x[_bi] = _frag_x_bounds(items[_bstk_else[-1]])
             else:
-                _else_x[_bi] = (float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
-                                 float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2)
+                _lp = participants[0] if participants else ""
+                _rp = participants[-1] if participants else ""
+                _else_x[_bi] = (
+                    float(_cx(_lp)) - _box_hw(_lp) - PAD_H / 2,
+                    float(_cx(_rp)) + _box_hw(_rp) + PAD_H / 2,
+                )
 
     # ── T7: self-loop geometry pre-pass (canvas expansion + data collection) ──
     _SELF_LOOP_STYLE = TextStyle(font_size=10)
@@ -689,10 +751,11 @@ def _layout_lifeline(
     # ─────────────────────────────────────────────────────────────────────────
     # HTML EMISSION
     # ─────────────────────────────────────────────────────────────────────────
+    _canvas_w_int = int(round(canvas_w))
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout diagram-lifeline" style="'
-        f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
+        f'position:relative;width:{_canvas_w_int}px;height:{canvas_h}px;">'
     )
     _seq_box_css = (
         f'display:flex;align-items:center;justify-content:center;'
@@ -703,27 +766,28 @@ def _layout_lifeline(
     )
     _seq_label_css = (
         f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+        f'white-space:nowrap;'
         f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
     )
     for pid in participants:
-        lx = _cx(pid) - col_w // 2
+        _bw = int(round(_box_hw(pid) * 2))
+        lx = int(round(_cx(pid) - _box_hw(pid)))
         lbl = _h(p_label.get(pid, pid))
         parts.append(
             f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
             f'position:absolute;left:{lx}px;top:{PAD_V}px;'
-            f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
+            f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
         parts.append(
             f'<div class="node node-rect node-lifeline-bottom" data-node-id="{_h(pid)}-bottom" style="'
             f'position:absolute;left:{lx}px;top:{ll_bot}px;'
-            f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
+            f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
 
     parts.append(
-        f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
+        f'<svg style="position:absolute;inset:0;width:{_canvas_w_int}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
     _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
@@ -759,7 +823,7 @@ def _layout_lifeline(
 
     # ── Lifeline dashes ────────────────────────────────────────────────────────
     for pid in participants:
-        lx = _cx(pid)
+        lx = int(round(_cx(pid)))
         parts.append(
             f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
             f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
@@ -823,9 +887,11 @@ def _layout_lifeline(
         if it["type"] == "block" or it["type"] == "rect":
             row += 1; continue
         if it["type"] == "else":
+            _fb_lp = participants[0] if participants else ""
+            _fb_rp = participants[-1] if participants else ""
             x0, x1 = _else_x.get(_bi, (
-                float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
-                float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2,
+                float(_cx(_fb_lp)) - _box_hw(_fb_lp) - PAD_H / 2,
+                float(_cx(_fb_rp)) + _box_hw(_fb_rp) + PAD_H / 2,
             ))
             ry = ll_top + _row_top_list[row]
             branch_cond = it.get("label", "")
@@ -920,8 +986,9 @@ def _layout_lifeline(
         if it["type"] == "else":
             ry = ll_top + _row_top_list[row]
             if it["label"]:
+                _el_lp = participants[0] if participants else ""
                 x0, _ = _else_x.get(_bi, (
-                    float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
+                    float(_cx(_el_lp)) - _box_hw(_el_lp) - PAD_H / 2,
                     0.0,
                 ))
                 parts.append(
