@@ -180,11 +180,17 @@ _SEQ_NOTE_RE = re.compile(
 _SEQ_ELSE_RE = re.compile(r'^(else|and|option)\s*(.*)', re.I)
 
 
-def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
+def _layout_lifeline(
+    src: str, direction: str, width_hint: int
+) -> "tuple[str, object]":
     """sequenceDiagram: participants as columns, messages as horizontal arrows."""
+    from ._geometry import Diagnostic, SequenceGeometry, TextStyle  # noqa: PLC0415
+    from ._text import get_default_measurer  # noqa: PLC0415
+    _MEASURER = get_default_measurer()
     content_lines = _directive_content(src)
     participants: list[str] = []
     p_label: dict[str, str] = {}
+    _diagnostics: list[Diagnostic] = []
 
     def _ensure_p(name: str) -> None:
         n = name.strip()
@@ -200,21 +206,22 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         "-->>":   {"dashed": True,  "start_m": None,       "end_m": "triangle"},
         "-x":     {"dashed": False, "start_m": None,       "end_m": "cross"},
         "--x":    {"dashed": True,  "start_m": None,       "end_m": "cross"},
-        "-)":     {"dashed": False, "start_m": None,       "end_m": "point"},
-        "--)":    {"dashed": True,  "start_m": None,       "end_m": "point"},
+        "-)":     {"dashed": False, "start_m": None,       "end_m": "filled_head"},
+        "--)":    {"dashed": True,  "start_m": None,       "end_m": "filled_head"},
         "<<->>":  {"dashed": False, "start_m": "triangle", "end_m": "triangle"},
         "<<-->>": {"dashed": True,  "start_m": "triangle", "end_m": "triangle"},
     }
 
     items: list[dict] = []
     block_depth = 0
-    for raw in content_lines:
+    for lineno, raw in enumerate(content_lines, start=1):
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
-        if _SEQ_SKIP_RE.match(line):  # SEQ-013: silently skip unsupported constructs
-            # box/par_over open a block; increment depth so their `end` is consumed
-            # without closing an outer fragment prematurely.
+        m_skip = _SEQ_SKIP_RE.match(line)
+        if m_skip:
+            kw = m_skip.group(1).lower().replace(" ", "_")
+            _diagnostics.append(Diagnostic(feature=kw, line_number=lineno, source_text=line))
             if re.match(r'^(box|par_over)\b', line, re.I):
                 block_depth += 1
             continue
@@ -273,6 +280,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if _SEQ_END_RE.match(line) and block_depth > 0:
             block_depth -= 1
             items.append({"type": "block_end"})
+        else:
+            _diagnostics.append(
+                Diagnostic(feature="unrecognized_line", line_number=lineno, source_text=line)
+            )
 
     if not participants:
         raise ValueError("No participants found in sequenceDiagram.")
@@ -280,11 +291,15 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     # ── Block-span prepass + fragment participant tracking (SEQ-008) ──────────
     _bstack: list[int] = []
     _frag_parts: "dict[int, set]" = {}
+    _frag_id: "dict[int, str]" = {}
+    _frag_ctr = 0
     _row_types = {"msg", "block", "note", "else", "rect"}
     for _bi, _bit in enumerate(items):
         if _bit["type"] in ("block", "rect"):
             _bstack.append(_bi)
             _frag_parts[_bi] = set()
+            _frag_id[_bi] = f"f{_frag_ctr}"
+            _frag_ctr += 1
         elif _bit["type"] == "block_end" and _bstack:
             _si = _bstack.pop()
             items[_si]["span"] = sum(
@@ -309,57 +324,136 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             _bit.setdefault("frag_parts", set())
 
     # ── Column geometry ───────────────────────────────────────────────────────
-    COL_W, COL_GAP, PAD_H, PAD_V = 160, 24, 40, 24
+    COL_GAP, PAD_H, PAD_V = 24, 40, 24
     HDR_H, ROW_H = 48, 40
     ACTIVATION_W = 10   # px width of a single activation bar (SEQ-006)
     ACTIVATION_DX = 4   # px x-shift per nesting depth (SEQ-006)
     NOTE_SPAN_OVERHANG = 24  # px a spanning note extends past edge lifelines (SEQ-010)
     SIDE_NOTE_GAP = 24
+    BOX_HPAD, BOX_MIN_W, LABEL_PAD = 32, 80, 40  # T8a: constraint-based layout
 
-    col_pitch = COL_W + COL_GAP
     n_parts = len(participants)
-    canvas_w = PAD_H * 2 + n_parts * col_pitch - COL_GAP
-    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
-        col_pitch = int(col_pitch * width_hint / canvas_w)
-        canvas_w = width_hint
-    col_w = min(COL_W, max(40, col_pitch - 8))
-    BOX_H = HDR_H - 8
-    ll_top = PAD_V + BOX_H + 4
+
+    # Measure participant name widths (13px bold matches _seq_label_css)
+    _PART_STYLE = TextStyle(font_size=13, font_weight=700)
+    _LABEL_STYLE = TextStyle(font_size=12)  # message label font
+    _half_w: "list[float]" = []
+    for _pp in participants:
+        _pl = p_label.get(_pp, _pp)
+        _pw = _MEASURER.layout(_pl, _PART_STYLE, max_width=float("inf")).max_content_width
+        _half_w.append(max(_pw + BOX_HPAD, BOX_MIN_W) / 2.0)
 
     # ── SEQ-014: precomputed participant index ────────────────────────────────
     _p_index: "dict[str, int]" = {p: i for i, p in enumerate(participants)}
 
+    def _box_hw(pid: str) -> float:
+        """Half-width of the participant box for pid."""
+        _idx = _p_index.get(pid, 0)
+        return _half_w[_idx] if _idx < len(_half_w) else BOX_MIN_W / 2.0
+
+    # Collect constraints: adjacent participant spacing + message label spans
+    # + spanning-note text widths + fragment-header text widths (T8b)
+    _col_constraints: "list[tuple[int, int, float]]" = []
+    for _ci in range(n_parts - 1):
+        _col_constraints.append((_ci, _ci + 1, _half_w[_ci] + COL_GAP + _half_w[_ci + 1]))
+    _NOTE_STYLE_C = TextStyle(font_size=10)
+    _FRAG_HDR_STYLE = TextStyle(font_size=11, font_weight=700)
+    for _it in items:
+        _itype = _it.get("type")
+        if _itype == "msg" and _it.get("src") != _it.get("dst"):
+            _si = _p_index.get(_it.get("src", ""), -1)
+            _di = _p_index.get(_it.get("dst", ""), -1)
+            if _si >= 0 and _di >= 0:
+                _lo, _hi = min(_si, _di), max(_si, _di)
+                _lbl = _it.get("label", "")
+                if _lbl:
+                    _lw = _MEASURER.layout(_lbl, _LABEL_STYLE, max_width=float("inf")).max_content_width
+                    _col_constraints.append((_lo, _hi, _lw + LABEL_PAD))
+        elif _itype == "note" and _it.get("pos") == "over":
+            _npids = _it.get("pids", [])
+            _nidxs = [_p_index[p] for p in _npids if p in _p_index]
+            if len(_nidxs) >= 2:
+                _nlo, _nhi = min(_nidxs), max(_nidxs)
+                _ntxt = _it.get("text", "")
+                if _ntxt:
+                    _ntl = _MEASURER.layout(_ntxt, _NOTE_STYLE_C, max_width=float("inf"))
+                    # Ensure the longest unbreakable word fits inside the usable note width.
+                    # Note width = (cx_hi - cx_lo) + 2*NOTE_SPAN_OVERHANG; usable = note_w - 8.
+                    # → cx_hi - cx_lo >= min_content_width - 2*NOTE_SPAN_OVERHANG + 8
+                    _ngap = _ntl.min_content_width - 2 * NOTE_SPAN_OVERHANG + 8
+                    if _ngap > 0:
+                        _col_constraints.append((_nlo, _nhi, _ngap))
+        elif _itype == "block":
+            _fps = _it.get("frag_parts", set())
+            _fps_idxs = [_p_index[p] for p in _fps if p in _p_index]
+            if _fps_idxs:
+                _flo, _fhi = min(_fps_idxs), max(_fps_idxs)
+            else:
+                _flo, _fhi = 0, max(0, n_parts - 1)
+            _fhdr = (_it.get("kw", "") + " " + _it.get("label", "")).strip()
+            if _fhdr and _flo < _fhi:
+                _ftw = _MEASURER.layout(_fhdr, _FRAG_HDR_STYLE, max_width=float("inf")).max_content_width
+                # frag width = cx(hi)-cx(lo) + half_w[lo] + half_w[hi] + PAD_H >= ftw + LABEL_PAD
+                _fgap = _ftw + LABEL_PAD - _half_w[_flo] - _half_w[_fhi] - PAD_H
+                if _fgap > 0:
+                    _col_constraints.append((_flo, _fhi, _fgap))
+
+    # Longest-path left-to-right solver (O(n) over sorted constraints)
+    def _solve_col_centers(constraints: "list[tuple[int, int, float]]", n: int) -> "list[float]":
+        centers: "list[float]" = [0.0] * n
+        for _i, _j, _gap in sorted(constraints, key=lambda c: (c[0], c[1])):
+            if _i < n and _j < n:
+                centers[_j] = max(centers[_j], centers[_i] + _gap)
+        return centers
+
+    _raw_centers = _solve_col_centers(_col_constraints, n_parts) if n_parts > 0 else []
+    _col_off = PAD_H + (_half_w[0] if _half_w else 0)
+    _col_centers: "list[float]" = [c + _col_off for c in _raw_centers]
+
+    canvas_w: float = (_col_centers[-1] + _half_w[-1] + PAD_H) if _col_centers else float(2 * PAD_H)
+
+    # Apply width_hint: scale only column positions (box widths stay natural for text measurement).
+    # T8b will replace this with a full uniform scale that also adjusts font sizes.
+    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
+        _wh_scale = width_hint / canvas_w
+        _col_centers = [c * _wh_scale for c in _col_centers]
+        canvas_w = float(width_hint)
+
+    BOX_H = HDR_H - 8
+    ll_top = PAD_V + BOX_H + 4
+
     _cx_offset = [0]
 
     def _cx(pid: str) -> int:
-        idx = _p_index.get(pid, 0)
-        return PAD_H + _cx_offset[0] + idx * col_pitch + col_pitch // 2
+        _idx = _p_index.get(pid, 0)
+        _base = _col_centers[_idx] if _idx < len(_col_centers) else float(PAD_H)
+        return int(round(_base + _cx_offset[0]))
 
     # ── SEQ-009: row-height accumulator ──────────────────────────────────────
-    # Heuristic: average character width at font-size 10px and 1.4× line height
-    _CHAR_W_10PX = 5.5
-    _LINE_H_10PX = 14
+    _NOTE_STYLE = TextStyle(font_size=10)
 
     def _note_row_h(it: dict) -> int:
         text = it.get("text", "")
         if not text:
             return ROW_H
         pids_list = it.get("pids", [it.get("pid", "")])
+        primary = pids_list[0] if pids_list else (participants[0] if participants else "")
         pos = it.get("pos", "over")
         if pos in ("left_of", "right_of"):
-            nw = float(col_w)
+            nw = _box_hw(primary) * 2
         elif pos == "over" and len(pids_list) >= 2:
             valid_idxs = [_p_index[p] for p in pids_list if p in _p_index]
             if valid_idxs:
-                span_cols = max(valid_idxs) - min(valid_idxs)
-                nw = float(span_cols * col_pitch + 2 * NOTE_SPAN_OVERHANG)
+                lo_i, hi_i = min(valid_idxs), max(valid_idxs)
+                span_w = _col_centers[hi_i] - _col_centers[lo_i] if lo_i < len(_col_centers) and hi_i < len(_col_centers) else 0.0
+                nw = span_w + 2 * NOTE_SPAN_OVERHANG
             else:
-                nw = float(col_w)
+                nw = _box_hw(primary) * 2
         else:
-            nw = float(col_w)
+            nw = _box_hw(primary) * 2
         usable_w = max(1.0, nw - 8)
-        n_lines = max(1, math.ceil(len(text) * _CHAR_W_10PX / usable_w))
-        return max(ROW_H, n_lines * _LINE_H_10PX + 8)
+        tl = _MEASURER.layout(text, _NOTE_STYLE, max_width=usable_w)
+        return max(ROW_H, int(math.ceil(tl.height)) + 8)
 
     _row_h_list: "list[int]" = [
         _note_row_h(it) if it["type"] == "note" else ROW_H
@@ -400,6 +494,12 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             if _stk:
                 _sy, _depth = _stk.pop()
                 _act_spans_v2.append((_pid, _sy, _last_msg_y, _depth))
+            else:
+                _diagnostics.append(Diagnostic(
+                    feature="unmatched_deactivate",
+                    line_number=0,
+                    source_text=f"deactivate {_pid}",
+                ))
     # Flush unclosed activations to lifeline bottom (SEQ-006)
     for _pid, _stk in _act_stacks_v2.items():
         while _stk:
@@ -416,6 +516,12 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         lo = min(cx - ACTIVATION_W // 2 + d * ACTIVATION_DX for _, _, d in active)
         hi = max(cx - ACTIVATION_W // 2 + d * ACTIVATION_DX + ACTIVATION_W for _, _, d in active)
         return lo, hi
+
+    def activation_bounds_at(pid: str, y: float) -> "tuple[float, float]":
+        """Return (left, right) of outermost active bar, or (cx, cx) if idle."""
+        ab = _act_bounds_at(pid, y)
+        cx = float(_cx(pid))
+        return ab if ab else (cx, cx)
 
     def _msg_endpoints(src: str, dst: str, y: float) -> "tuple[float, float]":
         """Return (x_start, x_end) for a message, honoring activation bar edges."""
@@ -439,10 +545,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         pids_list = it.get("pids", [it.get("pid", "")])
         primary = pids_list[0] if pids_list else ""
         if pos == "left_of":
-            nw = col_w
+            nw = _box_hw(primary) * 2
             nx = _cx(primary) - nw - SIDE_NOTE_GAP
         elif pos == "right_of":
-            nw = col_w
+            nw = _box_hw(primary) * 2
             nx = _cx(primary) + SIDE_NOTE_GAP
         elif pos == "over" and len(pids_list) >= 2:
             xs = [_cx(p) for p in pids_list if p in _p_index]
@@ -452,9 +558,11 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 nw = (right_cx - left_cx) + 2 * NOTE_SPAN_OVERHANG
                 nx = (left_cx + right_cx) / 2 - nw / 2
             else:
-                nx, nw = float(_cx(primary) - col_w // 2), float(col_w)
+                nw = _box_hw(primary) * 2
+                nx = float(_cx(primary) - _box_hw(primary))
         else:
-            nx, nw = float(_cx(primary) - col_w // 2), float(col_w)
+            nw = _box_hw(primary) * 2
+            nx = float(_cx(primary) - _box_hw(primary))
         return nx, note_y, nw, note_h
 
     # ── Note-bounds pre-pass ──────────────────────────────────────────────────
@@ -467,11 +575,11 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         _npids = _nit.get("pids", [_nit.get("pid", "")])
         _nprimary = _npids[0] if _npids else ""
         if _npos == "left_of" and _nprimary in _p_index:
-            _nx = _cx(_nprimary) - col_w - SIDE_NOTE_GAP
+            _nx = _cx(_nprimary) - _box_hw(_nprimary) * 2 - SIDE_NOTE_GAP
             _min_note_x = min(_min_note_x, _nx)
         elif _npos == "right_of" and _nprimary in _p_index:
             _nx = _cx(_nprimary) + SIDE_NOTE_GAP
-            _max_note_x = max(_max_note_x, _nx + col_w)
+            _max_note_x = max(_max_note_x, _nx + _box_hw(_nprimary) * 2)
     if _min_note_x < PAD_H:
         _cx_offset[0] = PAD_H - _min_note_x
         _max_note_x += _cx_offset[0]
@@ -482,13 +590,20 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     # ── SEQ-008: per-fragment x bounds ────────────────────────────────────────
     def _frag_x_bounds(it: dict) -> "tuple[float, float]":
         fparts = it.get("frag_parts", set())
-        if fparts:
-            pxs = sorted(_cx(p) for p in fparts if p in _p_index)
-            if pxs:
-                return (float(pxs[0]) - col_w / 2 - PAD_H / 2,
-                        float(pxs[-1]) + col_w / 2 + PAD_H / 2)
-        return (float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
-                float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2)
+        valid = [p for p in fparts if p in _p_index] if fparts else []
+        if valid:
+            left_p = min(valid, key=lambda p: _p_index[p])
+            right_p = max(valid, key=lambda p: _p_index[p])
+            return (
+                float(_cx(left_p)) - _box_hw(left_p) - PAD_H / 2,
+                float(_cx(right_p)) + _box_hw(right_p) + PAD_H / 2,
+            )
+        l_p = participants[0] if participants else ""
+        r_p = participants[-1] if participants else ""
+        return (
+            float(_cx(l_p)) - _box_hw(l_p) - PAD_H / 2,
+            float(_cx(r_p)) + _box_hw(r_p) + PAD_H / 2,
+        )
 
     # Precompute else→parent fragment x bounds so labels/separators use parent bounds
     _else_x: "dict[int, tuple[float, float]]" = {}
@@ -502,16 +617,49 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             if _bstk_else:
                 _else_x[_bi] = _frag_x_bounds(items[_bstk_else[-1]])
             else:
-                _else_x[_bi] = (float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
-                                 float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2)
+                _lp = participants[0] if participants else ""
+                _rp = participants[-1] if participants else ""
+                _else_x[_bi] = (
+                    float(_cx(_lp)) - _box_hw(_lp) - PAD_H / 2,
+                    float(_cx(_rp)) + _box_hw(_rp) + PAD_H / 2,
+                )
+
+    # ── T7: self-loop geometry pre-pass (canvas expansion + data collection) ──
+    _SELF_LOOP_STYLE = TextStyle(font_size=10)
+    _self_loop_data: "dict[int, tuple[float, float, float]]" = {}  # msg_idx → (ax_right, loop_w, ry)
+    _sl_row = 0
+    for _sl_i, _sl_it in enumerate(items):
+        if _sl_it["type"] in _row_types:
+            if _sl_it["type"] == "msg" and _sl_it["src"] == _sl_it["dst"]:
+                _sl_ry = float(ll_top + _row_top_list[_sl_row] + _row_h_list[_sl_row] // 2)
+                _sl_ax = activation_bounds_at(_sl_it["src"], _sl_ry)[1]
+                _sl_lbl = _sl_it.get("label", "")
+                _sl_lw = max(36, int(math.ceil(
+                    _MEASURER.layout(_sl_lbl, _SELF_LOOP_STYLE, max_width=None).max_content_width
+                )) + 16) if _sl_lbl else 36
+                _self_loop_data[_sl_i] = (_sl_ax, _sl_lw, _sl_ry)
+                _needed = _sl_ax + _sl_lw + PAD_H
+                if _needed > canvas_w:
+                    canvas_w = int(math.ceil(_needed))
+            _sl_row += 1
+
+    # ── Geometry accumulators (T7) ────────────────────────────────────────────
+    _geom_self_loops: "list[tuple[float,float,float,float]]" = []
+    _geom_msg_endpoints: "list[tuple[float,float,float,float]]" = []
+    _geom_msg_ys: "list[float]" = []
+    _geom_note_bounds: "list[tuple[float,float,float,float]]" = []
+    _geom_frag_bounds: "list[tuple[str,float,float,float,float]]" = []
+    _geom_branch_bounds: "list[tuple[str,float,float,float,float]]" = []
+    _geom_marker_bounds: "list[tuple[float,float,float,float]]" = []
 
     # ─────────────────────────────────────────────────────────────────────────
     # HTML EMISSION
     # ─────────────────────────────────────────────────────────────────────────
+    _canvas_w_int = int(round(canvas_w))
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout diagram-lifeline" style="'
-        f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
+        f'position:relative;width:{_canvas_w_int}px;height:{canvas_h}px;">'
     )
     _seq_box_css = (
         f'display:flex;align-items:center;justify-content:center;'
@@ -522,56 +670,66 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
     )
     _seq_label_css = (
         f'font-size:13px;font-weight:700;color:var(--node-fg,var(--text-primary,#191A17));'
-        f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+        f'white-space:nowrap;'
         f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
     )
     for pid in participants:
-        lx = _cx(pid) - col_w // 2
+        _bw = int(round(_box_hw(pid) * 2))
+        lx = int(round(_cx(pid) - _box_hw(pid)))
         lbl = _h(p_label.get(pid, pid))
         parts.append(
             f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
             f'position:absolute;left:{lx}px;top:{PAD_V}px;'
-            f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
+            f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
         parts.append(
             f'<div class="node node-rect node-lifeline-bottom" data-node-id="{_h(pid)}-bottom" style="'
             f'position:absolute;left:{lx}px;top:{ll_bot}px;'
-            f'width:{col_w}px;height:{BOX_H}px;{_seq_box_css}">'
+            f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
 
     parts.append(
-        f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
+        f'<svg style="position:absolute;inset:0;width:{_canvas_w_int}px;height:{canvas_h}px;'
         f'overflow:visible;pointer-events:none;">'
     )
     _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
 
     # ── Pass A: fragment background rects ─────────────────────────────────────
     _rp_a = 0
-    for it in items:
+    for _bi_a, it in enumerate(items):
         if it["type"] in ("block", "rect"):
             x0, x1 = _frag_x_bounds(it)
             ry = ll_top + _row_top_list[_rp_a]
             bh = sum(_row_h_list[_rp_a: _rp_a + it.get("span", 1)])
+            span = it.get("span", 1)
             if it["type"] == "rect":
                 color = _h(it.get("label", "") or "rgba(200,200,200,0.3)")
+                # T11: don't add opacity when fill already has rgba() — avoids double-alpha
+                _rect_opacity = "" if "rgba(" in color.lower() else ' opacity="0.3"'
                 parts.append(
                     f'<rect x="{x0}" y="{ry}" width="{x1 - x0}" height="{bh}" '
-                    f'fill="{color}" opacity="0.3" rx="3"/>'
+                    f'fill="{color}"{_rect_opacity} rx="3"/>'
                 )
             else:
+                fid = _frag_id.get(_bi_a, "")
+                pids_str = " ".join(sorted(it.get("frag_parts", set())))
                 parts.append(
                     f'<rect x="{x0}" y="{ry}" width="{x1 - x0}" height="{bh}" '
+                    f'data-fragment-id="{fid}" data-fragment-kind="{_h(it["kw"])}" '
+                    f'data-participants="{_h(pids_str)}" '
+                    f'data-start-event="{_rp_a}" data-end-event="{_rp_a + span}" '
                     f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.5" '
                     f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 3" rx="3"/>'
                 )
+                _geom_frag_bounds.append((fid, float(x0), float(ry), float(x1 - x0), float(bh)))
         if it["type"] in _row_types:
             _rp_a += 1
 
     # ── Lifeline dashes ────────────────────────────────────────────────────────
     for pid in participants:
-        lx = _cx(pid)
+        lx = int(round(_cx(pid)))
         parts.append(
             f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
             f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
@@ -607,6 +765,26 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'<circle cx="{xi}" cy="{yi}" r="4" fill="none" '
                 f'stroke="{_seq_edge}" stroke-width="1.5"/>'
             )
+        if marker == "filled_head":
+            # Half-arrowhead matching Mermaid 11.15 #filled-head marker.
+            # Path M 18,7 L9,13 L14,7 L9,1 Z scaled to renderer marker size.
+            # dirn=1 → pointing right (end marker); dirn=-1 → pointing left (start marker).
+            sz = 7
+            if dirn == 1:  # pointing right
+                pts = (
+                    f"{xi},{yi} "
+                    f"{xi - sz},{yi + sz // 2 + 1} "
+                    f"{xi - sz // 2},{yi} "
+                    f"{xi - sz},{yi - sz // 2 - 1}"
+                )
+            else:  # pointing left
+                pts = (
+                    f"{xi},{yi} "
+                    f"{xi + sz},{yi + sz // 2 + 1} "
+                    f"{xi + sz // 2},{yi} "
+                    f"{xi + sz},{yi - sz // 2 - 1}"
+                )
+            return f'<polygon points="{pts}" fill="{_seq_edge}"/>'
         return ""
 
     # ── Pass B: else separators, note polygons, message lines + markers ───────
@@ -615,15 +793,25 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if it["type"] == "block" or it["type"] == "rect":
             row += 1; continue
         if it["type"] == "else":
+            _fb_lp = participants[0] if participants else ""
+            _fb_rp = participants[-1] if participants else ""
             x0, x1 = _else_x.get(_bi, (
-                float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
-                float(_cx(participants[-1])) + col_w / 2 + PAD_H / 2,
+                float(_cx(_fb_lp)) - _box_hw(_fb_lp) - PAD_H / 2,
+                float(_cx(_fb_rp)) + _box_hw(_fb_rp) + PAD_H / 2,
             ))
             ry = ll_top + _row_top_list[row]
+            branch_cond = it.get("label", "")
             parts.append(
                 f'<line x1="{x0}" y1="{ry}" x2="{x1}" y2="{ry}" '
+                f'data-branch-condition="{_h(branch_cond)}" '
                 f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="4 4"/>'
             )
+            # find parent fragment id for branch_separator_bounds
+            _par_fid = ""
+            for _pbi in reversed(_bstk_else):  # _bstk_else rebuilt; use _else_x dict key
+                _par_fid = _frag_id.get(_pbi, "")
+                break
+            _geom_branch_bounds.append((_par_fid, float(x0), float(ry), float(x1 - x0), 1.0))
             row += 1; continue
         if it["type"] == "note":
             nx, ny, nw, nh = _note_geom(it, row)
@@ -635,37 +823,62 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" '
                 f'stroke="{_seq_edge}" stroke-width="1"/>'
             )
+            _geom_note_bounds.append((float(nx), float(ny), float(nw), float(nh)))
             row += 1; continue
         if it["type"] in ("activate", "deactivate", "block_end"):
             continue
         if it["type"] != "msg":
             continue
 
+        # T11: strict participant lookup — unknown names emit Diagnostic and skip
+        _msg_src, _msg_dst = it.get("src", ""), it.get("dst", "")
+        for _unknown in [p for p in (_msg_src, _msg_dst) if p and p not in _p_index]:
+            _diagnostics.append(Diagnostic(
+                feature="unknown_participant",
+                line_number=0,
+                source_text=f"{_unknown}",
+            ))
+        if _msg_src not in _p_index or _msg_dst not in _p_index:
+            row += 1; continue
+
         ry = ll_top + _row_top_list[row] + _row_h_list[row] // 2
+        _geom_msg_ys.append(float(ry))
         arrow = it.get("arrow", "->>")
         spec = _ARROW_SPECS.get(arrow, _ARROW_SPECS["->>"])
         dash = ' stroke-dasharray="6 4"' if spec["dashed"] else ""
         # SEQ-007: activation-aware endpoints
-        sx, dx2 = _msg_endpoints(it["src"], it["dst"], ry)
+        sx, dx2 = _msg_endpoints(_msg_src, _msg_dst, ry)
 
-        if it["src"] == it["dst"]:  # self-message: use lifeline center regardless of activation
-            scx = _cx(it["src"])
+        if _msg_src == _msg_dst:
+            # T7: anchor self-loop at right edge of active activation bar (or lifeline cx)
+            sl_data = _self_loop_data.get(_bi)
+            if sl_data:
+                ax_right, loop_w, _sl_ry = sl_data
+            else:
+                ax_right = activation_bounds_at(_msg_src, ry)[1]
+                loop_w = 36
+            loop_top = ry - 8
+            loop_bot = ry + 8
             parts.append(
-                f'<path d="M {scx} {ry - 8} C {scx + 36} {ry - 8} {scx + 36} {ry + 8} {scx} {ry + 8}" '
+                f'<path d="M {ax_right} {loop_top} C {ax_right + loop_w} {loop_top} '
+                f'{ax_right + loop_w} {loop_bot} {ax_right} {loop_bot}" '
                 f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}'
-                f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
+                f' data-src="{_h(_msg_src)}" data-dst="{_h(_msg_dst)}"/>'
             )
-            parts.append(_draw_marker(spec["end_m"], scx, ry + 8, -1))
+            parts.append(_draw_marker(spec["end_m"], ax_right, loop_bot, -1))
+            _geom_self_loops.append((float(ax_right), float(loop_top), float(loop_w), 16.0))
+            _geom_msg_endpoints.append((float(ax_right), float(loop_top), float(ax_right), float(loop_bot)))
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
                 f'stroke="{_seq_edge}" stroke-width="1.5"{dash}'
-                f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
+                f' data-src="{_h(_msg_src)}" data-dst="{_h(_msg_dst)}"/>'
             )
             dirn = 1 if dx2 > sx else -1
             parts.append(_draw_marker(spec["end_m"], dx2, ry, dirn))
             if spec["start_m"]:  # bidirectional (SEQ-012)
                 parts.append(_draw_marker(spec["start_m"], sx, ry, -dirn))
+            _geom_msg_endpoints.append((float(sx), float(ry), float(dx2), float(ry)))
         row += 1
 
     parts.append('</svg>')
@@ -690,8 +903,9 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if it["type"] == "else":
             ry = ll_top + _row_top_list[row]
             if it["label"]:
+                _el_lp = participants[0] if participants else ""
                 x0, _ = _else_x.get(_bi, (
-                    float(_cx(participants[0])) - col_w / 2 - PAD_H / 2,
+                    float(_cx(_el_lp)) - _box_hw(_el_lp) - PAD_H / 2,
                     0.0,
                 ))
                 parts.append(
@@ -718,9 +932,16 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             row += 1; continue
         if it["type"] not in ("msg",):
             continue
-        sx_lbl = float(_cx(it["src"]))
-        dx_lbl = float(_cx(it["dst"]))
+        _lbl_src, _lbl_dst = it.get("src", ""), it.get("dst", "")
+        if _lbl_src not in _p_index or _lbl_dst not in _p_index:
+            row += 1; continue
         ry = ll_top + _row_top_list[row] + _row_h_list[row] // 2
+        # T11: center label over activation-adjusted segment midpoint, not bare lifeline cx
+        if _lbl_src == _lbl_dst:
+            sx_lbl = float(_cx(_lbl_src))
+            dx_lbl = sx_lbl
+        else:
+            sx_lbl, dx_lbl = _msg_endpoints(_lbl_src, _lbl_dst, float(ry))
         lbl = _h(it["label"])
         if lbl:
             mid_x = int((sx_lbl + dx_lbl) / 2)
@@ -738,7 +959,22 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             )
         row += 1
     parts.append('</div>')
-    return "\n".join(parts)
+    _geom = SequenceGeometry(
+        participant_centers=tuple((p, float(_cx(p))) for p in participants),
+        lifeline_x=tuple((p, float(_cx(p))) for p in participants),
+        activation_bars=tuple((_pid, float(_sy), float(_ey)) for _pid, _sy, _ey, _ in _act_spans_v2),
+        message_ys=tuple(_geom_msg_ys),
+        message_endpoints=tuple(_geom_msg_endpoints),
+        fragment_bounds=tuple(_geom_frag_bounds),
+        branch_separator_bounds=tuple(_geom_branch_bounds),
+        note_bounds=tuple(_geom_note_bounds),
+        self_loop_bounds=tuple(_geom_self_loops),
+        label_bounds=(),
+        marker_bounds=tuple(_geom_marker_bounds),
+        canvas=(float(canvas_w), float(canvas_h)),
+        diagnostics=tuple(_diagnostics),
+    )
+    return "\n".join(parts), _geom
 
 
 # ── T2: erDiagram ─────────────────────────────────────────────────────────────
@@ -4236,7 +4472,8 @@ def _dispatch(
             opts=opts,
         )
     if d == "sequencediagram":
-        return _layout_lifeline(clean, direction, width_hint)
+        html, _ = _layout_lifeline(clean, direction, width_hint)
+        return html
     if d == "erdiagram":
         return _layout_er(clean, direction, width_hint)
     if d == "classdiagram":
@@ -4285,14 +4522,116 @@ def _dispatch(
         raise ValueError(f"Unsupported or unrecognised Mermaid directive: '{directive}'")
 
 
-def _dispatch_validate(src: str) -> "ValidationResult":
-    """Stub: validate Mermaid source and return a ValidationResult.
+def _validate_sequence_geometry(geom: "SequenceGeometry") -> "list[str]":
+    """Check 11 geometric invariants on a SequenceGeometry.  Returns a list of
+    violation strings; empty means geometry="pass"."""
+    from ._geometry import SequenceGeometry  # noqa: PLC0415
+    violations: list[str] = []
 
-    Full geometry constraint checking is deferred to a future sprint.
-    Currently returns an empty (ok) result for all inputs.
-    """
+    cw, ch = geom.canvas
+    lx = [x for _, x in geom.lifeline_x]
+
+    # INV-1: canvas dimensions positive
+    if cw <= 0 or ch <= 0:
+        violations.append(f"INV-1: canvas {cw}×{ch} not positive")
+
+    # INV-2: all lifeline x-coords within canvas
+    for pid, x in geom.lifeline_x:
+        if not (0 <= x <= cw + 1):  # +1 tolerance for rounding
+            violations.append(f"INV-2: lifeline '{pid}' x={x} outside canvas w={cw}")
+
+    # INV-3: lifeline centers strictly increasing (left→right order preserved)
+    for i in range(len(lx) - 1):
+        if lx[i] >= lx[i + 1]:
+            pid_a = geom.lifeline_x[i][0]
+            pid_b = geom.lifeline_x[i + 1][0]
+            violations.append(
+                f"INV-3: lifelines not left-to-right: '{pid_a}'@{lx[i]} >= '{pid_b}'@{lx[i + 1]}"
+            )
+
+    # INV-4: adjacent lifelines separated by at least 20 px (no overlap)
+    for i in range(len(lx) - 1):
+        gap = lx[i + 1] - lx[i]
+        if gap < 20:
+            pid_a = geom.lifeline_x[i][0]
+            pid_b = geom.lifeline_x[i + 1][0]
+            violations.append(f"INV-4: lifelines '{pid_a}'–'{pid_b}' overlap (gap={gap:.1f}px)")
+
+    # INV-5: message_ys count matches message_endpoints count
+    if len(geom.message_ys) != len(geom.message_endpoints):
+        violations.append(
+            f"INV-5: message_ys ({len(geom.message_ys)}) ≠ message_endpoints ({len(geom.message_endpoints)})"
+        )
+
+    # INV-6: message y-coordinates are monotonically non-decreasing
+    for i in range(len(geom.message_ys) - 1):
+        if geom.message_ys[i] > geom.message_ys[i + 1] + 0.5:  # 0.5 rounding tolerance
+            violations.append(
+                f"INV-6: message_ys not monotone at index {i}: {geom.message_ys[i]:.1f} > {geom.message_ys[i + 1]:.1f}"
+            )
+
+    # INV-7: message endpoints within canvas bounds
+    for i, (sx, sy, dx, dy) in enumerate(geom.message_endpoints):
+        for coord, name in ((sx, "sx"), (dx, "dx")):
+            if not (-1 <= coord <= cw + 1):
+                violations.append(f"INV-7: msg[{i}].{name}={coord:.1f} outside canvas w={cw}")
+        for coord, name in ((sy, "sy"), (dy, "dy")):
+            if not (-1 <= coord <= ch + 1):
+                violations.append(f"INV-7: msg[{i}].{name}={coord:.1f} outside canvas h={ch}")
+
+    # INV-8: note bounds within canvas width (x >= 0 and x+w <= canvas_w + tolerance)
+    for i, (nx, ny, nw, nh) in enumerate(geom.note_bounds):
+        if nx < -1:
+            violations.append(f"INV-8: note[{i}] left edge {nx:.1f} < 0")
+        if nx + nw > cw + 2:
+            violations.append(f"INV-8: note[{i}] right edge {nx + nw:.1f} > canvas w={cw}")
+
+    # INV-9: self-loop bounds within canvas (must not overflow right edge)
+    for i, (slx, sly, slw, slh) in enumerate(geom.self_loop_bounds):
+        if slx + slw > cw + 2:
+            violations.append(f"INV-9: self_loop[{i}] right edge {slx + slw:.1f} > canvas w={cw}")
+
+    # INV-10: fragment bounds within canvas width
+    for fid, fx, fy, fw, fh in geom.fragment_bounds:
+        if fx < -1:
+            violations.append(f"INV-10: fragment '{fid}' left edge {fx:.1f} < 0")
+        if fx + fw > cw + 2:
+            violations.append(f"INV-10: fragment '{fid}' right edge {fx + fw:.1f} > canvas w={cw}")
+
+    # INV-11: activation bar top < bottom (no inverted bars)
+    for pid, top_y, bot_y in geom.activation_bars:
+        if top_y > bot_y + 0.5:
+            violations.append(f"INV-11: activation bar for '{pid}' inverted: top={top_y:.1f} > bot={bot_y:.1f}")
+
+    return violations
+
+
+def _dispatch_validate(src: str) -> "ValidationResult":
+    """Validate Mermaid source including 11 geometry invariants (T9)."""
     from ._geometry import ValidationResult
-    return ValidationResult()
+    clean = _strip_frontmatter(src)
+    directive, _ = _detect_directive(clean)
+    if directive.lower() == "sequencediagram":
+        try:
+            _, geom = _layout_lifeline(clean, "LR", 900)
+        except Exception as exc:
+            return ValidationResult(
+                render="fail",
+                syntax_coverage="fail",
+                geometry="unvalidated",
+                errors=(str(exc),),
+            )
+        diagnostics = geom.diagnostics
+        sc = "partial" if diagnostics else "pass"
+        violations = _validate_sequence_geometry(geom)
+        geom_status = "fail" if violations else "pass"
+        return ValidationResult(
+            diagnostics=diagnostics,
+            syntax_coverage=sc,
+            geometry=geom_status,
+            warnings=tuple(violations),  # geometry violations go in warnings, not errors
+        )
+    return ValidationResult(geometry="unvalidated")
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

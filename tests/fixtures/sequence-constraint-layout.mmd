@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant VeryLongParticipantName
+    participant Short
+    participant Medium
+    VeryLongParticipantName->>Short: a very long message label that expands the column gap
+    Short-->>VeryLongParticipantName: ack
+    Medium->>Short: step two
+    note over VeryLongParticipantName, Short: this spanning note needs room too

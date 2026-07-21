@@ -595,10 +595,52 @@ def validate_finalized_layout(
 # ── Validation result ─────────────────────────────────────────────────────────
 
 @dataclass(frozen=True, slots=True)
+class Diagnostic:
+    """Structured diagnostic for an unsupported or unrecognised construct."""
+    feature: str
+    line_number: int
+    source_text: str
+
+
+@dataclass(frozen=True, slots=True)
+class SequenceGeometry:
+    """All computed geometry from a sequenceDiagram layout pass.
+
+    Returned alongside the HTML string by _layout_lifeline so that
+    _dispatch_validate can check invariants without parsing HTML.
+    Fields are populated incrementally across G3 tasks; unimplemented
+    fields default to empty tuples.
+    """
+    participant_centers: Tuple[Tuple[str, float], ...] = ()  # (pid, cx)
+    lifeline_x: Tuple[Tuple[str, float], ...] = ()           # (pid, x)
+    activation_bars: Tuple[Tuple[str, float, float], ...] = ()  # (pid, top_y, bot_y)
+    message_ys: Tuple[float, ...] = ()
+    message_endpoints: Tuple[Tuple[float, float, float, float], ...] = ()  # (sx,sy,dx,dy)
+    fragment_bounds: Tuple[Tuple[str, float, float, float, float], ...] = ()  # (id,x,y,w,h)
+    branch_separator_bounds: Tuple[Tuple[str, float, float, float, float], ...] = ()  # (frag_id,x,y,w,h)
+    note_bounds: Tuple[Tuple[float, float, float, float], ...] = ()  # (x,y,w,h)
+    self_loop_bounds: Tuple[Tuple[float, float, float, float], ...] = ()  # (x,y,w,h)
+    label_bounds: Tuple[Tuple[float, float, float, float], ...] = ()  # (x,y,w,h)
+    marker_bounds: Tuple[Tuple[float, float, float, float], ...] = ()  # (x,y,w,h)
+    canvas: Tuple[float, float] = (0.0, 0.0)  # (width, height)
+    diagnostics: Tuple["Diagnostic", ...] = ()  # unsupported-construct diagnostics
+
+
+@dataclass(frozen=True, slots=True)
 class ValidationResult:
-    """Result of a geometry validation pass."""
+    """Result of a geometry validation pass.
+
+    Four independent status lanes (render, syntax_coverage, geometry,
+    mmdc_oracle) replace the legacy single status property. The old
+    errors/warnings/status interface is preserved for existing callers.
+    """
     errors: Tuple[str, ...] = ()
     warnings: Tuple[str, ...] = ()
+    diagnostics: Tuple[Diagnostic, ...] = ()
+    render: str = "pass"              # "pass" | "fail"
+    syntax_coverage: str = "pass"     # "pass" | "partial" | "fail"
+    geometry: str = "unvalidated"     # "pass" | "fail" | "unvalidated"
+    mmdc_oracle: str = "unvalidated"  # "pass" | "warning" | "fail" | "unvalidated"
 
     @property
     def status(self) -> str:

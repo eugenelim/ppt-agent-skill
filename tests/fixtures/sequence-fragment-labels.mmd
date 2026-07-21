@@ -1,0 +1,13 @@
+sequenceDiagram
+    participant Client
+    participant Server
+    Client->>Server: request
+    loop retry until success or timeout
+        Server-->>Client: try again
+        Client->>Server: retry request
+    end
+    alt success condition met
+        Server-->>Client: 200 OK
+    else error occurred in server
+        Server-->>Client: 500 Internal Server Error
+    end

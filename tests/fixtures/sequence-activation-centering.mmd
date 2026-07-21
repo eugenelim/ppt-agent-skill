@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Alice
+    participant Bob
+    Alice->>Bob: initiate
+    activate Bob
+    Bob->>Alice: processing
+    activate Alice
+    Alice-->>Bob: acknowledged
+    deactivate Alice
+    Bob-->>Alice: complete
+    deactivate Bob
+    Alice->>Bob: follow up

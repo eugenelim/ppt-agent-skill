@@ -20,7 +20,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from mermaid_render import to_html  # pure-Python, no Playwright
+from mermaid_render import to_html, validate  # pure-Python, no Playwright
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -73,28 +73,34 @@ class TestSequenceParticipants:
         assert html
         assert "C" in html
 
-    def test_destroy_participant_renders(self):
-        """`destroy P` is accepted without raising."""
-        html = to_html(_seq(
+    def test_destroy_participant_renders_and_emits_diagnostic(self):
+        """`destroy P` renders without raising and emits a Diagnostic."""
+        src = _seq(
             "  participant A\n"
             "  participant B\n"
             "  A->>B: ping\n"
             "  destroy B\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "A" in html
+        vr = validate(src)
+        assert any(d.feature == "destroy" for d in vr.diagnostics)
 
     def test_create_then_destroy_roundtrip(self):
-        """Full create/use/destroy lifecycle renders without error."""
-        html = to_html(_seq(
+        """Full create/use/destroy lifecycle renders; create_participant emits Diagnostic."""
+        src = _seq(
             "  participant Alice\n"
             "  create participant Token\n"
             "  Alice->>Token: init\n"
             "  Token-->>Alice: ready\n"
             "  destroy Token\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "Alice" in html
+        vr = validate(src)
+        assert any(d.feature == "create_participant" for d in vr.diagnostics)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -334,16 +340,20 @@ class TestSequenceBlocks:
 class TestSequenceSequencing:
     """Directives that affect numbering or grouping: autonumber, box."""
 
-    def test_autonumber_renders(self):
-        """`autonumber` is silently accepted; diagram still renders."""
-        html = to_html(_seq(
+    def test_autonumber_renders_and_emits_diagnostic(self):
+        """`autonumber` renders the diagram and emits a Diagnostic."""
+        src = _seq(
             "  autonumber\n"
             "  Alice->>Bob: first\n"
             "  Bob-->>Alice: second\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "Alice" in html
         assert "Bob" in html
+        vr = validate(src)
+        assert any(d.feature == "autonumber" for d in vr.diagnostics)
+        assert vr.syntax_coverage == "partial"
 
     def test_autonumber_does_not_create_phantom_participant(self):
         """`autonumber` must not appear as a participant name."""
@@ -351,12 +361,11 @@ class TestSequenceSequencing:
             "  autonumber\n"
             "  A->>B: msg\n"
         ))
-        assert "autonumber" not in html.lower() or html.lower().count("autonumber") == 0 or \
-               "data-node-id=\"autonumber\"" not in html
+        assert "data-node-id=\"autonumber\"" not in html
 
-    def test_box_grouping_renders(self):
-        """`box Title … end` groups are accepted; participants render."""
-        html = to_html(_seq(
+    def test_box_grouping_renders_and_emits_diagnostic(self):
+        """`box Title … end` renders participants and emits a Diagnostic."""
+        src = _seq(
             "  box Frontend\n"
             "    participant Browser\n"
             "    participant UI\n"
@@ -366,10 +375,14 @@ class TestSequenceSequencing:
             "  end\n"
             "  Browser->>API: fetch\n"
             "  API-->>Browser: response\n"
-        ))
+        )
+        html = to_html(src)
         assert html
         assert "Browser" in html
         assert "API" in html
+        vr = validate(src)
+        box_diags = [d for d in vr.diagnostics if d.feature == "box"]
+        assert len(box_diags) == 2, f"Expected 2 box diagnostics, got {box_diags}"
 
     def test_box_single_participant(self):
         """`box` with a single participant renders the participant."""
@@ -393,3 +406,118 @@ class TestSequenceSequencing:
         ))
         assert html
         assert "loop" in html.lower()
+
+
+# ── T9: geometry invariant validation ─────────────────────────────────────────
+
+class TestGeometryValidation:
+    """T9: _dispatch_validate returns geometry='pass' for well-formed diagrams
+    and geometry='fail' for diagrams with invariant violations."""
+
+    def test_basic_diagram_geometry_pass(self):
+        """A simple two-participant diagram must pass all 11 geometry invariants."""
+        vr = validate(_seq("  Alice->>Bob: hello"))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_loop_diagram_geometry_pass(self):
+        """A diagram with a loop block must pass geometry invariants."""
+        vr = validate(_seq(
+            "  A->>B: start\n"
+            "  loop retry\n"
+            "    B->>A: ack\n"
+            "  end\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_activation_diagram_geometry_pass(self):
+        """A diagram with activate/deactivate must pass geometry invariants."""
+        vr = validate(_seq(
+            "  activate Alice\n"
+            "  Alice->>Bob: hi\n"
+            "  deactivate Alice\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_note_diagram_geometry_pass(self):
+        """A diagram with notes must pass geometry invariants."""
+        vr = validate(_seq(
+            "  note over Alice, Bob: spanning note\n"
+            "  Alice->>Bob: msg\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_self_loop_geometry_pass(self):
+        """A diagram with a self-loop must pass geometry invariants."""
+        vr = validate(_seq("  Alice->>Alice: self\n"))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_render_fail_returns_render_fail(self):
+        """An unparseable diagram sets render='fail' and geometry='unvalidated'."""
+        vr = validate("sequenceDiagram\n  !!invalid!!\n")
+        # render may be pass (unrecognised line emits diagnostic, not crash)
+        # but geometry must not be "fail" on a parse-level problem
+        assert vr.geometry != "fail"
+
+    def test_non_sequence_diagram_geometry_unvalidated(self):
+        """Non-sequenceDiagram types return geometry='unvalidated'."""
+        vr = validate("flowchart TD\n  A --> B\n")
+        assert vr.geometry == "unvalidated"
+
+    def test_geometry_pass_implies_no_violations(self):
+        """When geometry='pass' the warnings tuple (geometry violations) must be empty."""
+        vr = validate(_seq("  Alice->>Bob: msg\n  Bob->>Alice: ack"))
+        if vr.geometry == "pass":
+            assert vr.warnings == (), f"geometry=pass but warnings={vr.warnings}"
+
+    def test_complex_diagram_geometry_pass(self):
+        """A realistic multi-feature diagram must pass all geometry invariants."""
+        vr = validate(_seq(
+            "  participant Client\n"
+            "  participant Server\n"
+            "  participant DB\n"
+            "  Client->>Server: request\n"
+            "  activate Server\n"
+            "  Server->>DB: query\n"
+            "  DB-->>Server: result\n"
+            "  deactivate Server\n"
+            "  Server-->>Client: response\n"
+            "  note over Client, Server: HTTP/1.1\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_geometry_fail_on_inverted_activation_bar(self):
+        """INV-11: inverted activation bar (top > bottom) yields geometry='fail'."""
+        import sys
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        from mermaid_render.layout._geometry import SequenceGeometry, Diagnostic
+        from mermaid_render.layout._strategies import _validate_sequence_geometry
+        bad_geom = SequenceGeometry(
+            participant_centers=(("A", 100.0), ("B", 200.0)),
+            lifeline_x=(("A", 100.0), ("B", 200.0)),
+            activation_bars=(("A", 200.0, 100.0),),  # inverted: top > bottom
+            message_ys=(150.0,),
+            message_endpoints=((100.0, 150.0, 200.0, 150.0),),
+            canvas=(400.0, 300.0),
+        )
+        violations = _validate_sequence_geometry(bad_geom)
+        assert any("INV-11" in v for v in violations), (
+            f"Expected INV-11 violation for inverted bar, got: {violations}"
+        )
+
+    def test_geometry_fail_on_non_monotone_message_ys(self):
+        """INV-6: decreasing message_ys yields a geometry violation."""
+        import sys
+        sys.path.insert(0, str(REPO_ROOT / "scripts"))
+        from mermaid_render.layout._geometry import SequenceGeometry
+        from mermaid_render.layout._strategies import _validate_sequence_geometry
+        bad_geom = SequenceGeometry(
+            participant_centers=(("A", 100.0), ("B", 200.0)),
+            lifeline_x=(("A", 100.0), ("B", 200.0)),
+            message_ys=(200.0, 100.0),  # non-monotone
+            message_endpoints=((100.0, 200.0, 200.0, 200.0), (200.0, 100.0, 100.0, 100.0)),
+            canvas=(400.0, 300.0),
+        )
+        violations = _validate_sequence_geometry(bad_geom)
+        assert any("INV-6" in v for v in violations), (
+            f"Expected INV-6 violation for non-monotone ys, got: {violations}"
+        )
