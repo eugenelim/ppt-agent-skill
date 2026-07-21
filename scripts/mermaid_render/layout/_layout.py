@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
-    NODE_MIN_W, NODE_HPAD, ICON_COL_WIDTH,
+    NODE_MIN_W, NODE_MAX_W, NODE_HPAD, ICON_COL_WIDTH,
+    _DIAMOND_SIZE, _HEXAGON_SIZE,
     CROSSING_PASSES, GROUP_CAP,
-    _node_render_h, _measure_text_px, _load_icon,
+    _node_render_h, _measure_text_width, _load_icon,
+    _node_size_circle, _node_size_diamond_hex, _is_terminal_circle,
+    _TITLE_FS, _TITLE_FW,
 )
 
 # ── cycle break (DFS back-edge detection) ─────────────────────────────────────
@@ -243,57 +247,85 @@ def _assign_coordinates(
     _rank_gap = rank_gap if rank_gap is not None else RANK_GAP
 
     is_lr = direction.upper() in ("LR", "RL")
-    max_rank = max(n.rank for n in nodes.values())
-
     # Compute per-node display widths from label text (skip special-shape fixed sizes).
     # Icon-left nodes reserve ICON_COL_WIDTH for the icon; add it to the required width
     # so the text column budget (n.width - NODE_HPAD - ICON_COL_WIDTH) can fit the label.
     # For nodes with pipe-separated member rows (class/ER diagrams), the longest member
     # line drives the width so it doesn't overflow the rendered box.
-    _fixed_shapes = {"circle", "diamond", "hexagon"}
+    # Dynamic sizing for circle/diamond/hexagon (must run before text-box width loop)
+    for n in nodes.values():
+        if n.width == 0 and not n.is_dummy:
+            if n.shape in ("circle", "doublecircle"):
+                n.width = _node_size_circle(n)
+            elif n.shape == "diamond":
+                n.width = _node_size_diamond_hex(n, _DIAMOND_SIZE)
+            elif n.shape == "hexagon":
+                n.width = _node_size_diamond_hex(n, _HEXAGON_SIZE)
+    _fixed_shapes = {"circle", "doublecircle", "diamond", "hexagon"}
     for n in nodes.values():
         if n.width == 0 and not n.is_dummy and n.shape not in _fixed_shapes:
             _has_icon = bool(
                 (n.icon and _load_icon(n.icon)) or (n.css_class and _load_icon(n.css_class))
             )
             _icon_extra = ICON_COL_WIDTH if _has_icon else 0
-            _label_w = _measure_text_px(n.label)
+            # Use _TITLE_FS=15 for all nodes (including icon nodes) so that width
+            # estimation matches _wrap_label, which also uses _TITLE_FS. The renderer
+            # emits 14px for icon nodes (slightly less than 15px) — this overestimates
+            # slightly, which is safe (extra whitespace rather than clipping).
+            _title_line = n.label.split("|")[0].split("\n")[0].strip()
+            _label_w = math.ceil(_measure_text_width(_title_line, _TITLE_FS, _TITLE_FW))
             if "|" in n.label:
                 # Scan all member lines (the part after the first |)
                 _members = n.label.split("|", 1)[1].replace("---", "").split("\n")
                 for _ml in _members:
                     _ml = _ml.strip()
                     if _ml:
-                        _label_w = max(_label_w, _measure_text_px(_ml))
-            n.width = max(NODE_MIN_W, _label_w + NODE_HPAD + _icon_extra)
-    # Effective layout width = max across non-dummy nodes (uniform column spacing)
-    _layout_nw = max(
-        (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
-        default=NODE_W,
-    )
-
+                        _label_w = max(_label_w, math.ceil(_measure_text_width(_ml, _TITLE_FS, _TITLE_FW)))
+            # Cap only the text portion; icon column is additive and never capped.
+            _text_w = min(max(NODE_MIN_W, _label_w + NODE_HPAD), NODE_MAX_W)
+            n.width = _text_w + _icon_extra
+    # Populate n.height for all non-dummy nodes (must run after widths are set)
+    for n in nodes.values():
+        if not n.is_dummy:
+            n.height = _node_render_h(n)
     if not is_lr:
-        col_pitch = _layout_nw + _col_gap
-        max_col = max(n.col for n in nodes.values())
+        # Per-column widths: each column uses the max width of its own non-dummy nodes.
+        all_cols = sorted({n.col for n in nodes.values()})
+        col_width: dict[int, int] = {
+            c: max(
+                (n.width for n in nodes.values() if n.col == c and not n.is_dummy and n.width > 0),
+                default=NODE_W,
+            )
+            for c in all_cols
+        }
+        col_left: dict[int, int] = {}
+        _cursor = CANVAS_PAD
+        for c in all_cols:
+            col_left[c] = _cursor
+            _cursor += col_width[c] + _col_gap
+
         for n in nodes.values():
-            # Center narrow nodes within the _layout_nw-wide column slot so that all
-            # nodes in a column share the same visual centre regardless of label length.
-            # Fixed-shape nodes (circles, diamonds) keep slot_off=0; they get their own
-            # centering elsewhere (_circ_shift in _strategies.py).
-            _slot_off = 0 if n.is_dummy else (_layout_nw - (n.width or _layout_nw)) // 2
-            n.x = CANVAS_PAD + n.col * col_pitch + _slot_off
+            cw = col_width.get(n.col, NODE_W)
+            nw = n.width or cw  # dummy has width=0 → nw=cw → centering_offset=0 → x=col_left
+            if _is_terminal_circle(n):
+                # Terminal circles start at col_left; _strategies.py adds _circ_shift to center
+                # them (same contract as before dynamic sizing — do not double-center here).
+                n.x = col_left[n.col]
+            else:
+                n.x = col_left[n.col] + (cw - nw) // 2
 
         # Pull dummy nodes (routing waypoints) tightly against their sibling column.
         # Without this, a dummy assigned to col 1 sits ~290px from col-0 nodes,
         # creating very wide horizontal sweeps in the rendered edge paths.
-        # Strategy: move each dummy to just right of the column-slot right edge.
+        # Strategy: move each dummy to just right of the rightmost sibling column's right edge.
         _DUMMY_MARGIN = 20
         for n in nodes.values():
             if not n.is_dummy:
                 continue
             _siblings = [nn for nn in nodes.values() if nn.rank == n.rank and not nn.is_dummy]
             if _siblings:
-                _slot_right = CANVAS_PAD + max(nn.col for nn in _siblings) * col_pitch + _layout_nw
+                _max_sib_col = max(nn.col for nn in _siblings)
+                _slot_right = col_left[_max_sib_col] + col_width.get(_max_sib_col, NODE_W)
                 n.x = _slot_right + _DUMMY_MARGIN
 
         # Variable rank heights: accumulate Y positions by actual max node height per rank.
@@ -309,15 +341,27 @@ def _assign_coordinates(
             y_cursor += rank_h + _rank_gap
 
         # Recompute canvas_w using actual node x positions (dummies may have shifted)
-        max_x_right = max(n.x + (n.width or _layout_nw) for n in nodes.values())
+        max_x_right = max(n.x + (n.width or col_width.get(n.col, NODE_W)) for n in nodes.values())
         canvas_w = max_x_right + CANVAS_PAD
         canvas_h = y_cursor + CANVAS_PAD - _rank_gap
         return canvas_w, canvas_h
 
-    # LR: rank→X with fixed pitch; col→Y with variable pitch (multi-line nodes)
-    rank_pitch = _layout_nw + _rank_gap
+    # LR: per-rank x-positions using each rank's own max node width.
+    all_ranks = sorted({n.rank for n in nodes.values()})
+    rank_width: dict[int, int] = {
+        r: max(
+            (n.width for n in nodes.values() if n.rank == r and not n.is_dummy and n.width > 0),
+            default=NODE_W,
+        )
+        for r in all_ranks
+    }
+    rank_left: dict[int, int] = {}
+    _cursor = CANVAS_PAD
+    for r in all_ranks:
+        rank_left[r] = _cursor
+        _cursor += rank_width[r] + _rank_gap
     for n in nodes.values():
-        n.x = CANVAS_PAD + n.rank * rank_pitch
+        n.x = rank_left.get(n.rank, CANVAS_PAD)
 
     # Group nodes by col, accumulate Y positions top-to-bottom.
     # Nodes shorter than col_h are centered vertically within the band.
@@ -331,7 +375,7 @@ def _assign_coordinates(
             n.y = y_cursor + (col_h - _node_render_h(n)) // 2
         y_cursor += col_h + _col_gap
 
-    canvas_w = CANVAS_PAD * 2 + (max_rank + 1) * rank_pitch - _rank_gap
+    canvas_w = _cursor - _rank_gap + CANVAS_PAD
     canvas_h = y_cursor + CANVAS_PAD - _col_gap
     return canvas_w, canvas_h
 

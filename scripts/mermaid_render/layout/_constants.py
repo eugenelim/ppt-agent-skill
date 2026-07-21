@@ -175,40 +175,21 @@ _CIRCLE_NODE_SIZE = 80    # px square for regular (non-terminal) circle nodes
 _DIAMOND_SIZE = 100       # px square for diamond nodes (keeps aspect ratio 1:1)
 _HEXAGON_SIZE = 100       # px square for hexagon nodes (keeps aspect ratio 1:1)
 ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
+NODE_MAX_W: int = 220     # upper bound for text-box node widths (circle/diamond/hexagon uncapped)
+
+# Font constants matching _renderer.py's emitted CSS variables
+_TITLE_FS: int = 15   # var(--node-fs-title, 15px) — standard node title
+_TITLE_FW: int = 700  # font-weight for both icon and non-icon titles
+_ICON_FS: int = 14    # var(--node-fs-title, 14px) — icon-left node title (slightly smaller)
 
 
 def _measure_text_px(label: str) -> int:
-    """Approximate pixel width of a text label at 13px font size.
+    """Approximate pixel width of a text label at the renderer's title font (15px/700).
 
-    Uses character-class bucketing (same algorithm as _measure_text_width at
-    font_size=13, weight=500) so node widths are consistent with wrap decisions.
     Only the first display line is measured (before any | separator or newline).
     """
     text = label.split("|")[0].split("\n")[0]
-    _base = 0.57  # matches _measure_text_width at font_weight=500
-    total = 0.0
-    for c in text:
-        cp = ord(c)
-        if 0x0300 <= cp <= 0x036F:   # combining diacritics — zero width
-            ratio = 0.0
-        elif c == " ":
-            ratio = 0.3
-        elif c in "iltfjI1!|.,:;'":  # narrow chars
-            ratio = 0.4
-        elif c in "()[]{}/\\-\"`":   # semi-narrow
-            ratio = 0.5
-        elif c == "r":
-            ratio = 0.8
-        elif c in "WMwm@%":          # wide chars
-            ratio = 1.5
-        elif "A" <= c <= "Z":
-            ratio = 1.2
-        elif cp >= 0x4E00:           # CJK unified ideographs + wider scripts
-            ratio = 2.0
-        else:
-            ratio = 1.0
-        total += ratio
-    return math.ceil(total * 13 * _base + 13 * 0.15)
+    return math.ceil(_measure_text_width(text, _TITLE_FS, _TITLE_FW))
 
 
 # ── directive sets ────────────────────────────────────────────────────────────
@@ -241,6 +222,7 @@ class _Node:
     css_class: str = ""           # semantic class, e.g. "external"
     extra_css: str = ""           # inline CSS overrides (from `style NodeId fill:...`)
     width: int = 0                # computed per-node render width (0 → use global NODE_W)
+    height: int = 0               # computed per-node render height (0 → use _node_render_h)
 
 
 @dataclass
@@ -317,9 +299,9 @@ def _measure_text_width(text: str, font_size: int, font_weight: int) -> float:
 def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
     """Split label into lines fitting within width_budget pixels.
 
-    Uses _measure_text_width at font_size=13, font_weight=500 to estimate
-    pixel widths. Treats literal \\n and real newlines as explicit breaks.
-    For icon-left cards pass width_budget=NODE_W - 40 - ICON_COL_WIDTH.
+    Uses _measure_text_width at _TITLE_FS/_TITLE_FW to estimate pixel widths,
+    matching the renderer's emitted font. Treats literal \\n and real newlines
+    as explicit breaks. For icon-left cards pass width_budget=NODE_W - 40 - ICON_COL_WIDTH.
     """
     # 1. Normalize <br> variants to \n so they split before _nh() escapes angle brackets.
     # 2. Decode HTML entities (&lt; → <, &amp; → & etc.) for correct re-escaping by _nh().
@@ -335,19 +317,19 @@ def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
             if stripped:
                 result.extend(_wrap_label(stripped, width_budget))
         return result or [label]
-    if _measure_text_width(normalized, 13, 500) <= width_budget:
+    if _measure_text_width(normalized, _TITLE_FS, _TITLE_FW) <= width_budget:
         return [normalized]
     # Split on spaces; for hyphen-compound words also split at hyphens so
     # long kebab-case identifiers break at natural boundaries.
     raw_words = normalized.split()
     words: list[str] = []
     for w in raw_words:
-        if _measure_text_width(w, 13, 500) > width_budget and "-" in w:
+        if _measure_text_width(w, _TITLE_FS, _TITLE_FW) > width_budget and "-" in w:
             parts = w.split("-")
             acc = parts[0]
             for p in parts[1:]:
                 candidate = acc + "-" + p
-                if _measure_text_width(candidate, 13, 500) <= width_budget:
+                if _measure_text_width(candidate, _TITLE_FS, _TITLE_FW) <= width_budget:
                     acc = candidate
                 else:
                     words.append(acc + "-")
@@ -359,7 +341,7 @@ def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
     cur = ""
     for w in words:
         # Break individual tokens that still exceed the budget
-        while _measure_text_width(w, 13, 500) > width_budget:
+        while _measure_text_width(w, _TITLE_FS, _TITLE_FW) > width_budget:
             if cur:
                 lines.append(cur)
                 cur = ""
@@ -372,7 +354,7 @@ def _wrap_label(label: str, width_budget: int = NODE_W - 40) -> list[str]:
             w = w[split_i:]
         if not w:
             continue
-        if cur and _measure_text_width(cur + " " + w, 13, 500) > width_budget:
+        if cur and _measure_text_width(cur + " " + w, _TITLE_FS, _TITLE_FW) > width_budget:
             lines.append(cur)
             cur = w
         else:
@@ -413,6 +395,24 @@ def _is_terminal_circle(n: "_Node") -> bool:
     return n.shape == "circle" and len(n.label.strip()) <= 2
 
 
+def _node_size_circle(n: "_Node") -> int:
+    """Dynamic diameter for a regular circle node (hypot of label diagonal + padding)."""
+    if _is_terminal_circle(n):
+        return _TERMINAL_NODE_SIZE
+    label = n.label.split("|")[0].split("\n")[0].strip()
+    content_w = _measure_text_width(label, _TITLE_FS, _TITLE_FW)
+    content_h = _TITLE_LINE_H
+    return max(_CIRCLE_NODE_SIZE, math.ceil(math.hypot(content_w + NODE_HPAD, content_h + NODE_HPAD)))
+
+
+def _node_size_diamond_hex(n: "_Node", base_size: int) -> int:
+    """Linear content-sum size for diamond/hexagon (content_w + content_h + padding)."""
+    label = n.label.split("|")[0].split("\n")[0].strip()
+    content_w = _measure_text_width(label, _TITLE_FS, _TITLE_FW)
+    content_h = _TITLE_LINE_H
+    return max(base_size, math.ceil(content_w + content_h + NODE_HPAD))
+
+
 def _node_render_h(n: "_Node") -> int:
     """Return the rendered pixel height of node n (single source of truth).
 
@@ -421,14 +421,12 @@ def _node_render_h(n: "_Node") -> int:
     """
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
-    if n.shape == "circle":
-        return _CIRCLE_NODE_SIZE
-    if n.shape == "doublecircle":
-        return _CIRCLE_NODE_SIZE  # 80px — same size as regular circle; inner ring at inset:5px
+    if n.shape in ("circle", "doublecircle"):
+        return n.width if n.width > 0 else _CIRCLE_NODE_SIZE
     if n.shape == "diamond":
-        return _DIAMOND_SIZE
+        return n.width if n.width > 0 else _DIAMOND_SIZE
     if n.shape == "hexagon":
-        return _HEXAGON_SIZE
+        return n.width if n.width > 0 else _HEXAGON_SIZE
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)

@@ -16,12 +16,12 @@ def _node_render_w(n: "_Node") -> int:
     """Effective rendered width for routing exit/entry x-coordinate computation."""
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
-    if n.shape == "circle":
-        return _CIRCLE_NODE_SIZE
+    if n.shape in ("circle", "doublecircle"):
+        return n.width if n.width > 0 else _CIRCLE_NODE_SIZE
     if n.shape == "diamond":
-        return _DIAMOND_SIZE
+        return n.width if n.width > 0 else _DIAMOND_SIZE
     if n.shape == "hexagon":
-        return _HEXAGON_SIZE
+        return n.width if n.width > 0 else _HEXAGON_SIZE
     return n.width or NODE_W
 
 
