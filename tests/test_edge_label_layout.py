@@ -24,27 +24,30 @@ from mermaid_render.layout._routing import (
 # ── A* fallback: no diagonal ──────────────────────────────────────────────────
 
 class TestAstarFallback:
-    """When A* finds no clear path it must return an orthogonal L, not a diagonal."""
+    """When A* finds no clear path it returns None; caller uses _route_perimeter."""
 
     def _make_total_block(self):
-        """Grid where every segment is blocked, forcing immediate fallback."""
-        # Tiny 2-point grid so A* has nowhere to go
+        """Grid where every reachable segment from the start is blocked."""
         xs = [0, 100]
         ys = [0, 100]
-        # Block every segment
+        # Block (0,0)→(1,0) and (0,0)→(0,1) — no moves from start index
         blocked = {(0, 0, 1, 0), (0, 0, 0, 1), (1, 0, 1, 0), (0, 1, 0, 1),
-                   (0, 0, 0, 0)}  # includes non-existent segs, no harm
+                   (0, 0, 0, 0)}
         return xs, ys, blocked
 
-    def test_fallback_returns_at_least_two_points(self):
+    def test_blocked_grid_returns_none(self):
+        """_astar_route returns None when all paths are blocked (caller does perimeter retry)."""
         xs, ys, blocked = self._make_total_block()
         pts = _astar_route(0, 0, 100, 100, xs, ys, blocked)
-        assert len(pts) >= 2
+        assert pts is None
 
-    def test_fallback_is_orthogonal_no_diagonal(self):
-        """All segments in the fallback path must be horizontal or vertical."""
-        xs, ys, blocked = self._make_total_block()
+    def test_astar_result_is_orthogonal(self):
+        """A* paths on an unblocked grid must only use horizontal or vertical segments."""
+        xs = [0, 50, 100]
+        ys = [0, 50, 100]
+        blocked: set = set()
         pts = _astar_route(0, 0, 100, 100, xs, ys, blocked)
+        assert pts is not None
         for i in range(len(pts) - 1):
             x1, y1 = pts[i]
             x2, y2 = pts[i + 1]
@@ -54,24 +57,26 @@ class TestAstarFallback:
                 f"Diagonal segment detected: ({x1},{y1})→({x2},{y2})"
             )
 
-    def test_fallback_endpoints_correct(self):
+    def test_blocked_records_failure_info(self):
+        """Failure info (sx, sy, dx, dy) is appended to _failures when no path is found."""
         xs, ys, blocked = self._make_total_block()
-        pts = _astar_route(5, 10, 80, 90, xs, ys, blocked)
-        assert pts[0] == (5, 10)
-        assert pts[-1] == (80, 90)
+        failures: list = []
+        pts = _astar_route(5, 10, 80, 90, xs, ys, blocked, _failures=failures)
+        assert pts is None
+        assert len(failures) == 1
+        assert failures[0] == (5, 10, 80, 90)
 
     def test_fallback_records_failure(self):
         xs, ys, blocked = self._make_total_block()
         failures: list = []
         _astar_route(0, 0, 100, 100, xs, ys, blocked, _failures=failures)
-        # Failures should have been recorded
         assert len(failures) > 0
 
     def test_success_does_not_record_failure(self):
         """When A* succeeds, no failure is appended."""
         xs = [0, 50, 100]
         ys = [0, 50, 100]
-        blocked: set = set()  # nothing blocked
+        blocked: set = set()
         failures: list = []
         pts = _astar_route(0, 0, 100, 0, xs, ys, blocked, _failures=failures)
         assert failures == [], f"Expected no failures on clear path; got {failures}"

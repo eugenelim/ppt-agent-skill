@@ -20,6 +20,9 @@ _FORBIDDEN_IMPORTS = {
     "PIL", "playwright",
 }
 
+# _text.py is the Pillow-backed text-measurement utility; PIL is intentional there.
+_PIL_EXEMPTIONS: set[str] = {"_text.py"}
+
 
 def _collect_imports(path: Path) -> set[str]:
     """Return top-level module names imported anywhere in a .py file."""
@@ -69,7 +72,10 @@ class TestImportAllowlist:
         violations: list[str] = []
         for path in py_files:
             imports = _collect_imports(path)
-            forbidden_found = imports & _FORBIDDEN_IMPORTS
+            # PIL is allowed in _text.py (Pillow-backed text measurement utility).
+            allowed_pil = path.name in _PIL_EXEMPTIONS
+            effective_forbidden = _FORBIDDEN_IMPORTS - ({"PIL"} if allowed_pil else set())
+            forbidden_found = imports & effective_forbidden
             if forbidden_found:
                 rel = path.relative_to(ROOT)
                 violations.append(f"{rel}: {sorted(forbidden_found)}")

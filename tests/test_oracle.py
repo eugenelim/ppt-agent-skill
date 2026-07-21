@@ -248,9 +248,14 @@ def test_topology_matches_reference(fixture: Path):
     # Edges — only compared when the reference extractor provides them.
     # When the extractor returns frozenset() it means "no stable edge-id
     # convention in this diagram type's SVG" (e.g. ER), not "no edges exist".
+    # Self-loops (src == dst) are excluded from differential comparison: mermaid.js
+    # renders them but uses element IDs that the current extractor regex doesn't
+    # capture, causing false "extra edges" on our side.
     if ref_edges:
-        missing_edges = ref_edges - our_edges
-        extra_edges   = our_edges - ref_edges
+        our_non_self  = frozenset(e for e in our_edges  if e[0] != e[1])
+        ref_non_self  = frozenset(e for e in ref_edges  if e[0] != e[1])
+        missing_edges = ref_non_self - our_non_self
+        extra_edges   = our_non_self - ref_non_self
         if missing_edges:
             errors.append(f"missing edges  {sorted(missing_edges)}")
         if extra_edges:
