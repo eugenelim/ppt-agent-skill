@@ -395,6 +395,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 _act_spans.append((pid, _act_stacks[pid].pop(), _row_pre))
 
     _cx_offset = [0]  # mutable shift applied after note-bounds pre-pass
+    SIDE_NOTE_GAP = 24  # gap between lifeline center and left-of/right-of note edge
 
     def _cx(pid: str) -> int:
         idx = participants.index(pid) if pid in participants else 0
@@ -409,10 +410,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         primary = pids_list[0] if pids_list else ""
         if pos == "left_of":
             nw = col_w
-            nx = _cx(primary) - col_w // 2 - nw - 8
+            nx = _cx(primary) - nw - SIDE_NOTE_GAP
         elif pos == "right_of":
             nw = col_w
-            nx = _cx(primary) + col_w // 2 + 8
+            nx = _cx(primary) + SIDE_NOTE_GAP
         elif pos == "over" and len(pids_list) >= 2:
             xs = [_cx(p) for p in pids_list if p in participants]
             if xs:
@@ -436,10 +437,10 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         _npids = _nit.get("pids", [_nit.get("pid", "")])
         _nprimary = _npids[0] if _npids else ""
         if _npos == "left_of" and _nprimary in participants:
-            _nx = _cx(_nprimary) - col_w // 2 - col_w - 8
+            _nx = _cx(_nprimary) - col_w - SIDE_NOTE_GAP
             _min_note_x = min(_min_note_x, _nx)
         elif _npos == "right_of" and _nprimary in participants:
-            _nx = _cx(_nprimary) + col_w // 2 + 8
+            _nx = _cx(_nprimary) + SIDE_NOTE_GAP
             _max_note_x = max(_max_note_x, _nx + col_w)
     # Apply shift for left-of overflow
     if _min_note_x < PAD_H:
@@ -467,8 +468,8 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
         f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
     )
-    for i, pid in enumerate(participants):
-        lx = PAD_H + i * col_pitch + (col_pitch - col_w) // 2  # centered in pitch slot
+    for pid in participants:
+        lx = _cx(pid) - col_w // 2
         lbl = _h(p_label.get(pid, pid))
         # Top participant box
         parts.append(
@@ -489,9 +490,9 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         f'overflow:visible;pointer-events:none;">'
     )
     _seq_edge = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-    # Block x-extent: span only the participant columns, not the outer margin.
-    _blk_x0 = PAD_H // 2
-    _blk_x1 = PAD_H + (n_parts - 1) * col_pitch + col_w + PAD_H // 2
+    # Block x-extent: derived from actual participant centers so _cx_offset is honoured.
+    _blk_x0 = _cx(participants[0]) - col_w // 2 - PAD_H // 2
+    _blk_x1 = _cx(participants[-1]) + col_w // 2 + PAD_H // 2
     _blk_w = _blk_x1 - _blk_x0
     # Render combined-fragment (loop/alt/opt/…) backgrounds BEFORE lifeline dashes
     # so the dashed lifeline lines are drawn on top and remain visible.
@@ -565,8 +566,19 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}'
                 f' data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}"/>'
             )
-            ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
-            parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
+            if is_cross:
+                sz = 6
+                parts.append(
+                    f'<line x1="{sx - sz}" y1="{ry + 8 - sz}" x2="{sx}" y2="{ry + 8 + sz}" '
+                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+                )
+                parts.append(
+                    f'<line x1="{sx - sz}" y1="{ry + 8 + sz}" x2="{sx}" y2="{ry + 8 - sz}" '
+                    f'stroke="{_seq_edge}" stroke-width="1.5"/>'
+                )
+            elif has_head:
+                ah = _arrowhead(sx, ry + 8, -1, 0, back=10, half_w=6)
+                parts.append(f'<polygon points="{ah}" fill="{_seq_edge}"/>')
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
@@ -597,7 +609,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
         if it["type"] == "block":
             ry = ll_top + row * ROW_H
             parts.append(
-                f'<span style="position:absolute;left:{PAD_H + 4}px;top:{ry + 3}px;'
+                f'<span style="position:absolute;left:{_blk_x0 + 4}px;top:{ry + 3}px;'
                 f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
                 f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
@@ -608,7 +620,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
             ry = ll_top + row * ROW_H
             if it["label"]:
                 parts.append(
-                    f'<span style="position:absolute;left:{PAD_H + 4}px;top:{ry + 3}px;'
+                    f'<span style="position:absolute;left:{_blk_x0 + 4}px;top:{ry + 3}px;'
                     f'font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;'
                     f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'
                     f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
@@ -636,7 +648,7 @@ def _layout_lifeline(src: str, direction: str, width_hint: int) -> str:
                 f'<span class="edge-label" '
                 f'data-src="{_h(it["src"])}" data-dst="{_h(it["dst"])}" data-edge-label="{lbl}" '
                 f'style="position:absolute;'
-                f'left:{mid_x - 30}px;top:{ry - 18}px;'
+                f'left:{mid_x}px;top:{ry - 18}px;transform:translateX(-50%);'
                 f'font-size:11px;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
                 f'background:var(--node-bg-from,var(--card-bg-from,#ffffff));'
