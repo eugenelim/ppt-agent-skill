@@ -15,10 +15,15 @@ from ._constants import (
     _TITLE_FS, _TITLE_FW,
 )
 
-# ── cycle break (DFS back-edge detection) ─────────────────────────────────────
+# ── cycle break (iterative DFS back-edge detection) ───────────────────────────
 
 def _break_cycles(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
-    """Mark back-edges reversed_=True (DFS from source nodes)."""
+    """Mark feedback edges reversed_=True using iterative DFS.
+
+    Iterative DFS avoids Python's recursion limit on large graphs. Declaration
+    order of nodes in `nodes` is used as the deterministic traversal order so
+    the result is stable across equivalent calls.
+    """
     adj: dict[str, list[int]] = {nid: [] for nid in nodes}
     for i, e in enumerate(edges):
         if e.src in adj and e.dst in adj:
@@ -27,19 +32,26 @@ def _break_cycles(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
     WHITE, GRAY, BLACK = 0, 1, 2
     color = {nid: WHITE for nid in nodes}
 
-    def dfs(u: str) -> None:
-        color[u] = GRAY
-        for ei in adj[u]:
-            v = edges[ei].dst
-            if color.get(v) == GRAY:
-                edges[ei].reversed_ = True  # back-edge
-            elif color.get(v) == WHITE:
-                dfs(v)
-        color[u] = BLACK
-
-    for nid in list(nodes.keys()):
-        if color[nid] == WHITE:
-            dfs(nid)
+    for start in list(nodes.keys()):
+        if color[start] != WHITE:
+            continue
+        # Iterative DFS: stack holds (node, index into its adjacency list)
+        stack: list[tuple[str, int]] = [(start, 0)]
+        color[start] = GRAY
+        while stack:
+            u, idx = stack[-1]
+            if idx < len(adj[u]):
+                stack[-1] = (u, idx + 1)
+                ei = adj[u][idx]
+                v = edges[ei].dst
+                if color.get(v) == GRAY:
+                    edges[ei].reversed_ = True  # back-edge
+                elif color.get(v) == WHITE:
+                    color[v] = GRAY
+                    stack.append((v, 0))
+            else:
+                color[u] = BLACK
+                stack.pop()
 
 
 # ── rank assignment (longest path, then dummy insertion) ──────────────────────

@@ -73,16 +73,14 @@ class TestObstacleAvoidance:
         assert len(pts) >= 2, "must return at least 2 waypoints"
         assert _try_3seg_clear(pts, obstacles), "A* path must be obstacle-free"
 
-    def test_no_path_fallback_returns_two_points(self):
-        """When no grid path exists, fallback returns 2-point direct line."""
+    def test_no_path_fallback_returns_none(self):
+        """When no grid path exists, _astar_route returns None (callers do perimeter retry)."""
         grid_xs = [0, 100]
         grid_ys = [0, 100]
         # Block all segments
         blocked = {(0, 0, 1, 0), (0, 0, 0, 1), (0, 1, 1, 1), (1, 0, 1, 1)}
         pts = _astar_route(0, 0, 100, 100, grid_xs, grid_ys, blocked)
-        assert len(pts) == 2
-        assert pts[0] == (0, 0)
-        assert pts[1] == (100, 100)
+        assert pts is None
 
     def test_same_cell_returns_two_points(self):
         """Early return when src/dst snap to same cell must return 2 points, not 1."""
@@ -153,3 +151,193 @@ class TestArrowheadDirection:
         coords = [tuple(int(v) for v in pair.split(",")) for pair in pts.split()]
         assert len(coords) == 3
         assert len(set(coords)) == 3, "all three arrowhead vertices must be distinct"
+
+
+# ── AC-P4.1: A* failure returns None; perimeter retry ────────────────────────
+
+from mermaid_render.layout._routing import _route_perimeter
+
+
+class TestAStarNoneReturn:
+    def test_astar_no_path_returns_none(self):
+        """Heavily blocked 2×2 grid returns None, not a fallback straight line."""
+        grid_xs = [0, 10]
+        grid_ys = [0, 10]
+        blocked = {(0, 0, 1, 0), (0, 0, 0, 1), (0, 1, 1, 1), (1, 0, 1, 1)}
+        result = _astar_route(0, 0, 10, 10, grid_xs, grid_ys, blocked, set())
+        assert result is None
+
+    def test_perimeter_retry_finds_path(self):
+        """With a small obstacle, perimeter retry with margin=16 finds a clear path."""
+        obstacles = [(100, 100, 150, 150)]
+        result = _route_perimeter(50, 125, 200, 125, 16, obstacles)
+        assert result is not None, "perimeter retry should find a bypass path"
+        assert _try_3seg_clear(result, obstacles)
+
+    def test_routing_failure_omits_edge(self):
+        """When all perimeter retries fail, _route_perimeter returns None."""
+        obstacles = [(0, 0, 500, 500)]
+        result = _route_perimeter(100, 100, 400, 400, 16, obstacles)
+        assert result is None
+
+
+# ── AC-P4.2: allocate_face_ports ─────────────────────────────────────────────
+
+from mermaid_render.layout._routing import allocate_face_ports
+
+
+class TestAllocateFacePorts:
+    def test_allocate_face_ports_bounds(self):
+        """All offsets are within [0, face_length]."""
+        for count in (1, 3, 5, 8):
+            allocs = allocate_face_ports(100, count)
+            assert len(allocs) == count
+            for a in allocs:
+                assert 0 <= a.offset <= 100, f"count={count}: offset={a.offset} out of [0, 100]"
+
+    def test_allocate_face_ports_overflow(self):
+        """Ports beyond capacity go to lane=1."""
+        # face=42, min_step=6: usable=42-16=26, capacity=26//6=4
+        allocs = allocate_face_ports(42, 8, padding=8, min_step=6)
+        assert len(allocs) == 8
+        assert all(allocs[i].lane == 0 for i in range(4))
+        assert all(allocs[i].lane == 1 for i in range(4, 8))
+
+    def test_fan_offset_clamped(self):
+        """_fan_offset output is clamped to [0, node_w]."""
+        from mermaid_render.layout._routing import _fan_offset
+        for idx in range(10):
+            offset = _fan_offset(idx, 10, node_w=20, pad=16)
+            assert 0 <= offset <= 20, f"_fan_offset({idx}, 10, 20) = {offset} out of [0, 20]"
+
+
+# ── AC-P4.3: node_rect + predicates ──────────────────────────────────────────
+
+from mermaid_render.layout._routing import node_rect
+from mermaid_render.layout._constants import _Node as _N
+from mermaid_render.layout._geometry import Rect
+
+
+class TestNodeRectAndPredicates:
+    def test_node_rect_wide_card(self):
+        from mermaid_render.layout._routing import _node_render_w
+        from mermaid_render.layout._constants import _node_render_h
+        n = _N(id="A", label="Wide", width=200)
+        r = node_rect(n)
+        assert isinstance(r, Rect)
+        assert r.x == n.x and r.y == n.y
+        assert r.w == _node_render_w(n)
+        assert r.h == _node_render_h(n)
+        assert r.x1 == n.x + _node_render_w(n)
+
+    def test_back_edge_detection_center(self):
+        """Back-edge: dst center < src left edge."""
+        s = _N(id="S", label="S", width=80)
+        s.x = 200
+        d = _N(id="D", label="D", width=80)
+        d.x = 50
+        s_r, d_r = node_rect(s), node_rect(d)
+        assert (d_r.x + d_r.w / 2) < s_r.x  # dst center (90) < src left (200) → back
+
+    def test_reverse_edge_detection_center(self):
+        """Reverse-edge shortcut: src.x >= dst.x1."""
+        s = _N(id="S", label="S", width=80)
+        s.x = 300
+        d = _N(id="D", label="D", width=80)
+        d.x = 200
+        assert node_rect(s).x >= node_rect(d).x1  # 300 >= 280
+
+
+# ── AC-P2.1: Iterative DFS cycle-breaking ────────────────────────────────────
+
+class TestBreakCyclesInvariants:
+    def _make(self, ids, pairs):
+        from mermaid_render.layout._constants import _Node, _Edge
+        nodes = {nid: _Node(id=nid, label=nid) for nid in ids}
+        edges = [_Edge(s, d) for s, d in pairs]
+        return nodes, edges
+
+    def test_cycle_break_correctness(self):
+        """No directed cycles in forward-edge subgraph after _break_cycles."""
+        from mermaid_render.layout._layout import _break_cycles
+        from collections import defaultdict
+        nodes, edges = self._make(
+            ["A", "B", "C", "D"],
+            [("A", "B"), ("B", "C"), ("C", "D"), ("D", "A"), ("A", "C")],
+        )
+        _break_cycles(nodes, edges)
+        adj = defaultdict(list)
+        for e in edges:
+            if not e.reversed_:
+                adj[e.src].append(e.dst)
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color = {n: WHITE for n in nodes}
+        found_cycle = []
+
+        def dfs(u):
+            color[u] = GRAY
+            for v in adj[u]:
+                if color[v] == GRAY:
+                    found_cycle.append(True)
+                elif color[v] == WHITE:
+                    dfs(v)
+            color[u] = BLACK
+
+        for n in nodes:
+            if color[n] == WHITE:
+                dfs(n)
+        assert not found_cycle
+
+    def test_cycle_break_deterministic(self):
+        """Same graph → same reversed set every time."""
+        from mermaid_render.layout._layout import _break_cycles
+
+        def make():
+            return self._make(
+                ["A", "B", "C", "D"],
+                [("A", "B"), ("B", "C"), ("C", "D"), ("D", "A")],
+            )
+
+        nodes1, edges1 = make()
+        nodes2, edges2 = make()
+        _break_cycles(nodes1, edges1)
+        _break_cycles(nodes2, edges2)
+        assert [(e.src, e.dst) for e in edges1 if e.reversed_] == \
+               [(e.src, e.dst) for e in edges2 if e.reversed_]
+
+    def test_cycle_break_single_cycle(self):
+        """Simple 3-cycle: exactly 1 edge reversed."""
+        from mermaid_render.layout._layout import _break_cycles
+        nodes, edges = self._make(
+            ["A", "B", "C"],
+            [("A", "B"), ("B", "C"), ("C", "A")],
+        )
+        _break_cycles(nodes, edges)
+        assert sum(1 for e in edges if e.reversed_) == 1
+
+
+# ── AC-P4.1 (end-to-end): edge omitted when all routing paths fail ────────────
+
+class TestRouteEdgesOmitOnFailure:
+    """_route_edges skips an edge (no append to result) when A* + all perimeter retries return None."""
+
+    def test_edge_omitted_when_all_routing_fails(self):
+        """Edge S→D is absent from the result when fast path, A*, and perimeter all fail."""
+        from unittest.mock import patch
+        from mermaid_render.layout._routing import _route_edges
+        from mermaid_render.layout._constants import _Node, _Edge
+
+        s = _Node(id="S", label="S")
+        s.x, s.y, s.rank, s.col = 0, 0, 0, 0
+        d = _Node(id="D", label="D")
+        d.x, d.y, d.rank, d.col = 0, 200, 1, 0
+        nodes = {"S": s, "D": d}
+        edges = [_Edge("S", "D")]
+
+        mod = "mermaid_render.layout._routing"
+        with patch(f"{mod}._try_3seg_clear", return_value=False), \
+             patch(f"{mod}._astar_route", return_value=None), \
+             patch(f"{mod}._route_perimeter", return_value=None):
+            result = _route_edges(nodes, edges, canvas_w=800, direction="TB")
+
+        assert result == [], f"expected no edges in result, got {result}"

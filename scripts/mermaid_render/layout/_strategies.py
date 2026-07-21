@@ -3996,4 +3996,14 @@ def _dispatch(
         raise ValueError(f"Unsupported or unrecognised Mermaid directive: '{directive}'")
 
 
+def _dispatch_validate(src: str) -> "ValidationResult":
+    """Stub: validate Mermaid source and return a ValidationResult.
+
+    Full geometry constraint checking is deferred to a future sprint.
+    Currently returns an empty (ok) result for all inputs.
+    """
+    from ._geometry import ValidationResult
+    return ValidationResult()
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
