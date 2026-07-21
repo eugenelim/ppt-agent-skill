@@ -266,6 +266,40 @@ _PREPROCESS_JS = r"""() => {
     }
 }"""
 
+# JS: isolate the diagram element before dom-to-svg so the SVG is content-tight.
+# Reads data-diagram-w / data-diagram-h from the .diagram.mermaid-layout root,
+# resizes the body to those dimensions, hides unrelated elements.
+# Returns {w, h} for the Python side to resize the Playwright viewport.
+_ISOLATE_JS = r"""() => {
+    const diag = document.querySelector('.diagram.mermaid-layout');
+    if (!diag) return null;
+    const w = parseInt(diag.getAttribute('data-diagram-w')) ||
+              Math.ceil(diag.getBoundingClientRect().width) || 800;
+    const h = parseInt(diag.getAttribute('data-diagram-h')) ||
+              Math.ceil(diag.getBoundingClientRect().height) || 600;
+
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.overflow = 'hidden';
+    document.body.style.width = w + 'px';
+    document.body.style.height = h + 'px';
+    document.documentElement.style.margin = '0';
+    document.documentElement.style.padding = '0';
+
+    // Position diagram flush at top-left
+    diag.style.position = 'absolute';
+    diag.style.left = '0';
+    diag.style.top = '0';
+
+    // Hide unrelated body children (page chrome, meta-chip, etc.)
+    for (const child of Array.from(document.body.children)) {
+        if (child !== diag) child.style.display = 'none';
+    }
+
+    return {w, h};
+}"""
+
+
 # Verbatim in-page JS: DOM→SVG conversion (dom-to-svg must be injected first).
 _DOM_TO_SVG_JS = r"""async () => {
     const { documentToSVG, inlineResources } = window.__domToSvg;
@@ -284,6 +318,31 @@ _DOM_TO_SVG_JS = r"""async () => {
 
     return new XMLSerializer().serializeToString(svgDoc);
 }"""
+
+
+import re as _re
+
+def _patch_svg_bounds(svg: str, w: int, h: int) -> str:
+    """Patch the root <svg> element's width, height, and viewBox to match diagram bounds.
+
+    Replaces whatever dom-to-svg emits (typically the viewport size, e.g. 1280px)
+    with the actual diagram dimensions so the exported SVG is content-tight.
+    """
+    def _replace_root(m: "_re.Match[str]") -> str:
+        tag = m.group(0)
+        # Remove existing width/height/viewBox attrs, then inject correct ones
+        tag = _re.sub(r'\s+width="[^"]*"', "", tag)
+        tag = _re.sub(r'\s+height="[^"]*"', "", tag)
+        tag = _re.sub(r'\s+viewBox="[^"]*"', "", tag)
+        # Insert before the closing > or />
+        insertion = f' width="{w}" height="{h}" viewBox="0 0 {w} {h}"'
+        if tag.endswith("/>"):
+            return tag[:-2] + insertion + "/>"
+        return tag[:-1] + insertion + ">"
+
+    # Match only the opening <svg ...> tag (not nested SVGs)
+    patched = _re.sub(r"<svg\b[^>]*>", _replace_root, svg, count=1)
+    return patched
 
 
 def _inline_images(page, html_file: Path, deck_root: Path) -> None:
@@ -341,6 +400,19 @@ def _render_page_to_svg(page, html_file: Path) -> str:
     page.add_script_tag(path=str(BUNDLE_PATH))
     page.evaluate(_PREPROCESS_JS)
     page.wait_for_timeout(300)
+
+    # Isolate the diagram and read its content-tight dimensions.
+    dims = page.evaluate(_ISOLATE_JS)
+    if dims and dims.get("w") and dims.get("h"):
+        diag_w = int(dims["w"])
+        diag_h = int(dims["h"])
+        # Resize the Playwright viewport to the diagram's exact dimensions so
+        # dom-to-svg captures the full content without empty 1280px canvas space.
+        page.set_viewport_size({"width": diag_w, "height": diag_h})
+        page.wait_for_timeout(100)
+        svg = page.evaluate(_DOM_TO_SVG_JS)
+        return _patch_svg_bounds(svg, diag_w, diag_h)
+
     return page.evaluate(_DOM_TO_SVG_JS)
 
 
