@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import heapq
 import math
+from dataclasses import dataclass
 
 from ._constants import (
     _Node, _Edge,
@@ -11,6 +12,18 @@ from ._constants import (
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
 )
+from ._geometry import Rect
+
+
+@dataclass(frozen=True)
+class LabelPlacement:
+    """Result of label position selection.
+
+    box: the chip Rect when a position was found; None only when candidates list is empty.
+    reroute_required: True when the best available position still overlaps an obstacle.
+    """
+    box: "Rect | None"
+    reroute_required: bool
 
 
 def _node_render_w(n: "_Node") -> int:
@@ -176,8 +189,8 @@ def _astar_route(
                 heapq.heappush(heap, (ng + nh, ctr, nxi, nyi, nd))
                 ctr += 1
 
-    # No path found — direct fallback
-    return [(sx, sy), (dx, dy)]
+    # No path found
+    return None
 
 
 def _simplify_waypoints(pts: list) -> list:
@@ -216,6 +229,40 @@ def _try_3seg_clear(
     return True
 
 
+def _route_perimeter(
+    sx: int, sy: int, dx: int, dy: int,
+    margin: int,
+    obstacles: list,
+) -> "list | None":
+    """Try to route around obstacles using a 3-segment bypass path.
+
+    Computes the bounding box of all obstacles, inflates it by margin, then tries
+    4 bypass directions (top, bottom, left, right). Returns the first path that
+    passes _try_3seg_clear, or None if all four bypass paths are blocked.
+    """
+    if not obstacles:
+        return [(sx, sy), (dx, dy)]
+    bx1 = min(o[0] for o in obstacles) - margin
+    by1 = min(o[1] for o in obstacles) - margin
+    bx2 = max(o[2] for o in obstacles) + margin
+    by2 = max(o[3] for o in obstacles) + margin
+
+    bypass_paths = [
+        # top bypass: go above the obstacle bounding box
+        [(sx, sy), (sx, by1), (dx, by1), (dx, dy)],
+        # bottom bypass: go below
+        [(sx, sy), (sx, by2), (dx, by2), (dx, dy)],
+        # left bypass: go left of the bounding box
+        [(sx, sy), (bx1, sy), (bx1, dy), (dx, dy)],
+        # right bypass: go right of the bounding box
+        [(sx, sy), (bx2, sy), (bx2, dy), (dx, dy)],
+    ]
+    for path in bypass_paths:
+        if _try_3seg_clear(path, obstacles):
+            return path
+    return None
+
+
 def _label_on_longest(
     pts: list,
     label: str,
@@ -252,7 +299,17 @@ def _label_on_longest(
         (mid_x - w // 2 - 20,     mid_y - H - 4),
         (mid_x - w // 2 + 20,     mid_y + 4),
     ]
-    return _best_label_pos(cands, label, obstacles, placed, canvas_w, y_range=y_range)
+    _lp = _best_label_pos(cands, label, obstacles, placed, canvas_w, y_range=y_range)
+    if _lp.box is None:
+        return 0, 0
+    return int(_lp.box.x), int(_lp.box.y + _lp.box.h)
+
+
+def _lp_xy(lp: LabelPlacement) -> tuple:
+    """Unwrap a LabelPlacement to (lx, ly) for use as render coordinates."""
+    if lp.box is None:
+        return 0, 0
+    return int(lp.box.x), int(lp.box.y + lp.box.h)
 
 
 # ── diamond edge clipping ─────────────────────────────────────────────────────
@@ -344,11 +401,17 @@ def _smooth_orthogonal_path(pts: list[tuple[int, int]], r: int = 10) -> str:
     return d
 
 
+def node_rect(n: "_Node") -> Rect:
+    """Return the bounding Rect for node n using rendered (not fixed) dimensions."""
+    return Rect(n.x, n.y, _node_render_w(n), _node_render_h(n))
+
+
 def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> int:
     """Distribute fan-in/fan-out endpoints across node edge (spec §Step6).
 
     Endpoints are spaced at least MIN_FAN_STEP px apart and centred on the node
     midpoint so parallel edges stay visually separated even on short nodes.
+    Result is clamped to [0, node_w] to prevent out-of-bounds port placement.
     """
     if total <= 1:
         return node_w // 2
@@ -357,7 +420,38 @@ def _fan_offset(index: int, total: int, node_w: int = NODE_W, pad: int = 16) -> 
     # Centre the fan: span = step * (total-1), start = mid - span/2.
     centre = node_w // 2
     start = centre - step * (total - 1) // 2
-    return start + step * index
+    return max(0, min(node_w, start + step * index))
+
+
+def allocate_face_ports(
+    face_length: int,
+    count: int,
+    *,
+    padding: int = 8,
+    min_step: int = 6,
+) -> "tuple[PortAllocation, ...]":
+    """Allocate port positions along a node face.
+
+    Returns a tuple of PortAllocation with offset in [0, face_length] and lane.
+    When count exceeds capacity (usable / min_step), excess ports cycle to lane 1+.
+    """
+    from ._geometry import PortAllocation as _PA  # local import avoids circular at module level
+    if count == 0:
+        return ()
+    usable = max(0, face_length - 2 * padding)
+    capacity = max(1, usable // min_step)
+    results = []
+    for i in range(count):
+        slot = i % capacity
+        lane = i // capacity
+        if capacity == 1:
+            offset = face_length // 2
+        else:
+            step = usable // (capacity - 1) if capacity > 1 else 0
+            offset = padding + slot * step
+        offset = max(0, min(face_length, offset))
+        results.append(_PA(offset=offset, lane=lane))
+    return tuple(results)
 
 
 _LABEL_PERP = 20  # perpendicular offset for edge labels (px)
@@ -395,21 +489,19 @@ def _best_label_pos(
     placed: list,
     canvas_w: int,
     y_range: "tuple[int,int] | None" = None,
-) -> tuple:
-    """Pick the (lx, ly) from candidates with minimum total overlap.
+) -> LabelPlacement:
+    """Pick the best position from candidates with minimum total overlap.
 
-    Checks against pre-built node/group obstacle bboxes plus already-placed
-    label chips so label density is distributed rather than stacked.
-    Off-canvas placements (chip_top < 0) are strongly penalised so the
-    algorithm never greedily picks clear-but-invisible negative-y positions.
+    Returns a LabelPlacement. When candidates is empty, returns box=None.
+    When all candidates are blocked by node obstacles, returns the least-overlap
+    position with reroute_required=True so callers know a reroute is desirable.
 
     y_range: (y_lo, y_hi) defines the edge's natural vertical span.  Positions
     above y_lo are penalised at 200px/px to prevent labels from escaping above
     group containers; positions below y_hi get a softer 10px/px nudge.
     """
     if not candidates:
-        placed.append((0, 0, _est_label_w(label), _LABEL_CHIP_H))
-        return 0, 0
+        return LabelPlacement(box=None, reroute_required=True)
     w = _est_label_w(label)
     all_obs = obstacles + placed
     # Hard-reject: candidates that overlap any node obstacle are excluded in a first
@@ -419,6 +511,7 @@ def _best_label_pos(
         _overlap_area(_label_chip_bbox(max(4, min(canvas_w - w - 4, c[0])), c[1], label), obs, margin=0) == 0
         for obs in obstacles
     )]
+    _all_blocked = not _clear
     _active_candidates = _clear if _clear else candidates
     best_lx, best_ly = _active_candidates[0][0], _active_candidates[0][1]
     best_score = float("inf")
@@ -445,8 +538,10 @@ def _best_label_pos(
             best_score, best_lx, best_ly = score, lx, ly
         if score == 0:
             break
-    placed.append(_label_chip_bbox(best_lx, best_ly, label))
-    return best_lx, best_ly
+    chip = _label_chip_bbox(best_lx, best_ly, label)
+    placed.append(chip)
+    box = Rect(chip[0], chip[1], chip[2] - chip[0], chip[3] - chip[1])
+    return LabelPlacement(box=box, reroute_required=_all_blocked)
 
 
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
@@ -660,7 +755,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         (x_out - 4, loop_y),
                         (x_ret + 4, loop_y),
                     ]
-                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                                 if e.label else (mid_x - 20, max(0, loop_y - _LABEL_CHIP_H - 4)))
                 else:
                     # bottom face
@@ -676,7 +771,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         (x_out - 4, loop_y),
                         (x_ret + 4, loop_y),
                     ]
-                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                                 if e.label else (mid_x - 20, loop_y + 4))
             else:
                 # TB: right face (even lane_idx) / left face (odd lane_idx)
@@ -696,7 +791,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         (loop_x + 4, y_out - _LABEL_CHIP_H - 4),
                         (loop_x + 4, y_ret + _LABEL_CHIP_H + 4),
                     ]
-                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                                 if e.label else (loop_x + 4, mid_y))
                 else:
                     # left face
@@ -712,7 +807,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         (loop_x - 4 - label_w, y_out - _LABEL_CHIP_H - 4),
                         (loop_x - 4 - label_w, y_ret + _LABEL_CHIP_H + 4),
                     ]
-                    llx, lly = (_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                                 if e.label else (loop_x - 4 - label_w, mid_y))
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
@@ -727,7 +822,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         # and ELK (which places long forward edges without dummy nodes).
         # A forward edge goes RIGHT (LR) or DOWN (TB); anything else is a back edge.
         if is_lr:
-            _goes_back = (d.x + NODE_W // 2) < s.x  # dst center left of src left
+            _s_r, _d_r = node_rect(s), node_rect(d)
+            _goes_back = (_d_r.x + _d_r.w / 2) < _s_r.x  # dst center left of src left
         else:
             _goes_back = (d.y + _node_render_h(d) // 2) < s.y  # dst center above src top
         if e.reversed_ or _goes_back:
@@ -736,7 +832,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 # Right-to-left crossing: source LEFT edge is past destination RIGHT edge.
                 # Route directly (left-exit → midpoint → right-enter) instead of
                 # the bottom lane, which adds unnecessary vertical canvas space.
-                if not e.reversed_ and s.x >= d.x + NODE_W:
+                if not e.reversed_ and node_rect(s).x >= node_rect(d).x1:
                     out_list = fan_out[e.src]
                     out_idx = out_list.index(e.dst) if e.dst in out_list else 0
                     out_off = _fan_offset(out_idx, len(out_list), node_w=_node_render_h(s))
@@ -763,7 +859,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                             (int(x2) + 8,        int(y2) - 12),
                             (int(x2) + 8,        int(y2) + H + 4),
                         ]
-                        llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                        llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                     else:
                         llx, lly = max(0, x1 - 164), int(y1) - 12
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
@@ -790,7 +886,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                             (sx + 8,        lane_y - H - 4),
                             (dx_ + 8,       lane_y - H - 4),
                         ]
-                        llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                        llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                     else:
                         llx, lly = (sx + dx_) // 2, lane_y + 4
                     result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
@@ -817,7 +913,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         (lane_x + 4,      sy + H + 4),
                         (lane_x + 4,      dy_ - H - 4),
                     ]
-                    llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                    llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                 else:
                     llx, lly = lane_x + 4, (sy + dy_) // 2
                 result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
@@ -855,7 +951,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     (_sk_lane_x + 4, y1 + H + 4),
                     (_sk_lane_x + 4, y2 - H - 4),
                 ]
-                llx, lly = _best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w)
+                llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
             else:
                 llx, lly = _sk_lane_x + 4, (y1 + y2) // 2
             result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
@@ -898,6 +994,14 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             else:
                 _pts_lr = _astar_route(int(x1), int(y1), int(x2), int(y2),
                                        _grid_xs, _grid_ys, _blocked, _occupied)
+                if _pts_lr is None:
+                    for _margin in (16, 32, 64, 128):
+                        _pts_lr = _route_perimeter(int(x1), int(y1), int(x2), int(y2),
+                                                   _margin, _routing_obs)
+                        if _pts_lr is not None:
+                            break
+                if _pts_lr is None:
+                    continue  # skip edge — omit rather than draw through obstacle
                 if len(_pts_lr) >= 2:
                     _pts_lr[0] = (int(x1), int(y1))
                     _pts_lr[-1] = (int(x2), int(y2))
@@ -971,6 +1075,14 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         else:
             _pts = _astar_route(int(x1), int(y1), int(x2), int(y2),
                                 _grid_xs, _grid_ys, _blocked, _occupied)
+            if _pts is None:
+                for _margin in (16, 32, 64, 128):
+                    _pts = _route_perimeter(int(x1), int(y1), int(x2), int(y2),
+                                           _margin, _routing_obs)
+                    if _pts is not None:
+                        break
+            if _pts is None:
+                continue  # skip edge — omit rather than draw through obstacle
             if len(_pts) >= 2:
                 _pts[0] = (int(x1), int(y1))
                 _pts[-1] = (int(x2), int(y2))

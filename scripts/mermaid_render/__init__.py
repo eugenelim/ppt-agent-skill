@@ -3,10 +3,22 @@
 to_html(src, *, theme=None, width_hint=0) -> str          pure-Python, no playwright
 to_svg(src, *, theme=None, width_hint=0) -> str            requires playwright
 to_png(src, *, theme=None, scale=1.0, width_hint=0) -> bytes  requires playwright
+validate(src) -> ValidationResult                          geometry validation stub
 """
 from __future__ import annotations
 
 from .themes import Theme  # noqa: F401 — re-exported as part of public API
+from .layout._geometry import ValidationResult  # noqa: F401 — re-exported
+
+
+def validate(src: str) -> ValidationResult:
+    """Validate Mermaid source string and return a ValidationResult.
+
+    Stub — returns empty (ok) result for all inputs until full geometry
+    constraint checking is implemented.
+    """
+    from .layout._strategies import _dispatch_validate
+    return _dispatch_validate(src)
 
 
 def to_html(src: str, *, theme: Theme = None, width_hint: int = 0) -> str:

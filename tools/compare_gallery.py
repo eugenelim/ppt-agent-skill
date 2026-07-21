@@ -262,7 +262,8 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
     (out_dir / "mmdc").mkdir(exist_ok=True)
 
     from collections import defaultdict
-    # Tuple: (name, src, ours_ok, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err)
+    # Tuple: (name, src, ours_status, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err)
+    # ours_status: str from _classify_status ("ok" / "warning" / "invalid" / "error")
     # ours_html is NOT held in memory — written to disk and re-read per section below.
     type_results: dict[str, list[tuple]] = defaultdict(list)
 
@@ -274,23 +275,30 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
         print(f"  [{i + 1}/{n_total}] {name} ...", end=" ", flush=True)
 
         ours_html, ours_err = _render_ours(src)
+        render_exc: "BaseException | None" = None if ours_html is not None else Exception(ours_err)
         if ours_html:
             (out_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
+            vr = mermaid_render.validate(src)
+            ours_status = _classify_status(
+                geometry_errors=bool(vr.errors),
+                geometry_warnings=bool(vr.warnings),
+            )
+        else:
+            ours_status = _classify_status(render_exception=render_exc)
 
         mmdc_svg_path = out_dir / "mmdc" / f"{name}.svg"
         mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
 
-        ours_ok = ours_html is not None
-        print(f"ours:{'ok' if ours_ok else 'err'}  mmdc:{'ok' if mmdc_ok else 'err'}")
+        print(f"ours:{ours_status}  mmdc:{'ok' if mmdc_ok else 'err'}")
 
         dtype = _diagram_type(name)
-        type_results[dtype].append((name, src, ours_ok, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
+        type_results[dtype].append((name, src, ours_status, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
 
     # Build nav — requires all results, so collected first.
     nav_parts: list[str] = []
     for dtype in sorted(type_results):
         items = type_results[dtype]
-        n_ok = sum(1 for _, _, ok, _, _, _, _ in items if ok)
+        n_ok = sum(1 for _, _, st, _, _, _, _ in items if st == "ok")
         n_items = len(items)
         group_status = "ok" if n_ok == n_items else ("err" if n_ok == 0 else "warn")
         badge_cls = "badge-ok" if group_status == "ok" else ("badge-err" if group_status == "err" else "badge-warn")
@@ -299,18 +307,19 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
             f'<span class="nav-type">{_html_mod.escape(dtype)}'
             f'<span class="status-badge {badge_cls}">{n_ok}/{n_items}</span></span>'
         )
-        for name, _, ours_ok, _, _, mmdc_ok, _ in items:
+        for name, _, ours_status, _, _, mmdc_ok, _ in items:
             short = name[len(dtype):].lstrip("-") or name
+            _obadge = "ok" if ours_status == "ok" else ("warn" if ours_status == "warning" else "err")
             nav_parts.append(
                 f'<a href="#{name}">{_html_mod.escape(short)}'
-                f'<span class="status-badge badge-{"ok" if ours_ok else "err"}">O</span>'
+                f'<span class="status-badge badge-{_obadge}">O</span>'
                 f'<span class="status-badge badge-{"ok" if mmdc_ok else "err"}">M</span>'
                 f'</a>'
             )
         nav_parts.append('</div>')
 
     total_diags = sum(len(v) for v in type_results.values())
-    n_ours_ok = sum(ok for items in type_results.values() for _, _, ok, _, _, _, _ in items)
+    n_ours_ok = sum(1 for items in type_results.values() for _, _, st, _, _, _, _ in items if st == "ok")
     n_mmdc_ok = sum(m for items in type_results.values() for _, _, _, _, _, m, _ in items)
     n_types = len(type_results)
     nav_html = "\n".join(nav_parts)
@@ -338,11 +347,11 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
         for dtype in sorted(type_results):
             items = type_results[dtype]
             f.write(f'  <div class="type-group-header" id="type-{dtype}">{_html_mod.escape(dtype)}</div>\n')
-            for name, src, ours_ok, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
-                ours_status = "ok" if ours_ok else "err"
+            for name, src, ours_status, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
+                _ours_badge = "ok" if ours_status == "ok" else ("warn" if ours_status == "warning" else "err")
                 mmdc_status = "ok" if mmdc_ok else "err"
 
-                if ours_ok:
+                if ours_status in ("ok", "warning", "invalid"):
                     ours_html = (out_dir / "ours" / f"{name}.html").read_text(encoding="utf-8")
                     ours_srcdoc = _html_mod.escape(ours_html, quote=True)
                     ours_content = (
@@ -377,7 +386,7 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
                 f.write(f"""
 <div class="diagram-section" id="{name}">
   <h2>{_html_mod.escape(name)}
-    <span class="status-badge badge-{ours_status}">ours: {ours_status}</span>
+    <span class="status-badge badge-{_ours_badge}">ours: {ours_status}</span>
     <span class="status-badge badge-{mmdc_status}">mmdc: {mmdc_status}</span>
   </h2>
   <div class="comparison-grid">
@@ -422,7 +431,12 @@ def _build_gallery(mmd_files: list[Path], out_dir: Path) -> Path:
 </body>
 </html>""")
 
-    return index_path
+    has_failures = any(
+        st in ("invalid", "error")
+        for items in type_results.values()
+        for _, _, st, _, _, _, _ in items
+    )
+    return index_path, has_failures
 
 
 def main() -> None:
@@ -449,12 +463,15 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Building comparison gallery for {len(mmd_files)} diagram(s)...")
-    index_path = _build_gallery(mmd_files, OUT_DIR)
+    index_path, has_failures = _build_gallery(mmd_files, OUT_DIR)
     print(f"Gallery: file://{index_path}")
 
     if args.open:
         import webbrowser
         webbrowser.open(f"file://{index_path}")
+
+    if has_failures:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
