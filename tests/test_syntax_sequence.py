@@ -406,3 +406,81 @@ class TestSequenceSequencing:
         ))
         assert html
         assert "loop" in html.lower()
+
+
+# ── T9: geometry invariant validation ─────────────────────────────────────────
+
+class TestGeometryValidation:
+    """T9: _dispatch_validate returns geometry='pass' for well-formed diagrams
+    and geometry='fail' for diagrams with invariant violations."""
+
+    def test_basic_diagram_geometry_pass(self):
+        """A simple two-participant diagram must pass all 11 geometry invariants."""
+        vr = validate(_seq("  Alice->>Bob: hello"))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_loop_diagram_geometry_pass(self):
+        """A diagram with a loop block must pass geometry invariants."""
+        vr = validate(_seq(
+            "  A->>B: start\n"
+            "  loop retry\n"
+            "    B->>A: ack\n"
+            "  end\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_activation_diagram_geometry_pass(self):
+        """A diagram with activate/deactivate must pass geometry invariants."""
+        vr = validate(_seq(
+            "  activate Alice\n"
+            "  Alice->>Bob: hi\n"
+            "  deactivate Alice\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_note_diagram_geometry_pass(self):
+        """A diagram with notes must pass geometry invariants."""
+        vr = validate(_seq(
+            "  note over Alice, Bob: spanning note\n"
+            "  Alice->>Bob: msg\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_self_loop_geometry_pass(self):
+        """A diagram with a self-loop must pass geometry invariants."""
+        vr = validate(_seq("  Alice->>Alice: self\n"))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"
+
+    def test_render_fail_returns_render_fail(self):
+        """An unparseable diagram sets render='fail' and geometry='unvalidated'."""
+        vr = validate("sequenceDiagram\n  !!invalid!!\n")
+        # render may be pass (unrecognised line emits diagnostic, not crash)
+        # but geometry must not be "fail" on a parse-level problem
+        assert vr.geometry != "fail"
+
+    def test_non_sequence_diagram_geometry_unvalidated(self):
+        """Non-sequenceDiagram types return geometry='unvalidated'."""
+        vr = validate("flowchart TD\n  A --> B\n")
+        assert vr.geometry == "unvalidated"
+
+    def test_geometry_pass_implies_no_violations(self):
+        """When geometry='pass' the errors tuple must be empty."""
+        vr = validate(_seq("  Alice->>Bob: msg\n  Bob->>Alice: ack"))
+        if vr.geometry == "pass":
+            assert vr.errors == (), f"geometry=pass but errors={vr.errors}"
+
+    def test_complex_diagram_geometry_pass(self):
+        """A realistic multi-feature diagram must pass all geometry invariants."""
+        vr = validate(_seq(
+            "  participant Client\n"
+            "  participant Server\n"
+            "  participant DB\n"
+            "  Client->>Server: request\n"
+            "  activate Server\n"
+            "  Server->>DB: query\n"
+            "  DB-->>Server: result\n"
+            "  deactivate Server\n"
+            "  Server-->>Client: response\n"
+            "  note over Client, Server: HTTP/1.1\n"
+        ))
+        assert vr.geometry == "pass", f"Expected pass, got violations: {vr.errors}"

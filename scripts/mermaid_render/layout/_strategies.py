@@ -4273,8 +4273,92 @@ def _dispatch(
         raise ValueError(f"Unsupported or unrecognised Mermaid directive: '{directive}'")
 
 
+def _validate_sequence_geometry(geom: "SequenceGeometry") -> "list[str]":
+    """Check 11 geometric invariants on a SequenceGeometry.  Returns a list of
+    violation strings; empty means geometry="pass"."""
+    from ._geometry import SequenceGeometry  # noqa: PLC0415
+    violations: list[str] = []
+
+    cw, ch = geom.canvas
+    lx = [x for _, x in geom.lifeline_x]
+
+    # INV-1: canvas dimensions positive
+    if cw <= 0 or ch <= 0:
+        violations.append(f"INV-1: canvas {cw}×{ch} not positive")
+
+    # INV-2: all lifeline x-coords within canvas
+    for pid, x in geom.lifeline_x:
+        if not (0 <= x <= cw + 1):  # +1 tolerance for rounding
+            violations.append(f"INV-2: lifeline '{pid}' x={x} outside canvas w={cw}")
+
+    # INV-3: lifeline centers strictly increasing (left→right order preserved)
+    for i in range(len(lx) - 1):
+        if lx[i] >= lx[i + 1]:
+            pid_a = geom.lifeline_x[i][0]
+            pid_b = geom.lifeline_x[i + 1][0]
+            violations.append(
+                f"INV-3: lifelines not left-to-right: '{pid_a}'@{lx[i]} >= '{pid_b}'@{lx[i + 1]}"
+            )
+
+    # INV-4: adjacent lifelines separated by at least 20 px (no overlap)
+    for i in range(len(lx) - 1):
+        gap = lx[i + 1] - lx[i]
+        if gap < 20:
+            pid_a = geom.lifeline_x[i][0]
+            pid_b = geom.lifeline_x[i + 1][0]
+            violations.append(f"INV-4: lifelines '{pid_a}'–'{pid_b}' overlap (gap={gap:.1f}px)")
+
+    # INV-5: message_ys count matches message_endpoints count
+    if len(geom.message_ys) != len(geom.message_endpoints):
+        violations.append(
+            f"INV-5: message_ys ({len(geom.message_ys)}) ≠ message_endpoints ({len(geom.message_endpoints)})"
+        )
+
+    # INV-6: message y-coordinates are monotonically non-decreasing
+    for i in range(len(geom.message_ys) - 1):
+        if geom.message_ys[i] > geom.message_ys[i + 1] + 0.5:  # 0.5 rounding tolerance
+            violations.append(
+                f"INV-6: message_ys not monotone at index {i}: {geom.message_ys[i]:.1f} > {geom.message_ys[i + 1]:.1f}"
+            )
+
+    # INV-7: message endpoints within canvas bounds
+    for i, (sx, sy, dx, dy) in enumerate(geom.message_endpoints):
+        for coord, name in ((sx, "sx"), (dx, "dx")):
+            if not (-1 <= coord <= cw + 1):
+                violations.append(f"INV-7: msg[{i}].{name}={coord:.1f} outside canvas w={cw}")
+        for coord, name in ((sy, "sy"), (dy, "dy")):
+            if not (-1 <= coord <= ch + 1):
+                violations.append(f"INV-7: msg[{i}].{name}={coord:.1f} outside canvas h={ch}")
+
+    # INV-8: note bounds within canvas width (x >= 0 and x+w <= canvas_w + tolerance)
+    for i, (nx, ny, nw, nh) in enumerate(geom.note_bounds):
+        if nx < -1:
+            violations.append(f"INV-8: note[{i}] left edge {nx:.1f} < 0")
+        if nx + nw > cw + 2:
+            violations.append(f"INV-8: note[{i}] right edge {nx + nw:.1f} > canvas w={cw}")
+
+    # INV-9: self-loop bounds within canvas (must not overflow right edge)
+    for i, (slx, sly, slw, slh) in enumerate(geom.self_loop_bounds):
+        if slx + slw > cw + 2:
+            violations.append(f"INV-9: self_loop[{i}] right edge {slx + slw:.1f} > canvas w={cw}")
+
+    # INV-10: fragment bounds within canvas width
+    for fid, fx, fy, fw, fh in geom.fragment_bounds:
+        if fx < -1:
+            violations.append(f"INV-10: fragment '{fid}' left edge {fx:.1f} < 0")
+        if fx + fw > cw + 2:
+            violations.append(f"INV-10: fragment '{fid}' right edge {fx + fw:.1f} > canvas w={cw}")
+
+    # INV-11: activation bar top < bottom (no inverted bars)
+    for pid, top_y, bot_y in geom.activation_bars:
+        if top_y > bot_y + 0.5:
+            violations.append(f"INV-11: activation bar for '{pid}' inverted: top={top_y:.1f} > bot={bot_y:.1f}")
+
+    return violations
+
+
 def _dispatch_validate(src: str) -> "ValidationResult":
-    """Validate Mermaid source. Geometry checking is unvalidated until T9."""
+    """Validate Mermaid source including 11 geometry invariants (T9)."""
     from ._geometry import ValidationResult
     clean = _strip_frontmatter(src)
     directive, _ = _detect_directive(clean)
@@ -4290,10 +4374,13 @@ def _dispatch_validate(src: str) -> "ValidationResult":
             )
         diagnostics = geom.diagnostics
         sc = "partial" if diagnostics else "pass"
+        violations = _validate_sequence_geometry(geom)
+        geom_status = "fail" if violations else "pass"
         return ValidationResult(
             diagnostics=diagnostics,
             syntax_coverage=sc,
-            geometry="unvalidated",
+            geometry=geom_status,
+            errors=tuple(violations),
         )
     return ValidationResult(geometry="unvalidated")
 
