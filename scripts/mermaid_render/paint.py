@@ -719,6 +719,9 @@ def finalized_layout_to_scene(
         ))
 
     # Nodes → nodes layer
+    import re as _re_node
+    import html as _html_node
+    _node_order = 0
     for nid, nl in sorted(layout.node_layouts.items()):
         if nl.is_dummy:
             continue
@@ -734,6 +737,23 @@ def finalized_layout_to_scene(
         )
         eid = f"node-{nid}"
         extra_css = tuple(nl.css_classes)
+        # Compute normalized label: extract raw text from title_layout, strip <br>
+        _tl = nl.title_layout
+        _label_raw = ""
+        if _tl and _tl.lines:
+            _runs = _tl.lines[0].runs if _tl.lines[0].runs else ()
+            _label_raw = " ".join(getattr(r, "text", "") for r in _runs)
+        _label_norm = _re_node.sub(r'<br\s*/?>', ' ', _label_raw, flags=_re_node.IGNORECASE).strip()
+        _parent_id = getattr(nl, "parent_group_id", None) or ""
+        _node_data_attrs: tuple = (
+            ("kind", "node"),
+            ("label", _html_node.escape(_label_norm, quote=True)),
+            ("node-id", nid),
+            ("order", str(_node_order)),
+            ("semantic-id", nid),
+            ("shape", shape),
+        ) + ((("parent-id", _parent_id),) if _parent_id else ())
+        _node_order += 1
 
         if shape in ("rect", "round", "stadium", "subroutine", "flag"):
             rx_map = {"rect": t.node_rx, "round": 14.0, "stadium": 50.0, "subroutine": 4.0, "flag": 0.0}
@@ -741,7 +761,7 @@ def finalized_layout_to_scene(
             node_elements.append(SceneRoundedRect(
                 element_id=eid, x=x, y=y, w=nw, h=nh, rx=rx, ry=rx,
                 css_classes=("node", f"node-{shape}") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
         elif shape == "circle":
@@ -749,7 +769,7 @@ def finalized_layout_to_scene(
             node_elements.append(SceneCircle(
                 element_id=eid, cx=x + nw / 2, cy=y + nh / 2, r=r,
                 css_classes=("node", "node-circle") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
         elif shape == "doublecircle":
@@ -757,7 +777,7 @@ def finalized_layout_to_scene(
             node_elements.append(SceneCircle(
                 element_id=eid + "-outer", cx=x + nw / 2, cy=y + nh / 2, r=r_outer,
                 css_classes=("node", "node-doublecircle") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
             node_elements.append(SceneCircle(
@@ -773,7 +793,7 @@ def finalized_layout_to_scene(
                 element_id=eid,
                 points=((cx_, y), (x + nw, cy_), (cx_, y + nh), (x, cy_)),
                 css_classes=("node", "node-diamond") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
         elif shape == "hexagon":
@@ -786,7 +806,7 @@ def finalized_layout_to_scene(
                     (x + hw, y + nh), (x, y + nh / 2),
                 ),
                 css_classes=("node", "node-hexagon") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
         elif shape in ("trapezoid", "trapezoid-alt"):
@@ -798,7 +818,7 @@ def finalized_layout_to_scene(
             node_elements.append(ScenePolygon(
                 element_id=eid, points=pts,
                 css_classes=("node", f"node-{shape}") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
         elif shape == "cylinder":
@@ -807,7 +827,7 @@ def finalized_layout_to_scene(
                 element_id=eid + "-body",
                 x=x, y=y + cap_ry, w=nw, h=nh - 2 * cap_ry,
                 css_classes=("node", "node-cylinder") + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
             node_elements.append(SceneEllipse(
@@ -824,7 +844,7 @@ def finalized_layout_to_scene(
             node_elements.append(SceneRoundedRect(
                 element_id=eid, x=x, y=y, w=nw, h=nh, rx=t.node_rx, ry=t.node_rx,
                 css_classes=("node",) + extra_css,
-                data_attrs=(("node-id", nid),),
+                data_attrs=_node_data_attrs,
                 paint=node_paint,
             ))
 
@@ -851,7 +871,7 @@ def finalized_layout_to_scene(
                     element_id=eid + "-label",
                     lines=tuple(scene_lines),
                     text_anchor="middle",
-                    data_attrs=(("node-id", nid),),
+                    data_attrs=_node_data_attrs,
                 ))
 
         # Subtitle text from subtitle_layout (e.g. C4 element descriptions)
@@ -876,7 +896,7 @@ def finalized_layout_to_scene(
                     element_id=eid + "-subtitle",
                     lines=tuple(sub_lines),
                     text_anchor="middle",
-                    data_attrs=(("node-id", nid),),
+                    data_attrs=_node_data_attrs,
                 ))
 
         # Member layouts (class/ER member rows)
@@ -946,6 +966,12 @@ def finalized_layout_to_scene(
             stroke_w = t.edge_stroke_w
             dasharray = ""
 
+        import html as _html_fe
+        _edge_label_val = ""
+        if re_obj.label_layout:
+            _edge_label_val = _html_fe.escape(re_obj.label_layout.text or "", quote=True)
+        _re_arrow = re_obj.edge_style or "solid"
+        _re_rel_id = f"{re_obj.src_node_id}__{re_obj.dst_node_id}__{rei}"
         edge_elements.append(ScenePath(
             element_id=f"edge-{re_obj.src_node_id}-{re_obj.dst_node_id}-{rei}",
             commands=tuple(cmds),
@@ -955,7 +981,13 @@ def finalized_layout_to_scene(
                 fill=FillStyle(color="none"),
                 stroke=StrokeStyle(color=t.edge_stroke, width=stroke_w, dasharray=dasharray),
             ),
-            data_attrs=(("src", re_obj.src_node_id), ("dst", re_obj.dst_node_id)),
+            data_attrs=(
+                ("arrow", _re_arrow),
+                ("dst", re_obj.dst_node_id),
+                ("label", _edge_label_val),
+                ("relation-id", _re_rel_id),
+                ("src", re_obj.src_node_id),
+            ),
         ))
 
         if re_obj.label_layout and re_obj.label_layout.text:
@@ -989,9 +1021,11 @@ def finalized_layout_to_scene(
         description=f"Mermaid {diagram_type} diagram",
     )
 
+    _layout_direction = (getattr(layout, "direction", None) or "").upper()
     return SvgScene(
         scene_id=scene_id,
         diagram_type=diagram_type,
+        direction=_layout_direction,
         width=cw,
         height=ch,
         view_box=(0.0, 0.0, cw, ch),
