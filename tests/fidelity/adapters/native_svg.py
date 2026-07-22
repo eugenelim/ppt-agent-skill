@@ -444,6 +444,51 @@ class NativeSvgAdapter:
                 reason=f"{type(e).__name__}: {str(e)[:120]}",
                 source_sha256=source_sha256,
             )
+        except NativeRenderError as e:
+            # NativeRenderError(phase="not-implemented" or phase="dispatch" with
+            # NotImplementedError cause) means no native_builder is registered for
+            # this type — semantically equivalent to NATIVE_UNSUPPORTED.
+            # Other phases (build, serialize, geometry) are genuine failures → INTERNAL_ERROR.
+            _is_unimplemented = e.phase in ("not-implemented",) or (
+                e.phase == "dispatch" and isinstance(e.__cause__, NotImplementedError)
+            )
+            if _is_unimplemented:
+                return Observation(
+                    schema_version=1,
+                    case_id=case.id,
+                    implementation=impl,
+                    environment=env,
+                    parse_result=ParseObservation(
+                        accepted=False,
+                        diagram_type=getattr(e, "diagram_type", None) or case.diagram,
+                        error_category="unsupported_diagram_type",
+                        source_position=None,
+                    ),
+                    semantic=None,
+                    geometry=None,
+                    quality=None,
+                    status=ComparisonStatus.NATIVE_UNSUPPORTED,
+                    reason=f"NativeRenderError(not-implemented): {str(e)[:120]}",
+                    source_sha256=source_sha256,
+                )
+            return Observation(
+                schema_version=1,
+                case_id=case.id,
+                implementation=impl,
+                environment=env,
+                parse_result=ParseObservation(
+                    accepted=False,
+                    diagram_type=None,
+                    error_category="internal_error",
+                    source_position=None,
+                ),
+                semantic=None,
+                geometry=None,
+                quality=None,
+                status=ComparisonStatus.INTERNAL_ERROR,
+                reason=f"NativeRenderError: {str(e)[:120]}",
+                source_sha256=source_sha256,
+            )
         except ValueError as e:
             # Unrelated ValueError from renderer — not an unsupported-family signal.
             return Observation(

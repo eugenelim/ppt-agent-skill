@@ -241,7 +241,7 @@ def _rel_multiset_key(r: Relation) -> tuple:
         r.source or "",
         r.target or "",
         canonical_label(r.label),
-        r.arrow or "",
+        "",  # arrow: excluded from comparison — reference oracle never extracts arrow type
         r.attributes.get("cardinality_src") or "",
         r.attributes.get("cardinality_dst") or "",
     )
