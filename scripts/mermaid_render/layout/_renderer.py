@@ -1663,7 +1663,8 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             )
 
         # Fidelity data attributes for this node
-        _fid_label = _h(decoded_label)
+        # Strip <br> to space so the attribute value doesn't contain &lt;br&gt;
+        _fid_label = _h(decoded_label.replace("<br>", " "))
         _fid_parent = f' data-parent-id="{_h(nl.parent_group_id)}"' if nl.parent_group_id else ""
 
         # Special full-node renderings

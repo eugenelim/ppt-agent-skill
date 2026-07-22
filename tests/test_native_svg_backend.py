@@ -7,8 +7,14 @@ import re
 import pytest
 
 from scripts.mermaid_render import to_svg
+from scripts.mermaid_render.errors import (
+    NativeRendererUnavailable,
+    UnsupportedDiagramType,
+    NativeRenderError,
+)
 from scripts.mermaid_render.native_svg import (
     dispatch_native,
+    dispatch_native_result,
     _use_native,
     BACKEND_ENV,
     BACKEND_NATIVE,
@@ -168,10 +174,10 @@ class TestStateDiagram:
         assert "Idle" in svg or "Running" in svg
 
 
-# ── Stub types (mechanical migration) ────────────────────────────────────────
+# ── Legacy-only types — must raise NativeRendererUnavailable ──────────────────
 
-class TestStubMigration:
-    """Stub types must return valid SVG, even if placeholder content."""
+class TestLegacyOnlyTypes:
+    """LEGACY_ONLY types raise NativeRendererUnavailable from dispatch_native."""
 
     @pytest.mark.parametrize("src, dtype", [
         (SEQUENCE_DIAGRAM, "sequence"),
@@ -179,17 +185,20 @@ class TestStubMigration:
         ("gantt\n    title MyProject\n    section A\n    Task1 :t1, 2024-01-01, 7d\n", "gantt"),
         ("pie\n    title Colors\n    \"Red\" : 30\n    \"Blue\" : 70\n", "pie"),
     ])
-    def test_stub_returns_svg(self, src, dtype):
-        svg = dispatch_native(src)
-        assert "<svg" in svg, f"No <svg for {dtype}"
-        assert "<foreignObject" not in svg, f"foreignObject found for {dtype}"
+    def test_legacy_only_raises_native_renderer_unavailable(self, src, dtype):
+        with pytest.raises(NativeRendererUnavailable):
+            dispatch_native(src)
 
-    def test_stub_is_valid_xml(self):
-        from lxml import etree
-        src = "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n"
-        svg = dispatch_native(src)
-        body = re.sub(r"^<\?xml[^?]*\?>", "", svg.strip()).strip()
-        etree.fromstring(body.encode("utf-8"))
+    def test_legacy_only_is_value_error_subclass(self):
+        """NativeRendererUnavailable subclasses ValueError for backward compat."""
+        with pytest.raises(ValueError):
+            dispatch_native(SEQUENCE_DIAGRAM)
+
+    def test_dispatch_native_result_legacy_only_has_errors(self):
+        result = dispatch_native_result(SEQUENCE_DIAGRAM)
+        assert result.svg is None
+        assert result.errors
+        assert not result.is_success(strict=False)
 
 
 # ── to_svg() public API integration ──────────────────────────────────────────
@@ -225,9 +234,42 @@ class TestToSvgIntegration:
 class TestErrorHandling:
     def test_unsupported_sankey_raises(self):
         src = "sankey-beta\nA,B,10"
+        # UnsupportedDiagramType subclasses ValueError, so both assertions pass
         with pytest.raises(ValueError, match="not supported"):
             dispatch_native(src)
+
+    def test_unsupported_sankey_typed_error(self):
+        src = "sankey-beta\nA,B,10"
+        with pytest.raises(UnsupportedDiagramType) as exc_info:
+            dispatch_native(src)
+        assert exc_info.value.diagram_type == "sankey-beta"
 
     def test_empty_graph_raises(self):
         with pytest.raises(ValueError):
             dispatch_native("flowchart TD\n")
+
+    def test_unexpected_adapter_exception_becomes_native_render_error(self, monkeypatch):
+        """Unexpected builder exceptions must not be swallowed to stub — they raise NativeRenderError."""
+        import scripts.mermaid_render.native_svg as native_svg_mod
+
+        def _bad_builder(*a, **kw):
+            raise RuntimeError("adapter exploded")
+
+        monkeypatch.setattr(native_svg_mod, "_graph_topology_scene", _bad_builder)
+        with pytest.raises(NativeRenderError) as exc_info:
+            dispatch_native("flowchart TD\n    A-->B\n")
+        assert exc_info.value.__cause__ is not None
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+
+    def test_dispatch_native_result_wraps_unexpected_exception(self, monkeypatch):
+        """dispatch_native_result wraps unexpected exceptions in errors field."""
+        import scripts.mermaid_render.native_svg as native_svg_mod
+
+        def _bad_builder(*a, **kw):
+            raise RuntimeError("builder crashed")
+
+        monkeypatch.setattr(native_svg_mod, "_graph_topology_scene", _bad_builder)
+        result = dispatch_native_result("flowchart TD\n    A-->B\n")
+        assert result.svg is None
+        assert result.errors
+        assert not result.is_success()

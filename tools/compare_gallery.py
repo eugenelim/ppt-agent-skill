@@ -582,7 +582,9 @@ def _build_gallery_into(
 </html>""")
 
     has_failures = any(
-        vr.render == "fail" or vr.geometry == "fail"
+        vr.render == "fail"
+        or vr.geometry == "fail"
+        or vr.renderer_backend.endswith("-stub")
         for items in type_results.values()
         for _, _, vr, _, _, _, _ in items
     )
