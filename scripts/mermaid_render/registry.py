@@ -166,6 +166,126 @@ def _build_mindmap(request: object) -> tuple:  # type: ignore[type-arg]
     return scene, None
 
 
+def _build_sequencediagram(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _sequence_scene
+    scene = _sequence_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_erdiagram(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _er_scene
+    scene = _er_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_gantt(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _gantt_scene
+    scene = _gantt_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_quadrantchart(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _quadrant_scene
+    scene = _quadrant_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_pie(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _pie_scene
+    scene = _pie_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_xychart(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _xychart_scene
+    scene = _xychart_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_block(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _block_scene
+    scene = _block_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_packet(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _packet_scene
+    scene = _packet_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_kanban(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _kanban_scene
+    scene = _kanban_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_journey(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _journey_scene
+    scene = _journey_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_requirementdiagram(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _requirement_scene
+    scene = _requirement_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
+def _build_gitgraph(request: object) -> tuple:  # type: ignore[type-arg]
+    from .native_svg import _gitgraph_scene
+    scene = _gitgraph_scene(
+        request.clean_source,  # type: ignore[attr-defined]
+        request.direction,     # type: ignore[attr-defined]
+        request.width_hint,    # type: ignore[attr-defined]
+    )
+    return scene, None
+
+
 def _make(
     diagram_type: str,
     status: Literal["implemented", "experimental", "legacy-only", "unsupported"],
@@ -200,18 +320,18 @@ RENDERER_REGISTRY: dict[str, RendererCapability] = {
     "mindmap":           _make("mindmap",             "experimental", builder=_build_mindmap),
 
     # ── Experimental (Stage 6 PARTIAL builders; native output may vary) ──────────
-    "sequencediagram":   _make("sequencediagram",    "experimental"),
-    "erdiagram":         _make("erdiagram",           "experimental"),
-    "gantt":             _make("gantt",               "experimental"),
-    "quadrantchart":     _make("quadrantchart",       "experimental"),
-    "pie":               _make("pie",                 "experimental"),
-    "xychart-beta":      _make("xychart-beta",        "experimental"),
-    "block-beta":        _make("block-beta",          "experimental"),
-    "packet-beta":       _make("packet-beta",         "experimental"),
-    "kanban":            _make("kanban",              "experimental"),
-    "journey":           _make("journey",             "experimental"),
-    "requirementdiagram": _make("requirementdiagram", "experimental"),
-    "gitgraph":          _make("gitgraph",            "experimental"),
+    "sequencediagram":   _make("sequencediagram",    "experimental", builder=_build_sequencediagram),
+    "erdiagram":         _make("erdiagram",           "experimental", builder=_build_erdiagram),
+    "gantt":             _make("gantt",               "experimental", builder=_build_gantt),
+    "quadrantchart":     _make("quadrantchart",       "experimental", builder=_build_quadrantchart),
+    "pie":               _make("pie",                 "experimental", builder=_build_pie),
+    "xychart-beta":      _make("xychart-beta",        "experimental", builder=_build_xychart),
+    "block-beta":        _make("block-beta",          "experimental", builder=_build_block),
+    "packet-beta":       _make("packet-beta",         "experimental", builder=_build_packet),
+    "kanban":            _make("kanban",              "experimental", builder=_build_kanban),
+    "journey":           _make("journey",             "experimental", builder=_build_journey),
+    "requirementdiagram": _make("requirementdiagram", "experimental", builder=_build_requirementdiagram),
+    "gitgraph":          _make("gitgraph",            "experimental", builder=_build_gitgraph),
 
     # ── Unsupported (no DOM fallback either; requires dedicated engine) ───────
     "sankey-beta":       _make("sankey-beta",         "unsupported"),
