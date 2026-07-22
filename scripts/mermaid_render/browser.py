@@ -147,7 +147,7 @@ class BrowserSession:
 
         Matches the rendering contract of html2png.py:
           - viewport 1280×720, device_scale_factor=scale
-          - waits for networkidle, fonts.ready, and img loads
+          - waits for domcontentloaded, then fonts.ready and img loads
           - full-page screenshot when fullpage=True
 
         Page and context are closed in finally blocks after every render,
@@ -161,7 +161,7 @@ class BrowserSession:
         page.emulate_media(media="screen")
         _install_route(page)
         try:
-            page.goto("file://" + str(html_path), wait_until="networkidle", timeout=30000)
+            page.goto("file://" + str(html_path), wait_until="domcontentloaded", timeout=30000)
             page.evaluate(_FONTS_IMGS_READY)
             return page.screenshot(type="png", full_page=fullpage)
         finally:
@@ -173,6 +173,59 @@ class BrowserSession:
                 context.close()
             except Exception:
                 pass
+
+
+class SnapshotRasterSession:
+    """Snapshot raster session: one Browser, fresh BrowserContext+Page per render.
+
+    Uses page.set_content with domcontentloaded instead of page.goto with a blocking
+    navigation wait, eliminating the guaranteed ≥500 ms wait per render while preserving
+    pixel-stable output (page state doesn't accumulate across renders).
+
+    The URL-allowlist route handler (LLM01/ASI05) is installed on each page.
+
+    Use inside a BrowserSession context — shares its Browser instance:
+
+        with BrowserSession() as bs:
+            session = SnapshotRasterSession(bs._browser)
+            try:
+                png_bytes = session.render_html(html_string)
+            finally:
+                session.close()
+    """
+
+    def __init__(self, browser: "Browser") -> None:
+        self._browser = browser
+
+    def render_html(self, html: str) -> bytes:
+        """Render an HTML string to PNG bytes.
+
+        Creates a fresh BrowserContext+Page for each render to ensure pixel-stable
+        output across the full fixture corpus.
+        """
+        context = self._browser.new_context(
+            viewport={"width": 1280, "height": 720},
+            device_scale_factor=1.0,
+        )
+        page = context.new_page()
+        page.emulate_media(media="screen")
+        _install_route(page)  # LLM01/ASI05
+        try:
+            page.set_content(html, wait_until="domcontentloaded")
+            page.evaluate(_FONTS_IMGS_READY)
+            return page.screenshot(type="png", full_page=True)
+        finally:
+            try:
+                page.close()
+            except Exception:
+                pass
+            try:
+                context.close()
+            except Exception:
+                pass
+
+    def close(self) -> None:
+        """No-op: context+page are closed after each render_html call."""
 
 
 @contextmanager

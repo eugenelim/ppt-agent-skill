@@ -490,6 +490,55 @@ Radial mode remains unchanged when `layout: tidy-tree` is absent.
 
 **Deferred from `mermaid-fidelity-hardening` AC 20:** Extract exact Mermaid/mmdc/Node/Playwright/Chromium version provenance by probing the live environment at capture time. Unblocked when browser environment is available in CI.
 
+---
+
+## mermaid-test-perf-pass2
+
+### playwright-gated-snapshot-verification
+
+**Deferred from `mermaid-test-perf-pass2` AC-C3, AC-F1, AC-F4, AC-J1:** These ACs require a
+live Playwright+Chromium environment to verify:
+
+- **AC-C3**: `mermaid_render.to_png(FLOWCHART_SRC)` output is byte-identical before and after
+  the networkidle → domcontentloaded change in `_to_png_from_svg_string`.
+- **AC-F1**: A normal snapshot run launches exactly one `BrowserSession`; `SnapshotRasterSession`
+  creates a fresh `BrowserContext+Page` per render (one `new_context` call per `render_html` call).
+- **AC-F4**: Snapshot baselines captured before this PR pass against renders using
+  `set_content+domcontentloaded` — confirmed locally (36 of 38 ran pass; 2 pre-existing
+  sequence-basic failures unrelated).
+- **AC-J1**: `pytest --run-snapshots-quick tests/test_snapshots.py` collects exactly 42 items
+  (the conftest filter selects the 42; within-test skips for no-baseline fixtures are expected).
+
+Unblocked when playwright/Chromium are available in CI. Add a CI job step that runs
+`pytest --run-snapshots-quick tests/test_snapshots.py` and asserts exit code 0 (excluding
+the pre-existing sequence-basic failures via `-k "not sequence-basic"`).
+
+### batch-mmdc
+
+**Deferred from `mermaid-test-perf-pass2` Item I:** Batch live mmdc reference rendering in
+`test_oracle.py` to reduce subprocess spawning overhead. Currently each `--run-external-reference`
+oracle comparison spawns one mmdc process per fixture. Batching (pipe multiple fixtures through one
+mmdc invocation) requires multi-process coordination and is complex enough to deserve its own spec.
+Unblocked by writing a dedicated `batch-mmdc` spec when the oracle latency becomes a CI bottleneck.
+
+### gpu-benchmark
+
+**Deferred from `mermaid-test-perf-pass2` Item K:** Benchmark `--disable-gpu` vs. hardware-GPU
+render path on CI. Cannot benchmark without a benchmarking setup that measures Chromium render
+time per-fixture. Unblocked when CI has a stable timing baseline and playwright/Chromium are
+available in the benchmark environment. Candidate: add a `--benchmark` flag to `pytest --run-snapshots`
+that emits per-fixture render times via `time.perf_counter` around `session.render_html`.
+
+### xdist-snapshot-guard
+
+**Deferred from `mermaid-test-perf-pass2` AC-B1:** Behavioral test for the snapshot xdist guard —
+verify that `pytest --run-snapshots -n 2` raises `pytest.UsageError`. Requires `pytest-xdist`
+installed; currently not in requirements. The conftest guard code is present (structural AC-B1 met);
+only the behavioral assertion is deferred. Unblocked by adding `pytest-xdist` to dev requirements
+and writing a subprocess test that asserts `rc != 0` and `"not xdist-safe"` in stderr.
+
+---
+
 ### backlog-mermaid-p0-label-width-cap
 
 **Deferred from `mermaid-native-p0`:** `_est_label_w` in `layout/_routing.py` caps at 450px while

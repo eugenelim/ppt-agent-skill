@@ -113,6 +113,7 @@ if __name__ == "__main__":
     sys.exit(main())
 
 
+@pytest.mark.browser
 class TestOutOfRootImageConfinement:
     """Deck-root confinement: images outside root are skipped + warned (requires Chromium)."""
 

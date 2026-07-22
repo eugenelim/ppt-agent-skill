@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .browser import get_browser, new_page
+from .browser import _FONTS_IMGS_READY, get_browser, new_page
 
 
 def convert(html_dir: Path, output_dir: Path, scale: float = 1.0, full_page: bool = False) -> bool:
@@ -35,17 +35,8 @@ def convert(html_dir: Path, output_dir: Path, scale: float = 1.0, full_page: boo
             for f in html_files:
                 page = new_page(browser, width=1280, height=720, scale=scale)
                 try:
-                    page.goto("file://" + str(f), wait_until="networkidle", timeout=30000)
-                    page.evaluate(
-                        """async () => {
-                            await document.fonts.ready;
-                            const imgs = Array.from(document.querySelectorAll('img'));
-                            await Promise.all(imgs.map(img => {
-                                if (img.complete) return Promise.resolve();
-                                return new Promise(r => { img.onload = r; img.onerror = r; });
-                            }));
-                        }"""
-                    )
+                    page.goto("file://" + str(f), wait_until="domcontentloaded", timeout=30000)
+                    page.evaluate(_FONTS_IMGS_READY)
                     out_path = output_dir / (f.stem + ".png")
                     if full_page:
                         page.screenshot(path=str(out_path), type="png", full_page=True)
@@ -77,17 +68,8 @@ def _to_png_from_html_file(html_path: Path, scale: float = 1.0) -> bytes:
     with get_browser() as browser:
         page = new_page(browser, width=1280, height=720, scale=scale)
         try:
-            page.goto("file://" + str(html_path), wait_until="networkidle", timeout=30000)
-            page.evaluate(
-                """async () => {
-                    await document.fonts.ready;
-                    const imgs = Array.from(document.querySelectorAll('img'));
-                    await Promise.all(imgs.map(img => {
-                        if (img.complete) return Promise.resolve();
-                        return new Promise(r => { img.onload = r; img.onerror = r; });
-                    }));
-                }"""
-            )
+            page.goto("file://" + str(html_path), wait_until="domcontentloaded", timeout=30000)
+            page.evaluate(_FONTS_IMGS_READY)
             return page.screenshot(type="png", full_page=True)
         finally:
             try:
@@ -115,7 +97,8 @@ def _to_png_from_svg_string(svg_str: str, scale: float = 1.0) -> bytes:
     with get_browser() as browser:
         page = new_page(browser, width=1280, height=720, scale=scale)
         try:
-            page.set_content(html, wait_until="networkidle")
+            page.set_content(html, wait_until="domcontentloaded")
+            page.evaluate(_FONTS_IMGS_READY)
             return page.screenshot(type="png", full_page=True)
         finally:
             try:

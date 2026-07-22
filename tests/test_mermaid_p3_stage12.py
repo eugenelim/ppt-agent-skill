@@ -131,8 +131,9 @@ def test_svg_width_matches_view_box():
 
 # ── Task D: to_png native SVG path ───────────────────────────────────────────
 
-def test_to_png_returns_bytes():
-    """to_png returns PNG bytes for a supported diagram type."""
+@pytest.mark.browser
+def test_to_png_returns_bytes(browser_lock):
+    """to_png returns PNG bytes for a supported diagram type (requires Playwright)."""
     import mermaid_render
     result = mermaid_render.to_png(FLOWCHART_SRC)
     assert isinstance(result, bytes)
