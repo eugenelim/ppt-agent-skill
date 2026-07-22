@@ -371,11 +371,10 @@ Replace raw transform strings with typed `Translate/Scale/Rotate/Matrix`.
 
 ### backlog-mermaid-p3-type-migrations
 
-**Deferred from `mermaid-p3` Stage 6:** Implement all twelve placeholder types as real native
-scene builders using shared Pillow text service and PaintTokens. Types: sequenceDiagram, erDiagram,
-gantt, quadrantChart, pie, xychart-beta, block-beta, packet-beta, kanban, journey,
-requirementDiagram, gitGraph. Each requires an immutable compiled model and scene serializer.
-See Stage 6 Wave A-D breakdown in the spec attachment.
+~~**COMPLETED in Stage 6 (PR #93).**~~ All twelve types shipped as PARTIAL native scene builders:
+sequenceDiagram, erDiagram, gantt, quadrantChart, pie, xychart-beta, block-beta, packet-beta,
+kanban, journey, requirementDiagram, gitGraph. Each parses Mermaid source and produces a real
+SvgScene. 206 tests pass. Registry updated from `legacy-only` → `experimental`.
 
 ### backlog-mermaid-p3-timeline
 

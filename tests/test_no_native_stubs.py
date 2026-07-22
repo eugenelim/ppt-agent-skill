@@ -110,32 +110,33 @@ def test_architecture_exception_propagates():
             to_svg("architecture-beta\n  service A(server)[Server]")
 
 
-# ── Not-implemented directive raises, not placeholder ─────────────────────────
+# ── Stage 6 types produce SVG, not a placeholder ─────────────────────────────
 
 @pytest.mark.parametrize("src", [
-    "sequenceDiagram\nA->>B: hello",
+    "sequenceDiagram\nAlice->>Bob: hello",
     "erDiagram\n  PERSON { string name }",
-    "gantt\n  title G\n  section A\n    Task : 2024-01-01, 2d",
+    "gantt\n  title G\n  section A\n    Task :t1, 2024-01-01, 7d",
     "quadrantChart\n  x-axis Low --> High\n  y-axis Low --> High",
     "pie\n  title Pets\n  \"Dogs\" : 386",
     "xychart-beta\n  x-axis [a, b, c]\n  y-axis 0 --> 10\n  bar [5, 3, 8]",
     "block-beta\n  A B C",
     "packet-beta\n  0-7: Source Port",
     "kanban\n  column1\n    item1[Task 1]",
-    "journey\n  title My working day\n  section Go to work",
-    "requirementDiagram\n  requirement req1 { id: 1 }",
+    "journey\n  title My day\n  section Go\n    Task: 5: Me",
+    "requirementDiagram\n  requirement req1 {\n    id: 1\n    text: Example\n  }",
     "gitGraph\n  commit",
 ])
-def test_not_implemented_directive_raises_native_render_error(src):
-    """NOT_IMPLEMENTED diagram types must raise NativeRenderError, not return SVG."""
+def test_stage6_directive_produces_svg(src):
+    """Stage 6 PARTIAL types must return real SVG, not raise NativeRenderError."""
     import os
     from scripts.mermaid_render import to_svg
-    from scripts.mermaid_render.native_svg import NativeRenderError
 
     env = {"MERMAID_RENDER_SVG_BACKEND": "native"}
     with patch.dict(os.environ, env):
-        with pytest.raises((NativeRenderError, ValueError)):
-            to_svg(src)
+        result = to_svg(src)
+
+    assert result, f"Empty result for source: {src[:40]!r}"
+    assert "<svg" in result, f"No <svg> tag for source: {src[:40]!r}"
 
 
 # ── Unknown directive raises explicitly ───────────────────────────────────────

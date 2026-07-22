@@ -56,9 +56,9 @@ class TestRegistry:
         from scripts.mermaid_render.registry import RENDERER_REGISTRY
         assert RENDERER_REGISTRY["statediagram-v2"].native_status == "implemented"
 
-    def test_sequence_is_legacy_only(self):
+    def test_sequence_is_experimental(self):
         from scripts.mermaid_render.registry import RENDERER_REGISTRY
-        assert RENDERER_REGISTRY["sequencediagram"].native_status == "legacy-only"
+        assert RENDERER_REGISTRY["sequencediagram"].native_status == "experimental"
 
     def test_sankey_is_unsupported(self):
         from scripts.mermaid_render.registry import RENDERER_REGISTRY
@@ -217,12 +217,11 @@ class TestDispatchNativeResult:
         # Currently "unvalidated" — this is the correct transient state
         assert result.geometry in ("passed", "unvalidated")
 
-    def test_legacy_only_returns_error_result(self):
+    def test_sequence_produces_render_result(self):
         from scripts.mermaid_render import dispatch_native_result
         result = dispatch_native_result("sequenceDiagram\n    Alice->>Bob: Hi\n")
-        assert result.svg is None
-        assert result.errors
-        assert not result.is_success(strict=False)
+        assert result.svg is not None
+        assert "<svg" in result.svg
 
 
 # ── Typed errors ──────────────────────────────────────────────────────────────
@@ -280,28 +279,28 @@ class TestToSvgFallback:
         with pytest.raises(ValueError, match="Unknown fallback"):
             to_svg("flowchart TD\n    A-->B\n", fallback="unknown")
 
-    def test_no_fallback_legacy_raises_native_render_error(self, monkeypatch):
+    def test_native_sequence_produces_svg(self, monkeypatch):
+        """sequenceDiagram is now a PARTIAL native builder; no fallback needed."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
-        from scripts.mermaid_render.errors import NativeRenderError
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
-        with pytest.raises(NativeRenderError) as exc_info:
-            to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
-        assert exc_info.value.phase == "not-implemented"
+        result = to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
+        assert "<svg" in result
 
-    def test_fallback_legacy_dom_catches_not_implemented(self, monkeypatch):
-        """With fallback='legacy-dom', NativeRenderError(phase='not-implemented') is not propagated."""
+    def test_fallback_legacy_dom_does_not_raise_for_sequence(self, monkeypatch):
+        """sequenceDiagram is native; fallback='legacy-dom' should not affect it."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
         from scripts.mermaid_render.errors import NativeRenderError
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
         try:
-            to_svg(
+            result = to_svg(
                 "sequenceDiagram\n    Alice->>Bob: Hi\n",
                 fallback="legacy-dom",
             )
+            assert "<svg" in result
         except NativeRenderError as e:
             if e.phase == "not-implemented":
-                pytest.fail("Should not raise NativeRenderError(phase='not-implemented') with fallback='legacy-dom'")
+                pytest.fail("sequenceDiagram should not raise NativeRenderError(phase='not-implemented')")
         except Exception:
-            pass  # Playwright may not be installed; that's fine
+            pass  # Playwright unavailability is fine; the native path should not raise
