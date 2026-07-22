@@ -81,41 +81,73 @@ def cmd_run(
         print(f"✗ Manifest load failed: {e}", file=sys.stderr)
         return 1
 
+    # Validate --case ID before running
+    if args.case_id:
+        known_ids = {c.id for c in manifest.cases}
+        if args.case_id not in known_ids:
+            print(
+                f"✗ Unknown case ID: {args.case_id!r}. "
+                f"Known cases: {sorted(known_ids)}",
+                file=sys.stderr,
+            )
+            return 1
+
     profile = profile_loader(args.profile)
     runner = runner_factory(profile)
     case_ids = [args.case_id] if args.case_id else None
 
-    summary = runner.run_all(manifest, profile, args.ref_id, case_ids=case_ids)
+    try:
+        summary = runner.run_all(manifest, profile, args.ref_id, case_ids=case_ids)
+    except ValueError as e:
+        print(f"✗ Run error: {e}", file=sys.stderr)
+        return 1
 
     report_dir = args.report_dir
     json_path = generate_json_report(summary, report_dir, args.ref_id)
     md_path = generate_md_report(summary, report_dir, args.ref_id)
     html_path = generate_html_report(summary, report_dir, args.ref_id)
 
-    print(f"\nFidelity report: {summary.passed}/{summary.total} passed")
+    # Print lifecycle-aware summary
+    print(f"\nActive compatibility: {summary.active_passed}/{summary.active_total} passed")
+    if summary.active_failed:
+        print(f"  {summary.active_failed} active case(s) failed")
+    print(
+        f"Planned coverage: {summary.planned_unsupported}/{summary.planned_total} unsupported "
+        f"(expected — native support not yet implemented)"
+    )
+    print(f"\nFidelity report: {summary.passed}/{summary.total} total passed")
     print(f"  JSON: {json_path}")
     print(f"  Markdown: {md_path}")
     print(f"  HTML: {html_path}")
 
-    _print_failures(summary)
+    _print_failures(summary, manifest)
 
     # Hard-fail statuses — nonzero exit for any of these.
     # Scored metric differences alone do not gate CI (Phase 1).
-    # NATIVE_UNSUPPORTED is excluded: stub diagram types are expected and acceptable.
+    # NATIVE_UNSUPPORTED is only acceptable for planned cases.
     _HARD_FAIL_STATUSES = {
         ComparisonStatus.PARSE_MISMATCH,
         ComparisonStatus.SEMANTIC_MISMATCH,
         ComparisonStatus.RELATIVE_LAYOUT_MISMATCH,
         ComparisonStatus.QUALITY_FAILURE,
         ComparisonStatus.EXTRACTOR_GAP,
+        ComparisonStatus.REFERENCE_RENDER_FAILURE,
         ComparisonStatus.STALE_ORACLE,
         ComparisonStatus.INVALID_MANIFEST,
         ComparisonStatus.NONDETERMINISTIC,
         ComparisonStatus.INTERNAL_ERROR,
     }
+    lifecycle_by_id = {c.id: getattr(c, "lifecycle", "active") for c in manifest.cases}
     strict_failures = [
         r for r in summary.results
         if r.final_status in _HARD_FAIL_STATUSES
+        or (
+            # Belt-and-suspenders: runner.run_all() already escalates active
+            # NATIVE_UNSUPPORTED to INTERNAL_ERROR, so this branch is normally
+            # unreachable — but kept here as a safety net.
+            r.final_status == ComparisonStatus.NATIVE_UNSUPPORTED
+            and lifecycle_by_id.get(r.case_id, "active") == "active"
+        )
     ]
     if strict_failures:
         print(f"\n✗ {len(strict_failures)} strict failure(s)", file=sys.stderr)
@@ -141,6 +173,9 @@ def cmd_capture_reference(
         print(f"✗ Manifest load failed: {e}", file=sys.stderr)
         return 1
 
+    import shutil
+    import os
+
     output_dir = args.output / args.ref_id
     cases_dir = output_dir / "cases"
     env_path = output_dir / "environment.json"
@@ -159,35 +194,71 @@ def cmd_capture_reference(
     profile = profile_loader("mermaid-neutral")
     ref_adapter = ref_adapter_factory()
 
-    cases_dir.mkdir(parents=True, exist_ok=True)
+    # Transactional capture: write to a sibling temp dir (same filesystem → rename-atomic),
+    # gate on zero hard errors, then replace.
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tmp_cases = output_dir / f".cases_tmp_{os.getpid()}"
+    tmp_env = output_dir / f".env_tmp_{os.getpid()}.json"
+    try:
+        tmp_cases.mkdir()
 
-    errors = 0
-    for case in manifest.cases:
-        print(f"  Capturing {case.id}…", end="", flush=True)
-        obs = ref_adapter.observe(case, profile)
-        obs.capture_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        save_json(obs, cases_dir / f"{case.id}.json")
-        status = obs.status.value
-        print(f" {status}")
-        if obs.status not in (ComparisonStatus.PASS, ComparisonStatus.EXTRACTOR_GAP):
-            errors += 1
+        errors = 0
+        for case in manifest.cases:
+            print(f"  Capturing {case.id}…", end="", flush=True)
+            obs = ref_adapter.observe(case, profile)
+            obs.capture_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            save_json(obs, tmp_cases / f"{case.id}.json")
+            status = obs.status.value
+            print(f" {status}")
+            if obs.status not in (ComparisonStatus.PASS, ComparisonStatus.EXTRACTOR_GAP):
+                errors += 1
 
-    # Write environment.json
-    identity = ref_adapter.identity()
-    env_data = {
-        "ref_id": args.ref_id,
-        "adapter": {
-            "name": identity.name,
-            "version": identity.version,
-            "adapter_version": identity.adapter_version,
-        },
-        "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    }
-    save_json(env_data, env_path)
+        if errors > 0:
+            shutil.rmtree(tmp_cases, ignore_errors=True)
+            print(
+                f"\n✗ {errors} observation(s) failed — oracle NOT updated; "
+                f"fix failures and retry.",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Write environment.json
+        identity = ref_adapter.identity()
+        env_data = {
+            "ref_id": args.ref_id,
+            "adapter": {
+                "name": identity.name,
+                "version": identity.version,
+                "adapter_version": identity.adapter_version,
+            },
+            "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        }
+        save_json(env_data, tmp_env)
+
+        # Near-atomic replace: rename sibling temp dirs over the targets.
+        # If cases_dir already exists, rename it aside first.
+        old_cases = output_dir / f".cases_old_{os.getpid()}"
+        if cases_dir.exists():
+            cases_dir.rename(old_cases)
+        try:
+            tmp_cases.rename(cases_dir)
+        except Exception:
+            if old_cases.exists():
+                old_cases.rename(cases_dir)  # restore original
+            raise
+        if old_cases.exists():
+            shutil.rmtree(old_cases, ignore_errors=True)
+
+        tmp_env.rename(env_path)
+
+    except Exception:
+        if tmp_cases.exists():
+            shutil.rmtree(tmp_cases, ignore_errors=True)
+        if tmp_env.exists():
+            tmp_env.unlink(missing_ok=True)
+        raise
 
     print(f"\n✓ Captured {len(manifest.cases)} cases to {output_dir}")
-    if errors:
-        print(f"  {errors} non-PASS/non-gap observation(s)")
     return 0
 
 
@@ -202,13 +273,13 @@ def cmd_determinism(
     from .serialization import save_json
     import json
 
+    # Only active-lifecycle cases test determinism: sequence/er are planned and
+    # their NATIVE_UNSUPPORTED result is trivially stable — not a useful signal.
     _DETERMINISM_CASES = {
         "flowchart.groups.complex",
         "flowchart.parallel.links",
         "flowchart.shapes.new",
-        "sequence.complex",
         "architecture.groups.complex",
-        "er.ecommerce",
     }
 
     try:
@@ -244,10 +315,15 @@ def cmd_determinism(
     return 0
 
 
-def _print_failures(summary: Any) -> None:
+def _print_failures(summary: Any, manifest: Any = None) -> None:
     from .models import ComparisonStatus
+    lifecycle_by_id: dict[str, str] = {}
+    if manifest is not None:
+        lifecycle_by_id = {c.id: getattr(c, "lifecycle", "active") for c in manifest.cases}
     for r in summary.results:
         if r.final_status != ComparisonStatus.PASS:
-            print(f"  {r.final_status.value:<30} {r.case_id}")
+            lifecycle = lifecycle_by_id.get(r.case_id, "active")
+            tag = f"[{lifecycle}]"
+            print(f"  {r.final_status.value:<30} {r.case_id} {tag}")
             if r.reason:
                 print(f"    → {r.reason[:100]}")

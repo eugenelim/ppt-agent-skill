@@ -9,31 +9,16 @@ import tomllib
 from pathlib import Path
 
 from .models import FidelityCase, FidelityManifest
+from .registry import get_capability, strict_check_names, scored_check_names, ignored_check_names
 
+
+_KNOWN_LIFECYCLES: frozenset[str] = frozenset({"active", "planned"})
 
 _KNOWN_DIAGRAMS: frozenset[str] = frozenset({
     "flowchart", "sequence", "architecture", "er",
     "class", "state", "gantt", "timeline", "mindmap",
     "c4", "block", "packet", "kanban", "pie", "xychart",
     "gitgraph", "journey", "requirement", "sankey", "quadrant", "zenuml",
-})
-
-_KNOWN_STRICT_CHECKS: frozenset[str] = frozenset({
-    "parse", "diagram-type", "entities", "relations", "labels",
-    "direction", "containment", "edge-endpoints", "actor-order",
-    "message-order", "cardinality", "identifying",
-})
-
-_KNOWN_SCORED_CHECKS: frozenset[str] = frozenset({
-    "entity-centers", "entity-sizes", "canvas-aspect",
-    "connector-paths", "text-lines", "group-padding",
-    "crossing-count", "bend-count", "whitespace-density",
-    "endpoint-side",
-})
-
-_KNOWN_IGNORED: frozenset[str] = frozenset({
-    "palette", "shadow", "corner-radius", "raw-dom-structure",
-    "raw-pixels", "font-glyph", "animation", "transition",
 })
 
 
@@ -102,27 +87,38 @@ def parse_manifest(
                 f"Known: {sorted(_KNOWN_DIAGRAMS)}"
             )
 
+        lifecycle = cr.get("lifecycle", "active")
+        if lifecycle not in _KNOWN_LIFECYCLES:
+            raise ManifestValidationError(
+                f"Case {case_id!r}: unknown lifecycle {lifecycle!r}. "
+                f"Known: {sorted(_KNOWN_LIFECYCLES)}"
+            )
+
         strict: list[str] = cr.get("strict", [])
         scored: list[str] = cr.get("scored", [])
         ignored: list[str] = cr.get("ignored", [])
 
+        _strict_names = strict_check_names()
+        _scored_names = scored_check_names()
+        _ignored_names = ignored_check_names()
+
         for chk in strict:
-            if chk not in _KNOWN_STRICT_CHECKS:
+            if chk not in _strict_names:
                 raise ManifestValidationError(
                     f"Case {case_id!r}: unknown strict check {chk!r}. "
-                    f"Known strict checks: {sorted(_KNOWN_STRICT_CHECKS)}"
+                    f"Known strict checks: {sorted(_strict_names)}"
                 )
         for chk in scored:
-            if chk not in _KNOWN_SCORED_CHECKS:
+            if chk not in _scored_names:
                 raise ManifestValidationError(
                     f"Case {case_id!r}: unknown scored check {chk!r}. "
-                    f"Known scored checks: {sorted(_KNOWN_SCORED_CHECKS)}"
+                    f"Known scored checks: {sorted(_scored_names)}"
                 )
         for chk in ignored:
-            if chk not in _KNOWN_IGNORED:
+            if chk not in _ignored_names:
                 raise ManifestValidationError(
                     f"Case {case_id!r}: unknown ignored check {chk!r}. "
-                    f"Known ignored: {sorted(_KNOWN_IGNORED)}"
+                    f"Known ignored: {sorted(_ignored_names)}"
                 )
 
         all_checks = strict + scored + ignored
@@ -141,6 +137,7 @@ def parse_manifest(
             source_path=source_path,
             source=source_text,
             diagram=diagram,
+            lifecycle=lifecycle,
             tags=list(cr.get("tags", [])),
             strict=strict,
             scored=scored,

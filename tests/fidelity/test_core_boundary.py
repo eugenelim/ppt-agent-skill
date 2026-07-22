@@ -32,6 +32,7 @@ CORE_MODULES = [
     "mermaid_fidelity.serialization",
     "mermaid_fidelity.canonical",
     "mermaid_fidelity.manifest",
+    "mermaid_fidelity.registry",
     "mermaid_fidelity.adapters",
     "mermaid_fidelity.compare.semantic",
     "mermaid_fidelity.compare.geometry",
@@ -145,6 +146,36 @@ def test_no_absolute_paths_in_core_source():
                 pytest.fail(
                     f"{py_file.relative_to(_REPO)}:{line_no}: absolute home path: {line.strip()!r}"
                 )
+
+
+def test_registry_all_names_nonempty():
+    """all_check_names() returns a non-empty frozenset of strings."""
+    from mermaid_fidelity.registry import all_check_names
+    names = all_check_names()
+    assert isinstance(names, frozenset)
+    assert len(names) > 0
+    for name in names:
+        assert isinstance(name, str) and name, f"invalid name: {name!r}"
+
+
+def test_registry_policy_sets_disjoint():
+    """strict, scored, and ignored check-name sets must be mutually exclusive."""
+    from mermaid_fidelity.registry import strict_check_names, scored_check_names, ignored_check_names
+    strict = strict_check_names()
+    scored = scored_check_names()
+    ignored = ignored_check_names()
+    assert strict.isdisjoint(scored), f"strict ∩ scored = {strict & scored}"
+    assert strict.isdisjoint(ignored), f"strict ∩ ignored = {strict & ignored}"
+    assert scored.isdisjoint(ignored), f"scored ∩ ignored = {scored & ignored}"
+
+
+def test_registry_all_names_resolves():
+    """Every name returned by all_check_names() resolves via get_capability()."""
+    from mermaid_fidelity.registry import all_check_names, get_capability
+    for name in all_check_names():
+        cap = get_capability(name)
+        assert cap is not None, f"get_capability({name!r}) returned None"
+        assert cap.name == name
 
 
 def test_public_api_symbols_exported():

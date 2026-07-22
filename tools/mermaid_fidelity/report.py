@@ -35,8 +35,16 @@ def generate_md_report(
     lines.append("# Mermaid Fidelity Report — Phase 1")
     lines.append(f"\nReference: `{ref_id}`")
     lines.append(f"\n**{summary.passed}/{summary.total}** cases passed")
+    lines.append(f"\n### Lifecycle Breakdown\n")
+    lines.append(f"- **Active** (native-rendered): {summary.active_passed}/{summary.active_total} passed")
+    if summary.active_failed:
+        lines.append(f"  - {summary.active_failed} active failure(s) — must be fixed before merge")
+    lines.append(
+        f"- **Planned** (native not yet implemented): "
+        f"{summary.planned_unsupported}/{summary.planned_total} unsupported (expected)"
+    )
     if summary.semantic_mismatches:
-        lines.append(f"- {summary.semantic_mismatches} semantic mismatch(es)")
+        lines.append(f"\n- {summary.semantic_mismatches} semantic mismatch(es)")
     if summary.quality_failures:
         lines.append(f"- {summary.quality_failures} quality failure(s)")
     if summary.extractor_gaps:
@@ -106,6 +114,7 @@ th{{background:#f0f0f0;}}
 <h1>Mermaid Fidelity Report — Phase 1</h1>
 <p>Reference: <code>{ref_id}</code></p>
 <p><strong>{summary.passed}/{summary.total}</strong> cases passed</p>
+<p>Active: {summary.active_passed}/{summary.active_total} | Planned unsupported: {summary.planned_unsupported}/{summary.planned_total}</p>
 <table>
 <tr><th>Case</th><th>Status</th><th>Reason</th></tr>
 {rows}
@@ -176,6 +185,11 @@ def _build_report_dict(summary: RunSummary, ref_id: str) -> dict:
         "summary": {
             "total": summary.total,
             "passed": summary.passed,
+            "active_total": summary.active_total,
+            "active_passed": summary.active_passed,
+            "active_failed": summary.active_failed,
+            "planned_total": summary.planned_total,
+            "planned_unsupported": summary.planned_unsupported,
             "semantic_mismatches": summary.semantic_mismatches,
             "quality_failures": summary.quality_failures,
             "extractor_gaps": summary.extractor_gaps,

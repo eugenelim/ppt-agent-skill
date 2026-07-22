@@ -163,7 +163,8 @@ def run_quality_checks(
                 details={"bbox": _bbox_dict(eg.bbox)},
             ))
 
-    # Group containment violations
+    # Group containment violations.
+    # Convention: containment tuples are (child_id, parent_id).
     grp_by_id = {gg.group_id: gg.bbox for gg in geo.groups}
     for child_id, parent_id in geo.containment:
         if parent_id in grp_by_id and child_id in {eg.entity_id for eg in geo.entities}:
@@ -185,6 +186,7 @@ def run_quality_checks(
         for i in range(len(ents)):
             for j in range(i + 1, len(ents)):
                 # Skip entities that are in parent-child relationships
+                # Containment tuples are (child_id, parent_id).
                 related = {
                     (c, p) for c, p in geo.containment
                     if c in (ents[i].entity_id, ents[j].entity_id)

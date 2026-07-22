@@ -420,3 +420,29 @@ tests with source-label + node-count + edge-count + shape-role assertions for ev
 fixture. Fixture capability matrix (27 gallery fixtures). SVG-to-PowerPoint compatibility for every
 supported type. Oracle metrics comparison. Complete gallery with provenance metadata.
 
+### backlog-mindmap-tidy-tree
+
+**Deferred from `mermaid-p3` Stage 7 and `mermaid-p2`:** Implement Reingold-Tilford/Buchheim
+variable-size tidy-tree layout for Mind Map. Activated by `config: { layout: tidy-tree }` in
+frontmatter. Required algorithm phases: first walk, apportion, move subtree, execute shifts,
+second walk, normalization. Two-sided layout: root at center, split root children left/right
+deterministically. Mirror left side, align both sides to root, resolve vertical overlap.
+Radial mode remains unchanged when `layout: tidy-tree` is absent.
+
+## mermaid-fidelity-hardening
+
+### mmdc-oracle-recapture
+
+**Deferred from `mermaid-fidelity-hardening` ACs 18–19:** Re-run `capture-reference` with mmdc available and commit new oracle JSON that includes `source_sha256` fields. Until recaptured, oracle observations don't carry hashes and stale-oracle detection is inert on real data. Unblocked when mmdc/Node.js/Playwright are available in CI or a one-off runner.
+
+### mmdc-geometry-capture
+
+**Deferred from `mermaid-fidelity-hardening` ACs 14 and 16:** Extend the reference adapter to extract per-entity bounding boxes and group geometry from real mmdc SVG renders. Currently reference observations carry no geometry data (geometry is empty/None). Unblocked when mmdc is available.
+
+### browser-geometry-capture
+
+**Deferred from `mermaid-fidelity-hardening` AC 15:** Extend the reference adapter to sample connector paths (edge routing geometry) via Playwright. Unblocked when Playwright + Chromium are available in the capture environment.
+
+### browser-probing
+
+**Deferred from `mermaid-fidelity-hardening` AC 20:** Extract exact Mermaid/mmdc/Node/Playwright/Chromium version provenance by probing the live environment at capture time. Unblocked when browser environment is available in CI.
