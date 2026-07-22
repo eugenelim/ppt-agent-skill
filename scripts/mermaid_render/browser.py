@@ -1,24 +1,45 @@
 """Shared Playwright launcher for the PPT-agent render pipeline.
 
-Provides get_browser(), _setup_page(), _url_allowed(), and _within_deck_root().
-All scripts that spawn headless Chromium import from this module.
+Provides BrowserSession, get_browser(), _setup_page(), _url_allowed(), and
+_within_deck_root(). All scripts that spawn headless Chromium import from here.
 
 Security controls:
 - _url_allowed: blocks every scheme except file:// and data: (LLM01/ASI05)
 - _within_deck_root: symlink-safe path confinement (LLM05/CWE-22)
+
+Browser lifecycle
+-----------------
+Use BrowserSession as an explicit context manager when rendering multiple inputs
+through a single Chromium process:
+
+    with BrowserSession() as session:
+        png1 = session.render_to_png(html_path_1)
+        png2 = session.render_to_png(html_path_2)
+
+Each render_to_png call gets a fresh BrowserContext + Page, closed deterministically
+in finally blocks. The browser and Playwright driver close at session exit.
+
+Use get_browser() for legacy one-shot callers — it is a thin wrapper around
+BrowserSession and carries identical error semantics.
+
+Chromium provisioning
+---------------------
+Neither BrowserSession nor get_browser() installs Chromium automatically.
+If the Chromium executable is absent, a RuntimeError is raised immediately
+with instructions. Run: playwright install chromium
 """
 
 from __future__ import annotations
 
-import os
-import subprocess
-import sys
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
+from typing import TYPE_CHECKING, Generator
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Browser, Page
 
 try:
-    from playwright.sync_api import Browser, Page, sync_playwright
+    from playwright.sync_api import sync_playwright
     _PLAYWRIGHT_AVAILABLE = True
 except ImportError:
     _PLAYWRIGHT_AVAILABLE = False
@@ -42,6 +63,15 @@ def _within_deck_root(path: "Path | str", deck_root: "Path | str") -> bool:
 
 _LAUNCH_ARGS = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"]
 
+_FONTS_IMGS_READY = """async () => {
+    await document.fonts.ready;
+    const imgs = Array.from(document.querySelectorAll('img'));
+    await Promise.all(imgs.map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise(r => { img.onload = r; img.onerror = r; });
+    }));
+}"""
+
 
 def _install_route(page: "Page") -> None:
     """Install the URL allowlist route handler on a page (LLM01/ASI05)."""
@@ -54,46 +84,107 @@ def _install_route(page: "Page") -> None:
     page.route("**/*", _handle_route)
 
 
+def _launch_browser(pw):
+    """Launch Chromium; raise RuntimeError on any failure (no lazy install)."""
+    try:
+        return pw.chromium.launch(args=_LAUNCH_ARGS)
+    except Exception as e:
+        if "Executable doesn't exist" in str(e):
+            raise RuntimeError(
+                "Chromium not installed — run: playwright install chromium"
+            ) from e
+        raise RuntimeError(f"Chromium launch failed: {e}") from e
+
+
+class BrowserSession:
+    """Context manager owning one sync_playwright() instance and one Browser.
+
+    Callers can render many inputs through a single Chromium process.
+    Each render_to_png call uses a fresh BrowserContext + Page, closed
+    deterministically in finally blocks.
+
+    Usage::
+
+        with BrowserSession() as session:
+            png_bytes = session.render_to_png(html_path)
+
+    Raises RuntimeError on entry if playwright is not installed or Chromium
+    is absent. Never installs Chromium automatically.
+    """
+
+    def __init__(self) -> None:
+        self._pw = None
+        self._browser = None
+
+    def __enter__(self) -> "BrowserSession":
+        if not _PLAYWRIGHT_AVAILABLE:
+            raise RuntimeError(
+                "playwright not installed — run: pip install playwright && playwright install chromium"
+            )
+        self._pw = sync_playwright().start()
+        self._browser = _launch_browser(self._pw)
+        return self
+
+    def __exit__(self, *_) -> None:
+        try:
+            if self._browser is not None:
+                self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._pw is not None:
+                self._pw.stop()
+        except Exception:
+            pass
+
+    def render_to_png(
+        self,
+        html_path: Path,
+        scale: float = 1.0,
+        fullpage: bool = False,
+    ) -> bytes:
+        """Render one HTML file to PNG bytes using a fresh context and page.
+
+        Matches the rendering contract of html2png.py:
+          - viewport 1280×720, device_scale_factor=scale
+          - waits for networkidle, fonts.ready, and img loads
+          - full-page screenshot when fullpage=True
+
+        Page and context are closed in finally blocks after every render,
+        including on exception.
+        """
+        context = self._browser.new_context(
+            viewport={"width": 1280, "height": 720},
+            device_scale_factor=scale,
+        )
+        page = context.new_page()
+        page.emulate_media(media="screen")
+        _install_route(page)
+        try:
+            page.goto("file://" + str(html_path), wait_until="networkidle", timeout=30000)
+            page.evaluate(_FONTS_IMGS_READY)
+            return page.screenshot(type="png", full_page=fullpage)
+        finally:
+            try:
+                page.close()
+            except Exception:
+                pass
+            try:
+                context.close()
+            except Exception:
+                pass
+
+
 @contextmanager
 def get_browser() -> "Generator[Browser, None, None]":
-    """Yield a Playwright Browser; provision Chromium lazily on first run.
+    """Yield a Playwright Browser. Thin wrapper around BrowserSession.
 
-    All failures — bad install, broken Chromium, offline CI — raise RuntimeError
-    so callers can catch a single type and degrade gracefully.
+    All failures — missing Chromium, broken installation, offline CI — raise
+    RuntimeError so callers can catch a single type and degrade gracefully.
+    Chromium is NOT installed automatically; run: playwright install chromium
     """
-    if not _PLAYWRIGHT_AVAILABLE:
-        raise RuntimeError(
-            "playwright not installed — run: pip install playwright && playwright install chromium"
-        )
-
-    def _try_launch(pw):
-        return pw.chromium.launch(args=_LAUNCH_ARGS)
-
-    with sync_playwright() as pw:
-        try:
-            browser = _try_launch(pw)
-        except Exception as e:
-            if "Executable doesn't exist" not in str(e):
-                raise RuntimeError(f"Chromium launch failed: {e}") from e
-            try:
-                subprocess.run(
-                    [sys.executable, "-m", "playwright", "install", "chromium"],
-                    check=True,
-                )
-            except Exception as install_err:
-                raise RuntimeError(
-                    f"playwright install chromium failed: {install_err}"
-                ) from install_err
-            try:
-                browser = _try_launch(pw)
-            except Exception as launch_err:
-                raise RuntimeError(
-                    f"Chromium launch failed after install: {launch_err}"
-                ) from launch_err
-        try:
-            yield browser
-        finally:
-            browser.close()
+    with BrowserSession() as session:
+        yield session._browser
 
 
 def _setup_page(

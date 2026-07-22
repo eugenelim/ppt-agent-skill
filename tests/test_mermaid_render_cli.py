@@ -100,3 +100,10 @@ def test_icons_no_match():  # STUB: AC10 (no-match exit code + message)
     r = _run("icons", "zzznotanicon", "--snippet")
     assert r.returncode != 0
     assert "no match" in r.stderr
+
+
+def test_svg_stdout():
+    """svg subcommand uses the native pure-Python backend — no Playwright required."""
+    r = _run("svg", "--source", "flowchart LR\n  A --> B")
+    assert r.returncode == 0
+    assert "<svg" in r.stdout

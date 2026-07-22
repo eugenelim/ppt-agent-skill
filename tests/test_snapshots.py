@@ -1,8 +1,11 @@
 """Snapshot regression tests for the mermaid renderer.
 
-Renders each fixture in tests/fixtures/*.mmd to PNG via scripts/html2png.py
-(Playwright/Chromium) and compares against a committed baseline in
-tests/snapshots/.
+Renders each fixture in tests/fixtures/*.mmd to PNG via Playwright/Chromium
+and compares against a committed baseline in tests/snapshots/.
+
+One BrowserSession handles all renders for the entire pytest session.
+Each (fixture, theme) pair is rendered exactly once and reused by both
+the smoke and fidelity comparison lanes.
 
 Two comparison lanes share the same baseline PNGs:
 
@@ -19,8 +22,13 @@ Two comparison lanes share the same baseline PNGs:
     into a resized pixel diff.
 
 Run modes:
-  pytest tests/test_snapshots.py                  # both lanes, compare
-  pytest tests/test_snapshots.py --snapshot-capture  # re-capture baselines
+  pytest -m snapshot tests/test_snapshots.py                  # both lanes, compare
+  pytest -m snapshot tests/test_snapshots.py --snapshot-capture  # re-capture baselines
+
+Browser tier:
+  All tests carry @pytest.mark.browser + @pytest.mark.snapshot.
+  Do NOT combine with -n/xdist — the session-scoped browser fixture is not
+  xdist-safe.
 
 The entire module is skipped when playwright is not importable or when
 SNAPSHOT_BASELINE_PLATFORM is set and does not match sys.platform.
@@ -28,11 +36,9 @@ SNAPSHOT_BASELINE_PLATFORM is set and does not match sys.platform.
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -40,10 +46,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 SNAPSHOTS_LIGHT_DIR = REPO_ROOT / "tests" / "snapshots" / "light"
 SNAPSHOTS_DARK_DIR = REPO_ROOT / "tests" / "snapshots" / "dark"
-HTML2PNG = REPO_ROOT / "scripts" / "html2png.py"
-
-# Bypass pyenv shims to avoid rehash lock contention under concurrent pytest runs.
-REAL_PYTHON = os.path.realpath(sys.executable)
 
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
@@ -66,38 +68,66 @@ if _baseline_platform and _baseline_platform != sys.platform:
     )
 
 _FIXTURES = sorted(FIXTURES_DIR.glob("*.mmd"))
-
-
 _PPT_OUT = REPO_ROOT / "ppt-output"
 
 
-def _render_to_png(mmd_path: Path, tmp_dir: Path, theme: str) -> Path:
+# ── session-scoped lazy renderer ──────────────────────────────────────────────
+
+@pytest.fixture(scope="session")
+def _png_cache(tmp_path_factory):
+    """One BrowserSession for the whole pytest session; lazy per-(fixture, theme) render.
+
+    Returns a callable ``get_png(fixture_path, theme) -> Path | None``.
+    ``None`` means the fixture type is unsupported by the native renderer.
+
+    Each (fixture, theme) pair is rendered at most once; subsequent calls for
+    the same key return the cached path.  This means smoke and fidelity lanes
+    share the same PNG — no duplicate renders.
+
+    The cross-process flock (browser_budget) is held for the entire session so
+    that concurrent pytest invocations do not start competing browser sessions.
+    """
     from mermaid_layout import _dispatch, make_page
+    from mermaid_render.browser import BrowserSession
+    from mermaid_render.browser_lock import browser_budget
 
-    src = mmd_path.read_text()
-    try:
-        fragment = _dispatch(src, None, 800)
-    except ValueError as e:
-        pytest.skip(f"{mmd_path.stem}: unsupported diagram type — {e}")
-    html = make_page(fragment, theme=theme)
-    # Place the HTML inside ppt-output so html2png.py's get_dep_dir() resolves
-    # node_modules relative to the project's ppt-output (not a random tmp path).
+    cache_dir = tmp_path_factory.mktemp("snapshot_pngs", numbered=False)
+    _cache: dict[tuple[str, str], "Path | None"] = {}
     _PPT_OUT.mkdir(exist_ok=True)
-    html_path = _PPT_OUT / (mmd_path.stem + f"-{theme}.html")
-    html_path.write_text(html, encoding="utf-8")
-    try:
-        png_dir = tmp_dir / "png"
-        png_dir.mkdir(exist_ok=True)
-        subprocess.run(
-            [REAL_PYTHON, str(HTML2PNG), str(html_path), "-o", str(png_dir),
-             "--scale", "1", "--fullpage"],
-            check=True,
-            capture_output=True,
-        )
-    finally:
-        html_path.unlink(missing_ok=True)
-    return png_dir / (mmd_path.stem + f"-{theme}.png")
 
+    with browser_budget():
+        with BrowserSession() as session:
+
+            def _get_png(fixture_path: Path, theme: str) -> "Path | None":
+                key = (fixture_path.stem, theme)
+                if key in _cache:
+                    return _cache[key]
+
+                src = fixture_path.read_text()
+                try:
+                    fragment = _dispatch(src, None, 800)
+                except ValueError:
+                    _cache[key] = None
+                    return None
+
+                html = make_page(fragment, theme=theme)
+                html_path = _PPT_OUT / f"{fixture_path.stem}-{theme}-snap.html"
+                png_path = cache_dir / f"{fixture_path.stem}-{theme}.png"
+
+                html_path.write_text(html, encoding="utf-8")
+                try:
+                    png_bytes = session.render_to_png(html_path, scale=1.0, fullpage=True)
+                    png_path.write_bytes(png_bytes)
+                    _cache[key] = png_path
+                finally:
+                    html_path.unlink(missing_ok=True)
+
+                return _cache[key]
+
+            yield _get_png
+
+
+# ── comparison helpers ────────────────────────────────────────────────────────
 
 def _measure_canvas(img: "Image.Image") -> dict:
     """Return canvas dimensions and the content bounding box.
@@ -212,47 +242,56 @@ def _fidelity_compare(rendered: Path, baseline: Path, stem: str) -> None:
     )
 
 
+# ── smoke lane ────────────────────────────────────────────────────────────────
+
+@pytest.mark.browser
+@pytest.mark.snapshot
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=lambda p: p.stem)
-def test_snapshot_light(fixture: Path, request):
+def test_snapshot_light(fixture: Path, request, _png_cache: Callable):
     capture = request.config.getoption("--snapshot-capture")
     baseline = SNAPSHOTS_LIGHT_DIR / (fixture.stem + ".png")
+    rendered = _png_cache(fixture, "light")
+    if rendered is None:
+        pytest.skip(f"{fixture.stem}: unsupported diagram type")
+    _compare_or_capture(rendered, baseline, fixture.stem + " [light]", capture)
 
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        rendered = _render_to_png(fixture, tmp_path, "light")
-        _compare_or_capture(rendered, baseline, fixture.stem + " [light]", capture)
 
-
+@pytest.mark.browser
+@pytest.mark.snapshot
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=lambda p: p.stem)
-def test_snapshot_dark(fixture: Path, request):
+def test_snapshot_dark(fixture: Path, request, _png_cache: Callable):
     capture = request.config.getoption("--snapshot-capture")
     baseline = SNAPSHOTS_DARK_DIR / (fixture.stem + ".png")
-
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp_path = Path(tmp)
-        rendered = _render_to_png(fixture, tmp_path, "dark")
-        _compare_or_capture(rendered, baseline, fixture.stem + " [dark]", capture)
+    rendered = _png_cache(fixture, "dark")
+    if rendered is None:
+        pytest.skip(f"{fixture.stem}: unsupported diagram type")
+    _compare_or_capture(rendered, baseline, fixture.stem + " [dark]", capture)
 
 
 # ── fidelity lane ─────────────────────────────────────────────────────────────
-# Uses the same baselines as the smoke lane but asserts canvas size, content
-# bounds, and pixel diff as separate metrics without resizing.
+# Uses the same cached PNG as the smoke lane — no duplicate renders.
 
+@pytest.mark.browser
+@pytest.mark.snapshot
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=lambda p: p.stem)
-def test_fidelity_light(fixture: Path):
+def test_fidelity_light(fixture: Path, _png_cache: Callable):
     """Fidelity lane (light theme): canvas size, content bounds, pixel diff at
-    original dimensions."""
+    original dimensions. Reuses the same PNG as test_snapshot_light."""
     baseline = SNAPSHOTS_LIGHT_DIR / (fixture.stem + ".png")
-    with tempfile.TemporaryDirectory() as tmp:
-        rendered = _render_to_png(fixture, Path(tmp), "light")
-        _fidelity_compare(rendered, baseline, fixture.stem + " [light]")
+    rendered = _png_cache(fixture, "light")
+    if rendered is None:
+        pytest.skip(f"{fixture.stem}: unsupported diagram type")
+    _fidelity_compare(rendered, baseline, fixture.stem + " [light]")
 
 
+@pytest.mark.browser
+@pytest.mark.snapshot
 @pytest.mark.parametrize("fixture", _FIXTURES, ids=lambda p: p.stem)
-def test_fidelity_dark(fixture: Path):
+def test_fidelity_dark(fixture: Path, _png_cache: Callable):
     """Fidelity lane (dark theme): canvas size, content bounds, pixel diff at
-    original dimensions."""
+    original dimensions. Reuses the same PNG as test_snapshot_dark."""
     baseline = SNAPSHOTS_DARK_DIR / (fixture.stem + ".png")
-    with tempfile.TemporaryDirectory() as tmp:
-        rendered = _render_to_png(fixture, Path(tmp), "dark")
-        _fidelity_compare(rendered, baseline, fixture.stem + " [dark]")
+    rendered = _png_cache(fixture, "dark")
+    if rendered is None:
+        pytest.skip(f"{fixture.stem}: unsupported diagram type")
+    _fidelity_compare(rendered, baseline, fixture.stem + " [dark]")

@@ -46,6 +46,12 @@ from mermaid_fidelity.models import (
 _MMDC_PATH = shutil.which("mmdc") or "/opt/homebrew/bin/mmdc"
 _ADAPTER_VERSION = "1.0.0"
 
+# Version/integrity cached after the first subprocess call so that each case
+# does not re-invoke mmdc --version and re-hash the binary.
+_UNSET = object()  # sentinel distinguishing "not yet computed" from None/""
+_MMDC_VERSION_CACHE: object = _UNSET
+_MMDC_INTEGRITY_CACHE: object = _UNSET
+
 # SVG topology extractors matching test_oracle.py
 _MM_FLOWCHART_NODE = re.compile(r'flowchart-([A-Za-z0-9_.\-]+?)-\d+"')
 _MM_SERVICE_NODE   = re.compile(r'service-([A-Za-z0-9_.\-]+?)"')
@@ -68,21 +74,29 @@ def _strip_html(s: str) -> str:
 
 
 def _mmdc_version() -> str:
+    global _MMDC_VERSION_CACHE
+    if _MMDC_VERSION_CACHE is not _UNSET:
+        return _MMDC_VERSION_CACHE  # type: ignore[return-value]
     try:
         result = subprocess.run(
             [_MMDC_PATH, "--version"],
             capture_output=True, text=True, timeout=10,
         )
-        return result.stdout.strip() or result.stderr.strip() or "unknown"
+        v = result.stdout.strip() or result.stderr.strip() or "unknown"
     except Exception:
-        return "unknown"
+        v = "unknown"
+    _MMDC_VERSION_CACHE = v
+    return v
 
 
-def _mmdc_integrity() -> str | None:
+def _mmdc_integrity() -> "str | None":
+    global _MMDC_INTEGRITY_CACHE
+    if _MMDC_INTEGRITY_CACHE is not _UNSET:
+        return _MMDC_INTEGRITY_CACHE  # type: ignore[return-value]
     p = Path(_MMDC_PATH)
-    if p.exists():
-        return hashlib.sha256(p.read_bytes()).hexdigest()[:16]
-    return None
+    val: "str | None" = hashlib.sha256(p.read_bytes()).hexdigest()[:16] if p.exists() else None
+    _MMDC_INTEGRITY_CACHE = val
+    return val
 
 
 def _mmdc_render(source: str, config_json: str | None = None) -> str | None:
