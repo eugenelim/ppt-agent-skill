@@ -263,10 +263,15 @@ def _gantt_scene(src: str, direction: str, width_hint: int) -> SvgScene:
     raise NativeRenderError("gantt", "not-implemented")
 
 
-def _timeline_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+def _timeline_scene(
+    src: str,
+    direction: str,
+    width_hint: int,
+    diagram_config: Optional[dict] = None,
+) -> SvgScene:
     """Native semantic scene for timeline — delegates to dedicated module."""
     from .layout.timeline import layout_timeline_scene
-    return layout_timeline_scene(src, width_hint=width_hint)
+    return layout_timeline_scene(src, width_hint=width_hint, diagram_config=diagram_config)
 
 
 def _quadrant_scene(src: str, direction: str, width_hint: int) -> SvgScene:
@@ -470,7 +475,7 @@ def dispatch_native(
     elif d == "classdiagram":
         scene = _class_scene(clean, direction, width_hint)
     elif d == "timeline":
-        scene = _timeline_scene(clean, direction, width_hint)
+        scene = _timeline_scene(clean, direction, width_hint, diagram_config=dict(request.diagram_config))
     elif d == "mindmap":
         scene = _mindmap_scene(clean, direction, width_hint, _get_mindmap_layout(request))
     elif d == "architecture-beta":

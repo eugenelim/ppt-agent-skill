@@ -19,9 +19,9 @@ from mermaid_render.layout._strategies import _dispatch
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
 
 # Fixture files that the renderer explicitly marks unsupported (raise on dispatch).
-# Note: gitgraph, journey, and requirementDiagram are now handled by the dispatcher.
+# Note: gitgraph, journey, requirementDiagram, and sankey are now handled by the dispatcher.
 _UNSUPPORTED = {
-    "sankey-basic.mmd", "zenuml-basic.mmd",
+    "zenuml-basic.mmd",
 }
 
 # Fixture files whose rendered output contains no annotated <path> elements
@@ -39,6 +39,7 @@ _NO_PATHS = {
     "packet-basic.mmd", "packet-relative.mmd", "packet-wrap.mmd",
     "pie-basic.mmd", "pie-many-slices.mmd", "pie-showdata.mmd",
     "quadrant-basic.mmd",
+    "sankey-basic.mmd",
     "sequence-activation.mmd", "sequence-all-arrowtypes.mmd", "sequence-basic.mmd",
     "sequence-blocks.mmd", "sequence-complex.mmd", "sequence-note.mmd",
     "sequence-notes-all.mmd",
@@ -400,15 +401,31 @@ classDiagram
         assert 'marker-start=' in m.group(0), f"No marker-start on Animal→Dog: {m.group(0)}"
 
 
-# ── AC-3.1: Sankey — return explicit unsupported ─────────────────────────────
+# ── AC-3.1: Sankey — dedicated flow renderer (not a generic graph) ────────────
 
 class TestSankeyRenderer:
 
-    def test_sankey_raises_unsupported(self):
-        """sankey-beta diagrams must raise ValueError (not render a generic graph)."""
+    def test_sankey_renders_flow_not_generic_graph(self):
+        """sankey-beta renders via the dedicated Sankey layout: node bars + flow
+        ribbons, never the generic node-graph fallback (the original AC-3.1 guard
+        against misrendering is preserved by the data-sankey-* markers)."""
         src = (FIXTURES_DIR / "sankey-basic.mmd").read_text()
-        with pytest.raises(ValueError, match="not supported"):
-            _dispatch(src, None, 800)
+        html = _dispatch(src, None, 800)
+        # Dedicated Sankey markers present …
+        assert "data-sankey-node" in html
+        assert "data-sankey-link" in html
+        # … and it is NOT the generic graph fallback (no annotated edge paths).
+        assert "data-src=" not in html
+        # Quoted CSV field with an embedded comma is parsed as one node.
+        assert "Fuel, Oil" in html
+
+    def test_sankey_skips_header_row(self):
+        """A leading 'source,target,value' header (non-numeric value) is skipped,
+        not rendered as a bogus flow."""
+        src = "sankey-beta\nsource,target,value\nA,B,10\n"
+        html = _dispatch(src, None, 800)
+        assert "data-sankey-link" in html
+        assert html.count("data-sankey-link") == 1  # only A→B, header dropped
 
 
 # ── AC-3.3: ZenUML — return explicit unsupported ─────────────────────────────

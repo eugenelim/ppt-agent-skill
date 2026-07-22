@@ -31,21 +31,30 @@ from ..scene import (
     SvgScene,
     make_scene_id,
 )
+from ._geometry import TextStyle
+from ._text import get_default_measurer
 
 
 # ── Layout constants ──────────────────────────────────────────────────────────
 
-_COL_W: int = 112          # width of each period column
+_COL_W: int = 112          # natural width of each period column
 _COL_GAP: int = 12         # gap between columns
-_PERIOD_H: int = 24        # height of period chip
-_EVENT_H: int = 20         # height of each event card
 _EVENT_GAP: int = 4        # vertical gap between event cards
 _EVENT_PAD_TOP: int = 6    # gap from period chip bottom to first event
-_SECTION_H: int = 22       # height of section band header above spine
 _SPINE_DOT_GAP: int = 6    # gap from spine to top of period chip
 _MARKER_R: int = 5         # spine dot radius
 _PAD_H: int = 40           # horizontal canvas padding
 _PAD_V: int = 24           # vertical canvas padding
+
+# Font sizes for each text role
+_PERIOD_FS: float = 11.0
+_EVENT_FS: float = 10.0
+_SECTION_FS: float = 9.0
+
+# Vertical padding inside each chip (top + bottom per side)
+_PERIOD_CHIP_PAD: float = 6.0
+_EVENT_CHIP_PAD: float = 4.0
+_SECTION_CHIP_PAD: float = 4.0
 
 _SECTION_COLORS: tuple[str, ...] = (
     "rgba(96,165,250,0.10)",
@@ -54,6 +63,7 @@ _SECTION_COLORS: tuple[str, ...] = (
     "rgba(167,139,250,0.10)",
     "rgba(248,113,113,0.10)",
 )
+_SECTION_COLOR_MONO = "rgba(148,163,184,0.10)"
 
 _SPINE_STROKE = "#94a3b8"
 _DOT_FILL = "#60a5fa"
@@ -124,11 +134,19 @@ def _parse_timeline_source(src: str) -> tuple[str, list, list]:
 
 # ── Scene builders ────────────────────────────────────────────────────────────
 
-def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
+def layout_timeline_scene(
+    src: str,
+    *,
+    width_hint: int = 0,
+    diagram_config: Optional[dict] = None,
+) -> SvgScene:
     """Parse timeline source and return a column-layout SvgScene.
 
     Column layout: periods go left-to-right; events stack below each period.
     Section bands span their periods above the spine.
+
+    width_hint: maximum output width in pixels (0 = unconstrained / content-tight).
+    diagram_config: parsed %%{init:...}%% config; used for disableMulticolor.
     """
     title, groups, all_periods = _parse_timeline_source(src)
 
@@ -136,38 +154,60 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         raise ValueError("No periods found in timeline.")
 
     n = len(all_periods)
-    title_h = 28 if title else 0
 
-    # Column geometry
-    col_stride = _COL_W + _COL_GAP
+    # ── Text measurement ─────────────────────────────────────────────────────
+    measurer = get_default_measurer()
+
+    period_style = TextStyle(font_size=_PERIOD_FS, font_weight=700)
+    event_style = TextStyle(font_size=_EVENT_FS, font_weight=500)
+    section_style = TextStyle(font_size=_SECTION_FS, font_weight=700)
+
+    # Use "Aq" as a representative string to measure actual font cap+descender height
+    period_line_h = measurer.layout("Aq", period_style, None).line_height
+    event_line_h = measurer.layout("Aq", event_style, None).line_height
+    section_line_h = measurer.layout("Aq", section_style, None).line_height
+
+    period_h = period_line_h + 2.0 * _PERIOD_CHIP_PAD
+    event_h = event_line_h + 2.0 * _EVENT_CHIP_PAD
+    section_band_h = section_line_h + 2.0 * _SECTION_CHIP_PAD
+
+    # ── Config ───────────────────────────────────────────────────────────────
+    cfg = diagram_config or {}
+    timeline_cfg = cfg.get("timeline", {})
+    if not isinstance(timeline_cfg, dict):
+        timeline_cfg = {}
+    disable_multicolor = bool(timeline_cfg.get("disableMulticolor", False))
+
+    title_h = 28 if title else 0
 
     max_events = max((len(p["events"]) for p in all_periods), default=0)
     events_h = (
-        _EVENT_PAD_TOP + max_events * _EVENT_H + max(0, max_events - 1) * _EVENT_GAP
+        _EVENT_PAD_TOP + max_events * event_h + max(0, max_events - 1) * _EVENT_GAP
         if max_events > 0 else 0
     )
 
-    # Determine how many sections have names (for section band height)
+    # Determine whether any named sections exist
     has_sections = any(grp["name"] for grp in groups)
-    section_band_h = _SECTION_H if has_sections else 0
+    sec_h = section_band_h if has_sections else 0.0
 
     # Vertical layout:
-    #   PAD_V + title_h + section_band_h → spine_y
-    #   spine_y + SPINE_DOT_GAP → period chip top
-    #   period chip + PERIOD_H + EVENT_PAD_TOP + events_h + PAD_V → canvas_h
-    spine_y = float(_PAD_V + title_h + section_band_h)
-    canvas_h = float(spine_y + _SPINE_DOT_GAP + _PERIOD_H + events_h + _PAD_V)
+    #   PAD_V + title_h + sec_h → spine_y
+    #   spine_y + SPINE_DOT_GAP + period_h + events_h + PAD_V → canvas_h
+    spine_y = float(_PAD_V + title_h + sec_h)
+    canvas_h = float(spine_y + _SPINE_DOT_GAP + period_h + events_h + _PAD_V)
 
-    # Horizontal layout
-    min_w = _PAD_H * 2 + n * _COL_W + max(0, n - 1) * _COL_GAP
-    canvas_w = float(max(width_hint, min_w, 400))
-
-    # Recompute col_stride if we have extra width
-    available_w = canvas_w - _PAD_H * 2
-    if n > 0:
-        col_stride = int(available_w // n)
-        col_w = max(60, col_stride - _COL_GAP)
+    # ── Width: content-tight; width_hint is an output-maximum constraint ──────
+    natural_w = _PAD_H * 2 + n * _COL_W + max(0, n - 1) * _COL_GAP
+    if width_hint > 0 and width_hint < natural_w:
+        canvas_w = float(width_hint)
+        # Compress column widths to fit within the constrained canvas
+        available_w = canvas_w - _PAD_H * 2
+        col_stride = int(available_w // n) if n > 0 else _COL_W + _COL_GAP
+        col_w = max(40, col_stride - _COL_GAP)
     else:
+        # Content-tight: use natural width regardless of width_hint
+        canvas_w = float(natural_w)
+        col_stride = _COL_W + _COL_GAP
         col_w = _COL_W
 
     content = f"timeline:{canvas_w}:{canvas_h}:{','.join(p['period'] for p in all_periods)}"
@@ -214,8 +254,12 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             bx = float(_PAD_H + min(cols) * col_stride)
             bw = float((max(cols) - min(cols) + 1) * col_stride - _COL_GAP)
             band_y = float(_PAD_V + title_h)
-            band_h = float(_SECTION_H)
-            color = _SECTION_COLORS[sec_color_idx % len(_SECTION_COLORS)]
+            band_h = float(sec_h)
+
+            if disable_multicolor:
+                color = _SECTION_COLOR_MONO
+            else:
+                color = _SECTION_COLORS[sec_color_idx % len(_SECTION_COLORS)]
             if grp["name"]:
                 sec_color_idx += 1
 
@@ -233,8 +277,8 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                     lines=(SceneTextLine(
                         text=grp["name"].upper(),
                         x=bx + 6,
-                        y=band_y + _SECTION_H - 6,
-                        font_size=9.0,
+                        y=band_y + sec_h / 2.0 + 0.35 * _SECTION_FS,
+                        font_size=_SECTION_FS,
                         font_weight=700,
                         fill_color=_DIM_COLOR,
                     ),),
@@ -286,7 +330,7 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         node_elements.append(SceneRoundedRect(
             element_id=f"{eid}-period-{i}",
             x=col_left, y=period_top,
-            w=float(col_w), h=float(_PERIOD_H),
+            w=float(col_w), h=float(period_h),
             rx=4, ry=4,
             paint=PaintStyle(
                 fill=FillStyle(color=_NODE_FILL),
@@ -300,8 +344,8 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             lines=(SceneTextLine(
                 text=p["period"],
                 x=col_left + col_w / 2,
-                y=period_top + _PERIOD_H / 2 + 4,
-                font_size=11.0,
+                y=period_top + period_h / 2 + 0.35 * _PERIOD_FS,
+                font_size=_PERIOD_FS,
                 font_weight=700,
                 fill_color=_TEXT_COLOR,
             ),),
@@ -311,11 +355,11 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
 
         # Event cards stacked below the period chip (in-column)
         for j, ev in enumerate(p["events"]):
-            ev_top = period_top + _PERIOD_H + _EVENT_PAD_TOP + j * (_EVENT_H + _EVENT_GAP)
+            ev_top = period_top + period_h + _EVENT_PAD_TOP + j * (event_h + _EVENT_GAP)
             node_elements.append(SceneRoundedRect(
                 element_id=f"{eid}-ev-{i}-{j}",
                 x=col_left, y=float(ev_top),
-                w=float(col_w), h=float(_EVENT_H),
+                w=float(col_w), h=float(event_h),
                 rx=3, ry=3,
                 paint=PaintStyle(
                     fill=FillStyle(color=_NODE_FILL),
@@ -329,8 +373,8 @@ def layout_timeline_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                 lines=(SceneTextLine(
                     text=ev,
                     x=col_left + col_w / 2,
-                    y=float(ev_top) + _EVENT_H / 2 + 3.5,
-                    font_size=10.0,
+                    y=float(ev_top) + event_h / 2 + 0.35 * _EVENT_FS,
+                    font_size=_EVENT_FS,
                     font_weight=500,
                     fill_color=_TEXT_COLOR,
                 ),),

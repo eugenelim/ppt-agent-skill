@@ -6663,14 +6663,15 @@ flowchart TB
 # ── TestBugfixUnsupportedDirectives ───────────────────────────────────────────
 
 class TestBugfixUnsupportedDirectives:
-    """sankey-beta / zenuml must raise ValueError, not silently
-    fall through to the graph-topology fallback and produce gibberish output.
+    """zenuml must raise ValueError, not silently fall through to the
+    graph-topology fallback and produce gibberish output.
     gitGraph, journey, requirementDiagram now have real renderers and are tested
-    in TestGitGraphBasic, TestJourneyBasic, TestRequirementBasic.
+    in TestGitGraphBasic, TestJourneyBasic, TestRequirementBasic. sankey-beta now
+    has a dedicated flow renderer, tested in TestSankeyRenderer (test_render_correctness)
+    and tests/test_syntax_sankey.py.
     """
 
     @pytest.mark.parametrize("src,label", [
-        ("sankey-beta\nA,B,10\n", "sankey-beta"),
         ("zenuml\ntitle Demo\nA.method()\n", "zenuml"),
     ])
     def test_raises_value_error(self, src: str, label: str):
