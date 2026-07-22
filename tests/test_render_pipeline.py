@@ -181,11 +181,11 @@ class TestRenderSvgResult:
         assert result.svg is not None
         assert "<svg" in result.svg
 
-    def test_render_svg_result_legacy_raises_unavailable(self):
+    def test_render_svg_result_sequence_has_svg(self):
         from scripts.mermaid_render.native_svg import render_svg_result
-        from scripts.mermaid_render.errors import NativeRendererUnavailable
-        with pytest.raises(NativeRendererUnavailable):
-            render_svg_result("sequenceDiagram\n  Alice->>Bob: Hi\n")
+        result = render_svg_result("sequenceDiagram\n  Alice->>Bob: Hi\n")
+        assert result.svg is not None
+        assert "<svg" in result.svg
 
     def test_render_svg_result_experimental_has_partial_syntax(self):
         from scripts.mermaid_render.native_svg import render_svg_result
@@ -284,12 +284,11 @@ class TestPipelineWiring:
         assert exc_info.value.phase == "geometry"
         assert "overlap detected" in str(exc_info.value.__cause__)
 
-    def test_no_fallback_legacy_raises_native_render_error(self, monkeypatch):
-        """Regression: NativeRenderError(phase='not-implemented') still raised for legacy-only."""
+    def test_sequence_native_produces_svg(self, monkeypatch):
+        """sequenceDiagram now has a native builder and must produce SVG."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
-        from scripts.mermaid_render.errors import NativeRenderError
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
-        with pytest.raises(NativeRenderError) as exc_info:
-            to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
-        assert exc_info.value.phase == "not-implemented"
+        result = to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
+        assert result
+        assert "<svg" in result
