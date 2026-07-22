@@ -43,7 +43,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: "pip"
-      - run: pip install pytest
+      - run: pip install pytest Pillow
       # Guards run without playwright installed so the playwright-cleanliness
       # test is meaningful. Includes sibling-import AST scan, adaptive-theme
       # unit tests, vendor bundle parity, the full mermaid_layout shim
