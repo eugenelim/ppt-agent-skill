@@ -278,7 +278,7 @@ _FIXTURE_MATRIX = [
     ("journey",            "journey-basic.mmd",            30, ["Make tea"],             ["rect"],          None),
     ("quadrantchart",      "quadrant-basic.mmd",           15, ["Feature A"],            ["rect"],          None),
     ("requirementdiagram", "requirement-basic.mmd",        30, ["test_req"],             ["rect"],          None),
-    ("architecture-beta",  "architecture-basic.mmd",       15, ["api"],                  ["rect"],          None),
+    ("architecture-beta",  "architecture-basic.mmd",       15, ["API"],                  ["rect"],          None),
     ("c4context",          "c4-basic.mmd",                 20, ["User"],                ["path", "rect"],  None),
     ("classdiagram",       "class-basic.mmd",              10, ["Animal"],               ["rect"],          None),
     ("block-beta",         "block-basic.mmd",              10, ["Process"],              ["rect"],          None),

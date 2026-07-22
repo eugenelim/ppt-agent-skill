@@ -1,6 +1,6 @@
 # Spec: mermaid-render CLI + icon consolidation
 
-**Status:** Done
+**Status:** Shipped
 **Mode:** Full (risk triggers: structural — new module + package dir; destructive — delete `assets/icons/`; public-interface — new top-level CLI)
 
 ## Objective
@@ -35,23 +35,23 @@ top-level CLI (`python3 -m mermaid_render`) covering `render`, `svg`, `png`, and
 
 ## Acceptance Criteria
 
-- [ ] **AC1** `scripts/mermaid_render/icons/` contains all 94 SVGs from `assets/icons/` plus `catalog.json` and `__init__.py`
-- [ ] **AC2** `_ICON_DIR` in `layout/_constants.py` resolves within the package (no parent-walking past `mermaid_render/`)
-- [ ] **AC3** `python3 -m mermaid_render render --source "flowchart LR\n  A-->B"` exits 0, stdout contains `<!doctype`
-- [ ] **AC4** `python3 -m mermaid_render render --source @file.mmd --output out.html` writes file, exits 0
-- [ ] **AC5** `python3 -m mermaid_render render --source "..." --theme light` produces baked HTML (no `prefers-color-scheme`)
-- [ ] **AC6** `python3 -m mermaid_render svg --source "..."` exits 0, stdout is SVG (requires Playwright)
-- [ ] **AC7** `python3 -m mermaid_render png --source "..." --output out.png` exits 0, writes PNG (requires Playwright)
-- [ ] **AC8** `python3 -m mermaid_render icons --validate` exits 0 against the shipped catalog
-- [ ] **AC9** `python3 -m mermaid_render icons database` prints match table, exits 0
-- [ ] **AC10** `python3 -m mermaid_render icons database --snippet` prints `<svg` content, exits 0
-- [ ] **AC11** `python3 -m mermaid_render icons --list --json` prints valid JSON array, exits 0
-- [ ] **AC12** `test_icon_catalog_drift` fails if any `catalog.json` entry has no matching SVG file, and if any SVG has no catalog entry
-- [ ] **AC13** `import icon_search as I; I.load_catalog(); I.search("db", I.load_catalog())` works (shim preserves API)
-- [ ] **AC14** `python3 tests/test_icon_search.py` exits 0 (standalone test, not pytest)
-- [ ] **AC15** `assets/icons/` directory is deleted; no code or active reference doc references it (grep `scripts/ references/ --include="*.py" --include="*.md"` returns no hits outside `docs/specs/`)
-- [ ] **AC16** `references/cli-cheatsheet.md` documents `python3 -m mermaid_render render|svg|png|icons`
-- [ ] **AC17** All existing test suites pass
+- [x] **AC1** `scripts/mermaid_render/icons/` contains all 94 SVGs from `assets/icons/` plus `catalog.json` and `__init__.py`
+- [x] **AC2** `_ICON_DIR` in `layout/_constants.py` resolves within the package (no parent-walking past `mermaid_render/`)
+- [x] **AC3** `python3 -m mermaid_render render --source "flowchart LR\n  A-->B"` exits 0, stdout contains `<!doctype`
+- [x] **AC4** `python3 -m mermaid_render render --source @file.mmd --output out.html` writes file, exits 0
+- [x] **AC5** `python3 -m mermaid_render render --source "..." --theme light` produces baked HTML (no `prefers-color-scheme`)
+- [x] **AC6** `python3 -m mermaid_render svg --source "..."` exits 0, stdout is SVG (requires Playwright)
+- [x] **AC7** `python3 -m mermaid_render png --source "..." --output out.png` exits 0, writes PNG (requires Playwright)
+- [x] **AC8** `python3 -m mermaid_render icons --validate` exits 0 against the shipped catalog
+- [x] **AC9** `python3 -m mermaid_render icons database` prints match table, exits 0
+- [x] **AC10** `python3 -m mermaid_render icons database --snippet` prints `<svg` content, exits 0
+- [x] **AC11** `python3 -m mermaid_render icons --list --json` prints valid JSON array, exits 0
+- [x] **AC12** `test_icon_catalog_drift` fails if any `catalog.json` entry has no matching SVG file, and if any SVG has no catalog entry
+- [x] **AC13** `import icon_search as I; I.load_catalog(); I.search("db", I.load_catalog())` works (shim preserves API)
+- [x] **AC14** `python3 tests/test_icon_search.py` exits 0 (standalone test, not pytest)
+- [x] **AC15** `assets/icons/` directory is deleted; no code or active reference doc references it (grep `scripts/ references/ --include="*.py" --include="*.md"` returns no hits outside `docs/specs/`)
+- [x] **AC16** `references/cli-cheatsheet.md` documents `python3 -m mermaid_render render|svg|png|icons`
+- [x] **AC17** All existing test suites pass
 
 ## Testing Strategy
 

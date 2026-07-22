@@ -2,7 +2,7 @@
 
 **Mode: full (multi-feature, structural change, dependent tasks, unfamiliar territory)**
 
-**Status: Implementing**
+**Status:** Implementing
 
 **Constrained by:** source brief `.context/attachments/XL7Rq2/pasted_text_2026-07-21_16-53-49.txt`
 
