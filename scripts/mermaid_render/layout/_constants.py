@@ -252,6 +252,7 @@ class _Edge:
     extra_css: str = ""           # inline CSS overrides (from `linkStyle N stroke:...`)
     src_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
     dst_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
+    edge_id: str = ""             # stable parse-time ID: "src->dst" (or "src->dst#N" for duplicates)
 
 
 @dataclass

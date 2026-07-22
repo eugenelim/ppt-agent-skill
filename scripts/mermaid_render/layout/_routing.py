@@ -12,7 +12,7 @@ from ._constants import (
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
 )
-from ._geometry import Rect
+from ._geometry import Rect, RoutingFailure, RouteBatch
 
 
 @dataclass(frozen=True)
@@ -587,11 +587,11 @@ def _best_label_pos(
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                  direction: str = "TB",
                  group_bboxes: "dict | None" = None,
-                 route_failures: "list | None" = None) -> list[dict]:
-    """Return list of edge render specs (path_d, arrowhead_pts, label, style, lx, ly, rot).
+                 route_failures: "list | None" = None) -> RouteBatch:
+    """Return a RouteBatch containing routed edge dicts and RoutingFailure entries.
 
-    route_failures: if provided, mutable list where (src, dst) pairs are appended
-    whenever A* fails to find an obstacle-free path and the L-shaped fallback is used.
+    route_failures: deprecated legacy parameter; ignored. Failures are returned in
+    RouteBatch.failures instead.
     """
     is_lr = direction.upper() in ("LR", "RL")
 
@@ -729,6 +729,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 _skip_count += 1
 
     result: list[dict] = []
+    failures: list[RoutingFailure] = []
     for edge_i, e in enumerate(edges):
         if e.src not in nodes or e.dst not in nodes:
             continue
@@ -745,6 +746,12 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             orig = e.orig_src or e.src
             s = nodes.get(orig)
             if s is None:
+                failures.append(RoutingFailure(
+                    edge_id=e.edge_id or f"{e.src}->{e.dst}",
+                    src_node_id=e.orig_src or e.src,
+                    dst_node_id=e.orig_dst or e.dst,
+                    reason="dummy-chain orig_src missing from node map",
+                ))
                 continue
         else:
             s = s_node
@@ -790,9 +797,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     # top face — clamp so loop stays within canvas
                     y_face = s.y
                     loop_y = max(0, y_face - extent)
-                    path = _smooth_orthogonal_path(
-                        [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
-                    )
+                    _sl_pts = [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
+                    path = _smooth_orthogonal_path(_sl_pts)
                     ah = _arrowhead(x_ret, y_face, 0, 1, **ah_kw) if e.arrow else None
                     mid_x = (x_out + x_ret) // 2
                     cands = [
@@ -806,9 +812,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     # bottom face
                     y_face = s.y + nh
                     loop_y = y_face + extent
-                    path = _smooth_orthogonal_path(
-                        [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
-                    )
+                    _sl_pts = [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
+                    path = _smooth_orthogonal_path(_sl_pts)
                     ah = _arrowhead(x_ret, y_face, 0, -1, **ah_kw) if e.arrow else None
                     mid_x = (x_out + x_ret) // 2
                     cands = [
@@ -826,9 +831,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     # right face
                     lx_face = s.x + nw
                     loop_x = lx_face + extent
-                    path = _smooth_orthogonal_path(
-                        [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
-                    )
+                    _sl_pts = [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
+                    path = _smooth_orthogonal_path(_sl_pts)
                     ah = _arrowhead(lx_face, y_ret, -1, 0, **ah_kw) if e.arrow else None
                     mid_y = (y_out + y_ret) // 2
                     cands = [
@@ -842,9 +846,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     # left face
                     lx_face = s.x
                     loop_x = max(0, lx_face - extent)  # clamp to canvas left edge
-                    path = _smooth_orthogonal_path(
-                        [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
-                    )
+                    _sl_pts = [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
+                    path = _smooth_orthogonal_path(_sl_pts)
                     ah = _arrowhead(lx_face, y_ret, 1, 0, **ah_kw) if e.arrow else None
                     mid_y = (y_out + y_ret) // 2
                     cands = [
@@ -854,10 +857,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     ]
                     llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                                 if e.label else (loop_x - 4 - label_w, mid_y))
-            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+            result.append({"d": path, "waypoints": _sl_pts, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
             continue
 
         rank_gap = d.rank - s.rank
@@ -889,9 +892,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     x2 = d.x + _node_render_w(d)   # enter RIGHT side of destination
                     y2 = d.y + in_off
                     mid_x = (x1 + x2) // 2
-                    path = _smooth_orthogonal_path(
-                        [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
-                    )
+                    _be_pts = [(x1, y1), (mid_x, y1), (mid_x, y2), (x2, y2)]
+                    path = _smooth_orthogonal_path(_be_pts)
                     ah = _arrowhead(x2, y2, -1, 0, **ah_kw) if e.arrow else None
                     if e.label:
                         H = _LABEL_CHIP_H
@@ -907,19 +909,18 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                     else:
                         llx, lly = max(0, x1 - 164), int(y1) - 12
-                    result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                    result.append({"d": path, "waypoints": _be_pts, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                    "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
                 else:
                     lane_y = bottom_lane_y + 32 * be_lane
                     sx = s.x + _node_render_w(s) // 2
                     sy = s.y + _node_render_h(s)
                     dx_ = d.x + _node_render_w(d) // 2
                     dy_ = d.y + _node_render_h(d)
-                    path = _smooth_orthogonal_path(
-                        [(sx, sy), (sx, lane_y), (dx_, lane_y), (dx_, dy_)]
-                    )
+                    _be_pts = [(sx, sy), (sx, lane_y), (dx_, lane_y), (dx_, dy_)]
+                    path = _smooth_orthogonal_path(_be_pts)
                     ah = _arrowhead(dx_, dy_, 0, -1, **ah_kw) if e.arrow else None
                     if e.label:
                         H = _LABEL_CHIP_H
@@ -934,19 +935,18 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                     else:
                         llx, lly = (sx + dx_) // 2, lane_y + 4
-                    result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                    result.append({"d": path, "waypoints": _be_pts, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                    "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
             else:
                 lane_x = right_lane_x + 12 * be_lane
                 sx = s.x + _node_render_w(s)
                 sy = s.y + _node_render_h(s) // 2
                 dx_ = d.x + _node_render_w(d)
                 dy_ = d.y + _node_render_h(d) // 2
-                path = _smooth_orthogonal_path(
-                    [(sx, sy), (lane_x, sy), (lane_x, dy_), (dx_, dy_)]
-                )
+                _be_pts = [(sx, sy), (lane_x, sy), (lane_x, dy_), (dx_, dy_)]
+                path = _smooth_orthogonal_path(_be_pts)
                 ah = _arrowhead(dx_, dy_, -1, 0, **ah_kw) if e.arrow else None
                 if e.label:
                     H = _LABEL_CHIP_H
@@ -961,10 +961,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                 else:
                     llx, lly = lane_x + 4, (sy + dy_) // 2
-                result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+                result.append({"d": path, "waypoints": _be_pts, "ah": ah, "label": e.label, "style": e.style,
                                "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
             continue
 
         # TB skip-rank forward edge: rank_gap > 1 means this edge bypasses intermediate
@@ -984,9 +984,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             y1 = int(s.y + _node_render_h(s))   # src bottom
             x2 = int(d.x + in_offset)
             y2 = int(d.y)                         # dst top
-            path = _smooth_orthogonal_path(
-                [(x1, y1), (_sk_lane_x, y1), (_sk_lane_x, y2), (x2, y2)]
-            )
+            _sk_pts = [(x1, y1), (_sk_lane_x, y1), (_sk_lane_x, y2), (x2, y2)]
+            path = _smooth_orthogonal_path(_sk_pts)
             ah = _arrowhead(x2, y2, 0, 1, **ah_kw) if e.arrow else None
             if e.label:
                 H = _LABEL_CHIP_H
@@ -999,10 +998,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
             else:
                 llx, lly = _sk_lane_x + 4, (y1 + y2) // 2
-            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+            result.append({"d": path, "waypoints": _sk_pts, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
             continue
 
         if is_lr:
@@ -1058,7 +1057,13 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                         if _pts_lr is not None:
                             break
                 if _pts_lr is None:
-                    continue  # skip edge — omit rather than draw through obstacle
+                    failures.append(RoutingFailure(
+                        edge_id=e.edge_id or f"{e.orig_src or e.src}->{e.orig_dst or e.dst}",
+                        src_node_id=e.orig_src or e.src,
+                        dst_node_id=e.orig_dst or e.dst,
+                        reason="no obstacle-free path found (A* + perimeter fallbacks exhausted)",
+                    ))
+                    continue
                 if len(_pts_lr) >= 2:
                     _pts_lr[0] = (int(x1), int(y1))
                     _pts_lr[-1] = (int(x2), int(y2))
@@ -1081,10 +1086,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                                            y_range=_yr)
             else:
                 lx, ly = int((x1 + x2) // 2), int(min(y1, y2)) - 12
-            result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+            result.append({"d": path, "waypoints": _pts_lr, "ah": ah, "label": e.label, "style": e.style,
                            "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
             continue
 
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
@@ -1149,7 +1154,13 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     if _pts is not None:
                         break
             if _pts is None:
-                continue  # skip edge — omit rather than draw through obstacle
+                failures.append(RoutingFailure(
+                    edge_id=e.edge_id or f"{e.orig_src or e.src}->{e.orig_dst or e.dst}",
+                    src_node_id=e.orig_src or e.src,
+                    dst_node_id=e.orig_dst or e.dst,
+                    reason="no obstacle-free path found (A* + perimeter fallbacks exhausted)",
+                ))
+                continue
             if len(_pts) >= 2:
                 _pts[0] = (int(x1), int(y1))
                 _pts[-1] = (int(x2), int(y2))
@@ -1176,10 +1187,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                                        y_range=_yr)
         else:
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
-        result.append({"d": path, "ah": ah, "label": e.label, "style": e.style,
+        result.append({"d": path, "waypoints": list(_pts), "ah": ah, "label": e.label, "style": e.style,
                        "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
                        "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False)})
+                       "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
 
-    return result
+    return RouteBatch(routed=tuple(result), failures=tuple(failures))
 
