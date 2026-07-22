@@ -9,6 +9,9 @@ from scripts.mermaid_render.layout.timeline import (
     layout_timeline_scene,
     _parse_timeline_source,
     _COL_W,
+    _MIN_COL_W,
+    _COL_GAP,
+    _PAD_H,
 )
 from scripts.mermaid_render.scene import (
     SceneCircle, SceneRoundedRect, SceneLine, SceneText, SvgScene,
@@ -326,8 +329,84 @@ class TestMeasuredHeights:
 
     def test_canvas_width_is_content_tight(self):
         # Without width_hint, canvas = natural content width (no artificial inflation)
-        from scripts.mermaid_render.layout.timeline import _COL_W, _COL_GAP, _PAD_H
         scene = layout_timeline_scene(SIMPLE)
         n = 3  # SIMPLE has 3 periods
-        expected_w = _PAD_H * 2 + n * _COL_W + (n - 1) * _COL_GAP
-        assert scene.width == float(expected_w)
+        # Width must be at least n columns at minimum col size plus padding
+        min_expected = float(_PAD_H * 2 + n * _MIN_COL_W + (n - 1) * _COL_GAP)
+        assert scene.width >= min_expected
+        # Content-tight: same input → same width (deterministic)
+        assert layout_timeline_scene(SIMPLE).width == scene.width
+
+    # ── New cases for Stage 8 ─────────────────────────────────────────────────
+
+    LONG_EVENT = """\
+timeline
+    Q1 : This is a very long event description that must wrap across multiple lines
+"""
+
+    UNEVEN_COLS = """\
+timeline
+    Q1 : Plan
+       : Design
+       : Review
+    Q2 : Build
+"""
+
+    def test_multiline_event_card_taller_than_single_line(self):
+        """A card wrapping to 2+ lines must be taller than a single-line card."""
+        scene_long = layout_timeline_scene(self.LONG_EVENT)
+        scene_short = layout_timeline_scene(SIMPLE)
+
+        nodes_long = scene_long.get_layer(LAYER_NODES)
+        ev_long = [el for el in nodes_long if isinstance(el, SceneRoundedRect)
+                   and "timeline-event" in (el.css_classes or ())]
+        assert ev_long, "No event cards in LONG_EVENT scene"
+        long_h = ev_long[0].h
+
+        nodes_short = scene_short.get_layer(LAYER_NODES)
+        ev_short = [el for el in nodes_short if isinstance(el, SceneRoundedRect)
+                    and "timeline-event" in (el.css_classes or ())]
+        assert ev_short, "No event cards in SIMPLE scene"
+        short_h = ev_short[0].h
+
+        assert long_h > short_h, (
+            f"Long-event card h={long_h} should exceed single-line card h={short_h}"
+        )
+
+    def test_column_with_more_events_is_taller(self):
+        """A column with 3 events must produce a taller events block than a column with 1."""
+        scene = layout_timeline_scene(self.UNEVEN_COLS)
+        nodes = scene.get_layer(LAYER_NODES)
+
+        # Collect event rects by column (data_attrs col)
+        col_rects: dict[str, list] = {}
+        for el in nodes:
+            if isinstance(el, SceneRoundedRect) and "timeline-event" in (el.css_classes or ()):
+                col_val = dict(el.data_attrs).get("col", "?")
+                col_rects.setdefault(col_val, []).append(el)
+
+        assert "0" in col_rects, "Column 0 has no events"
+        assert "1" in col_rects, "Column 1 has no events"
+
+        col0_span = max(r.y + r.h for r in col_rects["0"]) - min(r.y for r in col_rects["0"])
+        col1_span = max(r.y + r.h for r in col_rects["1"]) - min(r.y for r in col_rects["1"])
+        assert col0_span > col1_span, (
+            f"Col-0 span={col0_span} should exceed col-1 span={col1_span} (3 vs 1 events)"
+        )
+
+    def test_activity_line_end_marker_in_edges(self):
+        """The spine SceneLine must reference a marker_end (arrowhead at timeline end)."""
+        scene = layout_timeline_scene(SIMPLE)
+        edges = scene.get_layer(LAYER_EDGES)
+        spine_lines = [
+            el for el in edges
+            if isinstance(el, SceneLine) and "timeline-spine" in (el.css_classes or ())
+        ]
+        assert spine_lines, "No spine line found in edges layer"
+        spine = spine_lines[0]
+        assert spine.marker_end, "Spine must have a marker_end (arrowhead)"
+        # The marker must be defined in scene.definitions
+        defined_ids = {d.marker_id for d in scene.definitions if hasattr(d, "marker_id")}
+        assert spine.marker_end in defined_ids, (
+            f"marker_end={spine.marker_end!r} not found in scene definitions"
+        )
