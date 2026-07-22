@@ -30,6 +30,48 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
+## sequence-renderer-correctness-pass
+
+### seq-corr-box-unsupported-fixture
+
+**Deferred from AC-R.2:** `sequence-box-unsupported.mmd` fixture — box grouping
+visual fidelity vs mmdc. The `box` directive is parsed but the outer box label and
+fill are not rendered. Blocked on a box-semantics spec. Unblocked by writing a
+dedicated `sequence-box` spec.
+
+### seq-corr-create-destroy-fixture
+
+**Deferred from AC-R.2:** `sequence-create-destroy.mmd` fixture — `create` / `destroy`
+participant lifecycle markers require non-trivial geometry changes (participant appears
+or disappears mid-diagram). Deferred to a dedicated lifecycle spec.
+
+### seq-corr-single-participant-fragment-long-header
+
+**Deferred from AC-R.2 / P2#5:** `sequence-single-participant-fragment-long-header.mmd` —
+single-participant override for fragment headers wider than the natural canvas. Blocked
+on investigation of the exact layout rule in mmdc.
+
+### seq-corr-note-only-implicit-participant-fixture
+
+**Deferred from AC-R.2:** `sequence-note-only-implicit-participant.mmd` — covered by
+existing `SEQ-014` regression test in `test_fix_sequence.py`; a new fixture is
+redundant unless SEQ-014 is removed.
+
+### seq-corr-height-hint-gallery-metadata
+
+`height_hint` is tested in T2 (AC-2.5) but is not tracked per-fixture in
+`gallery/metadata.json`. Follow-up: add a `height_hint` column to the per-fixture
+provenance row so CI can detect height-scaling regressions.
+
+### seq-corr-mmdc-data-et-selectors
+
+T11 describes extracting `<g data-et="participant">` counts from mmdc SVG. The
+exact attribute names depend on mmdc 11.15's output schema. Blocked on a probe of
+mmdc's actual SVG output to confirm selectors. Unblocked by running mmdc on a
+sample sequence diagram and inspecting the SVG.
+
+---
+
 ## diagram-consistency-system
 
 - **Discovered (not an AC deferral): style-gallery mock HTML variable-naming drift.**
