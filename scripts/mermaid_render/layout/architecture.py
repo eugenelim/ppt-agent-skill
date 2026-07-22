@@ -1,17 +1,15 @@
-"""mermaid_render.layout.architecture — Native architecture-beta scene builder.
-
-Runs the same parsing and graph topology layout as _layout_architecture()
-in _strategies.py, then calls graph_to_scene() for native SVG output.
-"""
+"""mermaid_render.layout.architecture — Native architecture-beta scene builder."""
 from __future__ import annotations
 
+import dataclasses
 import re
+from dataclasses import dataclass
+from typing import Optional
 
 from ..scene import SvgScene
-from ..paint import graph_to_scene
 
 
-# ── Mirrors _ARCH_*_RE from _strategies.py ───────────────────────────────────
+# ── Regex mirrors from _strategies.py ─────────────────────────────────────────
 
 _ARCH_SVC_RE = re.compile(
     r'^service\s+(\w+)\s*(?:\(([^)]*)\))?\s*\[([^\]]+)\](?:\s+in\s+(\w+))?', re.I
@@ -29,15 +27,136 @@ _ARCH_EDGE_RE = re.compile(
 )
 
 
-def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
-    """Parse architecture-beta source and return an SvgScene."""
-    from ._constants import _Node, _Group, NODE_CAP, _ARCH_ICON_MAP
-    from ._constants import _Edge
-    from ._layout import (
-        _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates,
-    )
-    from ._renderer import _extract_diagram_title
+# ── Immutable compiled model ───────────────────────────────────────────────────
 
+@dataclass(frozen=True)
+class ArchServiceTile:
+    """A parsed + positioned architecture-beta service node."""
+    node_id: str
+    label: str                       # raw label text
+    icon_name: str                   # resolved icon asset name (may be "")
+    icon_svg: str                    # loaded SVG string (may be "")
+    outer_bounds: object             # Rect from layout coordinates
+    label_layout: object             # TextLayout: measured label for the text painter
+    icon_bounds: Optional[object]    # Rect: icon area, or None if no icon
+    side_ports: tuple                # tuple[PortLayout, ...]: LEFT, RIGHT, TOP, BOTTOM
+    group_id: Optional[str]          # parent group id, or None
+    accent_color: str                # CSS color for stroke/text
+
+
+@dataclass(frozen=True)
+class ArchJunction:
+    """An architecture-beta junction — invisible routing point."""
+    node_id: str
+    outer_bounds: object             # Rect: layout-assigned bounds (used by router, not rendered)
+
+
+@dataclass(frozen=True)
+class ArchGroupBoundary:
+    """An architecture-beta group boundary with label and hierarchy."""
+    group_id: str
+    parent_group_id: Optional[str]   # set for nested groups
+    label: str
+    boundary_bounds: object          # Rect
+    label_layout: Optional[object]   # TextLayout, or None if no label
+    member_ids: tuple                # tuple[str, ...]
+    child_group_ids: tuple           # tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ArchEdge:
+    """A routed architecture-beta edge.
+
+    BiRel (<-->) is a single ArchEdge with has_marker_start=True and
+    has_marker_end=True — one path, two arrowheads.
+    """
+    edge_id: str
+    src_id: str
+    dst_id: str
+    label: str
+    waypoints: tuple                 # tuple[Point, ...]
+    src_port: object                 # PortLayout
+    dst_port: object                 # PortLayout
+    has_marker_end: bool             # True for --> and <-->
+    has_marker_start: bool           # True for <--> only
+    label_layout: Optional[object]   # EdgeLabelLayout, or None
+
+
+@dataclass(frozen=True)
+class ArchitectureDiagramLayout:
+    """Immutable compiled architecture-beta model — produced by compile_architecture()."""
+    services: tuple                  # tuple[ArchServiceTile, ...]
+    junctions: tuple                 # tuple[ArchJunction, ...]
+    groups: tuple                    # tuple[ArchGroupBoundary, ...]
+    edges: tuple                     # tuple[ArchEdge, ...]
+    canvas_bounds: object            # Rect
+    direction: str
+    zoom: float
+
+
+# ── Text layout helper ─────────────────────────────────────────────────────────
+
+def _arch_text_layout(label: str, font_size: float = 15.0, font_weight: int = 700) -> object:
+    """Single-line TextLayout with bucketed width estimate."""
+    from ._geometry import TextLayout, TextLine, TextRun, TextStyle
+    from ._constants import _measure_text_width
+    line_h = 18.0 if font_size >= 14 else 16.0
+    w = float(max(_measure_text_width(label, int(font_size), font_weight), 10.0))
+    style = TextStyle(font_size=float(font_size), font_weight=font_weight)
+    run = TextRun(text=label, style=style, width=w, height=line_h)
+    line = TextLine(runs=(run,), width=w, height=line_h, baseline=line_h - 4.0)
+    return TextLayout(
+        lines=(line,),
+        width=w,
+        height=line_h,
+        line_height=line_h,
+        min_content_width=min(w, 40.0),
+        max_content_width=w,
+        resolved_font_path=None,
+        resolved_font_family="system-ui",
+    )
+
+
+# ── Waypoint extraction (from SVG path string) ─────────────────────────────────
+
+def _extract_waypoints(d: str) -> tuple:
+    """Extract Point waypoints from an SVG path d-attribute string."""
+    from ._geometry import Point
+    pts: list = []
+    for cmd, num_str in re.findall(r'([MLQZ])\s*((?:[-\d.]+\s*)*)', d):
+        nums = [float(x) for x in num_str.split() if x]
+        if cmd in ('M', 'L') and len(nums) >= 2:
+            pts.append(Point(nums[0], nums[1]))
+        elif cmd == 'Q' and len(nums) >= 4:
+            pts.append(Point(nums[2], nums[3]))
+    return tuple(pts)
+
+
+# ── Accent color cycle (mirrors _renderer._ACCENT_CYCLE) ──────────────────────
+
+_ARCH_ACCENT_CYCLE = (
+    "var(--accent-1,#60a5fa)",
+    "var(--accent-2,#f59e0b)",
+    "var(--accent-3,#34d399)",
+    "var(--accent-4,#a78bfa)",
+)
+_ARCH_ACCENT_DEFAULT = "var(--node-title-fg,var(--accent-1,#60a5fa))"
+
+
+# ── compile_architecture ───────────────────────────────────────────────────────
+
+def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagramLayout:
+    """Parse + layout architecture-beta source into an immutable ArchitectureDiagramLayout."""
+    from ._constants import (
+        _Node, _Group, _Edge, NODE_CAP, _ARCH_ICON_MAP,
+        NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H,
+    )
+    from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates
+    from ._renderer import _compute_group_bboxes
+    from ._routing import _route_edges
+    from ._geometry import Rect, Point, PortLayout, PortSide, EdgeLabelLayout
+
+    # ── Parse ──────────────────────────────────────────────────────────────────
     lines = src.splitlines()
     content_start = 0
     for i, line in enumerate(lines):
@@ -46,10 +165,10 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             content_start = i + 1
             break
 
-    nodes: dict[str, _Node] = {}
-    groups: dict[str, _Group] = {}
+    nodes: dict = {}
+    groups: dict = {}
     edges: list = []
-    grp_stack: list[tuple[int, str]] = []
+    grp_stack: list = []
 
     for raw in lines[content_start:]:
         line = raw.strip()
@@ -102,7 +221,6 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
 
         m = _ARCH_EDGE_RE.match(line)
         if m:
-            from ._constants import _Edge as _E
             src_id = m.group(1)
             src_side = (m.group(2) or "").upper() or None
             op = m.group(3)
@@ -110,29 +228,26 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             dst_id = m.group(5)
             lbl = (m.group(6) or "").strip()
             if op == "<-->":
-                edges.append(_E(src=src_id, dst=dst_id, label=lbl,
-                                style="solid", arrow=True,
-                                src_side=src_side, dst_side=dst_side))
-                edges.append(_E(src=dst_id, dst=src_id, label="",
-                                style="solid", arrow=True,
-                                src_side=dst_side, dst_side=src_side))
+                # BiRel: one edge with bidir=True — one path, two arrowheads
+                edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
+                                   style="solid", arrow=True, bidir=True,
+                                   src_side=src_side, dst_side=dst_side))
             elif op == "<--":
-                edges.append(_E(src=dst_id, dst=src_id, label=lbl,
-                                style="solid", arrow=True,
-                                src_side=dst_side, dst_side=src_side))
+                edges.append(_Edge(src=dst_id, dst=src_id, label=lbl,
+                                   style="solid", arrow=True,
+                                   src_side=dst_side, dst_side=src_side))
             else:
-                edges.append(_E(src=src_id, dst=dst_id, label=lbl,
-                                style="solid", arrow=(op == "-->"),
-                                src_side=src_side, dst_side=dst_side))
+                edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
+                                   style="solid", arrow=(op == "-->"),
+                                   src_side=src_side, dst_side=dst_side))
 
     if not nodes:
         raise ValueError("No services found in architecture-beta.")
 
     if len(nodes) > NODE_CAP:
-        raise ValueError(
-            f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP})."
-        )
+        raise ValueError(f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}).")
 
+    # ── Layout ─────────────────────────────────────────────────────────────────
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
@@ -142,22 +257,296 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     if width_hint and canvas_w > 0 and canvas_w > width_hint:
         zoom = width_hint / canvas_w
 
-    from ._routing import _route_edges
-    from ._renderer import _compute_group_bboxes
     group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
-    routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes)
-    title = _extract_diagram_title(src)
+    routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)
 
-    return graph_to_scene(
-        nodes=nodes,
-        edges=edges,
-        groups=groups,
-        routes=routes,
-        canvas_w=canvas_w,
-        canvas_h=canvas_h,
-        diagram_type="architecture-beta",
+    # ── Build group → index map for accent colors ──────────────────────────────
+    node_grp_idx: dict = {}
+    for gi, gid in enumerate(groups):
+        for nid in groups[gid].members:
+            node_grp_idx[nid] = gi
+
+    # ── Build child_group_ids map ──────────────────────────────────────────────
+    group_children: dict = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        parent = getattr(grp, "parent_group", None)
+        if parent and parent in group_children:
+            group_children[parent].append(gid)
+
+    # ── Service tiles and junctions ────────────────────────────────────────────
+    services: list = []
+    junctions: list = []
+
+    for nid, n in sorted(nodes.items()):
+        nw = n.width or NODE_W
+        nh = _node_render_h(n)
+        outer = Rect(x=float(n.x), y=float(n.y), w=float(nw), h=float(nh))
+
+        if n.is_dummy:
+            junctions.append(ArchJunction(node_id=nid, outer_bounds=outer))
+            continue
+
+        icon_svg = _load_icon(n.icon) if n.icon else ""
+        has_icon = bool(icon_svg)
+        icon_bounds = (
+            Rect(
+                x=float(n.x + _NODE_PAD_V),
+                y=float(n.y + _NODE_PAD_V),
+                w=float(_ICON_H),
+                h=float(_ICON_H),
+            )
+            if has_icon else None
+        )
+
+        label_layout = _arch_text_layout(n.label, font_size=15.0, font_weight=700)
+
+        # Side ports: L / R / T / B face centers
+        cx = float(n.x + nw / 2)
+        cy = float(n.y + nh / 2)
+        side_ports = (
+            PortLayout(node_id=nid, side=PortSide.LEFT,
+                       position=Point(float(n.x), cy),
+                       direction=Point(-1.0, 0.0)),
+            PortLayout(node_id=nid, side=PortSide.RIGHT,
+                       position=Point(float(n.x + nw), cy),
+                       direction=Point(1.0, 0.0)),
+            PortLayout(node_id=nid, side=PortSide.TOP,
+                       position=Point(cx, float(n.y)),
+                       direction=Point(0.0, -1.0)),
+            PortLayout(node_id=nid, side=PortSide.BOTTOM,
+                       position=Point(cx, float(n.y + nh)),
+                       direction=Point(0.0, 1.0)),
+        )
+
+        gi = node_grp_idx.get(nid)
+        accent = (
+            _ARCH_ACCENT_CYCLE[gi % len(_ARCH_ACCENT_CYCLE)]
+            if gi is not None else _ARCH_ACCENT_DEFAULT
+        )
+
+        services.append(ArchServiceTile(
+            node_id=nid,
+            label=n.label,
+            icon_name=n.icon or "",
+            icon_svg=icon_svg,
+            outer_bounds=outer,
+            label_layout=label_layout,
+            icon_bounds=icon_bounds,
+            side_ports=side_ports,
+            group_id=n.group,
+            accent_color=accent,
+        ))
+
+    # ── Group boundaries ───────────────────────────────────────────────────────
+    arch_groups: list = []
+    for gid, grp in groups.items():
+        if gid not in group_bboxes:
+            continue
+        bx1, by1, bx2, by2 = group_bboxes[gid]
+        boundary_bounds = Rect(
+            x=float(bx1), y=float(by1),
+            w=float(bx2 - bx1), h=float(by2 - by1),
+        )
+        lbl = grp.label or ""
+        label_layout = _arch_text_layout(lbl, font_size=12.0, font_weight=600) if lbl else None
+        arch_groups.append(ArchGroupBoundary(
+            group_id=gid,
+            parent_group_id=getattr(grp, "parent_group", None),
+            label=lbl,
+            boundary_bounds=boundary_bounds,
+            label_layout=label_layout,
+            member_ids=tuple(grp.members),
+            child_group_ids=tuple(group_children.get(gid, [])),
+        ))
+
+    # ── Edges ──────────────────────────────────────────────────────────────────
+    arch_edges: list = []
+    seen_pairs: dict = {}
+
+    for spec in routes:
+        src = spec.get("src", "")
+        dst = spec.get("dst", "")
+        pair = (src, dst)
+        idx = seen_pairs.get(pair, 0)
+        seen_pairs[pair] = idx + 1
+        edge_id = f"{src}->{dst}" if idx == 0 else f"{src}->{dst}#{idx}"
+
+        waypoints = _extract_waypoints(spec.get("d", ""))
+        if len(waypoints) < 2:
+            continue  # unroutable edge — skip rather than emit a zero-length path
+        src_pos = waypoints[0]
+        dst_pos = waypoints[-1]
+
+        src_port = PortLayout(node_id=src, side=PortSide.AUTO,
+                              position=src_pos, direction=Point(0.0, 1.0))
+        dst_port = PortLayout(node_id=dst, side=PortSide.AUTO,
+                              position=dst_pos, direction=Point(0.0, -1.0))
+
+        mid = spec.get("marker_id") or ""
+        has_marker_end = bool(mid) and not mid.endswith("-rev")
+        has_marker_start = bool(spec.get("bidir")) or (bool(mid) and mid.endswith("-rev"))
+
+        label_text = spec.get("label", "") or ""
+        edge_label = None
+        if label_text:
+            lx, ly = float(spec.get("lx", 0)), float(spec.get("ly", 0))
+            tl = _arch_text_layout(label_text, font_size=12.0, font_weight=400)
+            edge_label = EdgeLabelLayout(
+                text=label_text,
+                layout=tl,
+                bounds=Rect(x=lx, y=ly, w=tl.width, h=tl.height),
+                anchor_point=src_pos,
+            )
+
+        arch_edges.append(ArchEdge(
+            edge_id=edge_id,
+            src_id=src,
+            dst_id=dst,
+            label=label_text,
+            waypoints=waypoints,
+            src_port=src_port,
+            dst_port=dst_port,
+            has_marker_end=has_marker_end,
+            has_marker_start=has_marker_start,
+            label_layout=edge_label,
+        ))
+
+    canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
+    return ArchitectureDiagramLayout(
+        services=tuple(services),
+        junctions=tuple(junctions),
+        groups=tuple(arch_groups),
+        edges=tuple(arch_edges),
+        canvas_bounds=canvas_bounds,
         direction="LR",
-        group_bboxes=group_bboxes or None,
-        title=title,
         zoom=zoom,
     )
+
+
+# ── arch_to_finalized ──────────────────────────────────────────────────────────
+
+def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
+    """Lower ArchitectureDiagramLayout to a FinalizedLayout for painting."""
+    from ._geometry import (
+        FinalizedLayout, NodeLayout, GroupLayout, RoutedEdge, Rect,
+        _empty_diagnostics,
+    )
+
+    node_layouts: dict = {}
+
+    for svc in arch.services:
+        b = svc.outer_bounds
+        node_layouts[svc.node_id] = NodeLayout(
+            node_id=svc.node_id,
+            semantic_shape="arch-service",
+            outer_bounds=b,
+            content_bounds=Rect(
+                x=b.x + 8.0, y=b.y + 4.0,
+                w=float(max(b.w - 16.0, 20.0)),
+                h=float(max(b.h - 8.0, 10.0)),
+            ),
+            title_layout=svc.label_layout,
+            subtitle_layout=None,
+            member_layouts=(),
+            icon_bounds=svc.icon_bounds,
+            ports=svc.side_ports,
+            css_classes=("node-arch-service",),
+            extra_css="",
+            is_dummy=False,
+            rank=0,
+            is_external=False,
+            icon_svg=svc.icon_svg,
+            accent_color=svc.accent_color,
+            parent_group_id=svc.group_id,
+        )
+
+    for jct in arch.junctions:
+        b = jct.outer_bounds
+        node_layouts[jct.node_id] = NodeLayout(
+            node_id=jct.node_id,
+            semantic_shape="arch-junction",
+            outer_bounds=b,
+            content_bounds=b,
+            title_layout=None,
+            subtitle_layout=None,
+            member_layouts=(),
+            icon_bounds=None,
+            ports=(),
+            css_classes=("node-arch-junction",),
+            extra_css="",
+            is_dummy=True,
+            rank=0,
+            is_external=False,
+            icon_svg="",
+            accent_color="",
+            parent_group_id=None,
+        )
+
+    group_layouts: dict = {}
+    for grp in arch.groups:
+        group_layouts[grp.group_id] = GroupLayout(
+            group_id=grp.group_id,
+            parent_group_id=grp.parent_group_id,
+            boundary_bounds=grp.boundary_bounds,
+            label_layout=grp.label_layout,
+            member_ids=grp.member_ids,
+            child_group_ids=grp.child_group_ids,
+            local_direction="LR",
+        )
+
+    routed_edges = tuple(
+        RoutedEdge(
+            edge_id=e.edge_id,
+            src_node_id=e.src_id,
+            dst_node_id=e.dst_id,
+            src_port=e.src_port,
+            dst_port=e.dst_port,
+            waypoints=e.waypoints,
+            edge_style="solid",
+            has_marker_end=e.has_marker_end,
+            has_marker_start=e.has_marker_start,
+            label_layout=e.label_layout,
+            src_label_layout=None,
+            dst_label_layout=None,
+        )
+        for e in arch.edges
+    )
+
+    return FinalizedLayout(
+        node_layouts=node_layouts,
+        group_layouts=group_layouts,
+        routed_edges=routed_edges,
+        visible_bounds=arch.canvas_bounds,
+        diagram_padding=48.0,
+        canvas_bounds=arch.canvas_bounds,
+        direction=arch.direction,
+        diagnostics=_empty_diagnostics(),
+    )
+
+
+# ── Public entry point ─────────────────────────────────────────────────────────
+
+def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
+    """Parse architecture-beta source and return an SvgScene."""
+    from ._renderer import _extract_diagram_title
+    from ..paint import finalized_layout_to_scene
+
+    arch = compile_architecture(src, width_hint=width_hint)
+    finalized = arch_to_finalized(arch)
+    title = _extract_diagram_title(src)
+
+    scene = finalized_layout_to_scene(
+        finalized,
+        diagram_type="architecture-beta",
+        title=title,
+    )
+
+    # Apply zoom: scale physical width/height while keeping coordinate viewBox intact.
+    if arch.zoom != 1.0:
+        scene = dataclasses.replace(
+            scene,
+            width=scene.view_box[2] * arch.zoom,
+            height=scene.view_box[3] * arch.zoom,
+        )
+
+    return scene
