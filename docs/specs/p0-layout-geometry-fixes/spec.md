@@ -20,7 +20,7 @@ Source analysis: `.context/attachments/TTRgsS/pasted_text_2026-07-20_17-16-08.tx
 **Out of scope:** P1 (Dagre/ELK integration), P2 (edge-routing engine outputs),
 P3 (geometry assertion tests), `mermaid_layout/` shim (reads from `mermaid_render`),
 self-loop lane allocation, faithful-mermaid mode separation, trapezoid/flag/cylinder
-dynamic sizing (deferred: backlog).
+dynamic sizing.
 
 ## Acceptance Criteria
 

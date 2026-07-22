@@ -1,7 +1,7 @@
 # Flowchart Geometry Fixes — spec
 
 Mode: full (multi-feature, dependent tasks; structural changes to `_constants.py`, `_layout.py`, `_routing.py`, `_renderer.py`, `_strategies.py`; new module `_geometry.py`)
-- **Status:** Implemented — adversarial review pending
+- **Status:** Shipped
 
 ## Objective
 

@@ -1,6 +1,6 @@
 # Spec: Skill Payload Refactor
 
-**Status:** Done
+**Status:** Shipped
 **Branch:** `eugene/skill-payload-refactor`
 
 ---
@@ -35,14 +35,14 @@ For `references/`: all content is adopter-facing (audit confirmed no non-adopter
 
 ## Acceptance Criteria
 
-- [ ] No `test_*.py` under any official folder.
-- [ ] Every remaining `scripts/*.py` is adopter-facing per the method above (one-line rationale per moved file in PR).
-- [ ] `assets/` contains only adopter-runtime resources (`icons/`, `proof/`) — hero gallery + branding live under `docs/assets/`.
-- [ ] `references/` audited — no non-adopter content (no moves needed).
-- [ ] All references updated; repo-wide grep for old paths is clean.
-- [ ] Gates green: `pytest tests/ -x -q` passes (existing tests + moved tests with pytest-safe guards); lint passes.
-- [ ] `tests/test_payload_boundary.py` exists and passes: (a) `glob('scripts/**/test_*.py')` is empty, (b) all `scripts/*.py` (non-package, non-`__init__`) are in the reachable set derived from the roots above.
-- [ ] `docs/CONVENTIONS.md` updated to reflect new test locations and new `tools/` maintainer-script location.
+- [x] No `test_*.py` under any official folder.
+- [x] Every remaining `scripts/*.py` is adopter-facing per the method above (one-line rationale per moved file in PR).
+- [x] `assets/` contains only adopter-runtime resources (`icons/`, `proof/`) — hero gallery + branding live under `docs/assets/`.
+- [x] `references/` audited — no non-adopter content (no moves needed).
+- [x] All references updated; repo-wide grep for old paths is clean.
+- [x] Gates green: `pytest tests/ -x -q` passes (existing tests + moved tests with pytest-safe guards); lint passes.
+- [x] `tests/test_payload_boundary.py` exists and passes: (a) `glob('scripts/**/test_*.py')` is empty, (b) all `scripts/*.py` (non-package, non-`__init__`) are in the reachable set derived from the roots above.
+- [x] `docs/CONVENTIONS.md` updated to reflect new test locations and new `tools/` maintainer-script location.
 
 ---
 

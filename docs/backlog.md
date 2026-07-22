@@ -471,6 +471,38 @@ second walk, normalization. Two-sided layout: root at center, split root childre
 deterministically. Mirror left side, align both sides to root, resolve vertical overlap.
 Radial mode remains unchanged when `layout: tidy-tree` is absent.
 
+### backlog-arch-bidir
+
+**Deferred from `mermaid-p2`:** Architecture bidirectional relations (`BiRel`) should render as a
+single path with arrowhead markers at both ends, not two separate directed edges. Requires the
+architecture router to detect `BiRel` edge type and emit a single `<path>` with `marker-start` and
+`marker-end`. Unblocked when the architecture layout/routing layer distinguishes `BiRel` from `Rel`.
+
+### backlog-c4-shapes
+
+**Deferred from `mermaid-p2`:** C4 element painters should use distinct shapes per stereotype:
+ordinary container (rectangle), person (rounded-rect with head icon), database (cylinder),
+queue (horizontal cylinder / barrel), external (dashed border). Currently all C4 elements
+use a generic rectangle. Unblocked when C4 painter dispatch reads the `stereotype` field.
+
+### backlog-c4-birel
+
+**Deferred from `mermaid-p2`:** C4 `BiRel` directional hints should affect edge endpoint
+placement and routing (e.g. `BiRel_D` routes downward). Additionally `BiRel` should render as
+one path with two markers rather than two directed relations. Unblocked alongside [[backlog-arch-bidir]]
+once the C4 router distinguishes `BiRel` from `Rel`.
+
+### backlog-state-semantics
+
+**Deferred from `mermaid-p2`:** State diagram semantic rendering — five sub-items:
+(1) initial (`[*]`) and final pseudo-states use filled-circle / double-circle shapes rather
+than placeholder text; (2) composite states contain their internal sub-machines visually;
+(3) atomic and composite nodes for the same state are not duplicated in the IR;
+(4) notes are anchored to the declared side of their target state;
+(5) external transitions use composite-boundary gate ports rather than crossing the enclosing
+group boundary. Unblocked when the state painter receives a properly stratified IR from the
+state layout module.
+
 ## mermaid-fidelity-hardening
 
 ### ~~mmdc-oracle-recapture~~ *(shipped — mermaid-p3 Stage 13 Task E)*

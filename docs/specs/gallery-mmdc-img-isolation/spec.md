@@ -1,4 +1,5 @@
 Mode: light (no risk trigger fired)
+- **Status:** Shipped
 
 # gallery-mmdc-img-isolation
 

@@ -2,7 +2,7 @@
 
 **Mode: full (structural change + multi-feature + unfamiliar territory)**
 
-Status: Implementing
+**Status:** Implementing
 
 ## Objective
 
