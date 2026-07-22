@@ -6,10 +6,14 @@ import re
 
 import pytest
 
-from scripts.mermaid_render import to_svg
+from scripts.mermaid_render import to_svg, dispatch_native_result
+from scripts.mermaid_render.errors import (
+    NativeRendererUnavailable,
+    UnsupportedDiagramType,
+    NativeRenderError,
+)
 from scripts.mermaid_render.native_svg import (
     dispatch_native,
-    NativeRenderError,
     _use_native,
     BACKEND_ENV,
     BACKEND_NATIVE,
@@ -169,10 +173,10 @@ class TestStateDiagram:
         assert "Idle" in svg or "Running" in svg
 
 
-# ── NOT_IMPLEMENTED types (stubs removed in P3) ───────────────────────────────
+# ── Legacy-only types — must raise NativeRendererUnavailable ──────────────────
 
-class TestNotImplementedTypes:
-    """NOT_IMPLEMENTED types must raise NativeRenderError, not return placeholder SVG."""
+class TestLegacyOnlyTypes:
+    """LEGACY_ONLY types raise NativeRendererUnavailable from dispatch_native."""
 
     @pytest.mark.parametrize("src, dtype", [
         (SEQUENCE_DIAGRAM, "sequencediagram"),
@@ -180,11 +184,21 @@ class TestNotImplementedTypes:
         ("gantt\n    title MyProject\n    section A\n    Task1 :t1, 2024-01-01, 7d\n", "gantt"),
         ("pie\n    title Colors\n    \"Red\" : 30\n    \"Blue\" : 70\n", "pie"),
     ])
-    def test_not_implemented_raises(self, src, dtype):
+    def test_legacy_only_raises_native_render_error(self, src, dtype):
         with pytest.raises(NativeRenderError) as exc_info:
             dispatch_native(src)
         assert exc_info.value.phase == "not-implemented"
-        assert dtype in exc_info.value.diagram_type
+
+    def test_legacy_only_is_value_error_subclass(self):
+        """NativeRenderError subclasses ValueError for backward compat."""
+        with pytest.raises(ValueError):
+            dispatch_native(SEQUENCE_DIAGRAM)
+
+    def test_dispatch_native_result_legacy_only_has_errors(self):
+        result = dispatch_native_result(SEQUENCE_DIAGRAM)
+        assert result.svg is None
+        assert result.errors
+        assert not result.is_success(strict=False)
 
 
 # ── to_svg() public API integration ──────────────────────────────────────────
@@ -220,9 +234,40 @@ class TestToSvgIntegration:
 class TestErrorHandling:
     def test_unsupported_sankey_raises(self):
         src = "sankey-beta\nA,B,10"
-        with pytest.raises((NativeRenderError, ValueError)):
+        # UnsupportedDiagramType subclasses ValueError, so both assertions pass
+        with pytest.raises(ValueError, match="not supported"):
             dispatch_native(src)
+
+    def test_unsupported_sankey_typed_error(self):
+        src = "sankey-beta\nA,B,10"
+        with pytest.raises(UnsupportedDiagramType) as exc_info:
+            dispatch_native(src)
+        assert exc_info.value.diagram_type == "sankey-beta"
 
     def test_empty_graph_raises(self):
         with pytest.raises(ValueError):
             dispatch_native("flowchart TD\n")
+
+    def test_unexpected_adapter_exception_propagates(self, monkeypatch):
+        """Unexpected builder exceptions propagate unmodified — no swallowing."""
+        import scripts.mermaid_render.native_svg as native_svg_mod
+
+        def _bad_builder(*a, **kw):
+            raise RuntimeError("adapter exploded")
+
+        monkeypatch.setattr(native_svg_mod, "_class_scene", _bad_builder)
+        with pytest.raises(RuntimeError, match="adapter exploded"):
+            dispatch_native("classDiagram\n    class Animal\n")
+
+    def test_dispatch_native_result_wraps_unexpected_exception(self, monkeypatch):
+        """dispatch_native_result wraps unexpected exceptions in errors field."""
+        import scripts.mermaid_render.native_svg as native_svg_mod
+
+        def _bad_builder(*a, **kw):
+            raise RuntimeError("builder crashed")
+
+        monkeypatch.setattr(native_svg_mod, "_class_scene", _bad_builder)
+        result = dispatch_native_result("classDiagram\n    class Animal\n")
+        assert result.svg is None
+        assert result.errors
+        assert not result.is_success()

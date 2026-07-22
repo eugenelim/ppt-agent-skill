@@ -471,6 +471,7 @@ def test_node_layout_field_coverage_reflective():
         "extra_css",
         "rank",
         "icon_svg",
+        "parent_group_id",  # subgraph membership metadata; grouping is encoded in FinalizedLayout.groups
     }
 
     # Build a comprehensive fixture with non-None/non-default values for all consumable fields

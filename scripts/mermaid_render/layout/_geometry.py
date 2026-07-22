@@ -371,6 +371,14 @@ class FinalizedLayout:
         if not isinstance(self.group_layouts, MappingProxyType):
             object.__setattr__(self, "group_layouts", MappingProxyType(self.group_layouts))
 
+    def validate(self, metadata: "LayoutMetadata | None" = None) -> "ValidationResult":
+        """Validate this layout against geometry invariants.
+
+        Delegates to validate_finalized_layout(); provided as a method for
+        convenient use from tests and callers that hold a FinalizedLayout.
+        """
+        return validate_finalized_layout(self, metadata)
+
 
 def _empty_diagnostics() -> LayoutDiagnostics:
     return LayoutDiagnostics(
@@ -433,15 +441,38 @@ def validate_finalized_layout(
             f"({rf.src_node_id} → {rf.dst_node_id}): {rf.reason}"
         )
 
-    # 2b. Edge-count reconciliation
+    # 2b. Edge-count reconciliation (AC-5.1)
     if metadata is not None:
         accounted = len(layout.routed_edges) + len(layout.routing_failures)
-        if accounted < metadata.edge_count:
-            missing = metadata.edge_count - accounted
+        if accounted != metadata.edge_count:
             errors.append(
-                f"Missing route: {missing} edge(s) from parsed source absent from "
-                f"routed_edges ({len(layout.routed_edges)}) and routing_failures ({len(layout.routing_failures)})"
+                f"Edge-count mismatch: routed({len(layout.routed_edges)}) + "
+                f"failures({len(layout.routing_failures)}) = {accounted}, "
+                f"expected {metadata.edge_count}"
             )
+
+    # 2c. Routed edge ID uniqueness (AC-5.3)
+    routed_ids = [re_obj.edge_id for re_obj in layout.routed_edges]
+    routed_id_set: set[str] = set()
+    for eid in routed_ids:
+        if eid in routed_id_set:
+            errors.append(f"Duplicate routed_edge ID: {eid!r}")
+        routed_id_set.add(eid)
+
+    # 2d. Routing failure ID uniqueness (AC-5.4)
+    failure_ids = [rf.edge_id for rf in layout.routing_failures]
+    failure_id_set: set[str] = set()
+    for eid in failure_ids:
+        if eid in failure_id_set:
+            errors.append(f"Duplicate routing_failure ID: {eid!r}")
+        failure_id_set.add(eid)
+
+    # 2e. Disjointness: no edge_id in both routed and failures (AC-5.5)
+    # Together with 2c (AC-5.3) + 2d (AC-5.4), this discharges AC-5.2
+    # ("every original edge ID is unique" — original = routed ∪ failures).
+    overlap = routed_id_set & failure_id_set
+    for eid in sorted(overlap):
+        errors.append(f"Edge ID {eid!r} appears in both routed_edges and routing_failures")
 
     # 3. Each node outer_bounds inside canvas
     for nid, nl in layout.node_layouts.items():
@@ -467,11 +498,16 @@ def validate_finalized_layout(
                     f"Edge {re_obj.edge_id!r} label {lbl.text!r} bounds {lbl.bounds} outside canvas"
                 )
 
-        # 13. Route validity
+        # 13. Route validity (AC-5.6)
         wps = re_obj.waypoints
         if len(wps) < 2:
             errors.append(f"Edge {re_obj.edge_id!r} has fewer than 2 waypoints")
         else:
+            for i, wp in enumerate(wps):
+                if not (math.isfinite(wp.x) and math.isfinite(wp.y)):
+                    errors.append(
+                        f"Edge {re_obj.edge_id!r} waypoint[{i}] has non-finite coordinate ({wp.x}, {wp.y})"
+                    )
             for i in range(len(wps) - 1):
                 if wps[i].x == wps[i + 1].x and wps[i].y == wps[i + 1].y:
                     errors.append(
@@ -642,6 +678,7 @@ class ValidationResult:
     syntax_coverage: str = "pass"     # "pass" | "partial" | "fail"
     geometry: str = "unvalidated"     # "pass" | "fail" | "unvalidated"
     mmdc_oracle: str = "unvalidated"  # "pass" | "warning" | "fail" | "unvalidated"
+    renderer_backend: str = ""        # e.g. "native" | "legacy-dom" | "none" | ""
 
     @property
     def status(self) -> str:

@@ -19,39 +19,16 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping, Optional
 
+from .errors import (
+    NativeRenderError,
+    NativeRendererUnavailable,
+    UnsupportedDiagramType,
+    UnsupportedDiagramFeature,  # noqa: F401 — re-exported for caller convenience
+)
 from .layout._parser import _detect_directive, _strip_frontmatter
 from .layout._strategies import _GRAPH_DIRECTIVES
 from .scene import SvgScene
 from .svg_serializer import scene_to_svg_str
-
-
-# ── Typed render error ────────────────────────────────────────────────────────
-
-class NativeRenderError(ValueError):
-    """Raised when native SVG rendering fails for a specific diagram type.
-
-    Always includes diagram_type and phase. Subclass of ValueError for
-    backward compatibility with existing callers that catch ValueError.
-    """
-
-    def __init__(
-        self,
-        *,
-        diagram_type: str,
-        phase: str,
-        semantic_id: str = "",
-        cause: "Exception | None" = None,
-    ) -> None:
-        self.diagram_type = diagram_type
-        self.phase = phase
-        self.semantic_id = semantic_id
-        self.cause = cause
-        parts = [f"diagram_type={diagram_type!r}", f"phase={phase!r}"]
-        if semantic_id:
-            parts.append(f"semantic_id={semantic_id!r}")
-        if cause:
-            parts.append(f"cause={cause}")
-        super().__init__(f"NativeRenderError({', '.join(parts)})")
 
 
 # ── Render request (immutable, parsed once) ──────────────────────────────────
@@ -270,8 +247,20 @@ def _class_topology_scene(src: str, direction: str, width_hint: int) -> SvgScene
     )
 
 
+def _sequence_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("sequencediagram", "not-implemented")
+
+
+def _er_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("erdiagram", "not-implemented")
+
+
 def _class_scene(src: str, direction: str, width_hint: int) -> SvgScene:
     return _class_topology_scene(src, direction, width_hint)
+
+
+def _gantt_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("gantt", "not-implemented")
 
 
 def _timeline_scene(src: str, direction: str, width_hint: int) -> SvgScene:
@@ -280,10 +269,34 @@ def _timeline_scene(src: str, direction: str, width_hint: int) -> SvgScene:
     return layout_timeline_scene(src, width_hint=width_hint)
 
 
+def _quadrant_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("quadrantchart", "not-implemented")
+
+
+def _pie_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("pie", "not-implemented")
+
+
+def _xychart_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("xychart-beta", "not-implemented")
+
+
 def _mindmap_scene(src: str, direction: str, width_hint: int) -> SvgScene:
     """Native semantic scene for mindmap — delegates to dedicated module."""
     from .layout.mindmap import layout_mindmap_scene
     return layout_mindmap_scene(src, width_hint=width_hint)
+
+
+def _block_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("block-beta", "not-implemented")
+
+
+def _packet_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("packet-beta", "not-implemented")
+
+
+def _kanban_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("kanban", "not-implemented")
 
 
 def _architecture_scene(src: str, direction: str, width_hint: int) -> SvgScene:
@@ -298,6 +311,18 @@ def _c4_scene(src: str, direction: str, width_hint: int, directive: str) -> SvgS
     return layout_c4_scene(src, c4_type=directive.lower(), width_hint=width_hint)
 
 
+def _journey_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("journey", "not-implemented")
+
+
+def _requirement_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("requirementdiagram", "not-implemented")
+
+
+def _gitgraph_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+    raise NativeRenderError("gitgraph", "not-implemented")
+
+
 # ── Main dispatch ─────────────────────────────────────────────────────────────
 
 _NOT_IMPLEMENTED_DIRECTIVES = frozenset({
@@ -305,6 +330,76 @@ _NOT_IMPLEMENTED_DIRECTIVES = frozenset({
     "xychart-beta", "block-beta", "packet-beta", "kanban", "journey",
     "requirementdiagram", "gitgraph",
 })
+
+
+def _dispatch_scene(
+    clean: str,
+    directive: str,
+    direction: str,
+    width_hint: int,
+    height_hint: int,
+) -> SvgScene:
+    """Route a cleaned Mermaid source to the appropriate scene builder."""
+    d = directive.lower()
+    if d in _GRAPH_DIRECTIVES:
+        from .layout._strategies import _compile_flowchart, RenderOptions
+        from .layout._renderer import _extract_diagram_title
+        from .paint import finalized_layout_to_scene
+        compiled = _compile_flowchart(
+            clean, width_hint, RenderOptions(),
+            direction_override=direction,
+            height_hint=height_hint,
+        )
+        title = _extract_diagram_title(clean)
+        return finalized_layout_to_scene(compiled.layout, diagram_type=d, title=title)
+    elif d == "sequencediagram":
+        return _sequence_scene(clean, direction, width_hint)
+    elif d == "erdiagram":
+        return _er_scene(clean, direction, width_hint)
+    elif d == "classdiagram":
+        return _class_scene(clean, direction, width_hint)
+    elif d == "gantt":
+        return _gantt_scene(clean, direction, width_hint)
+    elif d == "timeline":
+        return _timeline_scene(clean, direction, width_hint)
+    elif d == "quadrantchart":
+        return _quadrant_scene(clean, direction, width_hint)
+    elif d == "pie" or d.startswith("pie "):
+        return _pie_scene(clean, direction, width_hint)
+    elif d == "xychart-beta":
+        return _xychart_scene(clean, direction, width_hint)
+    elif d == "mindmap":
+        return _mindmap_scene(clean, direction, width_hint)
+    elif d == "block-beta":
+        return _block_scene(clean, direction, width_hint)
+    elif d == "packet-beta":
+        return _packet_scene(clean, direction, width_hint)
+    elif d == "kanban":
+        return _kanban_scene(clean, direction, width_hint)
+    elif d == "architecture-beta":
+        return _architecture_scene(clean, direction, width_hint)
+    elif d in ("c4context", "c4container", "c4component"):
+        return _c4_scene(clean, direction, width_hint, d)
+    elif d == "journey":
+        return _journey_scene(clean, direction, width_hint)
+    elif d == "requirementdiagram":
+        return _requirement_scene(clean, direction, width_hint)
+    elif d == "gitgraph":
+        return _gitgraph_scene(clean, direction, width_hint)
+    elif d in ("sankey-beta", "zenuml"):
+        raise UnsupportedDiagramType(d)
+    else:
+        # Unknown directive — attempt flowchart pipeline as best-effort
+        from .layout._strategies import _compile_flowchart, RenderOptions
+        from .layout._renderer import _extract_diagram_title
+        from .paint import finalized_layout_to_scene
+        compiled = _compile_flowchart(
+            clean, width_hint, RenderOptions(),
+            direction_override=direction,
+            height_hint=height_hint,
+        )
+        title = _extract_diagram_title(clean)
+        return finalized_layout_to_scene(compiled.layout, diagram_type=d, title=title)
 
 
 def dispatch_native(
@@ -315,11 +410,15 @@ def dispatch_native(
     width_hint: int = 0,
     height_hint: int = 0,
 ) -> str:
-    """Dispatch Mermaid source to native SVG string (no Playwright, no DOM-to-SVG).
+    """Dispatch Mermaid source to a native SVG string.
 
-    Raises NativeRenderError (subclass of ValueError) on failure.
-    Never silently falls back to legacy DOM rendering.
-    Never returns a placeholder scene.
+    Raises typed errors on failure:
+      - NativeRenderError(phase="not-implemented") for LEGACY_ONLY types
+      - UnsupportedDiagramType for UNSUPPORTED types (sankey-beta, zenuml)
+      - NativeRenderError for other builder failures
+      - ValueError for diagram-level errors (empty graph, etc.)
+
+    Never silently falls back to a placeholder.
     """
     request = parse_render_request(
         src,
@@ -360,21 +459,12 @@ def dispatch_native(
     elif d in ("c4context", "c4container", "c4component"):
         scene = _c4_scene(clean, direction, width_hint, d)
     elif d in _NOT_IMPLEMENTED_DIRECTIVES:
-        raise NativeRenderError(
-            diagram_type=d,
-            phase="not-implemented",
-        )
+        raise NativeRenderError(d, "not-implemented")
     elif d in ("sankey-beta", "zenuml"):
-        raise NativeRenderError(
-            diagram_type=d,
-            phase="dispatch",
-            semantic_id="unsupported",
-        )
+        raise UnsupportedDiagramType(d)
     else:
-        raise NativeRenderError(
-            diagram_type=d,
-            phase="dispatch",
-            semantic_id="unknown-directive",
-        )
+        raise NativeRenderError(d, "dispatch")
 
     return scene_to_svg_str(scene)
+
+
