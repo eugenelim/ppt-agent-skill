@@ -85,9 +85,9 @@ jobs:
           python-version: "3.13"
           cache: "pip"
       - run: pip install pytest
-      # Core library boundary, data model, manifest, comparators, mutations.
-      # No browser or mmdc required.
-      - run: python3 -m pytest tests/fidelity/test_models.py tests/fidelity/test_manifest.py tests/fidelity/test_core_boundary.py tests/fidelity/test_comparators.py tests/fidelity/test_mutations.py -q
+      # Core library boundary, data model, manifest, comparators, mutations,
+      # serialization round-trip.  No browser or mmdc required.
+      - run: python3 -m pytest tests/fidelity/test_models.py tests/fidelity/test_manifest.py tests/fidelity/test_core_boundary.py tests/fidelity/test_comparators.py tests/fidelity/test_mutations.py tests/fidelity/test_serialization_roundtrip.py -q
 
   fidelity-annotations:
     name: fidelity renderer data annotations
@@ -118,3 +118,17 @@ jobs:
       # End-to-end harness tests: serialization stability, canonical form,
       # manifest integration. Reference adapter tests are skipped (no mmdc).
       - run: python3 -m pytest tests/fidelity/test_phase1.py -q -k "not TestReferenceAdapter"
+      # Validate oracle manifest integrity (no mmdc required — reads committed oracle JSON).
+      - run: python3 tests/fidelity/run.py validate
+      # Run all 24 cases against committed oracle. Exits nonzero on hard failures
+      # (PARSE_MISMATCH, SEMANTIC_MISMATCH, QUALITY_FAILURE, etc.) but not on
+      # NATIVE_UNSUPPORTED (expected for stub diagram types). Reports uploaded always.
+      - run: python3 tests/fidelity/run.py run --report-dir tests/fidelity/reports/ci
+      # Determinism check: 3 consecutive runs of flowchart cases must be identical.
+      - run: python3 tests/fidelity/run.py determinism --runs 3 --report-dir tests/fidelity/reports/determinism
+      - name: Upload fidelity reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fidelity-reports
+          path: tests/fidelity/reports/

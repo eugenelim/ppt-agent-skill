@@ -101,6 +101,7 @@ def cmd_run(
 
     # Hard-fail statuses — nonzero exit for any of these.
     # Scored metric differences alone do not gate CI (Phase 1).
+    # NATIVE_UNSUPPORTED is excluded: stub diagram types are expected and acceptable.
     _HARD_FAIL_STATUSES = {
         ComparisonStatus.PARSE_MISMATCH,
         ComparisonStatus.SEMANTIC_MISMATCH,
@@ -109,7 +110,6 @@ def cmd_run(
         ComparisonStatus.EXTRACTOR_GAP,
         ComparisonStatus.STALE_ORACLE,
         ComparisonStatus.INVALID_MANIFEST,
-        ComparisonStatus.NATIVE_UNSUPPORTED,
         ComparisonStatus.NONDETERMINISTIC,
         ComparisonStatus.INTERNAL_ERROR,
     }

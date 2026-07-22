@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:00:42.823084+00:00",
+  "capture_timestamp": "2026-07-21T23:38:10.493367+00:00",
   "case_id": "flowchart.diamond.branch",
   "diagnostics": [],
   "environment": {
@@ -139,7 +139,7 @@
         "attributes": {},
         "id": "Check__Process__1",
         "kind": "edge",
-        "label": "",
+        "label": "Yes",
         "order": 1,
         "source": "Check",
         "target": "Process"
@@ -149,7 +149,7 @@
         "attributes": {},
         "id": "Check__Error__2",
         "kind": "edge",
-        "label": "",
+        "label": "No",
         "order": 2,
         "source": "Check",
         "target": "Error"
@@ -179,7 +179,7 @@
         "attributes": {},
         "id": "Retry__Check__5",
         "kind": "edge",
-        "label": "",
+        "label": "Yes",
         "order": 5,
         "source": "Retry",
         "target": "Check"
@@ -189,7 +189,7 @@
         "attributes": {},
         "id": "Retry__Done__6",
         "kind": "edge",
-        "label": "",
+        "label": "No",
         "order": 6,
         "source": "Retry",
         "target": "Done"

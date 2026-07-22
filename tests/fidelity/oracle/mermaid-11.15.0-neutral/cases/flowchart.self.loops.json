@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:01:22.967108+00:00",
+  "capture_timestamp": "2026-07-21T23:38:53.388571+00:00",
   "case_id": "flowchart.self.loops",
   "diagnostics": [],
   "environment": {
@@ -91,42 +91,42 @@
       {
         "arrow": null,
         "attributes": {},
-        "id": "A__B__0",
+        "id": "A__A__0",
         "kind": "edge",
-        "label": "",
+        "label": "retry",
         "order": 0,
-        "source": "A",
-        "target": "B"
-      },
-      {
-        "arrow": null,
-        "attributes": {},
-        "id": "B__C__1",
-        "kind": "edge",
-        "label": "",
-        "order": 1,
-        "source": "B",
-        "target": "C"
-      },
-      {
-        "arrow": null,
-        "attributes": {},
-        "id": "A__A__2",
-        "kind": "edge",
-        "label": "",
-        "order": 2,
         "source": "A",
         "target": "A"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "B__B__3",
+        "id": "B__B__1",
+        "kind": "edge",
+        "label": "refresh",
+        "order": 1,
+        "source": "B",
+        "target": "B"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "A__B__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "A",
+        "target": "B"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "B__C__3",
         "kind": "edge",
         "label": "",
         "order": 3,
         "source": "B",
-        "target": "B"
+        "target": "C"
       }
     ]
   },

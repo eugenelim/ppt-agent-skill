@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:00:47.502170+00:00",
+  "capture_timestamp": "2026-07-21T23:38:16.083959+00:00",
   "case_id": "flowchart.groups.complex",
   "diagnostics": [],
   "environment": {
@@ -129,7 +129,7 @@
         "attributes": {},
         "id": "UI__API__0",
         "kind": "edge",
-        "label": "",
+        "label": "request",
         "order": 0,
         "source": "UI",
         "target": "API"
@@ -139,7 +139,7 @@
         "attributes": {},
         "id": "UI__Cache__1",
         "kind": "edge",
-        "label": "",
+        "label": "cached read",
         "order": 1,
         "source": "UI",
         "target": "Cache"
@@ -199,7 +199,7 @@
         "attributes": {},
         "id": "Cache__DB__7",
         "kind": "edge",
-        "label": "",
+        "label": "invalidate",
         "order": 7,
         "source": "Cache",
         "target": "DB"

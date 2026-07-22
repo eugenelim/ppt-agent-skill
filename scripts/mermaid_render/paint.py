@@ -134,8 +134,9 @@ def _make_node_paint(stroke_color: str, fill_color: str, stroke_w: float = 1.5) 
     )
 
 
-def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
+def _node_scene_elements(node: Any, tokens: _Tokens, order: int = 0) -> list:
     """Convert a _Node to a list of scene elements."""
+    import html as _html
     x, y = float(node.x), float(node.y)
     nw = float(node.width or 192)
     nh = float(getattr(node, "_render_h", None) or _node_render_h_approx(node))
@@ -145,6 +146,18 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
 
     elements = []
     eid = f"node-{node.id}"
+    import re as _re
+    parent_id = getattr(node, "group", None) or ""
+    # Normalize <br> → space in label for canonical data-label value
+    label_canonical = _re.sub(r'<br\s*/?>', ' ', label, flags=_re.IGNORECASE).strip()
+    _node_data: tuple = (
+        ("node-id", node.id),
+        ("semantic-id", node.id),
+        ("kind", "node"),
+        ("label", _html.escape(label_canonical, quote=True)),
+        ("shape", shape),
+        ("order", str(order)),
+    ) + ((("parent-id", parent_id),) if parent_id else ())
 
     if shape in ("rect", "round", "stadium", "subroutine", "flag"):
         rx = {"rect": tokens.node_rx, "round": 14.0, "stadium": 50.0,
@@ -152,7 +165,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
         elements.append(SceneRoundedRect(
             element_id=eid, x=x, y=y, w=nw, h=nh, rx=rx, ry=rx,
             css_classes=("node", f"node-{shape}"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=paint,
         ))
 
@@ -161,7 +174,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
         elements.append(SceneCircle(
             element_id=eid, cx=x + nw/2, cy=y + nh/2, r=r,
             css_classes=("node", "node-circle"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=paint,
         ))
 
@@ -176,7 +189,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
         elements.append(SceneCircle(
             element_id=eid + "-outer", cx=x + nw/2, cy=y + nh/2, r=r_outer,
             css_classes=("node", "node-doublecircle"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=outer_paint,
         ))
         elements.append(SceneCircle(
@@ -191,7 +204,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
             element_id=eid,
             points=pts,
             css_classes=("node", "node-diamond"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=paint,
         ))
 
@@ -206,7 +219,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
             element_id=eid,
             points=pts,
             css_classes=("node", "node-hexagon"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=paint,
         ))
 
@@ -220,7 +233,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
             element_id=eid,
             points=pts,
             css_classes=("node", f"node-{shape}"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=paint,
         ))
 
@@ -234,7 +247,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
             element_id=eid + "-body",
             x=x, y=y + cap_ry, w=nw, h=nh - 2*cap_ry,
             css_classes=("node", "node-cylinder"),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=body_paint,
         ))
         # Bottom cap (filled)
@@ -257,7 +270,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
         elements.append(SceneRoundedRect(
             element_id=eid, x=x, y=y, w=nw, h=nh, rx=tokens.node_rx, ry=tokens.node_rx,
             css_classes=("node",),
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
             paint=paint,
         ))
 
@@ -283,7 +296,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens) -> list:
             element_id=eid + "-label",
             lines=scene_lines,
             text_anchor="middle",
-            data_attrs=(("node-id", node.id),),
+            data_attrs=_node_data,
         ))
 
     return elements
@@ -294,8 +307,12 @@ def _node_render_h_approx(node: Any) -> float:
     shape = getattr(node, "shape", "rect") or "rect"
     if shape in ("circle", "doublecircle"):
         return float(getattr(node, "width", 80) or 80)
-    if shape in ("diamond", "hexagon"):
+    if shape == "diamond":
         return float(getattr(node, "width", 100) or 100)
+    if shape == "hexagon":
+        # Use layout-assigned height (consistent with layout engine's _node_render_h).
+        # Using width here causes the polygon to exceed layout bounds and overlap siblings.
+        return float(getattr(node, "height", 100) or getattr(node, "width", 100) or 100)
     base_h = float(getattr(node, "height", 42) or 42)
     return max(base_h, 42.0)
 
@@ -321,7 +338,7 @@ def _marker_id_for_edge(route: dict, scene_id_hash: str) -> tuple[str, str]:
     return start_id, end_id
 
 
-def _edge_scene_elements(route: dict, tokens: _Tokens, scene_id_hash: str) -> list:
+def _edge_scene_elements(route: dict, tokens: _Tokens, scene_id_hash: str, edge_idx: int = 0) -> list:
     """Convert a route dict to scene elements (path + arrowhead + label)."""
     elements = []
 
@@ -342,13 +359,23 @@ def _edge_scene_elements(route: dict, tokens: _Tokens, scene_id_hash: str) -> li
     if not cmds:
         return elements
 
+    import html as _html
     src = route.get("src") or ""
     dst = route.get("dst") or ""
     edge_id = f"edge-{src}-{dst}"
+    edge_label = route.get("label") or ""
+    edge_style = route.get("style") or "solid"
 
     has_arrow = bool(route.get("ah"))
     start_marker_id, end_marker_id = _marker_id_for_edge(route, scene_id_hash)
 
+    _edge_data: tuple = (
+        ("src", src),
+        ("dst", dst),
+        ("label", _html.escape(edge_label, quote=True)),
+        ("arrow", edge_style),
+        ("relation-id", f"{src}__{dst}__{edge_idx}"),
+    )
     edge_paint = PaintStyle(
         fill=FillStyle(color="none"),
         stroke=StrokeStyle(color=stroke_color, width=stroke_w, dasharray=dasharray),
@@ -359,7 +386,7 @@ def _edge_scene_elements(route: dict, tokens: _Tokens, scene_id_hash: str) -> li
         marker_start=start_marker_id if start_marker_id else "",
         marker_end=end_marker_id if end_marker_id else "",
         paint=edge_paint,
-        data_attrs=(("src", src), ("dst", dst)),
+        data_attrs=_edge_data,
     ))
 
     # Inline arrowhead polygon (if no marker)
@@ -399,9 +426,16 @@ def _group_scene_element(
     group_id: str, group: Any, bbox: tuple, accent_idx: int,
 ) -> SceneGroup:
     """Convert a group bbox to a SceneGroup with boundary rect + label."""
+    import html as _html
     stroke_color, fill_color = _ACCENT_COLORS[accent_idx % len(_ACCENT_COLORS)]
     x1, y1, x2, y2 = float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])
     w, h = x2 - x1, y2 - y1
+
+    grp_label = getattr(group, "label", "") or group_id
+    _grp_data: tuple = (
+        ("group-id", group_id),
+        ("group-label", _html.escape(grp_label, quote=True)),
+    )
 
     boundary_paint = PaintStyle(
         fill=FillStyle(color=fill_color),
@@ -417,7 +451,7 @@ def _group_scene_element(
 
     children: list = [boundary]
 
-    label = getattr(group, "label", "") or group_id
+    label = grp_label
     if label:
         label_line = SceneTextLine(
             text=label,
@@ -435,7 +469,7 @@ def _group_scene_element(
     return SceneGroup(
         element_id=f"group-{group_id}",
         css_classes=("diagram-group-container",),
-        data_attrs=(("group-id", group_id),),
+        data_attrs=_grp_data,
         children=tuple(children),
     )
 
@@ -533,8 +567,8 @@ def graph_to_scene(
     # Edges → edges layer
     route_edge_elements: list = []
     route_label_elements: list = []
-    for route in routes:
-        els = _edge_scene_elements(route, t, scene_id_hash)
+    for edge_idx, route in enumerate(routes):
+        els = _edge_scene_elements(route, t, scene_id_hash, edge_idx)
         for el in els:
             if isinstance(el, SceneText):
                 route_label_elements.append(el)
@@ -544,10 +578,12 @@ def graph_to_scene(
 
     # Nodes → nodes layer (skip dummy nodes)
     node_text_elements: list = []
+    node_order = 0
     for nid, node in sorted(nodes.items()):  # sorted for determinism
         if getattr(node, "is_dummy", False):
             continue
-        els = _node_scene_elements(node, t)
+        els = _node_scene_elements(node, t, node_order)
+        node_order += 1
         for el in els:
             if isinstance(el, SceneText):
                 node_text_elements.append(el)

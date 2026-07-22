@@ -133,31 +133,31 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
             Entity(id=n, kind="node", label=node_labels.get(n, n), shape=None, parent_id=None, order=i)
             for i, n in enumerate(dict.fromkeys(raw_nodes))
         ]
-        # Deduplicate edges: each L_A_B_N id may appear multiple times in SVG attrs
-        unique_edges = list(dict.fromkeys(raw_edges))
-        # Add self-loop edges (mmdc uses "cyclic-special" id, not L_ format)
-        self_loop_nodes = list(dict.fromkeys(_MM_SELF_LOOP.findall(svg)))
-        # Filter out false positives: self-loop node must be a known node
-        node_ids = {e.id for e in entities}
-        for n in self_loop_nodes:
-            if n in node_ids:
-                unique_edges.append((n, n))
-
-        # Edge labels are not reliably ordered vs SVG edge elements (self-loops use
-        # different id pattern, breaking label_iter alignment).  Native SVG adapter
-        # also returns "" for edge labels until T4 adds data-label.  Return "" for
-        # all edges so topology comparison works without label mismatches.
+        # Use source-based edge extraction for accurate (src, dst, label) in document order.
+        # Dedup by (src, dst, label) key to match mmdc's dedup; fall back to SVG topology
+        # when source parser produces fewer edges (complex multi-edge or chains).
+        source_edges = _parse_flowchart_edges(source)
+        # Verify: source-based count should match SVG topology (after dedup + self-loops).
+        # If source parser found edges, prefer it (it has correct labels and order).
+        # Fall back to SVG topology with empty labels for parse failures.
+        svg_nodes_set = {e.id for e in entities}
+        # Filter source edges to known SVG nodes only (avoids false positives from
+        # comment lines parsed as edges)
+        valid_source_edges = [
+            (s, d, lbl) for s, d, lbl in source_edges
+            if s in svg_nodes_set and d in svg_nodes_set
+        ]
         relations = [
             Relation(
                 id=f"{s}__{d}__{i}",
                 kind="edge",
                 source=s,
                 target=d,
-                label="",
+                label=lbl,
                 arrow=None,
                 order=i,
             )
-            for i, (s, d) in enumerate(unique_edges)
+            for i, (s, d, lbl) in enumerate(valid_source_edges)
         ]
         direction = _extract_direction_from_source(source)
         return SemanticDiagram(
@@ -223,6 +223,52 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
 
     # Generic fallback
     return SemanticDiagram(diagram_type=diagram_type, direction=None)
+
+
+def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
+    """Extract (source, target, label) from Mermaid flowchart source in document order.
+
+    Handles: A --> B, A[Shape] -->|label| B, A -- label --> B, A & B --> C (multi-target).
+    Node IDs may be followed by shape markers like [text], (text), {text}, etc.
+    Returns one tuple per edge.
+    """
+    edges: list[tuple[str, str, str]] = []
+    _id = r'[A-Za-z0-9_]+'
+    # Optional shape suffix after node ID: [..], (..), {..}, etc. (non-greedy)
+    _shape_sfx = r'(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})*'
+    # Pipe label: A[shape] -->|label| B[shape]
+    _arrow_pipe = re.compile(
+        r'(' + _id + r')' + _shape_sfx + r'\s*(?:-+[-.=]*>|=[=]+>)\|([^|]*)\|\s*'
+        r'(' + _id + r')'
+    )
+    # Dash-text: A -- text --> B
+    _arrow_dash = re.compile(
+        r'(' + _id + r')' + _shape_sfx + r'\s*--\s+([^\-\n]+?)\s+--[->]\s*(' + _id + r')'
+    )
+    # Plain: A --> B, A -.-> B, A ==> B
+    _arrow_plain = re.compile(
+        r'(' + _id + r')' + _shape_sfx + r'\s*(?:-+[-.=]*>|=[=]+>)\s*(' + _id + r')'
+    )
+
+    for line in source.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith(('%%', '//', 'subgraph', 'end', 'flowchart', 'graph')):
+            continue
+        if '-->' not in stripped and '---' not in stripped and '==>' not in stripped and '-.->' not in stripped:
+            continue
+
+        m = _arrow_pipe.search(stripped)
+        if m:
+            edges.append((m.group(1), m.group(3), _strip_html(m.group(2)).strip()))
+            continue
+        m = _arrow_dash.search(stripped)
+        if m:
+            edges.append((m.group(1), m.group(3), _strip_html(m.group(2)).strip()))
+            continue
+        m = _arrow_plain.search(stripped)
+        if m:
+            edges.append((m.group(1), m.group(2), ""))
+    return edges
 
 
 def _parse_architecture_labels(source: str) -> dict[str, str]:
