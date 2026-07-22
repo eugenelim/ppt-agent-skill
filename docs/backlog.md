@@ -419,11 +419,3 @@ tests with source-label + node-count + edge-count + shape-role assertions for ev
 fixture. Fixture capability matrix (27 gallery fixtures). SVG-to-PowerPoint compatibility for every
 supported type. Oracle metrics comparison. Complete gallery with provenance metadata.
 
-### backlog-mindmap-tidy-tree
-
-**Deferred from `mermaid-p3` Stage 7 and `mermaid-p2`:** Implement Reingold-Tilford/Buchheim
-variable-size tidy-tree layout for Mind Map. Activated by `config: { layout: tidy-tree }` in
-frontmatter. Required algorithm phases: first walk, apportion, move subtree, execute shifts,
-second walk, normalization. Two-sided layout: root at center, split root children left/right
-deterministically. Mirror left side, align both sides to root, resolve vertical overlap.
-Radial mode remains unchanged when `layout: tidy-tree` is absent.

@@ -2,7 +2,7 @@
 
 **Mode: full (structural change + multi-feature + dependent tasks + unfamiliar territory)**
 
-- **Status:** Done (Stages 0-5, 9); Stages 6-8, 10-13 deferred per backlog anchors below
+- **Status:** Done (Stages 0-5, 7, 9); Stages 6, 8, 10-13 deferred per backlog anchors below
 
 ## Objective
 
@@ -113,7 +113,7 @@ No supported renderer may return a placeholder scene.
 - [x] Recursive compound layout default (Stage 4) — `_recursive_group_layout` replaces rank-flattening + `_apply_inner_direction_positions`; fixes TB inner in LR outer x-unification and child group unit treatment
 - [x] SVG Scene bounds hardening (Stage 5) — `element_visible_bounds`, `scene_visible_bounds`, `validate_scene` in `scene_bounds.py`; typed transform parsing; 50 tests
 - [ ] All 12 placeholder types implemented (Stage 6) (deferred: backlog-mermaid-p3-type-migrations)
-- [ ] Mind Map tidy-tree (Stage 7) (deferred: backlog-mindmap-tidy-tree)
+- [x] Mind Map tidy-tree (Stage 7) — Buchheim variable-size tidy-tree, two-sided layout, `config: { layout: tidy-tree }` activation; radial path unchanged
 - [ ] Timeline measurement completion (Stage 8) (deferred: backlog-mermaid-p3-timeline)
 - [x] Architecture semantics (Stage 9) — `ArchitectureDiagramLayout` compiled model; service tiles with measured label, icon_bounds, side ports; junction geometry; group hierarchy; BiRel → one path + two markers; `finalized_layout_to_scene` replaces `graph_to_scene`
 - [ ] C4 completion (Stage 10) (deferred: backlog-mermaid-p3-c4)

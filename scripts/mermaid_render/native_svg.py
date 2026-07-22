@@ -286,10 +286,29 @@ def _xychart_scene(src: str, direction: str, width_hint: int) -> SvgScene:
     raise NativeRenderError("xychart-beta", "not-implemented")
 
 
-def _mindmap_scene(src: str, direction: str, width_hint: int) -> SvgScene:
+def _get_mindmap_layout(request: RenderRequest) -> str:
+    """Extract the mindmap layout algorithm from frontmatter or diagram_config."""
+    if request.frontmatter.get("layout") == "tidy-tree":
+        return "tidy-tree"
+    # _parse_frontmatter stores values as raw strings; substring check handles
+    # `config: { layout: tidy-tree }` → "{ layout: tidy-tree }"
+    if "tidy-tree" in str(request.frontmatter.get("config", "")):
+        return "tidy-tree"
+    dc = request.diagram_config
+    if dc.get("layout") == "tidy-tree":
+        return "tidy-tree"
+    cfg = dc.get("config", {})
+    if isinstance(cfg, dict) and cfg.get("layout") == "tidy-tree":
+        return "tidy-tree"
+    return "radial"
+
+
+def _mindmap_scene(
+    src: str, direction: str, width_hint: int, layout: str = "radial"
+) -> SvgScene:
     """Native semantic scene for mindmap — delegates to dedicated module."""
     from .layout.mindmap import layout_mindmap_scene
-    return layout_mindmap_scene(src, width_hint=width_hint)
+    return layout_mindmap_scene(src, width_hint=width_hint, layout=layout)
 
 
 def _block_scene(src: str, direction: str, width_hint: int) -> SvgScene:
@@ -458,7 +477,7 @@ def dispatch_native(
     elif d == "timeline":
         scene = _timeline_scene(clean, direction, width_hint, diagram_config=dict(request.diagram_config))
     elif d == "mindmap":
-        scene = _mindmap_scene(clean, direction, width_hint)
+        scene = _mindmap_scene(clean, direction, width_hint, _get_mindmap_layout(request))
     elif d == "architecture-beta":
         scene = _architecture_scene(clean, direction, width_hint)
     elif d in ("c4context", "c4container", "c4component"):
