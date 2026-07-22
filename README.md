@@ -8,13 +8,13 @@
   <p>
     <a href="README_EN.md">English</a> ·
     <a href="#-快速开始">快速开始</a> ·
-    <a href="#-29-风格预览画廊">风格画廊</a> ·
+    <a href="#-30-风格预览画廊">风格画廊</a> ·
     <a href="#-工作流">工作流</a> ·
     <a href="#-架构">架构</a>
   </p>
 
   <p>
-    <img src="https://img.shields.io/badge/styles-29-22D3EE?style=for-the-badge&labelColor=050b1f" alt="29 Styles" />
+    <img src="https://img.shields.io/badge/styles-30-22D3EE?style=for-the-badge&labelColor=050b1f" alt="30 Styles" />
     <img src="https://img.shields.io/badge/charts-18-6366f1?style=for-the-badge&labelColor=050b1f" alt="18 Charts" />
     <img src="https://img.shields.io/badge/categories-5-FF9500?style=for-the-badge&labelColor=050b1f" alt="5 Categories" />
     <img src="https://img.shields.io/badge/pipeline-6_steps-22c55e?style=for-the-badge&labelColor=050b1f" alt="6-step Pipeline" />
@@ -47,8 +47,8 @@
 ---
 
 <div align="center">
-  <img src="docs/assets/hero-all.png" alt="29 风格预览" width="100%" />
-  <p><sub>29 个世界级风格 · 5 板块覆盖所有商业场景 · 真实 1280×720 标杆 mock</sub></p>
+  <img src="docs/assets/hero-all.png" alt="30 风格预览" width="100%" />
+  <p><sub>30 个世界级风格 · 5 板块覆盖所有商业场景 · 真实 1280×720 标杆 mock</sub></p>
 </div>
 
 ---
@@ -66,14 +66,14 @@
 | 特性 | 说明 |
 |------|------|
 | **6 步 Pipeline** | 需求调研 → 资料搜集 → 大纲策划 → 策划稿 → HTML 设计稿 → 后处理（SVG + PPTX）|
-| **29 种世界级风格** | 5 板块覆盖：暗色专业 8 / 浅色高级 10 / 活力鲜明 4 / 东方文化 3 / 自然复古 4 |
+| **30 种世界级风格** | 5 板块覆盖：暗色专业 9 / 浅色高级 10 / 活力鲜明 4 / 东方文化 3 / 自然复古 4 |
 | **18 种数据可视化** | 基础 8 + 进阶 6（雷达/时间线/漏斗/仪表盘）+ ECharts 级 4（世界地图/关系网络/桑基/热力日历）|
 | **Bento Grid 布局** | 7 种卡片式灵活布局，内容驱动版式 |
 | **世界级排版** | 7 级字号阶梯 · 字距铁律 · tabular-nums · OpenType 特性 · serif italic 混排 · 字体栈三层降级 |
 | **智能配图** | AI 生成配图 + 5 种视觉融入技法（渐隐融合/色调蒙版/氛围底图等）|
 | **失败模式目录** | 8 种 failure modes（underfill / decorative_substitution 等）+ 修复顺序铁律 |
 | **跨页叙事** | 密度交替节奏 / 章节色彩递进 / 封面-结尾呼应 / 渐进揭示 |
-| **风格预览画廊** | `gallery.py` 一键生成 29 风格卡片墙索引页，每风格封面 + 详情双版可切换 |
+| **风格预览画廊** | `gallery.py` 一键生成 30 风格卡片墙索引页，每风格封面 + 详情双版可切换 |
 | **Smoke 测试** | `smoke_test.py` 校验风格 JSON / pipeline 兼容 / 排版铁律 / 端到端管线 |
 | **PPTX 兼容** | HTML → SVG → PPTX 管线，PPT 365 中右键"转换为形状"全部可编辑 |
 
@@ -114,17 +114,17 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-## 🎨 29 风格预览画廊
+## 🎨 30 风格预览画廊
 
 5 个板块，覆盖所有典型商业场景。每个风格都附**两版**真实 1280×720 设计稿 ——
 **封面**（`<id>.cover.html`，标题/身份页）+ **详情**（`<id>.html`，内容/数据页）；
 画廊索引页每张卡片有 **Cover / Detail** 切换，顶部还有全局「Show: Covers / Details」开关，
 hero 拼图统一取封面：
 
-### 暗色专业（8 风格 · `references/styles/dark.md`）
+### 暗色专业（9 风格 · `references/styles/dark.md`）
 
 <div align="center">
-  <img src="docs/assets/hero-dark-professional.png" alt="暗色专业 8 风格" width="100%" />
+  <img src="docs/assets/hero-dark-professional.png" alt="暗色专业 9 风格" width="100%" />
 </div>
 
 > Linear / Apple Hardware / Tom Ford / Cyberpunk 2077 / Y2K / Magnum 等品牌的实际排版做法
@@ -139,6 +139,7 @@ hero 拼图统一取封面：
 | `chrome_y2k` | Y2K / Vaporwave | Web3 / 千禧年复古 |
 | `noir_film` | Magnum / 黑白纪录片 | 纪录片 / 影像艺术 / 摄影 |
 | `graphite_gold` | 高端咨询战略简报 | 咨询 / 战略汇报 / 董事会简报 |
+| `graphite_violet` | 工程交付演讲（深夜作战室） | 工程交付 / 三相位 roadmap / 工具平台简报 |
 
 ### 浅色高级（10 风格 · `references/styles/light.md`）
 
@@ -207,7 +208,7 @@ hero 拼图统一取封面：
 | **进阶** | 6 | 雷达图 · 时间线 · 漏斗图 · 仪表盘 · 多组对比柱 · 简单地理 | [`charts/advanced.md`](references/charts/advanced.md) |
 | **ECharts 级** | 4 | 世界地图 choropleth · 关系网络 · 桑基图 · 热力日历 | [`charts/complex.md`](references/charts/complex.md) |
 
-全部纯 HTML/CSS/SVG 实现，**无 JS 运行时**（保证 svg2pptx 管线兼容）。所有图表自动适配 29 风格的 CSS 变量。
+全部纯 HTML/CSS/SVG 实现，**无 JS 运行时**（保证 svg2pptx 管线兼容）。所有图表自动适配 30 风格的 CSS 变量。
 
 ## 🔧 工作流
 
@@ -216,7 +217,7 @@ hero 拼图统一取封面：
 │  Step 1      │  │  Step 2      │  │  Step 3      │  │  Step 4      │  │  Step 5      │  │  Step 6      │
 │  需求调研    │→ │  资料搜集    │→ │  大纲策划    │→ │  策划稿      │→ │  风格+设计稿 │→ │  后处理      │
 │              │  │              │  │              │  │              │  │              │  │              │
-│  7 题三层    │  │  3-15 查询   │  │  金字塔原理  │  │  Bento Grid  │  │  29 风格选 1 │  │  HTML→SVG    │
+│  7 题三层    │  │  3-15 查询   │  │  金字塔原理  │  │  Bento Grid  │  │  30 风格选 1 │  │  HTML→SVG    │
 │  递进访谈    │  │  自适应      │  │  + 自检      │  │  策划卡      │  │  + 智能配图  │  │  →PPTX       │
 └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
    STOP 等回复                                            默认先交付策划停下    按需出图           按需出图
@@ -241,7 +242,7 @@ hero 拼图统一取封面：
 
 | 模块 | 数量 | 位置 |
 |------|------|------|
-| 📐 Style Library | 29 风格 | `references/styles/` (5 板块) |
+| 📐 Style Library | 30 风格 | `references/styles/` (5 板块) |
 | 📊 Chart Library | 18 图表 | `references/charts/` (3 层级) |
 | 🔤 Typography | 14 铁律 | `references/typography.md` |
 | ⚠ Failure Modes | 8 模式 | `references/principles/failure-modes.md` |
@@ -256,7 +257,7 @@ ppt-agent-skill/
 ├── assets/                       # 视觉资产
 │   ├── logo.svg                  # Logo
 │   ├── banner.svg                # README 横幅
-│   ├── hero-all.png              # 29 风格全景拼图
+│   ├── hero-all.png              # 30 风格全景拼图
 │   └── hero-<category>.png       # 5 板块单独拼图
 ├── references/                   # Skill 引用文档
 │   ├── prompts.md                # 5 套 Prompt 模板（调研/大纲/策划/设计/备注）
@@ -265,10 +266,10 @@ ppt-agent-skill/
 │   ├── pipeline-compat.md        # HTML→SVG→PPTX 管线兼容规则
 │   ├── method.md                 # 核心方法论
 │   ├── style-system.md           # 引导文件（兼容旧引用）
-│   ├── styles/                   # 29 风格按 5 板块分目录
+│   ├── styles/                   # 30 风格按 5 板块分目录
 │   │   ├── index.md              # 索引 + 决策矩阵 + JSON Schema
-│   │   ├── dark.md               # 8 暗色专业
-│   │   ├── light.md              # 8 浅色高级
+│   │   ├── dark.md               # 9 暗色专业
+│   │   ├── light.md              # 10 浅色高级
 │   │   ├── vibrant.md            # 4 活力鲜明
 │   │   ├── cultural.md           # 3 东方文化
 │   │   └── natural.md            # 4 自然/复古
@@ -283,13 +284,13 @@ ppt-agent-skill/
 │   ├── html_packager.py          # 多页 HTML → 翻页预览
 │   ├── html2svg.py               # HTML → SVG（dom-to-svg, 文字可编辑）
 │   ├── svg2pptx.py               # SVG → PPTX（OOXML 原生）
-│   └── gallery.py                # 生成 29 风格预览画廊 + 截图
+│   └── gallery.py                # 生成 30 风格预览画廊 + 截图
 ├── tools/                        # 维护工具（非 adopter payload）
 │   ├── smoke_test.py             # 端到端测试 + pipeline-compat 扫描
 │   ├── check_skill.py            # 文档/代码合同漂移检查
 │   └── build_hero.py             # 生成 README hero 拼图
 ├── ppt-output/                   # 运行时：每个 PPT 一个 <deck 名>/ 目录（gitignore）
-│   └── style-gallery/            # 29 个 1280×720 mock + 29 PNG + index.html（工具产物，与 deck 平级）
+│   └── style-gallery/            # 30 个 1280×720 mock + 30 PNG + index.html（工具产物，与 deck 平级）
 ├── docs/superpowers/specs/       # 设计文档归档
 └── tests/smoke-results/          # 测试报告归档
 ```
@@ -297,7 +298,7 @@ ppt-agent-skill/
 ## 🧪 质量保证
 
 ```bash
-# 风格 JSON 校验 + pipeline-compat 扫描 + 排版自检（29 风格）
+# 风格 JSON 校验 + pipeline-compat 扫描 + 排版自检（30 风格）
 python3 tools/smoke_test.py --phase 1
 # → 52 pass / 0 fail / 0 warn
 
@@ -329,7 +330,7 @@ python3 tools/smoke_test.py --phase 5
 
 完整的世界级重做设计文档：[`docs/superpowers/specs/2026-05-10-world-class-redesign-design.md`](docs/superpowers/specs/2026-05-10-world-class-redesign-design.md)
 
-包含：目标与动机 / 29 风格列表 / JSON Schema 升级 / 字体栈策略 / 排版铁律 / 图表系统设计 / 风格预览画廊 / 文件组织架构 / 向后兼容保证 / 5 阶段实施路线 / 成功标准 / 决策日志。
+包含：目标与动机 / 30 风格列表 / JSON Schema 升级 / 字体栈策略 / 排版铁律 / 图表系统设计 / 风格预览画廊 / 文件组织架构 / 向后兼容保证 / 5 阶段实施路线 / 成功标准 / 决策日志。
 
 ## ⭐ Star History
 
