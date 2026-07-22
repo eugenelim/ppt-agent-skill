@@ -308,7 +308,7 @@ def _parse_flowchart_labels(source: str) -> dict[str, str]:
 
     Handles the common node-definition forms:
         A[rect]  A(round)  A{diamond}  A[[sub]]  A((circle))  A([stadium])
-        A(((dcircle)))  A{{hex}}  A[(cyl)]  A>flag]  A[/trap/]  A[\inv\]
+        A(((dcircle)))  A{{hex}}  A[(cyl)]  A>flag]  A[/trap/]  A[\\inv\\]
     Falls back to id == label when no bracket form is found.
     """
     result: dict[str, str] = {}
