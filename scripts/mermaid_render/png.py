@@ -104,6 +104,26 @@ def _to_png_from_html_string(html: str, scale: float = 1.0) -> bytes:
         return _to_png_from_html_file(html_file, scale=scale)
 
 
+def _to_png_from_svg_string(svg_str: str, scale: float = 1.0) -> bytes:
+    """Rasterize an SVG string to PNG bytes via Playwright page.set_content."""
+    html = (
+        "<!DOCTYPE html><html>"
+        "<body style='margin:0;padding:0'>"
+        f"{svg_str}"
+        "</body></html>"
+    )
+    with get_browser() as browser:
+        page = new_page(browser, width=1280, height=720, scale=scale)
+        try:
+            page.set_content(html, wait_until="networkidle")
+            return page.screenshot(type="png", full_page=True)
+        finally:
+            try:
+                page.close()
+            except Exception:
+                pass
+
+
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in {"-h", "--help"}:
         print("Usage: python3 scripts/html2png.py <html_dir_or_file> [-o output_dir] [--scale 1] [--fullpage]")

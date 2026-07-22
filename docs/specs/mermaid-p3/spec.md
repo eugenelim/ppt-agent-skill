@@ -118,7 +118,7 @@ No supported renderer may return a placeholder scene.
 - [x] Architecture semantics (Stage 9) — `ArchitectureDiagramLayout` compiled model; service tiles with measured label, icon_bounds, side ports; junction geometry; group hierarchy; BiRel → one path + two markers; `finalized_layout_to_scene` replaces `graph_to_scene`
 - [x] C4 completion (Stage 10)
 - [x] State diagrams (Stage 11) — partial: immutable state model (AtomicState, CompositeState, InitialPseudoState, FinalPseudoState, Choice, Fork, Join, History, StateGate, StateTransition, StateNote) in `statediagram.py`; <<fork>>/<<join>>/<<choice>>/<<history>> parser fix; bar shape rendering in HTML and SVG paths; 69 new tests. Deferred: wire statediagram.py as primary compiler replacing _parser.py state path, full composite children compilation. (backlog-mermaid-p3-state)
-- [ ] Themes/faithful/sizing/PNG (Stage 12) (deferred: backlog-mermaid-p3-infra)
+- [x] Themes/faithful/sizing/PNG (Stage 12) — `_tokens_from_theme` maps CSS-var palette to `_Tokens`; threaded into `finalized_layout_to_scene` via `_build_graph_pipeline`; `_natural_size` extracts view_box dims; `to_html` strips frontmatter before `_dispatch`; `to_png` rasterizes native SVG via `page.set_content`, falls back to HTML path for legacy-only types; `validate` sequence geometry confirmed wired
 - [ ] Semantic tests and gallery (Stage 13) (deferred: backlog-mermaid-p3-semantic-tests)
 
 ## Testing Strategy
