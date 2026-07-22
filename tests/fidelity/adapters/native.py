@@ -1,7 +1,13 @@
-"""Native adapter: observes scripts/mermaid_render/ output.
+"""Native HTML adapter (secondary emitter-consistency lane).
 
-Uses the public to_html() API, then extracts semantics and geometry
-from the actual emitted HTML via Playwright.
+Uses the public to_html() API to verify emitter consistency:
+    parser/native semantic intent
+        == native SVG semantic projection
+        == native HTML semantic projection
+
+The PRIMARY adapter for Phase 1 native-vs-reference comparison is
+adapters/native_svg.py (NativeSvgAdapter), which calls to_svg().
+This adapter is retained for HTML emitter consistency checks only.
 """
 from __future__ import annotations
 
@@ -124,7 +130,7 @@ def _env_identity(profile: RenderProfile) -> EnvironmentIdentity:
     )
 
 
-class NativeAdapter:
+class NativeHtmlAdapter:
     """Fidelity adapter for the native scripts/mermaid_render/ renderer.
 
     Extracts semantics from data-* annotations on the emitted HTML
@@ -292,19 +298,30 @@ def _extract_semantic_from_html(html: str, diagram_type: str) -> SemanticDiagram
         r'(?:[^>]*?data-arrow="([^"]*)")?',
         re.DOTALL,
     )
-    seen_rel_ids: set[str] = set()
-    rel_order = 0
+    # Two-pass: collect all matches then deduplicate, preferring the match
+    # that carries a label (edge-label overlay) over the path element match
+    # (which shares the same rel-id but has no data-edge-label).
+    _edge_by_relid: dict[str, tuple] = {}  # rel_id -> (src, dst, label, arrow, order)
+    _rel_order = 0
     for m in edge_pattern.finditer(html):
         src = _html_lib.unescape(m.group(1))
         dst = _html_lib.unescape(m.group(2))
         if not src or not dst:
             continue
         label = _html_lib.unescape(m.group(3) or "")
-        rel_id = _html_lib.unescape(m.group(4) or f"{src}__{dst}__{rel_order}")
-        if rel_id in seen_rel_ids:
-            continue
-        seen_rel_ids.add(rel_id)
+        rel_id = _html_lib.unescape(m.group(4) or f"{src}__{dst}__{_rel_order}")
         arrow = m.group(5) or None
+        if rel_id not in _edge_by_relid:
+            _edge_by_relid[rel_id] = (src, dst, label, arrow, _rel_order)
+            _rel_order += 1
+        elif label and not _edge_by_relid[rel_id][2]:
+            # Overlay element has label; path element didn't — prefer label
+            _edge_by_relid[rel_id] = (_edge_by_relid[rel_id][0], _edge_by_relid[rel_id][1],
+                                      label, arrow or _edge_by_relid[rel_id][3],
+                                      _edge_by_relid[rel_id][4])
+    for rel_id, (src, dst, label, arrow, order) in sorted(
+        _edge_by_relid.items(), key=lambda kv: kv[1][4]
+    ):
         relations.append(Relation(
             id=rel_id,
             kind="edge",
@@ -312,9 +329,8 @@ def _extract_semantic_from_html(html: str, diagram_type: str) -> SemanticDiagram
             target=dst,
             label=label,
             arrow=arrow,
-            order=rel_order,
+            order=order,
         ))
-        rel_order += 1
 
     # Extract groups (data-group-id on group containers)
     group_pattern = re.compile(
@@ -524,6 +540,9 @@ def _extract_geometry_and_quality(
 
     return geo, quality
 
+
+# Backward-compatibility alias for existing test imports
+NativeAdapter = NativeHtmlAdapter
 
 def _bbox_contains(container: BoundingBox, item: BoundingBox, tolerance: float = 8.0) -> bool:
     return (

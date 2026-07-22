@@ -1,0 +1,210 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:38:16.083959+00:00",
+  "case_id": "flowchart.groups.complex",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 713.5371,
+      "width": 723.0547,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "0 0 723.0546875 713.537109375"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "flowchart",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "flowchart",
+    "direction": "TB",
+    "entities": [
+      {
+        "attributes": {},
+        "id": "UI",
+        "kind": "node",
+        "label": "Web App",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Cache",
+        "kind": "node",
+        "label": "Redis Cache",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "API",
+        "kind": "node",
+        "label": "REST API",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Auth",
+        "kind": "node",
+        "label": "Auth Service",
+        "order": 3,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Worker",
+        "kind": "node",
+        "label": "Job Worker",
+        "order": 4,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "DB",
+        "kind": "node",
+        "label": "PostgreSQL",
+        "order": 5,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Queue",
+        "kind": "node",
+        "label": "Message Queue",
+        "order": 6,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": [
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "UI__API__0",
+        "kind": "edge",
+        "label": "request",
+        "order": 0,
+        "source": "UI",
+        "target": "API"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "UI__Cache__1",
+        "kind": "edge",
+        "label": "cached read",
+        "order": 1,
+        "source": "UI",
+        "target": "Cache"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "API__Auth__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "API",
+        "target": "Auth"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "API__Worker__3",
+        "kind": "edge",
+        "label": "",
+        "order": 3,
+        "source": "API",
+        "target": "Worker"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Worker__Queue__4",
+        "kind": "edge",
+        "label": "",
+        "order": 4,
+        "source": "Worker",
+        "target": "Queue"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "API__DB__5",
+        "kind": "edge",
+        "label": "",
+        "order": 5,
+        "source": "API",
+        "target": "DB"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Queue__DB__6",
+        "kind": "edge",
+        "label": "",
+        "order": 6,
+        "source": "Queue",
+        "target": "DB"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "Cache__DB__7",
+        "kind": "edge",
+        "label": "invalidate",
+        "order": 7,
+        "source": "Cache",
+        "target": "DB"
+      }
+    ]
+  },
+  "status": "PASS"
+}

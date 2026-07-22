@@ -488,6 +488,8 @@ def scene_to_svg(scene: SvgScene, *, validate: bool = True) -> bytes:
         root.set("aria-label", scene.accessibility.title)
     root.set("aria-roledescription", scene.diagram_type)
     root.set("data-diagram-type", scene.diagram_type)
+    if scene.direction:
+        root.set("data-direction", scene.direction)
 
     # <title>
     if scene.accessibility.title:

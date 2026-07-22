@@ -114,7 +114,7 @@ class FidelityRunner:
             # Native observation already has a failure status
             pass
         elif ref_obs is None:
-            status = ComparisonStatus.EXTRACTOR_GAP
+            status = ComparisonStatus.STALE_ORACLE
             reason = "no oracle reference data; run capture-reference first"
         elif ref_obs.status == ComparisonStatus.REFERENCE_RENDER_FAILURE:
             status = ComparisonStatus.REFERENCE_RENDER_FAILURE
@@ -144,7 +144,7 @@ class FidelityRunner:
                     native_obs.semantic.direction if native_obs.semantic else None,
                 )
                 if not layout_result.passed and status == ComparisonStatus.PASS:
-                    status = ComparisonStatus.SEMANTIC_MISMATCH
+                    status = ComparisonStatus.RELATIVE_LAYOUT_MISMATCH
                     reason = "; ".join(layout_result.failures[:3])
                     diagnostics.extend(layout_result.failures)
 
@@ -337,8 +337,8 @@ def _deserialize_observation(raw: dict) -> Observation:
             source_position=parse.get("source_position"),
         ),
         semantic=_deserialize_semantic(raw.get("semantic")),
-        geometry=None,  # geometry deserialized on demand
-        quality=None,
+        geometry=_deserialize_geometry(raw.get("geometry")),
+        quality=_deserialize_quality(raw.get("quality")),
         status=status,
         reason=raw.get("reason"),
         artifact_refs=raw.get("artifact_refs", {}),
@@ -406,3 +406,104 @@ def _deserialize_semantic(data: dict | None):
         ordered_events=[_event(e) for e in data.get("ordered_events", [])],
         metadata=data.get("metadata", {}),
     )
+
+
+def _deserialize_geometry(data: dict | None):
+    """Reconstruct GeometryObservation from a loaded JSON dict."""
+    if data is None:
+        return None
+    from .models import (
+        BoundingBox, EntityGeometry, GeometryObservation,
+        GroupGeometry, RelationGeometry,
+    )
+
+    def _bbox(d: dict | None) -> BoundingBox | None:
+        if not d:
+            return None
+        return BoundingBox(
+            x=float(d.get("x", 0)),
+            y=float(d.get("y", 0)),
+            width=float(d.get("width", 0)),
+            height=float(d.get("height", 0)),
+        )
+
+    def _point(p) -> tuple[float, float] | None:
+        if p is None:
+            return None
+        if isinstance(p, (list, tuple)) and len(p) >= 2:
+            return (float(p[0]), float(p[1]))
+        return None
+
+    entities = [
+        EntityGeometry(
+            entity_id=e.get("entity_id", ""),
+            bbox=_bbox(e.get("bbox")) or BoundingBox(0, 0, 0, 0),
+            text_bbox=_bbox(e.get("text_bbox")),
+            text_lines=e.get("text_lines", 1),
+        )
+        for e in data.get("entities", [])
+    ]
+
+    groups = [
+        GroupGeometry(
+            group_id=g.get("group_id", ""),
+            bbox=_bbox(g.get("bbox")) or BoundingBox(0, 0, 0, 0),
+        )
+        for g in data.get("groups", [])
+    ]
+
+    relations = []
+    for r in data.get("relations", []):
+        src_pt = _point(r.get("source_point"))
+        dst_pt = _point(r.get("target_point"))
+        sampled_raw = r.get("sampled_points", [])
+        sampled = [_point(p) for p in sampled_raw if _point(p) is not None]
+        relations.append(RelationGeometry(
+            relation_id=r.get("relation_id", ""),
+            source_point=src_pt or (0.0, 0.0),
+            target_point=dst_pt or (0.0, 0.0),
+            source_side=r.get("source_side"),
+            target_side=r.get("target_side"),
+            sampled_points=sampled,
+            bend_count=r.get("bend_count", 0),
+            path_length=r.get("path_length"),
+        ))
+
+    containment = []
+    for item in data.get("containment", []):
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            containment.append((str(item[0]), str(item[1])))
+
+    return GeometryObservation(
+        coordinate_convention=data.get("coordinate_convention", "css-top-left"),
+        content_bounds=_bbox(data.get("content_bounds")),
+        canvas_bounds=_bbox(data.get("canvas_bounds")),
+        viewbox=data.get("viewbox"),
+        entities=entities,
+        groups=groups,
+        relations=relations,
+        containment=containment,
+        crossing_count=data.get("crossing_count"),
+    )
+
+
+def _deserialize_quality(data: dict | None):
+    """Reconstruct QualityObservation from a loaded JSON dict."""
+    if data is None:
+        return None
+    from .models import QualityFinding, QualityFindingKind, QualityObservation
+
+    findings = []
+    for f in data.get("findings", []):
+        kind_val = f.get("kind", "missing_element")
+        try:
+            kind = QualityFindingKind(kind_val)
+        except ValueError:
+            kind = QualityFindingKind.MISSING_ELEMENT
+        findings.append(QualityFinding(
+            kind=kind,
+            entity_id=f.get("entity_id"),
+            message=f.get("message", ""),
+            details=f.get("details", {}),
+        ))
+    return QualityObservation(findings=findings)

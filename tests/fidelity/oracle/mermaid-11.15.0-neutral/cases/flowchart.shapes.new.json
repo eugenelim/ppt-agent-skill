@@ -1,0 +1,171 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:38:59.590404+00:00",
+  "case_id": "flowchart.shapes.new",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 569.625,
+      "width": 150.5938,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "0 0 150.59375 569.625"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "flowchart",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "flowchart",
+    "direction": "TB",
+    "entities": [
+      {
+        "attributes": {},
+        "id": "S",
+        "kind": "node",
+        "label": "Stadium Shape",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "H",
+        "kind": "node",
+        "label": "Hexagon Node",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "R",
+        "kind": "node",
+        "label": "Subroutine",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "T",
+        "kind": "node",
+        "label": "Trapezoid",
+        "order": 3,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "TA",
+        "kind": "node",
+        "label": "TrapAlt",
+        "order": 4,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "DC",
+        "kind": "node",
+        "label": "DoubleCircle",
+        "order": 5,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": [
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "S__H__0",
+        "kind": "edge",
+        "label": "",
+        "order": 0,
+        "source": "S",
+        "target": "H"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "H__R__1",
+        "kind": "edge",
+        "label": "",
+        "order": 1,
+        "source": "H",
+        "target": "R"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "R__T__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "R",
+        "target": "T"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "T__TA__3",
+        "kind": "edge",
+        "label": "",
+        "order": 3,
+        "source": "T",
+        "target": "TA"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "TA__DC__4",
+        "kind": "edge",
+        "label": "",
+        "order": 4,
+        "source": "TA",
+        "target": "DC"
+      }
+    ]
+  },
+  "status": "PASS"
+}

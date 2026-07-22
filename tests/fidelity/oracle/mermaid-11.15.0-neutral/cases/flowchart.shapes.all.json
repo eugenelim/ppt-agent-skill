@@ -1,0 +1,285 @@
+{
+  "artifact_refs": {},
+  "capture_timestamp": "2026-07-21T23:38:05.899074+00:00",
+  "case_id": "flowchart.shapes.all",
+  "diagnostics": [],
+  "environment": {
+    "chromium_revision": "1228",
+    "css_profile_hash": null,
+    "device_scale_factor": 1,
+    "font_info": {
+      "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
+    },
+    "locale": "en-US",
+    "mermaid_config_hash": "ba18222622882470",
+    "mermaid_integrity": "508c39b847f0460f",
+    "mermaid_version": "11.15.0",
+    "playwright_version": "bundled-in-mmdc",
+    "reduced_motion": true,
+    "timezone": "UTC",
+    "viewport_height": 900,
+    "viewport_width": 1200
+  },
+  "geometry": {
+    "canvas_bounds": {
+      "height": 893.0392,
+      "width": 303.7422,
+      "x": 0.0,
+      "y": 0.0
+    },
+    "containment": [],
+    "content_bounds": null,
+    "coordinate_convention": "svg-top-left",
+    "crossing_count": null,
+    "entities": [],
+    "groups": [],
+    "relations": [],
+    "viewbox": "0 0 303.7421875 893.0391845703125"
+  },
+  "implementation": {
+    "adapter_version": "1.0.0",
+    "integrity": "508c39b847f0460f",
+    "name": "mermaid-cli",
+    "profile_id": "mermaid-neutral",
+    "version": "11.15.0"
+  },
+  "parse_result": {
+    "accepted": true,
+    "diagram_type": "flowchart",
+    "error_category": null,
+    "source_position": null
+  },
+  "quality": null,
+  "reason": null,
+  "schema_version": 1,
+  "semantic": {
+    "diagram_type": "flowchart",
+    "direction": "TD",
+    "entities": [
+      {
+        "attributes": {},
+        "id": "A",
+        "kind": "node",
+        "label": "Rectangle",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "B",
+        "kind": "node",
+        "label": "Rounded",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "C",
+        "kind": "node",
+        "label": "Diamond",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "D",
+        "kind": "node",
+        "label": "Stadium",
+        "order": 3,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "E",
+        "kind": "node",
+        "label": "Circle",
+        "order": 4,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "F",
+        "kind": "node",
+        "label": "Subroutine",
+        "order": 5,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "G",
+        "kind": "node",
+        "label": "DoubleCircle",
+        "order": 6,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "H",
+        "kind": "node",
+        "label": "Hexagon",
+        "order": 7,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "I",
+        "kind": "node",
+        "label": "Cylinder",
+        "order": 8,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "J",
+        "kind": "node",
+        "label": "Flag",
+        "order": 9,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "K",
+        "kind": "node",
+        "label": "Trapezoid",
+        "order": 10,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "L",
+        "kind": "node",
+        "label": "InvTrapezoid",
+        "order": 11,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
+    "groups": [],
+    "metadata": {},
+    "ordered_events": [],
+    "relations": [
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "A__B__0",
+        "kind": "edge",
+        "label": "",
+        "order": 0,
+        "source": "A",
+        "target": "B"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "B__C__1",
+        "kind": "edge",
+        "label": "",
+        "order": 1,
+        "source": "B",
+        "target": "C"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "C__D__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "C",
+        "target": "D"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "C__E__3",
+        "kind": "edge",
+        "label": "",
+        "order": 3,
+        "source": "C",
+        "target": "E"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "D__F__4",
+        "kind": "edge",
+        "label": "",
+        "order": 4,
+        "source": "D",
+        "target": "F"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "E__G__5",
+        "kind": "edge",
+        "label": "",
+        "order": 5,
+        "source": "E",
+        "target": "G"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "F__H__6",
+        "kind": "edge",
+        "label": "",
+        "order": 6,
+        "source": "F",
+        "target": "H"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "G__I__7",
+        "kind": "edge",
+        "label": "",
+        "order": 7,
+        "source": "G",
+        "target": "I"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "H__J__8",
+        "kind": "edge",
+        "label": "",
+        "order": 8,
+        "source": "H",
+        "target": "J"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "I__K__9",
+        "kind": "edge",
+        "label": "",
+        "order": 9,
+        "source": "I",
+        "target": "K"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "J__L__10",
+        "kind": "edge",
+        "label": "",
+        "order": 10,
+        "source": "J",
+        "target": "L"
+      }
+    ]
+  },
+  "status": "PASS"
+}

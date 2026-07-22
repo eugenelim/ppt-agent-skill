@@ -1,11 +1,13 @@
 """Repository entry point for the Mermaid fidelity harness.
 
+Thin wrapper: provides repository-specific paths and adapter wiring,
+then delegates all command logic to tools/mermaid_fidelity/cli.py.
+
 Usage:
-    python tests/fidelity/run.py [--oracle-id mermaid-11.15.0-neutral]
-                                 [--report-dir tests/fidelity/reports/]
-                                 [--case-filter GLOB]
-                                 [--capture-reference]
-                                 [--check-determinism]
+    python tests/fidelity/run.py validate
+    python tests/fidelity/run.py run [--case CASE_ID] --report-dir DIR
+    python tests/fidelity/run.py capture-reference --output DIR [--force]
+    python tests/fidelity/run.py determinism [--runs N] --report-dir DIR
 """
 from __future__ import annotations
 
@@ -25,7 +27,14 @@ _PROFILES_DIR = _FIDELITY_DIR / "profiles"
 _DEFAULT_ORACLE_ID = "mermaid-11.15.0-neutral"
 
 
-def _load_profile():
+# ── callback factories ────────────────────────────────────────────────────────
+
+def _manifest_loader(path: Path):
+    from mermaid_fidelity.manifest import parse_manifest
+    return parse_manifest(path, load_sources=True)
+
+
+def _profile_loader(profile_id: str):
     import json
     from mermaid_fidelity.models import RenderProfile
 
@@ -34,7 +43,7 @@ def _load_profile():
     cfg = json.loads(cfg_path.read_text())
     vp = cfg.get("viewport", {})
     return RenderProfile(
-        id="mermaid-neutral",
+        id=profile_id,
         viewport_width=vp.get("width", 1200),
         viewport_height=vp.get("height", 900),
         device_scale_factor=cfg.get("device_scale_factor", 1.0),
@@ -46,130 +55,142 @@ def _load_profile():
     )
 
 
-def _load_manifest():
-    from mermaid_fidelity.manifest import parse_manifest
-    return parse_manifest(_MANIFEST_PATH, load_sources=True)
+def _runner_factory(oracle_base: Path):
+    """Return a runner factory that pre-bakes the oracle base directory.
 
-
-def cmd_run(args) -> int:
-    from mermaid_fidelity.manifest import parse_manifest
+    FidelityRunner.run_case builds the full path as:
+        oracle_dir / ref_id / "cases" / "{case_id}.json"
+    so oracle_dir must be the base (e.g. tests/fidelity/oracle), not
+    oracle_base / ref_id.
+    """
     from mermaid_fidelity.runner import FidelityRunner
-    from mermaid_fidelity.report import generate_json_report, generate_md_report
-    from adapters.native import NativeAdapter
+    from adapters.native_svg import NativeSvgAdapter
 
-    manifest = _load_manifest()
-    profile = _load_profile()
-    oracle_dir = _ORACLE_BASE / args.oracle_id
-
-    cases = manifest.cases
-    if args.case_filter:
-        import fnmatch
-        cases = [c for c in cases if fnmatch.fnmatch(c.id, args.case_filter)]
-
-    runner = FidelityRunner(
-        native_adapter=NativeAdapter(),
-        oracle_dir=oracle_dir,
-        tolerances=None,
-    )
-    summary = runner.run_all(cases, profile)
-
-    report_dir = Path(args.report_dir)
-    report_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = report_dir / "report.json"
-    md_path = report_dir / "report.md"
-
-    json_path.write_text(generate_json_report(summary), encoding="utf-8")
-    md_path.write_text(generate_md_report(summary), encoding="utf-8")
-
-    print(f"Report: {md_path}")
-    print(f"Cases run: {len(summary.results)}")
-
-    fail_statuses = {"SEMANTIC_MISMATCH", "PARSE_MISMATCH", "NONDETERMINISTIC", "INTERNAL_ERROR"}
-    failures = [r for r in summary.results if r.status.value in fail_statuses]
-    if failures:
-        print(f"FAILED: {[r.case_id for r in failures]}", file=sys.stderr)
-        return 1
-    return 0
+    def factory(profile):
+        return FidelityRunner(
+            native_adapter=NativeSvgAdapter(),
+            oracle_dir=oracle_base,
+            tolerances=None,
+        )
+    return factory
 
 
-def cmd_capture_reference(args) -> int:
-    """Capture oracle observations from mmdc for all 24 cases."""
+def _ref_adapter_factory():
     from adapters.reference import ReferenceAdapter
-    from mermaid_fidelity.serialization import save_json
-
-    manifest = _load_manifest()
-    profile = _load_profile()
-    oracle_dir = _ORACLE_BASE / args.oracle_id
-    cases_dir = oracle_dir / "cases"
-    cases_dir.mkdir(parents=True, exist_ok=True)
-
-    adapter = ReferenceAdapter()
-    ok = 0
-    failed = []
-    for case in manifest.cases:
-        print(f"  capturing {case.id}...", end=" ", flush=True)
-        obs = adapter.observe(case, profile)
-        out_path = cases_dir / f"{case.id}.json"
-        save_json(obs, out_path)
-        status = obs.status.value
-        print(status)
-        if status in ("REFERENCE_RENDER_FAILURE", "INTERNAL_ERROR"):
-            failed.append(case.id)
-        else:
-            ok += 1
-
-    print(f"\nCaptured {ok}/{len(manifest.cases)}")
-    if failed:
-        print(f"Failed: {failed}", file=sys.stderr)
-        return 1
-    return 0
+    return ReferenceAdapter()
 
 
-def cmd_determinism(args) -> int:
-    from adapters.native import NativeAdapter
-    from mermaid_fidelity.runner import FidelityRunner
+# ── argument parsing ──────────────────────────────────────────────────────────
 
-    manifest = _load_manifest()
-    profile = _load_profile()
-    runner = FidelityRunner(
-        native_adapter=NativeAdapter(),
-        oracle_dir=_ORACLE_BASE / args.oracle_id,
-        tolerances=None,
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="run.py",
+        description="Mermaid fidelity harness — repository entry point",
     )
-    results = runner.run_determinism(manifest.cases, profile, runs=3)
-    nondeterministic = [r for r in results if r.status.value == "NONDETERMINISTIC"]
-    if nondeterministic:
-        print(f"NONDETERMINISTIC: {[r.case_id for r in nondeterministic]}", file=sys.stderr)
-        return 1
-    print(f"All {len(results)} cases deterministic")
-    return 0
+    p.add_argument(
+        "--oracle-id", default=_DEFAULT_ORACLE_ID,
+        help=f"Reference oracle identifier (default: {_DEFAULT_ORACLE_ID})",
+    )
 
+    sub = p.add_subparsers(dest="command")
+
+    # validate
+    sub.add_parser("validate", help="Validate cases.toml manifest + oracle integrity")
+
+    # run
+    run_p = sub.add_parser("run", help="Run fidelity comparisons against oracle")
+    run_p.add_argument("--case", dest="case_id", default=None,
+                       help="Run a single case by exact ID")
+    run_p.add_argument("--report-dir", type=Path,
+                       default=_FIDELITY_DIR / "reports",
+                       help="Directory to write report.json and report.md")
+
+    # capture-reference
+    cap_p = sub.add_parser("capture-reference",
+                            help="Capture oracle reference observations via mmdc")
+    cap_p.add_argument("--output", type=Path, default=_ORACLE_BASE,
+                       help="Oracle base directory (case JSONs go under <output>/<oracle-id>/cases/)")
+    cap_p.add_argument("--force", action="store_true",
+                       help="Overwrite existing oracle files")
+
+    # determinism
+    det_p = sub.add_parser("determinism", help="Check rendering determinism")
+    det_p.add_argument("--runs", type=int, default=3,
+                       help="Number of render passes per case (default: 3)")
+    det_p.add_argument("--report-dir", type=Path,
+                       default=_FIDELITY_DIR / "reports" / "determinism",
+                       help="Directory to write determinism.json")
+
+    return p
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Mermaid fidelity harness")
-    parser.add_argument("--oracle-id", default=_DEFAULT_ORACLE_ID)
-    parser.add_argument("--report-dir", default=str(_FIDELITY_DIR / "reports"))
-    parser.add_argument("--case-filter", default=None)
+    from mermaid_fidelity import cli
 
-    sub = parser.add_subparsers(dest="command")
-    sub.add_parser("run", help="Run fidelity comparisons against oracle")
-    sub.add_parser("capture-reference", help="Capture reference oracle observations")
-    sub.add_parser("determinism", help="Check native renderer determinism")
-    sub.add_parser("validate", help="Validate cases.toml manifest")
-
+    parser = _build_parser()
     args = parser.parse_args()
 
-    if args.command is None or args.command == "run":
-        return cmd_run(args)
+    if args.command is None:
+        parser.print_help()
+        return 1
+
+    if args.command == "validate":
+        ns = argparse.Namespace(
+            manifest=_MANIFEST_PATH,
+            oracle_dir=_ORACLE_BASE,
+            ref_id=args.oracle_id,
+        )
+        return cli.cmd_validate(ns, manifest_loader=_manifest_loader)
+
+    elif args.command == "run":
+        ns = argparse.Namespace(
+            manifest=_MANIFEST_PATH,
+            oracle_dir=_ORACLE_BASE,
+            ref_id=args.oracle_id,
+            report_dir=args.report_dir,
+            case_id=args.case_id,
+            profile="native-production",
+        )
+        return cli.cmd_run(
+            ns,
+            manifest_loader=_manifest_loader,
+            runner_factory=_runner_factory(_ORACLE_BASE),
+            profile_loader=_profile_loader,
+        )
+
     elif args.command == "capture-reference":
-        return cmd_capture_reference(args)
+        ns = argparse.Namespace(
+            manifest=_MANIFEST_PATH,
+            output=args.output,
+            ref_id=args.oracle_id,
+            force=args.force,
+            profile="mermaid-neutral",
+        )
+        return cli.cmd_capture_reference(
+            ns,
+            manifest_loader=_manifest_loader,
+            ref_adapter_factory=_ref_adapter_factory,
+            profile_loader=_profile_loader,
+        )
+
     elif args.command == "determinism":
-        return cmd_determinism(args)
-    elif args.command == "validate":
-        _load_manifest()
-        print("Manifest OK")
-        return 0
+        ns = argparse.Namespace(
+            manifest=_MANIFEST_PATH,
+            oracle_dir=_ORACLE_BASE,
+            ref_id=args.oracle_id,
+            runs=args.runs,
+            report_dir=args.report_dir,
+            profile="native-production",
+        )
+        return cli.cmd_determinism(
+            ns,
+            manifest_loader=_manifest_loader,
+            runner_factory=_runner_factory(_ORACLE_BASE),
+            profile_loader=_profile_loader,
+        )
+
     else:
         parser.print_help()
         return 1
