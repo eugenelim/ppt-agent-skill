@@ -280,15 +280,15 @@ class TestToSvgFallback:
             to_svg("flowchart TD\n    A-->B\n", fallback="unknown")
 
     def test_native_sequence_produces_svg(self, monkeypatch):
-        """sequenceDiagram is now a PARTIAL native builder; no fallback needed."""
+        """sequenceDiagram is a PARTIAL (experimental) native builder; experimental=True required."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
-        result = to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
+        result = to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n", experimental=True)
         assert "<svg" in result
 
     def test_fallback_legacy_dom_does_not_raise_for_sequence(self, monkeypatch):
-        """sequenceDiagram is native; fallback='legacy-dom' should not affect it."""
+        """sequenceDiagram is experimental native; experimental=True required to get SVG."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
         from scripts.mermaid_render.errors import NativeRenderError
@@ -297,6 +297,7 @@ class TestToSvgFallback:
             result = to_svg(
                 "sequenceDiagram\n    Alice->>Bob: Hi\n",
                 fallback="legacy-dom",
+                experimental=True,
             )
             assert "<svg" in result
         except NativeRenderError as e:

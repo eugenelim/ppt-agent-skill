@@ -127,13 +127,13 @@ def test_architecture_exception_propagates():
     "gitGraph\n  commit",
 ])
 def test_stage6_directive_produces_svg(src):
-    """Stage 6 PARTIAL types must return real SVG, not raise NativeRenderError."""
+    """Stage 6 PARTIAL (experimental) types must return real SVG with experimental=True."""
     import os
     from scripts.mermaid_render import to_svg
 
     env = {"MERMAID_RENDER_SVG_BACKEND": "native"}
     with patch.dict(os.environ, env):
-        result = to_svg(src)
+        result = to_svg(src, experimental=True)
 
     assert result, f"Empty result for source: {src[:40]!r}"
     assert "<svg" in result, f"No <svg> tag for source: {src[:40]!r}"

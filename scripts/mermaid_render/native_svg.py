@@ -605,7 +605,9 @@ def render_svg_result(
     # cap.native_status=="implemented", experimental builders never populate
     # geometry_errors, so errors stays () on the experimental path.
     if cap.native_status == "experimental":
-        sem_adapter: str = "unsupported"
+        # "partial" distinguishes from truly unsupported (sankey-beta, zenuml).
+        # "unsupported" is reserved for types with no builder at all.
+        sem_adapter: str = "partial"
         syntax_cov: str = "partial"
         geometry = "unvalidated"
     else:

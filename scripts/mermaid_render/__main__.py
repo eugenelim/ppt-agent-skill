@@ -44,7 +44,7 @@ def _cmd_svg(args: argparse.Namespace) -> int:
     from . import to_svg
     src = _read_source(args.source)
     try:
-        svg = to_svg(src, theme=args.theme)
+        svg = to_svg(src, theme=args.theme, experimental=True)
     except Exception as exc:
         print(f"mermaid_render svg: {exc}", file=sys.stderr)
         return 1
@@ -59,7 +59,7 @@ def _cmd_png(args: argparse.Namespace) -> int:
     from . import to_png
     src = _read_source(args.source)
     try:
-        data = to_png(src, theme=args.theme, scale=args.scale)
+        data = to_png(src, theme=args.theme, scale=args.scale, experimental=True)
     except Exception as exc:
         print(f"mermaid_render png: {exc}", file=sys.stderr)
         return 1
