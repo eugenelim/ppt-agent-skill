@@ -20,8 +20,9 @@ def test_parse_detects_flowchart_directive():
 
 
 def test_parse_detects_graph_directive():
+    # "graph" is canonicalized to "flowchart" (DIRECTIVE_ALIASES)
     req = parse_render_request("graph TD\n  A-->B")
-    assert req.directive == "graph"
+    assert req.directive == "flowchart"
     assert req.direction == "TD"
 
 

@@ -39,17 +39,23 @@ def test_no_mechanical_stub_in_native_svg():
 
 
 def test_no_broad_except_exception_in_native_svg():
-    """No bare `except Exception:` or `except Exception as` in native builder wrappers."""
+    """No swallowing `except Exception:` in native builder wrappers.
+
+    `except Exception as e: raise TypedError(...) from e` is allowed (wrapping).
+    `except Exception: pass` or returning without re-raising is not allowed.
+    """
     import ast
     tree = ast.parse(_NATIVE_SVG_SRC)
     for node in ast.walk(tree):
         if isinstance(node, ast.ExceptHandler):
             if node.type is not None:
                 handler_type = ast.unparse(node.type) if hasattr(ast, "unparse") else ""
-                assert handler_type != "Exception", (
-                    f"Native builder contains broad `except Exception:` at line {node.lineno}. "
-                    "Let exceptions propagate to the outer error context."
-                )
+                if handler_type == "Exception":
+                    has_reraise = any(isinstance(stmt, ast.Raise) for stmt in node.body)
+                    assert has_reraise, (
+                        f"Native builder has broad `except Exception:` at line {node.lineno} "
+                        "that doesn't re-raise. Let exceptions propagate to the outer error context."
+                    )
 
 
 def test_no_html_fallback_scene_anywhere_in_package():

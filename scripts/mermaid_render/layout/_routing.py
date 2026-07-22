@@ -307,18 +307,27 @@ def _label_on_longest(
     if len(pts) < 2:
         return pts[0][0], pts[0][1]
 
-    # Find longest segment
-    best_p1, best_p2 = pts[0], pts[1]
-    best_len = 0
-    for i in range(len(pts) - 1):
-        p1, p2 = pts[i], pts[i + 1]
-        seg_len = abs(p2[0] - p1[0]) + abs(p2[1] - p1[1])
-        if seg_len > best_len:
-            best_len = seg_len
-            best_p1, best_p2 = p1, p2
+    # For collinear paths (all same x or all same y), center across the full path.
+    # The longest-segment heuristic mis-places labels on straight A* routes that
+    # produce multiple equal-length collinear segments.
+    all_same_y = all(p[1] == pts[0][1] for p in pts)
+    all_same_x = all(p[0] == pts[0][0] for p in pts)
+    if all_same_y or all_same_x:
+        mid_x = (pts[0][0] + pts[-1][0]) // 2
+        mid_y = (pts[0][1] + pts[-1][1]) // 2
+    else:
+        # Find longest segment
+        best_p1, best_p2 = pts[0], pts[1]
+        best_len = 0
+        for i in range(len(pts) - 1):
+            p1, p2 = pts[i], pts[i + 1]
+            seg_len = abs(p2[0] - p1[0]) + abs(p2[1] - p1[1])
+            if seg_len > best_len:
+                best_len = seg_len
+                best_p1, best_p2 = p1, p2
 
-    mid_x = (best_p1[0] + best_p2[0]) // 2
-    mid_y = (best_p1[1] + best_p2[1]) // 2
+        mid_x = (best_p1[0] + best_p2[0]) // 2
+        mid_y = (best_p1[1] + best_p2[1]) // 2
     w = _est_label_w(label)
     H = _LABEL_CHIP_H
     # Candidates: above and below the segment midpoint, with offsets
@@ -406,13 +415,26 @@ def _smooth_orthogonal_path(pts: list[tuple[int, int]], r: int = 10) -> str:
     """
     if len(pts) < 2:
         return ""
+    # Collapse consecutive identical points (e.g. when x1==x2 in the fast path,
+    # the two middle points are the same; degenerate arcs produce duplicate L commands
+    # in the SVG string which the waypoint extractor then re-emits as zero-length segments).
+    deduped: list[tuple[int, int]] = [pts[0]]
+    for _p in pts[1:]:
+        if _p != deduped[-1]:
+            deduped.append(_p)
+    pts = deduped
+    if len(pts) < 2:
+        return ""
     d = f"M {pts[0][0]} {pts[0][1]}"
+    _prev_qx: "float | None" = None  # endpoint of the last Q command
+    _prev_qy: "float | None" = None
     for i in range(1, len(pts)):
         prev = pts[i - 1]
         curr = pts[i]
         nxt = pts[i + 1] if i < len(pts) - 1 else None
         if nxt is None:
             d += f" L {curr[0]} {curr[1]}"
+            _prev_qx = _prev_qy = None
         else:
             dx1 = curr[0] - prev[0]
             dy1 = curr[1] - prev[1]
@@ -426,8 +448,14 @@ def _smooth_orthogonal_path(pts: list[tuple[int, int]], r: int = 10) -> str:
             # arc-end: r px after the corner along the outgoing segment
             bx = curr[0] + dx2 / len2 * min(r, len2 / 2)
             by_ = curr[1] + dy2 / len2 * min(r, len2 / 2)
-            d += (f" L {ax:.1f} {ay:.1f}"
-                  f" Q {curr[0]} {curr[1]} {bx:.1f} {by_:.1f}")
+            # Skip the L if the arc-start equals the previous Q endpoint
+            # (happens when a short segment consumes all r on both sides).
+            if _prev_qx is not None and abs(ax - _prev_qx) < 0.05 and abs(ay - _prev_qy) < 0.05:
+                d += f" Q {curr[0]} {curr[1]} {bx:.1f} {by_:.1f}"
+            else:
+                d += (f" L {ax:.1f} {ay:.1f}"
+                      f" Q {curr[0]} {curr[1]} {bx:.1f} {by_:.1f}")
+            _prev_qx, _prev_qy = bx, by_
     return d
 
 
@@ -489,23 +517,19 @@ _LABEL_PERP = 20  # perpendicular offset for edge labels (px)
 # ── edge label placement ──────────────────────────────────────────────────────
 
 _LABEL_CHIP_H = 17    # chip height: 12px font + 2×padding + 1px border ≈ 17px
-_LABEL_CHAR_W = 6.8   # average char width at 12px Inter regular (empirical)
 
 
 def _est_label_w(text: str) -> int:
     """Estimate rendered edge-label chip width in px.
 
-    Uses the TextLayout measurer (Pillow FreeType when available) for accuracy;
-    falls back to character-bucketing heuristic when measurement fails.
+    Uses the same 8px-per-char heuristic as _make_text_layout_ir (in _strategies.py).
+    For labels >56 chars the 450px cap creates a divergence vs. _make_text_layout_ir
+    (which has no cap); routing and stored bounds can disagree there, but labels that
+    long are unusual and the discrepancy is bounded.  See backlog-mermaid-p0-label-width-cap.
     """
     if not text:
         return 0
-    try:
-        from ._text import get_default_measurer, TextStyle
-        run = get_default_measurer().measure_run(text, TextStyle(font_size=11))
-        return min(450, max(30, int(run.width)))
-    except Exception:
-        return min(450, max(30, int(len(text) * _LABEL_CHAR_W)))
+    return min(450, max(30, len(text) * 8))
 
 
 def _label_chip_bbox(lx: int, ly: int, text: str) -> tuple:

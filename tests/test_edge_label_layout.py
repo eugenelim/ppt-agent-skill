@@ -122,6 +122,19 @@ class TestEstLabelWidth:
                 f"Width not monotonic at n={i+1}: {widths}"
             )
 
+    def test_alignment_with_make_text_layout_ir_for_short_labels(self):
+        """For labels ≤56 chars, _est_label_w matches _make_text_layout_ir.width exactly."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _make_text_layout_ir
+        for n in (1, 5, 10, 20, 40, 56):
+            text = "x" * n
+            routing_w = _est_label_w(text)
+            layout_w = int(_make_text_layout_ir(text).width)
+            assert routing_w == layout_w, (
+                f"Width mismatch at n={n}: _est_label_w={routing_w} vs _make_text_layout_ir={layout_w}"
+            )
+
 
 # ── Route failure diagnostics ─────────────────────────────────────────────────
 

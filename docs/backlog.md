@@ -446,3 +446,12 @@ Radial mode remains unchanged when `layout: tidy-tree` is absent.
 ### browser-probing
 
 **Deferred from `mermaid-fidelity-hardening` AC 20:** Extract exact Mermaid/mmdc/Node/Playwright/Chromium version provenance by probing the live environment at capture time. Unblocked when browser environment is available in CI.
+
+### backlog-mermaid-p0-label-width-cap
+
+**Deferred from `mermaid-native-p0`:** `_est_label_w` in `layout/_routing.py` caps at 450px while
+`_make_text_layout_ir` in `layout/_strategies.py` has no upper cap. For edge labels >56 chars the
+routing placement width (450px) diverges from the stored `label_layout.bounds.w` (`len*8`). Apply
+the 450px cap to `_make_text_layout_ir` too (affects node-width calculation for long labels — needs
+snapshot recapture), or add a separate cap in the label-layout path. Reference: `spec.md` item 3
+in `docs/specs/mermaid-native-p0/spec.md`.
