@@ -458,9 +458,16 @@ class TestGeometryValidation:
         # but geometry must not be "fail" on a parse-level problem
         assert vr.geometry != "fail"
 
-    def test_non_sequence_diagram_geometry_unvalidated(self):
-        """Non-sequenceDiagram types return geometry='unvalidated'."""
+    def test_graph_directive_geometry_validated(self):
+        """Graph directives (flowchart, graph, stateDiagram) return geometry='pass' or 'fail', not 'unvalidated'."""
         vr = validate("flowchart TD\n  A --> B\n")
+        assert vr.geometry in ("pass", "fail"), (
+            f"Expected graph directive to be validated; got geometry={vr.geometry!r}"
+        )
+
+    def test_non_graph_non_sequence_geometry_unvalidated(self):
+        """Non-graph, non-sequence types (timeline, mindmap, etc.) still return geometry='unvalidated'."""
+        vr = validate("timeline\n  title T\n  section S\n    E: detail\n")
         assert vr.geometry == "unvalidated"
 
     def test_geometry_pass_implies_no_violations(self):
