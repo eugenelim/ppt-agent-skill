@@ -464,6 +464,8 @@ def test_node_layout_field_coverage_reflective():
     # - extra_css: HTML-only CSS override; inserting raw CSS violates the no-foreignObject constraint
     # - rank: layout rank (topological order); non-visual metadata
     # - icon_svg: HTML inline SVG icon; inserting user SVG violates no-user-SVG constraint
+    # - parent_group_id: layout hierarchy metadata for compound layout (Stage 4);
+    #   group membership is rendered via GroupLayout boundaries, not per-node
     _DECLARED_NON_CONSUMED: set[str] = {
         "content_bounds",
         "icon_bounds",

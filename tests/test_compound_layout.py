@@ -273,6 +273,164 @@ class TestInnerDirectionFixture:
         assert top_ingest < top_sink, f"ingest should be above sink; got {top_ingest} vs {top_sink}"
 
 
+# ── Stage 4: _recursive_group_layout invariants ───────────────────────────────
+
+class TestTBInnerLROuter:
+    """TB inner group in LR outer: members must be at same x, increasing y."""
+
+    SRC = """
+flowchart LR
+  subgraph G1
+    direction TB
+    P --> Q --> R
+  end
+  X --> P
+"""
+
+    def _layout(self):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+        return _compile_flowchart(self.SRC, width_hint=900, options=None).layout
+
+    def test_tb_inner_members_same_x(self):
+        """All TB-inner members must share the same x position in LR outer."""
+        layout = self._layout()
+        px = layout.node_layouts["P"].outer_bounds.x
+        qx = layout.node_layouts["Q"].outer_bounds.x
+        rx = layout.node_layouts["R"].outer_bounds.x
+        assert round(px) == round(qx) == round(rx), (
+            f"TB inner members should share x, got P={round(px)} Q={round(qx)} R={round(rx)}"
+        )
+
+    def test_tb_inner_members_increasing_y(self):
+        """TB-inner members must be placed top-to-bottom (increasing y)."""
+        layout = self._layout()
+        py = layout.node_layouts["P"].outer_bounds.y
+        qy = layout.node_layouts["Q"].outer_bounds.y
+        ry = layout.node_layouts["R"].outer_bounds.y
+        assert py < qy < ry, (
+            f"TB inner members should have increasing y, got P={round(py)} Q={round(qy)} R={round(ry)}"
+        )
+
+    def test_x_does_not_enter_predecessor_column(self):
+        """Node X (predecessor of G1) must be left of G1 members."""
+        layout = self._layout()
+        xx = layout.node_layouts["X"].outer_bounds.x + layout.node_layouts["X"].outer_bounds.w
+        px = layout.node_layouts["P"].outer_bounds.x
+        assert xx < px, f"X.right={round(xx)} should be left of P.x={round(px)}"
+
+
+class TestNestedGroupAsUnit:
+    """Child group treated as unit: Outer positions Inner group + direct members as blocks."""
+
+    SRC = """
+flowchart TB
+  subgraph Outer
+    direction LR
+    subgraph Inner
+      direction LR
+      A --> B
+    end
+    C --> D
+  end
+"""
+
+    def _layout(self):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+        return _compile_flowchart(self.SRC, width_hint=900, options=None).layout
+
+    def test_inner_members_at_same_y_as_outer_direct(self):
+        """A, B (Inner) and C, D (Outer direct) should all be at the same y (LR outer)."""
+        layout = self._layout()
+        if not all(k in layout.node_layouts for k in ("A", "B", "C", "D")):
+            pytest.skip("Expected nodes A/B/C/D not found — parsing regression")
+        ay = round(layout.node_layouts["A"].outer_bounds.y)
+        by = round(layout.node_layouts["B"].outer_bounds.y)
+        cy = round(layout.node_layouts["C"].outer_bounds.y)
+        dy = round(layout.node_layouts["D"].outer_bounds.y)
+        assert ay == by == cy == dy, (
+            f"All LR nodes should share y: A={ay} B={by} C={cy} D={dy}"
+        )
+
+    def test_inner_group_to_left_of_outer_direct(self):
+        """Inner group (A, B) must be to the left of Outer direct members (C, D)."""
+        layout = self._layout()
+        if not all(k in layout.node_layouts for k in ("A", "B", "C", "D")):
+            pytest.skip("Expected nodes A/B/C/D not found — parsing regression")
+        b_right = layout.node_layouts["B"].outer_bounds.x + layout.node_layouts["B"].outer_bounds.w
+        cx = layout.node_layouts["C"].outer_bounds.x
+        assert b_right < cx, f"B.right={round(b_right)} should be left of C.x={round(cx)}"
+
+    def test_no_overlap_inner_and_outer_direct(self):
+        """Inner group bbox and C node must not overlap."""
+        layout = self._layout()
+        if "Inner" not in layout.group_layouts or "C" not in layout.node_layouts:
+            pytest.skip("Inner group or C node not found — parsing regression")
+        ib = layout.group_layouts["Inner"].boundary_bounds
+        cb = layout.node_layouts["C"].outer_bounds
+        x_overlap = ib.x < cb.x + cb.w and cb.x < ib.x + ib.w
+        y_overlap = ib.y < cb.y + cb.h and cb.y < ib.y + ib.h
+        assert not (x_overlap and y_overlap), (
+            f"Inner group and C node should not overlap"
+        )
+
+
+# ── Stage 4 determinism ───────────────────────────────────────────────────────
+
+class TestRecursiveGroupLayoutDeterminism:
+    """Same input must produce identical FinalizedLayout on repeated calls."""
+
+    def _layout(self, src: str):
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+        return _compile_flowchart(src, width_hint=900, options=None).layout
+
+    def test_tb_outer_lr_inner_deterministic(self):
+        src = """
+flowchart TB
+  subgraph pipeline
+    direction LR
+    A --> B --> C
+  end
+  X --> A
+  C --> Y
+"""
+        l1 = self._layout(src)
+        l2 = self._layout(src)
+        assert l1.canvas_bounds.w == l2.canvas_bounds.w
+        assert l1.canvas_bounds.h == l2.canvas_bounds.h
+        for nid in ("A", "B", "C", "X", "Y"):
+            if nid in l1.node_layouts and nid in l2.node_layouts:
+                b1 = l1.node_layouts[nid].outer_bounds
+                b2 = l2.node_layouts[nid].outer_bounds
+                assert b1.x == b2.x and b1.y == b2.y, (
+                    f"{nid} position not deterministic: {b1} vs {b2}"
+                )
+
+    def test_lr_outer_tb_inner_deterministic(self):
+        src = """
+flowchart LR
+  subgraph G1
+    direction TB
+    P --> Q --> R
+  end
+  X --> P
+"""
+        l1 = self._layout(src)
+        l2 = self._layout(src)
+        assert l1.canvas_bounds.w == l2.canvas_bounds.w
+        assert l1.canvas_bounds.h == l2.canvas_bounds.h
+        for nid in ("P", "Q", "R", "X"):
+            if nid in l1.node_layouts and nid in l2.node_layouts:
+                b1 = l1.node_layouts[nid].outer_bounds
+                b2 = l2.node_layouts[nid].outer_bounds
+                assert b1.x == b2.x and b1.y == b2.y
+
+
 # ── Regression: existing group fixtures ──────────────────────────────────────
 
 class TestGroupRegressions:

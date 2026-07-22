@@ -2,7 +2,7 @@
 
 **Mode: full (structural change + multi-feature + dependent tasks + unfamiliar territory)**
 
-- **Status:** Done (Stages 0-3); Stages 4-13 deferred per backlog anchors below
+- **Status:** Done (Stages 0-4); Stages 5-13 deferred per backlog anchors below
 
 ## Objective
 
@@ -110,7 +110,7 @@ No supported renderer may return a placeholder scene.
 - [x] `tests/test_finalized_layout_scene.py` passes (serialization-only proof)
 
 **Stages 4-13 — Semantic Type Implementations** (deferred to future loops)
-- [ ] Recursive compound layout default (Stage 4) (deferred: backlog-mermaid-p3-compound-layout)
+- [x] Recursive compound layout default (Stage 4) — `_recursive_group_layout` replaces rank-flattening + `_apply_inner_direction_positions`; fixes TB inner in LR outer x-unification and child group unit treatment
 - [ ] SVG Scene bounds hardening (Stage 5) (deferred: backlog-mermaid-p3-scene-bounds)
 - [ ] All 12 placeholder types implemented (Stage 6) (deferred: backlog-mermaid-p3-type-migrations)
 - [ ] Mind Map tidy-tree (Stage 7) (deferred: backlog-mindmap-tidy-tree)
