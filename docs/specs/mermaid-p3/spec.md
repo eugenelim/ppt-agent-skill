@@ -2,7 +2,7 @@
 
 **Mode: full (structural change + multi-feature + dependent tasks + unfamiliar territory)**
 
-- **Status:** Done (Stages 0-5); Stages 6-13 deferred per backlog anchors below
+- **Status:** Done (Stages 0-5, 9); Stages 6-8, 10-13 deferred per backlog anchors below
 
 ## Objective
 
@@ -105,7 +105,7 @@ No supported renderer may return a placeholder scene.
 - [x] `graph_to_scene()` no longer called on the `_GRAPH_DIRECTIVES` native path with mutable models
 - [x] `_graph_topology_scene()` removed from `native_svg.py` (replaced by compile+scene pipeline)
 - [x] `_class_topology_scene()` kept until a dedicated class compiler exists (deferred: backlog-mermaid-p3-class-compiler)
-- [x] `architecture.py::graph_to_scene` call scoped out — architecture deferred to Stage 9 (deferred: backlog-mermaid-p3-architecture)
+- [x] `architecture.py::graph_to_scene` call scoped out — architecture completed in Stage 9
 - [x] Field-coverage parity test uses `dataclasses.fields(NodeLayout)` + `dataclasses.fields(RoutedEdge)` to assert every visible field is consumed (reflective, not manually enumerated)
 - [x] `tests/test_finalized_layout_scene.py` passes (serialization-only proof)
 
@@ -115,7 +115,7 @@ No supported renderer may return a placeholder scene.
 - [ ] All 12 placeholder types implemented (Stage 6) (deferred: backlog-mermaid-p3-type-migrations)
 - [ ] Mind Map tidy-tree (Stage 7) (deferred: backlog-mindmap-tidy-tree)
 - [ ] Timeline measurement completion (Stage 8) (deferred: backlog-mermaid-p3-timeline)
-- [ ] Architecture semantics (Stage 9) (deferred: backlog-mermaid-p3-architecture)
+- [x] Architecture semantics (Stage 9) — `ArchitectureDiagramLayout` compiled model; service tiles with measured label, icon_bounds, side ports; junction geometry; group hierarchy; BiRel → one path + two markers; `finalized_layout_to_scene` replaces `graph_to_scene`
 - [ ] C4 completion (Stage 10) (deferred: backlog-mermaid-p3-c4)
 - [ ] State diagrams (Stage 11) (deferred: backlog-mermaid-p3-state)
 - [ ] Themes/faithful/sizing/PNG (Stage 12) (deferred: backlog-mermaid-p3-infra)

@@ -384,13 +384,6 @@ TextLayout for period/event/section labels, derive all heights from measured tex
 activity-line end marker, `disableMulticolor` config, content-tight bounds, theme tokens.
 `width_hint` must be output maximum not minimum canvas width.
 
-### backlog-mermaid-p3-architecture
-
-**Deferred from `mermaid-p3` Stage 9:** Architecture semantics — replace generic `_Node(shape="rect")`
-lowering with immutable `ArchitectureDiagramLayout` model. Service tiles with icon, measured label,
-side ports. Junction geometry. Group boundary/icon/label/hierarchy. BiRel → one path + two markers.
-Fix `architecture.py::graph_to_scene` call to use FinalizedLayout.
-
 ### backlog-mermaid-p3-c4
 
 **Deferred from `mermaid-p3` Stage 10:** C4 completion — distinct painters for Person, System,
