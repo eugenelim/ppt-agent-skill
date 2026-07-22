@@ -683,6 +683,170 @@ class Diagnostic:
 
 
 @dataclass(frozen=True, slots=True)
+class SequenceDiagnostic:
+    """Typed diagnostic for sequenceDiagram layout/parse issues."""
+    severity: str          # "info" | "warning" | "error"
+    code: str
+    message: str
+    feature: Optional[str] = None
+    line_number: Optional[int] = None
+    source_text: Optional[str] = None
+
+
+class MarkerKind(enum.Enum):
+    """Arrow endpoint marker kinds (AC-8.1)."""
+    triangle = "triangle"
+    cross = "cross"
+    filled_head = "filled_head"
+
+
+@dataclass(frozen=True, slots=True)
+class ArrowSpec:
+    """Typed arrow specification (AC-8.2)."""
+    dashed: bool
+    start_marker: Optional[MarkerKind]
+    end_marker: Optional[MarkerKind]
+
+
+ARROW_SPECS: "Mapping[str, ArrowSpec]" = MappingProxyType({
+    "->":     ArrowSpec(dashed=False, start_marker=None, end_marker=None),
+    "-->":    ArrowSpec(dashed=True,  start_marker=None, end_marker=None),
+    "->>":    ArrowSpec(dashed=False, start_marker=None, end_marker=MarkerKind.triangle),
+    "-->>":   ArrowSpec(dashed=True,  start_marker=None, end_marker=MarkerKind.triangle),
+    "-x":     ArrowSpec(dashed=False, start_marker=None, end_marker=MarkerKind.cross),
+    "--x":    ArrowSpec(dashed=True,  start_marker=None, end_marker=MarkerKind.cross),
+    "-)":     ArrowSpec(dashed=False, start_marker=None, end_marker=MarkerKind.filled_head),
+    "--)":    ArrowSpec(dashed=True,  start_marker=None, end_marker=MarkerKind.filled_head),
+    "<<->>":  ArrowSpec(dashed=False, start_marker=MarkerKind.triangle, end_marker=MarkerKind.triangle),
+    "<<-->>": ArrowSpec(dashed=True,  start_marker=MarkerKind.triangle, end_marker=MarkerKind.triangle),
+})
+
+
+@dataclass(frozen=True, slots=True)
+class SequenceCompileResult:
+    """Result of a single compile_sequence() call.
+
+    Holds the HTML fragment, geometry IR, and transform metadata so both
+    _dispatch and _dispatch_validate share one _layout_lifeline invocation.
+    T2 sets scale < 1.0 and wraps html in the CSS-transform viewport;
+    in T1, scale=1.0 and rendered_width=natural_width.
+    """
+    html: str
+    geometry: "SequenceGeometry"
+    natural_width: float
+    natural_height: float
+    scale: float = 1.0
+    rendered_width: float = 0.0
+    rendered_height: float = 0.0
+    diagnostics: Tuple["SequenceDiagnostic", ...] = ()
+
+
+# ── Sequence typed geometry IR (T3a) ─────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class Bounds:
+    """Axis-aligned bounding box for sequence geometry primitives.
+
+    Named fields mirror CSS box-model direction: left/top/right/bottom.
+    All values are canvas-coordinate pixels (pre-scale).
+    """
+    left: float
+    top: float
+    right: float
+    bottom: float
+
+    @property
+    def width(self) -> float:
+        return self.right - self.left
+
+    @property
+    def height(self) -> float:
+        return self.bottom - self.top
+
+    @property
+    def cx(self) -> float:
+        return (self.left + self.right) / 2
+
+    @property
+    def cy(self) -> float:
+        return (self.top + self.bottom) / 2
+
+
+@dataclass(frozen=True, slots=True)
+class ParticipantGeometry:
+    """Geometry for one sequence diagram participant."""
+    participant_id: str
+    label: str
+    center_x: float
+    top_box: Bounds
+    bottom_box: Bounds
+    lifeline_top: float
+    lifeline_bottom: float
+
+
+@dataclass(frozen=True, slots=True)
+class MessageGeometry:
+    """Geometry for one sequence message (arrow)."""
+    event_id: str
+    source_id: str
+    destination_id: str
+    baseline_y: float
+    source_x: float
+    destination_x: float
+    label_x: float
+    arrow_token: str
+    is_self_message: bool = False
+    path_bounds: Optional[Bounds] = None
+    label_bounds: Optional[Bounds] = None
+    start_marker: Optional[str] = None
+    end_marker: Optional[str] = None
+
+
+@dataclass(frozen=True, slots=True)
+class ActivationGeometry:
+    """Geometry for one activation bar."""
+    activation_id: str
+    participant_id: str
+    start_y: float
+    end_y: float
+    depth: int
+    bounds: Bounds
+    was_implicitly_closed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class NoteGeometry:
+    """Geometry for one note."""
+    note_id: str
+    participant_ids: Tuple[str, ...]
+    placement: str  # "over" | "left of" | "right of"
+    bounds: Bounds
+
+
+@dataclass(frozen=True, slots=True)
+class FragmentGeometry:
+    """Geometry for one combined fragment (alt/opt/loop/par/critical/break/ref/seq/strict/neg/ignore/consider)."""
+    fragment_id: str
+    kind: str
+    participant_ids: Tuple[str, ...]
+    bounds: Bounds
+    header_text: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class BranchGeometry:
+    """Geometry for one branch separator (else/and/option) within a fragment."""
+    branch_id: str
+    parent_fragment_id: str
+    label: str
+    bounds: Bounds
+
+
+# ── SequenceGeometry ──────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
 class SequenceGeometry:
     """All computed geometry from a sequenceDiagram layout pass.
 
@@ -691,6 +855,7 @@ class SequenceGeometry:
     Fields are populated incrementally across G3 tasks; unimplemented
     fields default to empty tuples.
     """
+    # Legacy float-tuple fields — deprecated aliases kept for backward compat.
     participant_centers: Tuple[Tuple[str, float], ...] = ()  # (pid, cx)
     lifeline_x: Tuple[Tuple[str, float], ...] = ()           # (pid, x)
     activation_bars: Tuple[Tuple[str, float, float], ...] = ()  # (pid, top_y, bot_y)
@@ -704,6 +869,23 @@ class SequenceGeometry:
     marker_bounds: Tuple[Tuple[float, float, float, float], ...] = ()  # (x,y,w,h)
     canvas: Tuple[float, float] = (0.0, 0.0)  # (width, height)
     diagnostics: Tuple["Diagnostic", ...] = ()  # unsupported-construct diagnostics
+    # Typed geometry IR (T3b populates these; default () enables partial construction in tests)
+    participants: Tuple["ParticipantGeometry", ...] = ()
+    messages: Tuple["MessageGeometry", ...] = ()
+    activations: Tuple["ActivationGeometry", ...] = ()
+    notes: Tuple["NoteGeometry", ...] = ()
+    fragments: Tuple["FragmentGeometry", ...] = ()
+    branches: Tuple["BranchGeometry", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SequenceValidationResult:
+    """Typed validation result for a sequenceDiagram geometry pass (AC-4.1)."""
+    structural_geometry: str = "pass"    # "pass" | "fail"
+    semantic_geometry: str = "pass"      # "pass" | "fail"
+    diagnostics: "Tuple[SequenceDiagnostic, ...]" = ()
+    errors: "Tuple[str, ...]" = ()
+    warnings: "Tuple[str, ...]" = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -717,11 +899,13 @@ class ValidationResult:
     errors: Tuple[str, ...] = ()
     warnings: Tuple[str, ...] = ()
     diagnostics: Tuple[Diagnostic, ...] = ()
-    render: str = "pass"              # "pass" | "fail"
-    syntax_coverage: str = "pass"     # "pass" | "partial" | "fail"
-    geometry: str = "unvalidated"     # "pass" | "fail" | "unvalidated"
-    mmdc_oracle: str = "unvalidated"  # "pass" | "warning" | "fail" | "unvalidated"
-    renderer_backend: str = ""        # e.g. "native" | "legacy-dom" | "none" | ""
+    render: str = "pass"                      # "pass" | "fail"
+    syntax_coverage: str = "pass"             # "pass" | "partial" | "fail"
+    geometry: str = "unvalidated"             # "pass" | "fail" | "unvalidated"
+    structural_geometry: str = "unvalidated"  # "pass" | "fail" | "unvalidated"
+    semantic_geometry: str = "unvalidated"    # "pass" | "fail" | "unvalidated"
+    mmdc_oracle: str = "unvalidated"          # "pass" | "warning" | "fail" | "unvalidated"
+    renderer_backend: str = ""                # e.g. "native" | "legacy-dom" | "none" | ""
 
     @property
     def status(self) -> str:

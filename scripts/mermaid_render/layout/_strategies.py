@@ -160,6 +160,79 @@ def _directive_content(src: str) -> list[str]:
     return []
 
 
+# ── T8: arrow-spec helpers ───────────────────────────────────────────────────
+
+def _emit_arrow_or_diagnostic(
+    token: str,
+    diagnostics: "list",
+) -> "ArrowSpec":
+    """Look up token in ARROW_SPECS; on miss emit diagnostic and return no-marker fallback."""
+    from ._geometry import ARROW_SPECS, ArrowSpec, SequenceDiagnostic  # noqa: PLC0415
+    spec = ARROW_SPECS.get(token)
+    if spec is None:
+        diagnostics.append(SequenceDiagnostic(
+            severity="warning",
+            code="unsupported_arrow",
+            message=f"Unknown arrow token '{token}'",
+            source_text=token,
+        ))
+        spec = ArrowSpec(dashed=False, start_marker=None, end_marker=None)
+    return spec
+
+
+def _cx_or_diagnostic(
+    pid: str,
+    p_index: "dict[str, int]",
+    *,
+    col_centers: "list[float]",
+    diags: "list",
+    _PAD_H: float = 40.0,
+) -> float:
+    """Return cx for pid, or emit diagnostic and return PAD_H fallback (AC-9.3, AC-4.5).
+
+    Defensive hardening — all pids are auto-registered through parsing so this
+    site is unreachable by user input. Verified via direct unit tests.
+    """
+    from ._geometry import SequenceDiagnostic  # noqa: PLC0415
+    idx = p_index.get(pid, -1)
+    if idx < 0 or idx >= len(col_centers):
+        diags.append(SequenceDiagnostic(
+            severity="error",
+            code="unknown_participant",
+            message=f"Participant '{pid}' not registered (defensive invariant)",
+            source_text=pid,
+        ))
+        return _PAD_H
+    return col_centers[idx]
+
+
+def _emit_message_or_skip(
+    src_pid: str,
+    dst_pid: str,
+    p_index: "dict[str, int]",
+    col_centers: "list[float]",
+    diags: "list",
+    row_tops: "list[float]",
+    event_idx: int,
+) -> bool:
+    """Return True (skip) if either pid is unregistered, emitting a diagnostic (AC-4.5).
+
+    Defensive hardening — all pids are auto-registered through parsing so this
+    site is unreachable by user input. Verified via direct unit tests.
+    """
+    from ._geometry import SequenceDiagnostic  # noqa: PLC0415
+    skipped = False
+    for unknown in [p for p in (src_pid, dst_pid) if p and p not in p_index]:
+        diags.append(SequenceDiagnostic(
+            severity="error",
+            code="unknown_participant",
+            message=f"Participant '{unknown}' not registered (defensive invariant)",
+            source_text=unknown,
+        ))
+        skipped = True
+    return skipped
+
+
 # ── T2: sequenceDiagram ───────────────────────────────────────────────────────
 
 _SEQ_PART_RE = re.compile(r'^(?:participant|actor)\s+(\S+)(?:\s+as\s+(.+))?', re.I)
@@ -185,7 +258,11 @@ def _layout_lifeline(
     src: str, direction: str, width_hint: int
 ) -> "tuple[str, object]":
     """sequenceDiagram: participants as columns, messages as horizontal arrows."""
-    from ._geometry import Diagnostic, SequenceGeometry, TextStyle  # noqa: PLC0415
+    from ._geometry import (  # noqa: PLC0415
+        Bounds, ParticipantGeometry, MessageGeometry, ActivationGeometry,
+        NoteGeometry, FragmentGeometry, BranchGeometry,
+        Diagnostic, SequenceGeometry, TextStyle,
+    )
     from ._text import get_default_measurer  # noqa: PLC0415
     _MEASURER = get_default_measurer()
     content_lines = _directive_content(src)
@@ -293,6 +370,7 @@ def _layout_lifeline(
     _bstack: list[int] = []
     _frag_parts: "dict[int, set]" = {}
     _frag_id: "dict[int, str]" = {}
+    _branch_parent_id: "dict[int, str]" = {}  # T7: else_item_idx → parent frag_id
     _frag_ctr = 0
     _row_types = {"msg", "block", "note", "else", "rect"}
     for _bi, _bit in enumerate(items):
@@ -301,6 +379,8 @@ def _layout_lifeline(
             _frag_parts[_bi] = set()
             _frag_id[_bi] = f"f{_frag_ctr}"
             _frag_ctr += 1
+        elif _bit["type"] in ("else",) and _bstack:
+            _branch_parent_id[_bi] = _frag_id[_bstack[-1]]
         elif _bit["type"] == "block_end" and _bstack:
             _si = _bstack.pop()
             items[_si]["span"] = sum(
@@ -413,13 +493,6 @@ def _layout_lifeline(
 
     canvas_w: float = (_col_centers[-1] + _half_w[-1] + PAD_H) if _col_centers else float(2 * PAD_H)
 
-    # Apply width_hint: scale only column positions (box widths stay natural for text measurement).
-    # T8b will replace this with a full uniform scale that also adjusts font sizes.
-    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
-        _wh_scale = width_hint / canvas_w
-        _col_centers = [c * _wh_scale for c in _col_centers]
-        canvas_w = float(width_hint)
-
     BOX_H = HDR_H - 8
     ll_top = PAD_V + BOX_H + 4
 
@@ -430,8 +503,9 @@ def _layout_lifeline(
         _base = _col_centers[_idx] if _idx < len(_col_centers) else float(PAD_H)
         return int(round(_base + _cx_offset[0]))
 
-    # ── SEQ-009: row-height accumulator ──────────────────────────────────────
+    # ── SEQ-009: row-height accumulator (T6: variable heights) ──────────────
     _NOTE_STYLE = TextStyle(font_size=10)
+    _MSG_LABEL_STYLE = TextStyle(font_size=11)
 
     def _note_row_h(it: dict) -> int:
         text = it.get("text", "")
@@ -456,10 +530,50 @@ def _layout_lifeline(
         tl = _MEASURER.layout(text, _NOTE_STYLE, max_width=usable_w)
         return max(ROW_H, int(math.ceil(tl.height)) + 8)
 
-    _row_h_list: "list[int]" = [
-        _note_row_h(it) if it["type"] == "note" else ROW_H
-        for it in items if it["type"] in _row_types
-    ]
+    def _msg_row_h(it: dict) -> int:
+        lbl = it.get("label", "")
+        if not lbl:
+            return ROW_H
+        src, dst = it.get("src", ""), it.get("dst", "")
+        si = _p_index.get(src, -1)
+        di = _p_index.get(dst, -1)
+        if si < 0 or di < 0 or si >= len(_col_centers) or di >= len(_col_centers):
+            return ROW_H
+        span_w = abs(_col_centers[si] - _col_centers[di])
+        if span_w < 1.0:
+            span_w = _box_hw(src) * 2
+        tl = _MEASURER.layout(lbl, _MSG_LABEL_STYLE, max_width=max(1.0, span_w - 8))
+        return max(ROW_H, int(math.ceil(tl.height)) + 16)
+
+    def _block_row_h(it: dict) -> int:
+        hdr = (it.get("kw", "") + " " + it.get("label", "")).strip()
+        if not hdr:
+            return ROW_H
+        fparts = it.get("frag_parts", set())
+        fps_idxs = [_p_index[p] for p in fparts if p in _p_index]
+        if fps_idxs and len(fps_idxs) >= 2:
+            lo_i, hi_i = min(fps_idxs), max(fps_idxs)
+            if lo_i < len(_col_centers) and hi_i < len(_col_centers):
+                frag_w = (_col_centers[hi_i] - _col_centers[lo_i]
+                          + _half_w[lo_i] + _half_w[hi_i] + PAD_H)
+            else:
+                frag_w = canvas_w
+        else:
+            frag_w = canvas_w
+        tl = _MEASURER.layout(hdr, _FRAG_HDR_STYLE, max_width=max(1.0, frag_w - 8))
+        return max(ROW_H, int(math.ceil(tl.height)) + 8)
+
+    def _row_h_for(it: dict) -> int:
+        t = it["type"]
+        if t == "note":
+            return _note_row_h(it)
+        if t == "msg":
+            return _msg_row_h(it)
+        if t == "block":
+            return _block_row_h(it)
+        return ROW_H
+
+    _row_h_list: "list[int]" = [_row_h_for(it) for it in items if it["type"] in _row_types]
     _row_top_list: "list[int]" = []
     _acc = 0
     for _rh in _row_h_list:
@@ -502,10 +616,17 @@ def _layout_lifeline(
                     source_text=f"deactivate {_pid}",
                 ))
     # Flush unclosed activations to lifeline bottom (SEQ-006)
+    _implicitly_closed: "set[tuple[str, float, int]]" = set()
     for _pid, _stk in _act_stacks_v2.items():
         while _stk:
             _sy, _depth = _stk.pop()
+            _implicitly_closed.add((_pid, _sy, _depth))
             _act_spans_v2.append((_pid, _sy, float(ll_bot), _depth))
+            _diagnostics.append(Diagnostic(
+                feature="unclosed_activation",
+                line_number=0,
+                source_text=f"activate {_pid}",
+            ))
 
     # ── SEQ-007: activation-aware message endpoint resolver ───────────────────
     def _act_bounds_at(pid: str, y: float) -> "Optional[tuple[float, float]]":
@@ -652,6 +773,14 @@ def _layout_lifeline(
     _geom_frag_bounds: "list[tuple[str,float,float,float,float]]" = []
     _geom_branch_bounds: "list[tuple[str,float,float,float,float]]" = []
     _geom_marker_bounds: "list[tuple[float,float,float,float]]" = []
+    # ── Typed geometry IR accumulators (T3b) ─────────────────────────────────
+    _typed_participants: "list[ParticipantGeometry]" = []
+    _typed_messages: "list[MessageGeometry]" = []
+    _typed_activations: "list[ActivationGeometry]" = []
+    _typed_notes: "list[NoteGeometry]" = []
+    _typed_fragments: "list[FragmentGeometry]" = []
+    _typed_branches: "list[BranchGeometry]" = []
+    _msg_ctr = 0
 
     # ─────────────────────────────────────────────────────────────────────────
     # HTML EMISSION
@@ -677,7 +806,14 @@ def _layout_lifeline(
     for pid in participants:
         _bw = int(round(_box_hw(pid) * 2))
         lx = int(round(_cx(pid) - _box_hw(pid)))
-        lbl = _h(p_label.get(pid, pid))
+        _lbl_str = p_label.get(pid, pid)
+        lbl = _h(_lbl_str)
+        _typed_participants.append(ParticipantGeometry(
+            participant_id=pid, label=_lbl_str, center_x=float(_cx(pid)),
+            top_box=Bounds(float(lx), float(PAD_V), float(lx + _bw), float(PAD_V + BOX_H)),
+            bottom_box=Bounds(float(lx), float(ll_bot), float(lx + _bw), float(ll_bot + BOX_H)),
+            lifeline_top=float(ll_top), lifeline_bottom=float(ll_bot),
+        ))
         parts.append(
             f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
             f'position:absolute;left:{lx}px;top:{PAD_V}px;'
@@ -725,6 +861,12 @@ def _layout_lifeline(
                     f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 3" rx="3"/>'
                 )
                 _geom_frag_bounds.append((fid, float(x0), float(ry), float(x1 - x0), float(bh)))
+                _typed_fragments.append(FragmentGeometry(
+                    fragment_id=fid, kind=it["kw"].lower(),
+                    participant_ids=tuple(sorted(it.get("frag_parts", set()))),
+                    bounds=Bounds(float(x0), float(ry), float(x1), float(ry + bh)),
+                    header_text=(it.get("kw", "") + (" " + it.get("label", "") if it.get("label") else "")).strip(),
+                ))
         if it["type"] in _row_types:
             _rp_a += 1
 
@@ -746,6 +888,12 @@ def _layout_lifeline(
             f'fill="var(--edge-strong,var(--accent-1,#60a5fa))" opacity="0.35" rx="2"'
             f' data-pid="{_h(_pid)}"/>'
         )
+        _typed_activations.append(ActivationGeometry(
+            activation_id=f"act-{_pid}-{int(_sy)}",
+            participant_id=_pid, start_y=float(_sy), end_y=float(_ey), depth=_depth,
+            bounds=Bounds(float(_ax), float(_sy), float(_ax + ACTIVATION_W), float(_sy + _act_h)),
+            was_implicitly_closed=(_pid, _sy, _depth) in _implicitly_closed,
+        ))
 
     # ── Arrow marker helper ────────────────────────────────────────────────────
     def _draw_marker(marker: "Optional[str]", x: float, y: float, dirn: int) -> str:
@@ -807,12 +955,14 @@ def _layout_lifeline(
                 f'data-branch-condition="{_h(branch_cond)}" '
                 f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="4 4"/>'
             )
-            # find parent fragment id for branch_separator_bounds
-            _par_fid = ""
-            for _pbi in reversed(_bstk_else):  # _bstk_else rebuilt; use _else_x dict key
-                _par_fid = _frag_id.get(_pbi, "")
-                break
+            _par_fid = _branch_parent_id.get(_bi, "")
             _geom_branch_bounds.append((_par_fid, float(x0), float(ry), float(x1 - x0), 1.0))
+            _typed_branches.append(BranchGeometry(
+                branch_id=f"branch-{len(_typed_branches)}",
+                parent_fragment_id=_par_fid,
+                label=branch_cond,
+                bounds=Bounds(float(x0), float(ry), float(x1), float(ry + 1.0)),
+            ))
             row += 1; continue
         if it["type"] == "note":
             nx, ny, nw, nh = _note_geom(it, row)
@@ -825,6 +975,13 @@ def _layout_lifeline(
                 f'stroke="{_seq_edge}" stroke-width="1"/>'
             )
             _geom_note_bounds.append((float(nx), float(ny), float(nw), float(nh)))
+            _note_pids = it.get("pids") or ([it.get("pid", "")] if it.get("pid") else [])
+            _typed_notes.append(NoteGeometry(
+                note_id=f"note-{len(_typed_notes)}",
+                participant_ids=tuple(_note_pids),
+                placement=it.get("pos", "over").replace("_", " "),
+                bounds=Bounds(float(nx), float(ny), float(nx + nw), float(ny + nh)),
+            ))
             row += 1; continue
         if it["type"] in ("activate", "deactivate", "block_end"):
             continue
@@ -867,8 +1024,20 @@ def _layout_lifeline(
                 f' data-src="{_h(_msg_src)}" data-dst="{_h(_msg_dst)}"/>'
             )
             parts.append(_draw_marker(spec["end_m"], ax_right, loop_bot, -1))
+            if spec.get("start_m"):  # bidirectional self-message (AC-5.6)
+                parts.append(_draw_marker(spec["start_m"], ax_right, loop_top, 1))
             _geom_self_loops.append((float(ax_right), float(loop_top), float(loop_w), 16.0))
             _geom_msg_endpoints.append((float(ax_right), float(loop_top), float(ax_right), float(loop_bot)))
+            _typed_messages.append(MessageGeometry(
+                event_id=f"msg-{_msg_ctr}",
+                source_id=_msg_src, destination_id=_msg_dst,
+                baseline_y=float(ry), source_x=float(ax_right), destination_x=float(ax_right),
+                label_x=float(ax_right + loop_w / 2), arrow_token=arrow, is_self_message=True,
+                path_bounds=Bounds(float(ax_right), float(loop_top),
+                                   float(ax_right + loop_w), float(loop_bot)),
+                start_marker=spec.get("start_m"), end_marker=spec.get("end_m"),
+            ))
+            _msg_ctr += 1
         else:
             parts.append(
                 f'<line x1="{sx}" y1="{ry}" x2="{dx2}" y2="{ry}" '
@@ -880,6 +1049,16 @@ def _layout_lifeline(
             if spec["start_m"]:  # bidirectional (SEQ-012)
                 parts.append(_draw_marker(spec["start_m"], sx, ry, -dirn))
             _geom_msg_endpoints.append((float(sx), float(ry), float(dx2), float(ry)))
+            _typed_messages.append(MessageGeometry(
+                event_id=f"msg-{_msg_ctr}",
+                source_id=_msg_src, destination_id=_msg_dst,
+                baseline_y=float(ry), source_x=float(sx), destination_x=float(dx2),
+                label_x=float((sx + dx2) / 2), arrow_token=arrow, is_self_message=False,
+                path_bounds=Bounds(min(float(sx), float(dx2)), float(ry) - 1.0,
+                                   max(float(sx), float(dx2)), float(ry) + 1.0),
+                start_marker=spec.get("start_m"), end_marker=spec.get("end_m"),
+            ))
+            _msg_ctr += 1
         row += 1
 
     parts.append('</svg>')
@@ -974,6 +1153,12 @@ def _layout_lifeline(
         marker_bounds=tuple(_geom_marker_bounds),
         canvas=(float(canvas_w), float(canvas_h)),
         diagnostics=tuple(_diagnostics),
+        participants=tuple(_typed_participants),
+        messages=tuple(_typed_messages),
+        activations=tuple(_typed_activations),
+        notes=tuple(_typed_notes),
+        fragments=tuple(_typed_fragments),
+        branches=tuple(_typed_branches),
     )
     return "\n".join(parts), _geom
 
@@ -4886,6 +5071,73 @@ def _compile_flowchart(
     return CompiledFlowchart(layout=finalized, validation=validation, metadata=metadata)
 
 
+# ── sequence compile-once helper ─────────────────────────────────────────────
+
+def compile_sequence(
+    source: str,
+    *,
+    width_hint: int = 0,
+    height_hint: int = 0,
+    theme: "str | None" = None,
+) -> "SequenceCompileResult":
+    """Compile a sequenceDiagram exactly once and return a SequenceCompileResult.
+
+    Both _dispatch (rendering) and _dispatch_validate (validation) consume this
+    result so _layout_lifeline is called at most once per source string.
+    T1: scale=1.0, rendered_width=natural_width.
+    T2: fills scale and CSS-transform viewport when width_hint < natural_width.
+    """
+    from ._geometry import SequenceCompileResult, SequenceDiagnostic  # noqa: PLC0415
+    clean = _strip_frontmatter(source)
+    # Always render at natural size; CSS transform scales the viewport.
+    html, geom = _layout_lifeline(clean, "LR", 0)
+    natural_w = float(geom.canvas[0]) if geom.canvas else 0.0
+    natural_h = float(geom.canvas[1]) if geom.canvas else 0.0
+    # Compute uniform CSS-transform scale (T2, AC-2.5).
+    w_scale = (width_hint / natural_w) if (width_hint and natural_w > 0) else 1.0
+    h_scale = (height_hint / natural_h) if (height_hint and natural_h > 0) else 1.0
+    scale = min(1.0, w_scale, h_scale)
+    if scale < 1.0:
+        rendered_w = round(natural_w * scale, 2)
+        rendered_h = round(natural_h * scale, 2)
+        html = (
+            f'<div class="sequence-viewport" style="'
+            f'position:relative;width:{rendered_w}px;height:{rendered_h}px;overflow:hidden;">'
+            f'<div class="sequence-natural-stage" style="'
+            f'position:absolute;top:0;left:0;'
+            f'width:{natural_w}px;height:{natural_h}px;'
+            f'transform:scale({scale:.6g});transform-origin:top left;">'
+            f'{html}'
+            f'</div></div>'
+        )
+    else:
+        rendered_w = natural_w
+        rendered_h = natural_h
+        scale = 1.0
+    # Lift legacy Diagnostic objects to SequenceDiagnostic for uniform access.
+    seq_diags: "tuple[SequenceDiagnostic, ...]" = tuple(
+        SequenceDiagnostic(
+            severity="warning",
+            code=d.feature or "unsupported_construct",
+            message=d.source_text or d.feature or "",
+            feature=d.feature,
+            line_number=d.line_number,
+            source_text=d.source_text,
+        )
+        for d in geom.diagnostics
+    )
+    return SequenceCompileResult(
+        html=html,
+        geometry=geom,
+        natural_width=natural_w,
+        natural_height=natural_h,
+        scale=scale,
+        rendered_width=rendered_w,
+        rendered_height=rendered_h,
+        diagnostics=seq_diags,
+    )
+
+
 # ── strategy dispatch ─────────────────────────────────────────────────────────
 
 def _dispatch(
@@ -4913,8 +5165,7 @@ def _dispatch(
             opts=opts,
         )
     if d == "sequencediagram":
-        html, _ = _layout_lifeline(clean, direction, width_hint)
-        return html
+        return compile_sequence(clean, width_hint=width_hint, height_hint=effective_height).html
     if d == "erdiagram":
         return _layout_er(clean, direction, width_hint)
     if d == "classdiagram":
@@ -5049,6 +5300,87 @@ def _validate_sequence_geometry(geom: "SequenceGeometry") -> "list[str]":
     return violations
 
 
+def validate_sequence_geometry(
+    geom: "SequenceGeometry",
+) -> "SequenceValidationResult":
+    """Public API: run structural + semantic validation on a SequenceGeometry.
+
+    Returns SequenceValidationResult with independent structural_geometry and
+    semantic_geometry lanes plus collected errors/warnings (AC-4.1, AC-4.2, AC-4.3).
+    """
+    from ._geometry import SequenceValidationResult  # noqa: PLC0415
+
+    struct_violations: "list[str]" = list(_validate_sequence_geometry(geom))
+
+    # Structural checks on typed geometry records (AC-4.2 extension)
+    for act in geom.activations:
+        if act.end_y < act.start_y - 0.5:
+            struct_violations.append(
+                f"STRUCT: activation '{act.activation_id}' inverted end_y={act.end_y} < start_y={act.start_y}"
+            )
+        if act.bounds.right < act.bounds.left or act.bounds.bottom < act.bounds.top:
+            struct_violations.append(
+                f"STRUCT: activation '{act.activation_id}' has non-positive bounds"
+            )
+    for frag in geom.fragments:
+        if frag.bounds.right < frag.bounds.left or frag.bounds.bottom < frag.bounds.top:
+            struct_violations.append(
+                f"STRUCT: fragment '{frag.fragment_id}' has non-positive bounds"
+            )
+    for branch in geom.branches:
+        if branch.bounds.right < branch.bounds.left:
+            struct_violations.append(
+                f"STRUCT: branch '{branch.branch_id}' has negative width"
+            )
+
+    # Semantic checks (AC-4.3)
+    sem_violations: "list[str]" = []
+    frag_id_set = {f.fragment_id for f in geom.fragments}
+    registered_pids = {p.participant_id for p in geom.participants}
+    participant_lifeline_bottom: "dict[str, float]" = {
+        p.participant_id: p.lifeline_bottom for p in geom.participants
+    }
+
+    # Branch parent_fragment_id must be non-empty and in fragment_id set
+    for branch in geom.branches:
+        if not branch.parent_fragment_id:
+            sem_violations.append(
+                f"SEM: branch '{branch.branch_id}' has empty parent_fragment_id"
+            )
+        elif branch.parent_fragment_id not in frag_id_set:
+            sem_violations.append(
+                f"SEM: branch '{branch.branch_id}' parent '{branch.parent_fragment_id}' not in fragments"
+            )
+
+    # Note participants must be registered
+    for note in geom.notes:
+        for pid in note.participant_ids:
+            if pid and pid not in registered_pids:
+                sem_violations.append(
+                    f"SEM: note '{note.note_id}' references unregistered participant '{pid}'"
+                )
+
+    # was_implicitly_closed activations should extend near lifeline_bottom
+    for act in geom.activations:
+        if act.was_implicitly_closed:
+            ll_bot = participant_lifeline_bottom.get(act.participant_id)
+            if ll_bot is not None and abs(act.end_y - ll_bot) > 3:
+                sem_violations.append(
+                    f"SEM: implicitly-closed activation '{act.activation_id}' "
+                    f"end_y={act.end_y} not at lifeline_bottom={ll_bot}"
+                )
+
+    structural_status = "fail" if struct_violations else "pass"
+    semantic_status = "fail" if sem_violations else "pass"
+    all_warnings = tuple(struct_violations + sem_violations)
+    return SequenceValidationResult(
+        structural_geometry=structural_status,
+        semantic_geometry=semantic_status,
+        errors=(),
+        warnings=all_warnings,
+    )
+
+
 def _dispatch_validate(src: str) -> "ValidationResult":
     """Validate Mermaid source including geometry invariants."""
     from ._geometry import ValidationResult
@@ -5058,7 +5390,7 @@ def _dispatch_validate(src: str) -> "ValidationResult":
 
     if d == "sequencediagram":
         try:
-            _, geom = _layout_lifeline(clean, "LR", 900)
+            compiled = compile_sequence(clean)
         except Exception as exc:
             return ValidationResult(
                 render="fail",
@@ -5066,15 +5398,17 @@ def _dispatch_validate(src: str) -> "ValidationResult":
                 geometry="unvalidated",
                 errors=(str(exc),),
             )
-        diagnostics = geom.diagnostics
-        sc = "partial" if diagnostics else "pass"
-        violations = _validate_sequence_geometry(geom)
-        geom_status = "fail" if violations else "pass"
+        geom = compiled.geometry
+        legacy_diags = geom.diagnostics  # legacy Diagnostic tuples for ValidationResult
+        sc = "partial" if legacy_diags else "pass"
+        svr = validate_sequence_geometry(geom)
         return ValidationResult(
-            diagnostics=diagnostics,
+            diagnostics=legacy_diags,
             syntax_coverage=sc,
-            geometry=geom_status,
-            warnings=tuple(violations),  # geometry violations go in warnings, not errors
+            geometry=svr.structural_geometry,
+            structural_geometry=svr.structural_geometry,
+            semantic_geometry=svr.semantic_geometry,
+            warnings=tuple(svr.warnings),
         )
 
     if d in _GRAPH_DIRECTIVES:

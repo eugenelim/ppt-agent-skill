@@ -1,0 +1,7 @@
+sequenceDiagram
+  critical acquire lock
+    Alice->>Bob: request
+    Bob-->>Alice: granted
+  option timeout
+    Alice->>Bob: retry
+  end
