@@ -4804,11 +4804,13 @@ def _validate_sequence_geometry(geom: "SequenceGeometry") -> "list[str]":
 
 
 def _dispatch_validate(src: str) -> "ValidationResult":
-    """Validate Mermaid source including 11 geometry invariants (T9)."""
+    """Validate Mermaid source including geometry invariants."""
     from ._geometry import ValidationResult
     clean = _strip_frontmatter(src)
     directive, _ = _detect_directive(clean)
-    if directive.lower() == "sequencediagram":
+    d = directive.lower()
+
+    if d == "sequencediagram":
         try:
             _, geom = _layout_lifeline(clean, "LR", 900)
         except Exception as exc:
@@ -4828,6 +4830,33 @@ def _dispatch_validate(src: str) -> "ValidationResult":
             geometry=geom_status,
             warnings=tuple(violations),  # geometry violations go in warnings, not errors
         )
+
+    if d in _GRAPH_DIRECTIVES:
+        try:
+            compiled = _compile_flowchart(clean, 0, None)
+        except Exception as exc:
+            return ValidationResult(
+                render="fail",
+                syntax_coverage="fail",
+                geometry="unvalidated",
+                errors=(str(exc),),
+            )
+        try:
+            from ..paint import finalized_layout_to_scene
+            scene = finalized_layout_to_scene(compiled.layout, diagram_type=d, title="")
+        except Exception as exc:
+            return ValidationResult(
+                render="fail",
+                geometry="unvalidated",
+                errors=(str(exc),),
+            )
+        from ..scene_bounds import validate_scene
+        scene_errors = validate_scene(scene)
+        return ValidationResult(
+            geometry="fail" if scene_errors else "pass",
+            errors=tuple(scene_errors),
+        )
+
     return ValidationResult(geometry="unvalidated")
 
 

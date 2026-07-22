@@ -1,6 +1,6 @@
 # Mermaid P3 — Implementation Plan
 
-- **Status:** Done (Tasks 0-10 complete; Tasks 6-8 include reflective field-coverage tests; Task 10 = Stage 4 recursive compound layout)
+- **Status:** Done (Tasks 0-11 complete; Task 10 = Stage 4 recursive compound layout; Task 11 = Stage 5 scene bounds)
 
 ## Task 0: Record Baseline
 Verification: goal-based
@@ -153,7 +153,26 @@ Approach:
     (`_group_coherent_cols` and `_compact_group_columns` remain as prerequisite col-assignment passes)
   - Update imports in `_strategies.py`
 
-## Deferred tasks (Stages 5-13 — separate loops)
+## Task 11: Stage 5 — Scene bounds hardening
+Verification: TDD
+Tests (tests/test_scene_bounds.py):
+  - element_visible_bounds for all 10 element types
+  - _parse_translate: comma/space/single-arg/empty/unrecognised
+  - scene_visible_bounds: single element, multi-element union, empty → None, multi-layer
+  - validate_scene: clean scene, duplicate element_id, nested duplicate, blank ids OK,
+    negative width/height, negative radius, nested negative geometry
+Done when: 50 tests pass
+Approach:
+  - New module `scripts/mermaid_render/scene_bounds.py`
+  - Imports Rect/Point from layout/_geometry; imports scene types from scene.py (no circular deps)
+  - element_visible_bounds: dispatches on element type, parses translate() from transform str
+  - arc command endpoint: (cmd[6], cmd[7]) per ScenePath docstring ("A", rx,ry,xr,lf,sf,x,y)
+  - text bounds: per-line width estimate from len*font_size*0.6, respects text_anchor
+  - group bounds: recursive children union + translate parent transform on top
+  - scene_visible_bounds: union across all layers
+  - validate_scene: duplicate element_ids + negative geometry on rects/circles/ellipses
+
+## Deferred tasks (Stages 6-13 — separate loops)
 See docs/backlog.md entries:
 - backlog-mermaid-p3-scene-bounds (Stage 5 scene IR hardening)
 - backlog-mermaid-p3-type-migrations (Stage 6 twelve placeholder types)
