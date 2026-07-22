@@ -386,10 +386,11 @@ activity-line end marker, `disableMulticolor` config, content-tight bounds, them
 
 ### backlog-mermaid-p3-c4
 
-**Deferred from `mermaid-p3` Stage 10:** C4 completion — distinct painters for Person, System,
-SystemDb, SystemQueue, Container, Component (+ Ext variants). Nested boundaries with brace-stack
-behavior. BiRel → one path + two markers. Direction hints. Technology as separate text role.
-Label candidates avoid nodes and boundary titles.
+**Resolved in `eugene/mermaid-p3-c4-painters`.** Distinct painters (Person stick-figure,
+SystemDb cylinder, SystemQueue double-bar), nested boundaries, BiRel two-marker paths, direction
+hints with Bézier bias, technology `c4-technology` text role. Fixed perpendicular label offset
+(10px); true obstacle-avoidance against node/boundary bounding boxes remains open — file a new
+backlog item if needed.
 
 ### backlog-mermaid-p3-state
 

@@ -45,6 +45,7 @@ class C4Relationship:
     src: str
     dst: str
     label: str
+    rel_type: str = "rel"  # "rel" | "birel" | "rel_d" | "rel_u" | "rel_l" | "rel_r"
 
 
 @dataclass
@@ -52,6 +53,7 @@ class C4Boundary:
     id: str
     label: str
     members: list[str] = field(default_factory=list)
+    parent: Optional[str] = None  # parent boundary id when nested
 
 
 @dataclass

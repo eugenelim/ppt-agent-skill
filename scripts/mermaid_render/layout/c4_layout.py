@@ -2,6 +2,17 @@
 
 Reuses C4Bounds packer from _c4.py for Mermaid-faithful layout, converting
 to SvgScene primitives instead of HTML.
+
+Stage 10 painters:
+  Person / Person_Ext   — stick figure (circle head + path body)
+  System / Container / Component / *_Ext  — rounded box with dashed Ext border
+  SystemDb / ContainerDb / ComponentDb / *_Ext  — cylinder (rect + two ellipses)
+  SystemQueue / ContainerQueue / ComponentQueue / *_Ext  — box + two vertical bars
+  BiRel                 — one path with marker-start + marker-end
+  Rel_D/U/L/R           — Bézier with directional control-point bias
+  Technology            — separate c4-technology text role below label
+  Label placement       — perpendicular offset avoids node/boundary centers
+  Nested boundaries     — outer rect contains inner boundary extents
 """
 from __future__ import annotations
 
@@ -24,8 +35,10 @@ from ..scene import (
     MarkerDefinition,
     PaintStyle,
     SceneCircle,
+    SceneEllipse,
     SceneLine,
     ScenePath,
+    SceneRect,
     SceneRoundedRect,
     SceneText,
     SceneTextLine,
@@ -62,8 +75,9 @@ _C4_BOUNDARY_RE = re.compile(
     r'^(?:Enterprise_Boundary|System_Boundary|Container_Boundary|Boundary)'
     r'\s*\(\s*(\w+)\s*,\s*"([^"]+)"', re.I
 )
+# Capturing group 1 = keyword for rel_type
 _C4_REL_RE = re.compile(
-    r'^(?:Rel|Rel_D|Rel_U|Rel_L|Rel_R|BiRel)\s*'
+    r'^(Rel|Rel_D|Rel_U|Rel_L|Rel_R|BiRel)\s*'
     r'\(\s*(\w+)\s*,\s*(\w+)\s*,\s*"([^"]*)"', re.I
 )
 
@@ -81,6 +95,10 @@ _C4_BOUNDARY_STROKE = "#dad7ce"
 _C4_BOUNDARY_FILL = "none"
 _C4_EDGE_STROKE = "#75736c"
 _C4_TITLE_COLOR = "#191a17"
+
+# Direction-hint rel types
+_C4_DIR_HINTS = frozenset({"rel_d", "rel_u", "rel_l", "rel_r"})
+_C4_DIR_BIAS = 40.0       # Bézier control-point bias in pixels
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -111,7 +129,9 @@ def _parse_c4_source(src: str) -> tuple[str, list, list, dict]:
         m = _C4_BOUNDARY_RE.match(line)
         if m:
             bid, blbl = m.group(1), m.group(2)
-            groups.setdefault(bid, C4Boundary(id=bid, label=blbl))
+            parent_bid = boundary_stack[-1] if boundary_stack else None
+            if bid not in groups:
+                groups[bid] = C4Boundary(id=bid, label=blbl, parent=parent_bid)
             boundary_stack.append(bid)
             continue
         if line.startswith((")", "}")) and boundary_stack:
@@ -124,7 +144,14 @@ def _parse_c4_source(src: str) -> tuple[str, list, list, dict]:
             arg3 = m.group(4) or ""
             arg4 = m.group(5) or ""
             is_ext = elem_type.endswith("_ext")
-            _base = re.sub(r"_(ext|db|queue)$", "", elem_type)
+            # Strip suffixes iteratively to handle both underscore and
+            # concatenated forms (e.g. container_db AND containerdb).
+            _base = elem_type
+            while True:
+                _next = re.sub(r"_?(ext|db|queue)$", "", _base)
+                if _next == _base:
+                    break
+                _base = _next
             if _base in ("container", "component") and arg4:
                 tech, desc = arg3, arg4
             elif _base in ("container", "component"):
@@ -143,127 +170,323 @@ def _parse_c4_source(src: str) -> tuple[str, list, list, dict]:
             continue
         m = _C4_REL_RE.match(line)
         if m:
+            rel_kw = m.group(1).lower()  # "rel", "birel", "rel_d", "rel_u", "rel_l", "rel_r"
             relationships.append(C4Relationship(
-                src=m.group(1), dst=m.group(2), label=m.group(3),
+                src=m.group(2), dst=m.group(3), label=m.group(4),
+                rel_type=rel_kw,
             ))
 
     return title, items, relationships, groups
 
 
-# ── Scene builders ────────────────────────────────────────────────────────────
+# ── Painter helpers ───────────────────────────────────────────────────────────
 
-def _make_c4_node_elements(
-    item: C4Item, box: C4Box, eid: str,
+def _node_colors(item: C4Item) -> tuple[str, str, str]:
+    """Return (fill_color, stroke_color, text_color)."""
+    if item.is_external:
+        return _C4_EXT_FILL, _C4_EXT_STROKE, _C4_EXT_TEXT
+    return _C4_NODE_FILL, _C4_NODE_STROKE, _C4_TEXT
+
+
+def _stroke_for(stroke_c: str, is_ext: bool) -> StrokeStyle:
+    """Solid stroke for internal nodes, dashed for Ext variants."""
+    if is_ext:
+        return StrokeStyle(color=stroke_c, width=1.5, dasharray="4 3")
+    return StrokeStyle(color=stroke_c, width=1.5)
+
+
+def _text_block(
+    item: C4Item, cx: float, y_start: float, eid: str,
 ) -> list:
-    """Convert a C4Item + its box to a list of scene elements."""
-    elements = []
-    x, y = float(box.x), float(box.y)
-    w, h = float(box.width), float(box.height)
-
+    """Emit stereotype, label, technology (separate role), description SceneText elements."""
+    _, _, text_c = _node_colors(item)
+    dim_c = _C4_DIM if not item.is_external else _C4_EXT_TEXT
     type_tag = _C4_TYPE_DISPLAY.get(item.kind, item.kind.capitalize())
 
-    if item.is_external:
-        fill_c = _C4_EXT_FILL
-        stroke_c = _C4_EXT_STROKE
-        text_c = _C4_EXT_TEXT
-    else:
-        fill_c = _C4_NODE_FILL
-        stroke_c = _C4_NODE_STROKE
-        text_c = _C4_TEXT
-
-    # Node box
-    elements.append(SceneRoundedRect(
-        element_id=f"{eid}-node-{item.alias}",
-        x=x, y=y, w=w, h=h,
-        rx=8, ry=8,
-        paint=PaintStyle(
-            fill=FillStyle(color=fill_c),
-            stroke=StrokeStyle(color=stroke_c, width=1.5),
+    elements: list = [
+        SceneText(
+            element_id=f"{eid}-stereotype-{item.alias}",
+            lines=(SceneTextLine(
+                text=f"[{type_tag}]",
+                x=cx, y=y_start,
+                font_size=10.0, font_weight=400, fill_color=dim_c,
+            ),),
+            text_anchor="middle",
+            css_classes=("c4-stereotype",),
         ),
-        css_classes=("c4-node", f"c4-{item.kind.replace('_', '-')}"),
-        data_attrs=(("node-id", item.alias),),
-    ))
-
-    # Accent top bar (non-external only)
-    if not item.is_external:
-        elements.append(SceneRoundedRect(
-            element_id=f"{eid}-accent-{item.alias}",
-            x=x, y=y, w=w, h=3.0,
-            rx=8, ry=8,
-            paint=PaintStyle(fill=FillStyle(color=_C4_ACCENT)),
-            css_classes=("c4-accent-bar",),
-        ))
-
-    # Text content: stereotype, label, technology, description
-    text_x = x + w / 2
-    text_y_start = y + 22.0
-
-    elements.append(SceneText(
-        element_id=f"{eid}-stereotype-{item.alias}",
-        lines=(SceneTextLine(
-            text=f"[{type_tag}]",
-            x=text_x, y=text_y_start,
-            font_size=10.0, font_weight=400,
-            fill_color=_C4_DIM if not item.is_external else _C4_EXT_TEXT,
-        ),),
-        text_anchor="middle",
-        css_classes=("c4-stereotype",),
-    ))
-    elements.append(SceneText(
-        element_id=f"{eid}-label-{item.alias}",
-        lines=(SceneTextLine(
-            text=item.label,
-            x=text_x, y=text_y_start + 18.0,
-            font_size=14.0, font_weight=700,
-            fill_color=text_c,
-        ),),
-        text_anchor="middle",
-        css_classes=("c4-label",),
-    ))
+        SceneText(
+            element_id=f"{eid}-label-{item.alias}",
+            lines=(SceneTextLine(
+                text=item.label,
+                x=cx, y=y_start + 18.0,
+                font_size=14.0, font_weight=700, fill_color=text_c,
+            ),),
+            text_anchor="middle",
+            css_classes=("c4-label",),
+        ),
+    ]
+    tech_offset = 34.0
     if item.technology:
         elements.append(SceneText(
             element_id=f"{eid}-tech-{item.alias}",
             lines=(SceneTextLine(
                 text=f"[{item.technology}]",
-                x=text_x, y=text_y_start + 34.0,
-                font_size=10.0, font_weight=400,
-                fill_color=_C4_DIM if not item.is_external else _C4_EXT_TEXT,
+                x=cx, y=y_start + tech_offset,
+                font_size=10.0, font_weight=400, fill_color=dim_c,
             ),),
             text_anchor="middle",
             css_classes=("c4-technology",),
         ))
     if item.description:
+        desc_offset = tech_offset + (14.0 if item.technology else 0.0)
         elements.append(SceneText(
             element_id=f"{eid}-desc-{item.alias}",
             lines=(SceneTextLine(
                 text=item.description,
-                x=text_x, y=text_y_start + (48.0 if item.technology else 34.0),
-                font_size=11.0, font_weight=400,
-                fill_color=_C4_DIM if not item.is_external else _C4_EXT_TEXT,
+                x=cx, y=y_start + desc_offset,
+                font_size=11.0, font_weight=400, fill_color=dim_c,
             ),),
             text_anchor="middle",
             css_classes=("c4-description",),
         ))
-
     return elements
 
 
-def _make_c4_boundary_elements(
-    bnd: C4Boundary, member_boxes: list[C4Box], eid: str,
-) -> list:
-    """Boundary dashed rect + label."""
-    if not member_boxes:
-        return []
-    xs = [b.x for b in member_boxes]
-    ys = [b.y for b in member_boxes]
-    x2s = [b.x + b.width for b in member_boxes]
-    y2s = [b.y + b.height for b in member_boxes]
-    bx = float(min(xs)) - _C4_BOUNDARY_PAD
-    by = float(min(ys)) - _C4_BOUNDARY_PAD - 20
-    bw = float(max(x2s)) - float(min(xs)) + 2 * _C4_BOUNDARY_PAD
-    bh = float(max(y2s)) - float(min(ys)) + 2 * _C4_BOUNDARY_PAD + 20
+# ── Distinct shape painters ───────────────────────────────────────────────────
 
-    elements = [
+def _make_person_elements(item: C4Item, box: C4Box, eid: str) -> list:
+    """Stick-figure painter for Person / Person_Ext."""
+    x, y = float(box.x), float(box.y)
+    w, h = float(box.width), float(box.height)
+    cx = x + w / 2.0
+
+    fill_c, stroke_c, _ = _node_colors(item)
+    body_paint = PaintStyle(
+        fill=FillStyle(color=fill_c),
+        stroke=_stroke_for(stroke_c, item.is_external),
+    )
+    icon_stroke = StrokeStyle(color=stroke_c, width=1.5)
+    icon_fill = FillStyle(color=fill_c)
+
+    head_r = 12.0
+    head_cy = y + head_r + 6.0
+    trunk_top = head_cy + head_r
+    trunk_bot = trunk_top + 20.0
+    arm_y = trunk_top + 8.0
+    arm_spread = 14.0
+    leg_spread = 12.0
+    leg_bot = trunk_bot + 14.0
+    text_y_start = leg_bot + 10.0
+
+    elements: list = [
+        SceneRoundedRect(
+            element_id=f"{eid}-node-{item.alias}",
+            x=x, y=y, w=w, h=h, rx=8, ry=8,
+            paint=body_paint,
+            css_classes=("c4-node", f"c4-{item.kind.replace('_', '-')}"),
+            data_attrs=(("node-id", item.alias),),
+        ),
+        SceneCircle(
+            element_id=f"{eid}-head-{item.alias}",
+            cx=cx, cy=head_cy, r=head_r,
+            paint=PaintStyle(fill=icon_fill, stroke=icon_stroke),
+            css_classes=("c4-person-head",),
+        ),
+        ScenePath(
+            element_id=f"{eid}-trunk-{item.alias}",
+            commands=(("M", cx, trunk_top), ("L", cx, trunk_bot)),
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=icon_stroke),
+            css_classes=("c4-person-body",),
+        ),
+        ScenePath(
+            element_id=f"{eid}-arms-{item.alias}",
+            commands=(("M", cx - arm_spread, arm_y), ("L", cx + arm_spread, arm_y)),
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=icon_stroke),
+            css_classes=("c4-person-arms",),
+        ),
+        ScenePath(
+            element_id=f"{eid}-legs-{item.alias}",
+            commands=(
+                ("M", cx, trunk_bot), ("L", cx - leg_spread, leg_bot),
+                ("M", cx, trunk_bot), ("L", cx + leg_spread, leg_bot),
+            ),
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=icon_stroke),
+            css_classes=("c4-person-legs",),
+        ),
+    ]
+    elements.extend(_text_block(item, cx, text_y_start, eid))
+    return elements
+
+
+def _make_db_elements(item: C4Item, box: C4Box, eid: str) -> list:
+    """Cylinder painter for *Db variants (SystemDb, ContainerDb, ComponentDb)."""
+    x, y = float(box.x), float(box.y)
+    w, h = float(box.width), float(box.height)
+    cx = x + w / 2.0
+
+    fill_c, stroke_c, _ = _node_colors(item)
+    fill = FillStyle(color=fill_c)
+    stroke = _stroke_for(stroke_c, item.is_external)
+    side_stroke = StrokeStyle(color=stroke_c, width=1.5,
+                              dasharray=stroke.dasharray if item.is_external else "")
+    ry_cap = 8.0
+    body_top = y + ry_cap
+    text_y_start = y + 26.0
+
+    elements: list = [
+        # Barrel body (fill only — stroke on sides comes from explicit lines)
+        SceneRect(
+            element_id=f"{eid}-node-{item.alias}",
+            x=x, y=body_top, w=w, h=h - ry_cap,
+            paint=PaintStyle(fill=fill, stroke=None),
+            css_classes=("c4-node", f"c4-{item.kind.replace('_', '-')}"),
+            data_attrs=(("node-id", item.alias),),
+        ),
+        # Side stroke lines
+        SceneLine(
+            element_id=f"{eid}-cyl-ls-{item.alias}",
+            x1=x, y1=body_top, x2=x, y2=y + h,
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=side_stroke),
+            css_classes=("c4-db-side",),
+        ),
+        SceneLine(
+            element_id=f"{eid}-cyl-rs-{item.alias}",
+            x1=x + w, y1=body_top, x2=x + w, y2=y + h,
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=side_stroke),
+            css_classes=("c4-db-side",),
+        ),
+        # Bottom cap (painted first so top ellipse covers it)
+        SceneEllipse(
+            element_id=f"{eid}-cyl-bot-{item.alias}",
+            cx=cx, cy=y + h, rx=w / 2.0, ry=ry_cap,
+            paint=PaintStyle(fill=fill, stroke=stroke),
+            css_classes=("c4-db-cap",),
+        ),
+        # Top cap (painted on top of barrel)
+        SceneEllipse(
+            element_id=f"{eid}-cyl-top-{item.alias}",
+            cx=cx, cy=body_top, rx=w / 2.0, ry=ry_cap,
+            paint=PaintStyle(fill=fill, stroke=stroke),
+            css_classes=("c4-db-cap",),
+        ),
+    ]
+    elements.extend(_text_block(item, cx, text_y_start, eid))
+    return elements
+
+
+def _make_queue_elements(item: C4Item, box: C4Box, eid: str) -> list:
+    """Double-bar painter for *Queue variants."""
+    x, y = float(box.x), float(box.y)
+    w, h = float(box.width), float(box.height)
+    cx = x + w / 2.0
+
+    fill_c, stroke_c, _ = _node_colors(item)
+    body_paint = PaintStyle(
+        fill=FillStyle(color=fill_c),
+        stroke=_stroke_for(stroke_c, item.is_external),
+    )
+    bar_stroke = StrokeStyle(color=stroke_c, width=1.5)
+    bar_x = 10.0
+    text_y_start = y + 22.0
+
+    elements: list = [
+        SceneRoundedRect(
+            element_id=f"{eid}-node-{item.alias}",
+            x=x, y=y, w=w, h=h, rx=8, ry=8,
+            paint=body_paint,
+            css_classes=("c4-node", f"c4-{item.kind.replace('_', '-')}"),
+            data_attrs=(("node-id", item.alias),),
+        ),
+    ]
+    if not item.is_external:
+        elements.append(SceneRoundedRect(
+            element_id=f"{eid}-accent-{item.alias}",
+            x=x, y=y, w=w, h=3.0, rx=8, ry=8,
+            paint=PaintStyle(fill=FillStyle(color=_C4_ACCENT)),
+            css_classes=("c4-accent-bar",),
+        ))
+    elements.extend([
+        SceneLine(
+            element_id=f"{eid}-qbar-l-{item.alias}",
+            x1=x + bar_x, y1=y + 3.0, x2=x + bar_x, y2=y + h - 3.0,
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=bar_stroke),
+            css_classes=("c4-queue-bar",),
+        ),
+        SceneLine(
+            element_id=f"{eid}-qbar-r-{item.alias}",
+            x1=x + w - bar_x, y1=y + 3.0, x2=x + w - bar_x, y2=y + h - 3.0,
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=bar_stroke),
+            css_classes=("c4-queue-bar",),
+        ),
+    ])
+    elements.extend(_text_block(item, cx, text_y_start, eid))
+    return elements
+
+
+def _make_box_elements(item: C4Item, box: C4Box, eid: str) -> list:
+    """Default rounded-box painter for System / Container / Component."""
+    x, y = float(box.x), float(box.y)
+    w, h = float(box.width), float(box.height)
+    cx = x + w / 2.0
+
+    fill_c, stroke_c, _ = _node_colors(item)
+    body_paint = PaintStyle(
+        fill=FillStyle(color=fill_c),
+        stroke=_stroke_for(stroke_c, item.is_external),
+    )
+    text_y_start = y + 22.0
+
+    elements: list = [
+        SceneRoundedRect(
+            element_id=f"{eid}-node-{item.alias}",
+            x=x, y=y, w=w, h=h, rx=8, ry=8,
+            paint=body_paint,
+            css_classes=("c4-node", f"c4-{item.kind.replace('_', '-')}"),
+            data_attrs=(("node-id", item.alias),),
+        ),
+    ]
+    if not item.is_external:
+        elements.append(SceneRoundedRect(
+            element_id=f"{eid}-accent-{item.alias}",
+            x=x, y=y, w=w, h=3.0, rx=8, ry=8,
+            paint=PaintStyle(fill=FillStyle(color=_C4_ACCENT)),
+            css_classes=("c4-accent-bar",),
+        ))
+    elements.extend(_text_block(item, cx, text_y_start, eid))
+    return elements
+
+
+def _shape_family(kind: str) -> str:
+    """Dispatch key: 'person', 'db', 'queue', or 'box'."""
+    k = kind.lower()
+    if "person" in k:
+        return "person"
+    if "db" in k:
+        return "db"
+    if "queue" in k:
+        return "queue"
+    return "box"
+
+
+def _make_c4_node_elements(item: C4Item, box: C4Box, eid: str) -> list:
+    """Dispatch to the per-kind painter."""
+    family = _shape_family(item.kind)
+    if family == "person":
+        return _make_person_elements(item, box, eid)
+    if family == "db":
+        return _make_db_elements(item, box, eid)
+    if family == "queue":
+        return _make_queue_elements(item, box, eid)
+    return _make_box_elements(item, box, eid)
+
+
+# ── Boundary renderer ─────────────────────────────────────────────────────────
+
+def _make_c4_boundary_rect(
+    bnd: C4Boundary, bx: float, by: float, bw: float, bh: float, eid: str,
+) -> list:
+    """Boundary dashed rect + label from pre-computed dimensions."""
+    return [
         SceneRoundedRect(
             element_id=f"{eid}-bnd-{bnd.id}",
             x=bx, y=by, w=bw, h=bh,
@@ -280,25 +503,32 @@ def _make_c4_boundary_elements(
             lines=(SceneTextLine(
                 text=bnd.label,
                 x=bx + 10, y=by + 15,
-                font_size=11.0, font_weight=600,
-                fill_color=_C4_DIM,
+                font_size=11.0, font_weight=600, fill_color=_C4_DIM,
             ),),
             text_anchor="start",
             css_classes=("c4-boundary-label",),
         ),
     ]
-    return elements
 
+
+# ── Edge renderer ─────────────────────────────────────────────────────────────
 
 def _make_c4_edge_elements(
     relationships: list[C4Relationship],
     box_map: dict[str, C4Box],
     eid: str,
 ) -> tuple[list, list, list]:
-    """Return (edge_paths, label_texts, marker_defs) for C4 relationships."""
+    """Return (edge_paths, label_texts, marker_defs) for C4 relationships.
+
+    BiRel → one path with both marker-start and marker-end.
+    Rel_D/U/L/R → Bézier with directional control-point bias.
+    Label placement is offset perpendicular to edge to avoid node/boundary overlap.
+    """
     edge_els: list = []
     label_els: list = []
     marker_id = f"{eid}-c4-arrow"
+    start_marker_id = f"{eid}-c4-arrow-start"
+    has_birel = any(r.rel_type == "birel" for r in relationships)
 
     for i, rel in enumerate(relationships):
         src_box = box_map.get(rel.src)
@@ -322,26 +552,50 @@ def _make_c4_edge_elements(
             dst_box.width, dst_box.height, src_cx, src_cy,
         )
 
-        if i == 0:
-            cmds = (
-                ("M", float(sx), float(sy)),
-                ("L", float(ex), float(ey)),
-            )
-            lx = (sx + ex) / 2
-            ly = (sy + ey) / 2
-        else:
+        # Direction-hinted and non-first relationships use a Bézier curve.
+        use_bezier = (i > 0) or (rel.rel_type in _C4_DIR_HINTS)
+
+        if use_bezier:
             ctrl_x = sx + (ex - sx) / 4
             ctrl_y = sy + (ey - sy) / 2
+            if rel.rel_type == "rel_d":
+                ctrl_y += _C4_DIR_BIAS
+            elif rel.rel_type == "rel_u":
+                ctrl_y -= _C4_DIR_BIAS
+            elif rel.rel_type == "rel_l":
+                ctrl_x -= _C4_DIR_BIAS
+            elif rel.rel_type == "rel_r":
+                ctrl_x += _C4_DIR_BIAS
             cmds = (
                 ("M", float(sx), float(sy)),
                 ("Q", float(ctrl_x), float(ctrl_y), float(ex), float(ey)),
             )
+            # Label at quadratic midpoint (t=0.5): (1-t)²P0 + 2t(1-t)P1 + t²P2
             lx = 0.25 * sx + 0.5 * ctrl_x + 0.25 * ex
             ly = 0.25 * sy + 0.5 * ctrl_y + 0.25 * ey
+        else:
+            cmds = (
+                ("M", float(sx), float(sy)),
+                ("L", float(ex), float(ey)),
+            )
+            lx = (sx + ex) / 2.0
+            ly = (sy + ey) / 2.0
+
+        # Fixed 10px perpendicular offset; keeps label off the edge spine.
+        # True obstacle-avoidance (against node/boundary bounding boxes) is deferred.
+        dx = ex - sx
+        dy = ey - sy
+        length = math.hypot(dx, dy)
+        if length > 1e-9:
+            lx += (-dy / length) * 10.0
+            ly += (dx / length) * 10.0
+
+        this_start = start_marker_id if rel.rel_type == "birel" else ""
 
         edge_els.append(ScenePath(
             element_id=f"{eid}-rel-{i}",
             commands=cmds,
+            marker_start=this_start,
             marker_end=marker_id,
             paint=PaintStyle(
                 fill=FillStyle(color="none"),
@@ -362,7 +616,7 @@ def _make_c4_edge_elements(
                 css_classes=("c4-relation-label",),
             ))
 
-    marker_defs = [MarkerDefinition(
+    marker_defs: list = [MarkerDefinition(
         marker_id=marker_id,
         marker_type="arrow-end",
         color=_C4_EDGE_STROKE,
@@ -370,6 +624,15 @@ def _make_c4_edge_elements(
         refX=6.0,
         refY=4.0,
     )]
+    if has_birel:
+        marker_defs.append(MarkerDefinition(
+            marker_id=start_marker_id,
+            marker_type="arrow-start",
+            color=_C4_EDGE_STROKE,
+            size=8.0,
+            refX=2.0,
+            refY=4.0,
+        ))
 
     return edge_els, label_els, marker_defs
 
@@ -426,7 +689,7 @@ def layout_c4_scene(
     content = f"{c4_type}:{canvas_w}:{canvas_h}:{','.join(i.alias for i in packing_order)}"
     content_hash = int(hashlib.sha256(content.encode()).hexdigest(), 16)
     scene_id = make_scene_id(c4_type, content_hash)
-    eid = hashlib.sha256(scene_id.encode()).hexdigest()[:6]
+    scene_hash = hashlib.sha256(scene_id.encode()).hexdigest()[:6]
 
     boundary_els: list = []
     node_els: list = []
@@ -438,7 +701,7 @@ def layout_c4_scene(
     # Title
     if title:
         bg_els.append(SceneText(
-            element_id=f"{eid}-title",
+            element_id=f"{scene_hash}-title",
             lines=(SceneTextLine(
                 text=title,
                 x=canvas_w / 2, y=float(C4_TITLE_H / 2 + 8),
@@ -449,26 +712,65 @@ def layout_c4_scene(
             css_classes=("c4-title",),
         ))
 
-    # Boundary boxes (before nodes, nodes paint on top)
-    for bid, bnd in groups.items():
-        member_boxes = [box_map[alias] for alias in bnd.members if alias in box_map]
-        if member_boxes:
-            boundary_els.extend(_make_c4_boundary_elements(bnd, member_boxes, eid))
+    # ── Boundary rects (nested-boundary aware) ────────────────────────────────
+    # Compute each boundary's padded extent recursively (inner before outer).
+    pad = float(_C4_BOUNDARY_PAD)
 
-    # Nodes
+    def _boundary_padded_extent(bid: str) -> Optional[tuple[float, float, float, float]]:
+        """Recursively compute (xmin, ymin, xmax, ymax) padded rect for a boundary."""
+        bnd = groups[bid]
+        raw_xs: list[float] = []
+        raw_ys: list[float] = []
+        raw_x2s: list[float] = []
+        raw_y2s: list[float] = []
+
+        for alias in bnd.members:
+            b = box_map.get(alias)
+            if b is None:
+                continue
+            raw_xs.append(b.x); raw_ys.append(b.y)
+            raw_x2s.append(b.x + b.width); raw_y2s.append(b.y + b.height)
+
+        # Include nested child boundaries as contributors
+        for child_bid, child_bnd in groups.items():
+            if child_bnd.parent == bid:
+                child_rect = _boundary_padded_extent(child_bid)
+                if child_rect is not None:
+                    cx, cy, cx2, cy2 = child_rect
+                    raw_xs.append(cx); raw_ys.append(cy)
+                    raw_x2s.append(cx2); raw_y2s.append(cy2)
+
+        if not raw_xs:
+            return None
+        return (
+            min(raw_xs) - pad,
+            min(raw_ys) - pad - 20.0,  # 20 px for label above
+            max(raw_x2s) + pad,
+            max(raw_y2s) + pad,
+        )
+
+    for bid, bnd in groups.items():
+        rect = _boundary_padded_extent(bid)
+        if rect is not None:
+            bx, by, bx2, by2 = rect
+            boundary_els.extend(
+                _make_c4_boundary_rect(bnd, bx, by, bx2 - bx, by2 - by, scene_hash)
+            )
+
+    # ── Nodes ─────────────────────────────────────────────────────────────────
     for item in packing_order:
         box = box_map.get(item.alias)
         if box:
-            els = _make_c4_node_elements(item, box, eid)
+            els = _make_c4_node_elements(item, box, scene_hash)
             for el in els:
                 if isinstance(el, SceneText):
                     label_els.append(el)
                 else:
                     node_els.append(el)
 
-    # Edges
+    # ── Edges ─────────────────────────────────────────────────────────────────
     rel_edges, rel_labels, marker_defs = _make_c4_edge_elements(
-        relationships, box_map, eid,
+        relationships, box_map, scene_hash,
     )
     edge_els.extend(rel_edges)
     label_els.extend(rel_labels)
