@@ -11,6 +11,7 @@ from ._constants import (
     GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE, _BAR_W,
+    _measure_text_width,
 )
 from ._geometry import Rect, RoutingFailure, RouteBatch
 
@@ -522,14 +523,15 @@ _LABEL_CHIP_H = 17    # chip height: 12px font + 2×padding + 1px border ≈ 17p
 def _est_label_w(text: str) -> int:
     """Estimate rendered edge-label chip width in px.
 
-    Uses the same 8px-per-char heuristic as _make_text_layout_ir (in _strategies.py).
-    For labels >56 chars the 450px cap creates a divergence vs. _make_text_layout_ir
-    (which has no cap); routing and stored bounds can disagree there, but labels that
-    long are unusual and the discrepancy is bounded.  See backlog-mermaid-p0-label-width-cap.
+    Uses _measure_text_width at font_size=12, weight=400, matching the computation
+    in _strategies._estimate_text_width / _make_text_layout_ir. For labels >56 chars
+    the 450px cap creates a minor divergence vs. _make_text_layout_ir (which has no
+    cap); routing and stored bounds can disagree there, but labels that long are unusual
+    and the discrepancy is bounded.
     """
     if not text:
         return 0
-    return min(450, max(30, len(text) * 8))
+    return min(450, int(max(30.0, _measure_text_width(text, 12, 400))))
 
 
 def _label_chip_bbox(lx: int, ly: int, text: str) -> tuple:
