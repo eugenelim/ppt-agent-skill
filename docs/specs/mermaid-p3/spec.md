@@ -116,7 +116,7 @@ No supported renderer may return a placeholder scene.
 - [ ] Mind Map tidy-tree (Stage 7) (deferred: backlog-mindmap-tidy-tree)
 - [ ] Timeline measurement completion (Stage 8) (deferred: backlog-mermaid-p3-timeline)
 - [x] Architecture semantics (Stage 9) — `ArchitectureDiagramLayout` compiled model; service tiles with measured label, icon_bounds, side ports; junction geometry; group hierarchy; BiRel → one path + two markers; `finalized_layout_to_scene` replaces `graph_to_scene`
-- [ ] C4 completion (Stage 10) (deferred: backlog-mermaid-p3-c4)
+- [x] C4 completion (Stage 10)
 - [ ] State diagrams (Stage 11) (deferred: backlog-mermaid-p3-state)
 - [ ] Themes/faithful/sizing/PNG (Stage 12) (deferred: backlog-mermaid-p3-infra)
 - [ ] Semantic tests and gallery (Stage 13) (deferred: backlog-mermaid-p3-semantic-tests)
