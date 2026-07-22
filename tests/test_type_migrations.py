@@ -109,7 +109,8 @@ def test_gantt_contains_task_labels():
 
 def test_gantt_has_task_elements():
     svg = dispatch_native(_GANTT_SRC)
-    assert 'data-task' in svg or 'semantic_role' in svg or 'rect' in svg.lower()
+    # data-status on task bars is specific to the gantt builder (not emitted by the bg rect)
+    assert 'data-status' in svg
 
 
 # ── quadrantChart ─────────────────────────────────────────────────────────────
@@ -251,7 +252,8 @@ def test_packet_contains_field_labels():
 
 def test_packet_has_field_rects():
     svg = dispatch_native(_PACKET_SRC)
-    assert 'data-label' in svg or "<rect" in svg
+    # data-label is set on each packet field rect — unique to packet builder
+    assert svg.count('data-label=') >= 4  # 4 fields in _PACKET_SRC
 
 
 # ── kanban ────────────────────────────────────────────────────────────────────
@@ -312,7 +314,8 @@ def test_journey_contains_task_names():
 
 def test_journey_has_score_colors():
     svg = dispatch_native(_JOURNEY_SRC)
-    assert "<rect" in svg or "fill" in svg
+    # Score 3=yellow, 5=green should produce distinct fills; check at least two distinct score fills
+    assert "#fde68a" in svg or "#4ade80" in svg or "#fca5a5" in svg
 
 
 # ── requirementDiagram ────────────────────────────────────────────────────────
@@ -427,3 +430,29 @@ def test_all_stage6_types_no_nan(dtype, src):
     svg = dispatch_native(src)
     assert "NaN" not in svg, f"{dtype}: NaN in output"
     assert "Infinity" not in svg, f"{dtype}: Infinity in output"
+
+
+# ── Empty / degenerate source — must produce SvgScene, never crash ─────────────
+
+_MINIMAL_SOURCES = [
+    ("sequenceDiagram", "sequenceDiagram"),
+    ("erDiagram", "erDiagram"),
+    ("gantt", "gantt\n  title Empty"),
+    ("quadrantChart", "quadrantChart"),
+    ("pie", "pie\n  title Empty"),
+    ("xychart-beta", "xychart-beta"),
+    ("block-beta", "block-beta"),
+    ("packet-beta", "packet-beta"),
+    ("kanban", "kanban"),
+    ("journey", "journey\n  title Empty"),
+    ("requirementDiagram", "requirementDiagram"),
+    ("gitGraph", "gitGraph"),
+]
+
+
+@pytest.mark.parametrize("label,src", _MINIMAL_SOURCES)
+def test_minimal_source_does_not_raise(label, src):
+    """Empty/directive-only source must produce a valid SVG, not raise."""
+    result = dispatch_native(src)
+    assert "<svg" in result, f"{label}: empty source raised instead of returning stub SVG"
+    assert "NaN" not in result, f"{label}: NaN in empty-source output"

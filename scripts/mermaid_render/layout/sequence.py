@@ -63,20 +63,6 @@ _TITLE_FONT = 16
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
-_MSG_RE = re.compile(
-    r'^([^:\-\s][^:\-]*)?\s*'                # optional actor (source)
-    r'(--?>>?|--?x|--?o|->|-->|=>>)\s*'    # arrow type
-    r'([^:]+):\s*'                           # target actor
-    r'(.*)$',                                # message label
-)
-
-_SOLID_ASYNC = re.compile(r'^->$')
-_DASHED_ASYNC = re.compile(r'^-->$')
-_SOLID_SYNC = re.compile(r'^->>$')
-_DASHED_SYNC = re.compile(r'^-->>$')
-_SOLID_X = re.compile(r'^-x$')
-_DASHED_X = re.compile(r'^--x$')
-
 
 def _parse_sequence_source(src: str) -> tuple[str, list[str], list[dict]]:
     """Return (title, participants, messages).
@@ -133,14 +119,9 @@ def _parse_sequence_source(src: str) -> tuple[str, list[str], list[dict]]:
         if stripped.lower().startswith("activate ") or stripped.lower().startswith("deactivate "):
             continue
 
-        # Message: Src->>Dst: Label  (or with +/- suffix)
-        # Detect +/- activations on arrows like ->>+, -->>-
+        # Message: Src->>Dst: Label  (or with +/- suffix for activations)
         is_activate = False
         is_deactivate = False
-        test_stripped = stripped
-        if "+" in stripped.split(":")[-1]:
-            pass  # handled by ->>+ pattern
-        # Match ->>+ or -->>-
         m2 = re.match(r'^(.+?)\s*(-{1,2}>?>?[+\-]?\s*x?)\s*([^:]+):\s*(.*)$', stripped)
         if m2:
             src_actor = m2.group(1).strip()
@@ -192,11 +173,8 @@ def layout_sequence_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     gap = max(_ACTOR_GAP, (((width_hint or 0) - _PAD_H * 2 - _ACTOR_W) // max(n - 1, 1))
               if width_hint and n > 1 else _ACTOR_GAP)
     gap = min(gap, 200)
-    p_centers = [float(_PAD_H + _ACTOR_W / 2 + i * (_ACTOR_W + gap - _ACTOR_W / 2 + _ACTOR_W / 2)) for i in range(n)]
-    # Simpler: evenly space actor centers
     p_centers = [float(_PAD_H + _ACTOR_W / 2 + i * (_ACTOR_W + gap)) for i in range(n)]
 
-    n_messages = max(len([m for m in messages if not m["is_note"]]), 1)
     lifeline_h = float((len(messages) + 2) * _MSG_STEP)
 
     canvas_w = float(p_centers[-1] + _ACTOR_W / 2 + _PAD_H if participants else _PAD_H * 2 + _ACTOR_W)
