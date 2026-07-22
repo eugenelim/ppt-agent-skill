@@ -114,7 +114,7 @@ No supported renderer may return a placeholder scene.
 - [x] SVG Scene bounds hardening (Stage 5) — `element_visible_bounds`, `scene_visible_bounds`, `validate_scene` in `scene_bounds.py`; typed transform parsing; 50 tests
 - [x] All 12 placeholder types implemented (Stage 6) — sequenceDiagram, erDiagram, gantt, quadrantChart, pie, xychart-beta, block-beta, packet-beta, kanban, journey, requirementDiagram, gitGraph each have PARTIAL native scene builders; 218 tests pass
 - [x] Mind Map tidy-tree (Stage 7) — Buchheim variable-size tidy-tree, two-sided layout, `config: { layout: tidy-tree }` activation; radial path unchanged
-- [ ] Timeline measurement completion (Stage 8) (deferred: backlog-mermaid-p3-timeline)
+- [x] Timeline measurement completion (Stage 8) — per-text measurement for period/event heights, col_w derived from widest period label, canvas_h driven by tallest column, activity-line arrowhead, _TimelineTokens theme token struct
 - [x] Architecture semantics (Stage 9) — `ArchitectureDiagramLayout` compiled model; service tiles with measured label, icon_bounds, side ports; junction geometry; group hierarchy; BiRel → one path + two markers; `finalized_layout_to_scene` replaces `graph_to_scene`
 - [x] C4 completion (Stage 10)
 - [x] State diagrams (Stage 11) — partial: immutable state model (AtomicState, CompositeState, InitialPseudoState, FinalPseudoState, Choice, Fork, Join, History, StateGate, StateTransition, StateNote) in `statediagram.py`; <<fork>>/<<join>>/<<choice>>/<<history>> parser fix; bar shape rendering in HTML and SVG paths; 69 new tests. Deferred: wire statediagram.py as primary compiler replacing _parser.py state path, full composite children compilation. (backlog-mermaid-p3-state)

@@ -7,7 +7,7 @@ Section bands span their periods, rendered above the spine.
 from __future__ import annotations
 
 import hashlib
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from ..scene import (
     AccessibilityMetadata,
@@ -18,12 +18,12 @@ from ..scene import (
     LAYER_LABELS,
     LAYER_NODES,
     LAYER_NOTES,
-    LAYER_ORDER,
     LAYER_OVERLAYS,
+    LAYER_ORDER,
+    MarkerDefinition,
     PaintStyle,
     SceneCircle,
     SceneLine,
-    SceneRect,
     SceneRoundedRect,
     SceneText,
     SceneTextLine,
@@ -31,13 +31,14 @@ from ..scene import (
     SvgScene,
     make_scene_id,
 )
-from ._geometry import TextStyle
+from ._geometry import TextLayout, TextStyle
 from ._text import get_default_measurer
 
 
 # ── Layout constants ──────────────────────────────────────────────────────────
 
-_COL_W: int = 112          # natural width of each period column
+_COL_W: int = 112          # retained for test import; col_w is derived from measurement
+_MIN_COL_W: float = 64.0   # absolute minimum column width
 _COL_GAP: int = 12         # gap between columns
 _EVENT_GAP: int = 4        # vertical gap between event cards
 _EVENT_PAD_TOP: int = 6    # gap from period chip bottom to first event
@@ -65,15 +66,74 @@ _SECTION_COLORS: tuple[str, ...] = (
 )
 _SECTION_COLOR_MONO = "rgba(148,163,184,0.10)"
 
-_SPINE_STROKE = "#94a3b8"
-_DOT_FILL = "#60a5fa"
-_DOT_STROKE = "#ffffff"
-_CONNECTOR_STROKE = "#94a3b8"
-_NODE_FILL = "#f7f6f2"
-_NODE_STROKE = "#dad7ce"
-_TEXT_COLOR = "#191a17"
-_DIM_COLOR = "#75736c"
-_TITLE_COLOR = "#111827"
+
+# ── Theme tokens ──────────────────────────────────────────────────────────────
+
+class _TimelineTokens(NamedTuple):
+    """Color tokens for timeline rendering. Hardcoded defaults match THEME_ADAPTIVE_LIGHT."""
+    spine_stroke: str = "#94a3b8"
+    dot_fill: str = "#60a5fa"
+    dot_stroke: str = "#ffffff"
+    connector_stroke: str = "#94a3b8"
+    node_fill: str = "#f7f6f2"
+    node_stroke: str = "#dad7ce"
+    text_color: str = "#191a17"
+    dim_color: str = "#75736c"
+    title_color: str = "#111827"
+
+
+def _tokens_from_theme(theme: Optional[dict]) -> _TimelineTokens:
+    """Populate _TimelineTokens from a CSS-var-keyed theme dict; fall back to defaults."""
+    d = _TimelineTokens()
+    if not theme:
+        return d
+    return _TimelineTokens(
+        spine_stroke=theme.get("--text-secondary", d.spine_stroke),
+        dot_fill=theme.get("--accent-1", d.dot_fill),
+        dot_stroke=d.dot_stroke,
+        connector_stroke=theme.get("--text-secondary", d.connector_stroke),
+        node_fill=theme.get("--card-bg-to", d.node_fill),
+        node_stroke=theme.get("--card-border", d.node_stroke),
+        text_color=theme.get("--text-primary", d.text_color),
+        dim_color=theme.get("--text-secondary", d.dim_color),
+        title_color=theme.get("--text-primary", d.title_color),
+    )
+
+
+# ── Text helpers ──────────────────────────────────────────────────────────────
+
+def _chip_text_lines(
+    layout: TextLayout,
+    box_x: float,
+    box_y: float,
+    box_w: float,
+    box_h: float,
+    font_size: float,
+    font_weight: int,
+    color: str,
+    anchor: str = "middle",
+) -> tuple[SceneTextLine, ...]:
+    """Convert a TextLayout into SceneTextLines vertically centered within a chip box."""
+    start_y = box_y + (box_h - layout.height) / 2.0
+    if anchor == "middle":
+        text_x = box_x + box_w / 2.0
+    else:
+        text_x = box_x + _EVENT_CHIP_PAD
+
+    result: list[SceneTextLine] = []
+    cum_y = start_y
+    for line in layout.lines:
+        line_text = " ".join(run.text for run in line.runs)
+        result.append(SceneTextLine(
+            text=line_text,
+            x=text_x,
+            y=cum_y + line.baseline,
+            font_size=font_size,
+            font_weight=font_weight,
+            fill_color=color,
+        ))
+        cum_y += line.height
+    return tuple(result)
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -139,6 +199,7 @@ def layout_timeline_scene(
     *,
     width_hint: int = 0,
     diagram_config: Optional[dict] = None,
+    theme: Optional[dict] = None,
 ) -> SvgScene:
     """Parse timeline source and return a column-layout SvgScene.
 
@@ -147,6 +208,7 @@ def layout_timeline_scene(
 
     width_hint: maximum output width in pixels (0 = unconstrained / content-tight).
     diagram_config: parsed %%{init:...}%% config; used for disableMulticolor.
+    theme: CSS-var-keyed color dict (e.g. THEME_ADAPTIVE_LIGHT); falls back to defaults.
     """
     title, groups, all_periods = _parse_timeline_source(src)
 
@@ -157,19 +219,19 @@ def layout_timeline_scene(
 
     # ── Text measurement ─────────────────────────────────────────────────────
     measurer = get_default_measurer()
+    tokens = _tokens_from_theme(theme)
 
     period_style = TextStyle(font_size=_PERIOD_FS, font_weight=700)
     event_style = TextStyle(font_size=_EVENT_FS, font_weight=500)
     section_style = TextStyle(font_size=_SECTION_FS, font_weight=700)
 
-    # Use "Aq" as a representative string to measure actual font cap+descender height
-    period_line_h = measurer.layout("Aq", period_style, None).line_height
-    event_line_h = measurer.layout("Aq", event_style, None).line_height
-    section_line_h = measurer.layout("Aq", section_style, None).line_height
-
-    period_h = period_line_h + 2.0 * _PERIOD_CHIP_PAD
-    event_h = event_line_h + 2.0 * _EVENT_CHIP_PAD
-    section_band_h = section_line_h + 2.0 * _SECTION_CHIP_PAD
+    # Derive col_w from the widest period label (unconstrained measurement)
+    period_ideal_widths = [
+        measurer.layout(p["period"], period_style, None).width
+        for p in all_periods
+    ]
+    col_w_from_text = max(period_ideal_widths, default=0.0) + 2.0 * _PERIOD_CHIP_PAD + 4.0
+    col_w = max(_MIN_COL_W, col_w_from_text)
 
     # ── Config ───────────────────────────────────────────────────────────────
     cfg = diagram_config or {}
@@ -180,35 +242,69 @@ def layout_timeline_scene(
 
     title_h = 28 if title else 0
 
-    max_events = max((len(p["events"]) for p in all_periods), default=0)
-    events_h = (
-        _EVENT_PAD_TOP + max_events * event_h + max(0, max_events - 1) * _EVENT_GAP
-        if max_events > 0 else 0
-    )
+    # ── Width: content-tight; width_hint is an output-maximum constraint ──────
+    natural_w = _PAD_H * 2 + n * col_w + max(0, n - 1) * _COL_GAP
+    if width_hint > 0 and width_hint < natural_w:
+        canvas_w = float(width_hint)
+        available_w = canvas_w - _PAD_H * 2
+        col_stride = available_w / n if n > 0 else col_w + _COL_GAP
+        col_w = max(40.0, col_stride - _COL_GAP)
+    else:
+        canvas_w = float(natural_w)
+        col_stride = col_w + _COL_GAP
 
-    # Determine whether any named sections exist
+    # ── Measure period chips (per-period) ────────────────────────────────────
+    period_text_pad = col_w - 2.0 * _PERIOD_CHIP_PAD
+    period_layouts: list[TextLayout] = [
+        measurer.layout(p["period"], period_style, max(1.0, period_text_pad))
+        for p in all_periods
+    ]
+    period_heights = [lay.height + 2.0 * _PERIOD_CHIP_PAD for lay in period_layouts]
+
+    # ── Measure event cards (per-event) and compute per-column events_h ──────
+    event_text_pad = col_w - 2.0 * _EVENT_CHIP_PAD
+    # event_layouts[i][j] = layout for column i, event j
+    event_layouts: list[list[TextLayout]] = []
+    for p in all_periods:
+        col_layouts = [
+            measurer.layout(ev, event_style, max(1.0, event_text_pad))
+            for ev in p["events"]
+        ]
+        event_layouts.append(col_layouts)
+
+    event_heights: list[list[float]] = [
+        [lay.height + 2.0 * _EVENT_CHIP_PAD for lay in col]
+        for col in event_layouts
+    ]
+
+    # Per-column total events block height
+    col_events_h: list[float] = []
+    for i, heights in enumerate(event_heights):
+        if heights:
+            col_events_h.append(
+                _EVENT_PAD_TOP + sum(heights) + max(0, len(heights) - 1) * _EVENT_GAP
+            )
+        else:
+            col_events_h.append(0.0)
+
+    # Section band height (single line — section labels never wrap)
+    section_line_h = measurer.layout("Aq", section_style, None).line_height
+    section_band_h = section_line_h + 2.0 * _SECTION_CHIP_PAD
     has_sections = any(grp["name"] for grp in groups)
     sec_h = section_band_h if has_sections else 0.0
 
     # Vertical layout:
     #   PAD_V + title_h + sec_h → spine_y
-    #   spine_y + SPINE_DOT_GAP + period_h + events_h + PAD_V → canvas_h
+    #   spine_y + SPINE_DOT_GAP + tallest(period_h + events_h) + PAD_V → canvas_h
     spine_y = float(_PAD_V + title_h + sec_h)
-    canvas_h = float(spine_y + _SPINE_DOT_GAP + period_h + events_h + _PAD_V)
-
-    # ── Width: content-tight; width_hint is an output-maximum constraint ──────
-    natural_w = _PAD_H * 2 + n * _COL_W + max(0, n - 1) * _COL_GAP
-    if width_hint > 0 and width_hint < natural_w:
-        canvas_w = float(width_hint)
-        # Compress column widths to fit within the constrained canvas
-        available_w = canvas_w - _PAD_H * 2
-        col_stride = int(available_w // n) if n > 0 else _COL_W + _COL_GAP
-        col_w = max(40, col_stride - _COL_GAP)
-    else:
-        # Content-tight: use natural width regardless of width_hint
-        canvas_w = float(natural_w)
-        col_stride = _COL_W + _COL_GAP
-        col_w = _COL_W
+    max_col_content = max(
+        (
+            period_heights[i] + col_events_h[i]
+            for i in range(n)
+        ),
+        default=0.0,
+    )
+    canvas_h = float(spine_y + _SPINE_DOT_GAP + max_col_content + _PAD_V)
 
     content = f"timeline:{canvas_w}:{canvas_h}:{','.join(p['period'] for p in all_periods)}"
     content_hash = int(hashlib.sha256(content.encode()).hexdigest(), 16)
@@ -232,7 +328,7 @@ def layout_timeline_scene(
                 y=float(_PAD_V + 16),
                 font_size=13.0,
                 font_weight=700,
-                fill_color=_TITLE_COLOR,
+                fill_color=tokens.title_color,
             ),),
             text_anchor="start",
         ))
@@ -280,26 +376,28 @@ def layout_timeline_scene(
                         y=band_y + sec_h / 2.0 + 0.35 * _SECTION_FS,
                         font_size=_SECTION_FS,
                         font_weight=700,
-                        fill_color=_DIM_COLOR,
+                        fill_color=tokens.dim_color,
                     ),),
                     text_anchor="start",
                     css_classes=("timeline-section-label",),
                 ))
 
     # Spine: horizontal line at spine_y from first to last period center
-    cx_first = float(_PAD_H + col_stride // 2)
-    cx_last = float(_PAD_H + (n - 1) * col_stride + col_stride // 2)
+    cx_first = float(_PAD_H + col_stride / 2)
+    cx_last = float(_PAD_H + (n - 1) * col_stride + col_stride / 2)
+    spine_marker_id = f"{eid}-spine-arrow"
     edge_elements.append(SceneLine(
         element_id=f"{eid}-spine",
         x1=cx_first - _MARKER_R - 4, y1=spine_y,
         x2=cx_last + _MARKER_R + 4, y2=spine_y,
-        paint=PaintStyle(stroke=StrokeStyle(color=_SPINE_STROKE, width=2.0)),
+        paint=PaintStyle(stroke=StrokeStyle(color=tokens.spine_stroke, width=2.0)),
         css_classes=("timeline-spine",),
+        marker_end=spine_marker_id,
     ))
 
     # Per-period column: dot on spine, connector, period chip, event cards
     for i, p in enumerate(all_periods):
-        cx = float(_PAD_H + i * col_stride + col_stride // 2)
+        cx = float(_PAD_H + i * col_stride + col_stride / 2)
         col_left = cx - col_w / 2
 
         # Spine dot
@@ -307,8 +405,8 @@ def layout_timeline_scene(
             element_id=f"{eid}-dot-{i}",
             cx=cx, cy=spine_y, r=float(_MARKER_R),
             paint=PaintStyle(
-                fill=FillStyle(color=_DOT_FILL),
-                stroke=StrokeStyle(color=_DOT_STROKE, width=2.0),
+                fill=FillStyle(color=tokens.dot_fill),
+                stroke=StrokeStyle(color=tokens.dot_stroke, width=2.0),
             ),
             css_classes=("timeline-dot",),
             data_attrs=(("period", p["period"]),),
@@ -321,66 +419,73 @@ def layout_timeline_scene(
             x1=cx, y1=spine_y + _MARKER_R,
             x2=cx, y2=period_top,
             paint=PaintStyle(stroke=StrokeStyle(
-                color=_CONNECTOR_STROKE, width=1.0, dasharray="3 3",
+                color=tokens.connector_stroke, width=1.0, dasharray="3 3",
             )),
             css_classes=("timeline-connector",),
         ))
 
-        # Period chip
+        # Period chip — height derived from measured label
+        p_h = period_heights[i]
         node_elements.append(SceneRoundedRect(
             element_id=f"{eid}-period-{i}",
             x=col_left, y=period_top,
-            w=float(col_w), h=float(period_h),
+            w=float(col_w), h=float(p_h),
             rx=4, ry=4,
             paint=PaintStyle(
-                fill=FillStyle(color=_NODE_FILL),
-                stroke=StrokeStyle(color=_NODE_STROKE, width=1.0),
+                fill=FillStyle(color=tokens.node_fill),
+                stroke=StrokeStyle(color=tokens.node_stroke, width=1.0),
             ),
             css_classes=("timeline-period",),
             data_attrs=(("period", p["period"]),),
         ))
         label_elements.append(SceneText(
             element_id=f"{eid}-period-lbl-{i}",
-            lines=(SceneTextLine(
-                text=p["period"],
-                x=col_left + col_w / 2,
-                y=period_top + period_h / 2 + 0.35 * _PERIOD_FS,
-                font_size=_PERIOD_FS,
-                font_weight=700,
-                fill_color=_TEXT_COLOR,
-            ),),
+            lines=_chip_text_lines(
+                period_layouts[i],
+                col_left, period_top, col_w, p_h,
+                _PERIOD_FS, 700, tokens.text_color, "middle",
+            ),
             text_anchor="middle",
             css_classes=("timeline-period-label",),
         ))
 
         # Event cards stacked below the period chip (in-column)
+        ev_top = period_top + p_h + _EVENT_PAD_TOP
         for j, ev in enumerate(p["events"]):
-            ev_top = period_top + period_h + _EVENT_PAD_TOP + j * (event_h + _EVENT_GAP)
+            e_h = event_heights[i][j]
             node_elements.append(SceneRoundedRect(
                 element_id=f"{eid}-ev-{i}-{j}",
                 x=col_left, y=float(ev_top),
-                w=float(col_w), h=float(event_h),
+                w=float(col_w), h=float(e_h),
                 rx=3, ry=3,
                 paint=PaintStyle(
-                    fill=FillStyle(color=_NODE_FILL),
-                    stroke=StrokeStyle(color=_NODE_STROKE, width=1.0),
+                    fill=FillStyle(color=tokens.node_fill),
+                    stroke=StrokeStyle(color=tokens.node_stroke, width=1.0),
                 ),
                 css_classes=("timeline-event",),
                 data_attrs=(("col", str(i)),),
             ))
             label_elements.append(SceneText(
                 element_id=f"{eid}-ev-lbl-{i}-{j}",
-                lines=(SceneTextLine(
-                    text=ev,
-                    x=col_left + col_w / 2,
-                    y=float(ev_top) + event_h / 2 + 0.35 * _EVENT_FS,
-                    font_size=_EVENT_FS,
-                    font_weight=500,
-                    fill_color=_TEXT_COLOR,
-                ),),
+                lines=_chip_text_lines(
+                    event_layouts[i][j],
+                    col_left, ev_top, col_w, e_h,
+                    _EVENT_FS, 500, tokens.text_color, "middle",
+                ),
                 text_anchor="middle",
                 css_classes=("timeline-event-label",),
             ))
+            ev_top += e_h + _EVENT_GAP
+
+    # Spine arrowhead marker definition
+    spine_marker = MarkerDefinition(
+        marker_id=spine_marker_id,
+        marker_type="timeline-end",
+        color=tokens.spine_stroke,
+        size=6.0,
+        refX=6.0,
+        refY=3.0,
+    )
 
     layers = tuple(
         (name, tuple(elems)) for name, elems in [
@@ -404,5 +509,6 @@ def layout_timeline_scene(
             title=title or "timeline",
             description="Mermaid timeline diagram",
         ),
+        definitions=(spine_marker,),
         layers=layers,
     )
