@@ -1662,9 +1662,10 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'<polygon points="{_pts}" fill="none" stroke="{accent}" stroke-width="2"/></svg>'
             )
 
-        # Fidelity data attributes for this node
-        # Strip <br> to space so the attribute value doesn't contain &lt;br&gt;
-        _fid_label = _h(decoded_label.replace("<br>", " "))
+        # Fidelity data attributes for this node; strip HTML tags so
+        # data-label contains plain text (e.g. <br> → space, not &lt;br&gt;).
+        import re as _re_fid
+        _fid_label = _h(_re_fid.sub(r'<[^>]+>', ' ', decoded_label).strip())
         _fid_parent = f' data-parent-id="{_h(nl.parent_group_id)}"' if nl.parent_group_id else ""
 
         # Special full-node renderings
@@ -1845,6 +1846,7 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             parts.append(
                 f'<div class="edge-label"'
                 f' data-src="{_h(re_obj.src_node_id)}" data-dst="{_h(re_obj.dst_node_id)}"'
+                f' data-edge-label="{_h(re_obj.label_layout.text)}"'
                 f' data-relation-id="{_el_rel_id}"'
                 f' style="position:absolute;'
                 f' left:{int(lb.x)}px; top:{int(lb.y)}px;'

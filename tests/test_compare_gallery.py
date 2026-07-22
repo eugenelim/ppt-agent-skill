@@ -61,9 +61,9 @@ class TestGalleryExitCode:
         mmd.write_text("flowchart TD\n    A --> B\n", encoding="utf-8")
 
         # Inject a stub backend at the dispatch_native_result level.
-        # validate() in __init__.py does `from .native_svg import dispatch_native_result`
-        # each call, resolving via the mermaid_render.native_svg module object.
-        import mermaid_render.native_svg as _nsv  # same module via scripts/ sys.path
+        # validate() calls dispatch_native_result() from mermaid_render.__init__,
+        # so patch the mermaid_render module attribute directly.
+        import mermaid_render as _mr  # same module via scripts/ sys.path
         from mermaid_render.registry import RenderResult
         stub_result = RenderResult(
             svg="<svg/>",
@@ -76,7 +76,7 @@ class TestGalleryExitCode:
             warnings=(),
             errors=(),
         )
-        monkeypatch.setattr(_nsv, "dispatch_native_result", lambda *a, **kw: stub_result)
+        monkeypatch.setattr(_mr, "dispatch_native_result", lambda *a, **kw: stub_result)
 
         with patch.object(gallery, "_run_mmdc", return_value=(False, "mmdc not installed")):
             _, has_failures = gallery._build_gallery([mmd], tmp_path / "out")

@@ -101,7 +101,7 @@ class RenderResult:
     ------
     svg               : produced SVG string, or None on failure
     diagram_type      : detected diagram-type key
-    backend           : name of the backend used (e.g. "native", "native-svg-stub")
+    backend           : name of the backend used (e.g. "native", "legacy-dom", "none")
     semantic_adapter  : "passed" | "unsupported" | "failed"
     syntax_coverage   : "passed" | "partial" | "failed"
     geometry          : "passed" | "unvalidated" | "failed"

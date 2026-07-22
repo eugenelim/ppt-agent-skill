@@ -4090,14 +4090,14 @@ def _build_node_layouts_ir(
     groups: "dict[str, _Group] | None" = None,
 ) -> "dict[str, NodeLayout]":
     from ._geometry import NodeLayout, Rect
-    # Build node→group-index and node→parent-group maps
+    # Build node→group-index and node→parent-group-id maps
     _node_grp_idx: dict[str, int] = {}
-    _node_parent_group: dict[str, str] = {}
+    _nid_parent_gid: dict[str, str] = {}
     if groups:
         for _gi, gid in enumerate(groups.keys()):
             for _nid in groups[gid].members:
                 _node_grp_idx[_nid] = _gi
-                _node_parent_group[_nid] = gid
+                _nid_parent_gid[_nid] = gid
     result: dict = {}
     for nid, n in nodes.items():
         nw = n.width or NODE_W
@@ -4139,7 +4139,7 @@ def _build_node_layouts_ir(
             is_external=is_ext,
             icon_svg=icon_svg,
             accent_color=accent,
-            parent_group_id=_node_parent_group.get(nid),
+            parent_group_id=_nid_parent_gid.get(nid),
         )
     return result
 

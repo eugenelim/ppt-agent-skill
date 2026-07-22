@@ -38,6 +38,118 @@ from .errors import (  # noqa: F401 — re-exported
 )
 
 
+def dispatch_native_result(
+    src: str,
+    *,
+    theme: "str | None" = None,
+    width_hint: int = 0,
+    height_hint: int = 0,
+) -> "RenderResult":
+    """Dispatch Mermaid source to a typed RenderResult.
+
+    Returns a RenderResult with svg=None and errors populated on failure.
+    Never silently falls back to a placeholder or legacy renderer.
+    """
+    from .native_svg import _dispatch_scene
+    from .layout._parser import _detect_directive, _strip_frontmatter
+    from .svg_serializer import scene_to_svg_str
+
+    clean = _strip_frontmatter(src)
+    directive, auto_direction = _detect_directive(clean)
+    d = directive.lower()
+
+    try:
+        scene = _dispatch_scene(clean, directive, auto_direction.upper(), width_hint, height_hint)
+    except (NativeRendererUnavailable, UnsupportedDiagramType) as e:
+        return RenderResult(
+            svg=None,
+            diagram_type=d,
+            backend="none",
+            semantic_adapter="unsupported",
+            syntax_coverage="failed",
+            geometry="unvalidated",
+            serialization="failed",
+            warnings=(),
+            errors=(str(e),),
+        )
+    except NativeRenderError as e:
+        return RenderResult(
+            svg=None,
+            diagram_type=d,
+            backend="native",
+            semantic_adapter="failed",
+            syntax_coverage="failed",
+            geometry="unvalidated",
+            serialization="failed",
+            warnings=(),
+            errors=(str(e),),
+        )
+    except ValueError as e:
+        return RenderResult(
+            svg=None,
+            diagram_type=d,
+            backend="native",
+            semantic_adapter="failed",
+            syntax_coverage="failed",
+            geometry="unvalidated",
+            serialization="failed",
+            warnings=(),
+            errors=(str(e),),
+        )
+    except Exception as e:
+        wrapped = NativeRenderError(d, "dispatch", cause=e)
+        return RenderResult(
+            svg=None,
+            diagram_type=d,
+            backend="native",
+            semantic_adapter="failed",
+            syntax_coverage="failed",
+            geometry="unvalidated",
+            serialization="failed",
+            warnings=(),
+            errors=(str(wrapped),),
+        )
+
+    # Serialise
+    try:
+        svg_str = scene_to_svg_str(scene)
+    except Exception as e:
+        return RenderResult(
+            svg=None,
+            diagram_type=d,
+            backend=getattr(scene, "renderer_backend", "native"),
+            semantic_adapter="passed",
+            syntax_coverage="passed",
+            geometry="unvalidated",
+            serialization="failed",
+            warnings=(),
+            errors=(f"Serialization failed: {e}",),
+        )
+
+    backend = getattr(scene, "renderer_backend", "native")
+
+    # For experimental types, validation lanes are not yet wired — downgrade from "passed"
+    cap = RENDERER_REGISTRY.get(d)
+    if cap is not None and cap.native_status == "experimental":
+        sem_adapter: str = "unsupported"
+        syntax_cov: str = "partial"
+    else:
+        sem_adapter = "passed"
+        syntax_cov = "passed"
+
+    return RenderResult(
+        svg=svg_str,
+        diagram_type=d,
+        backend=backend,
+        semantic_adapter=sem_adapter,
+        syntax_coverage=syntax_cov,
+        geometry="unvalidated",   # Phase 4 will wire per-type validation
+        serialization="passed",
+        warnings=(),
+        errors=(),
+    )
+
+
 def validate(src: str) -> ValidationResult:
     """Validate Mermaid source string and return a ValidationResult.
 
@@ -48,12 +160,11 @@ def validate(src: str) -> ValidationResult:
     """
     from dataclasses import replace as _dc_replace
     from .layout._strategies import _dispatch_validate
-    from .native_svg import dispatch_native_result
 
     result = _dispatch_validate(src)
 
     # Run native dispatch to capture the actual backend name.
-    # Errors (NativeRendererUnavailable, UnsupportedDiagramType, …) are
+    # Errors (NativeRenderError, UnsupportedDiagramType, …) are
     # expected for LEGACY_ONLY / UNSUPPORTED types — use the error result's
     # backend field, which is "none" for those cases, never "-stub".
     try:
@@ -111,11 +222,15 @@ def to_svg(
 
     if _use_native():
         try:
-            return dispatch_native(src, theme=theme, width_hint=width_hint)
+            return dispatch_native(src, theme=theme, faithful=faithful, width_hint=width_hint)
         except NativeRendererUnavailable:
             if fallback == "legacy-dom":
-                # Fall through to legacy DOM path below
-                pass
+                pass  # Fall through to legacy DOM path below
+            else:
+                raise
+        except NativeRenderError as _e:
+            if fallback == "legacy-dom" and _e.phase == "not-implemented":
+                pass  # Fall through to legacy DOM path below
             else:
                 raise
 

@@ -347,3 +347,90 @@ Deferred items from the sequenceDiagram rendering fix spec
 ### seq-mmdc-oracle-comparison
 
 **Deferred from `sequence-rendering-fix` AC (Validation four-status model):** The `mmdc_oracle` status field in `ValidationResult` defaults to `"unvalidated"` and is displayed as a grey badge. Computing a real oracle comparison requires: running `mmdc` on each diagram, comparing our SVG geometry to mmdc's SVG (participant positions, lifeline x-coords, activation bar extents), and classifying the result as `pass`/`warning`/`fail`. Unblocked once the `SequenceGeometry` return value (T7 in `sequence-rendering-fix`) is stable enough to compare against parsed mmdc SVG coordinates.
+
+---
+
+## mermaid-p3 — Deferred items
+
+### backlog-mermaid-p3-compound-layout
+
+**Deferred from `mermaid-p3` Stage 4:** Replace the rank-flattening + group-pushing path with
+recursive compound layout. Implement group tree, edge partitioning, innermost-first compilation,
+proxy-node expansion, boundary gate routing. Remove default reliance on `_apply_inner_direction_positions`,
+`_separate_groups_lr/tb`, `_push_nonmembers_out_of_groups_lr`. Required invariants: descendants inside
+ancestors, sibling groups non-overlapping, local direction edges predominantly horizontal/vertical,
+cross-boundary edges through gates only, deterministic output.
+
+### backlog-mermaid-p3-scene-bounds
+
+**Deferred from `mermaid-p3` Stage 5:** Add visible-geometry ownership to SvgScene IR. Either
+`bounds` on every element or `element_visible_bounds(element, definitions) -> Rect`. Derive
+`SvgScene.view_box/width/height` from union of visible bounds. Validate: negative geometry,
+unresolved references, duplicate IDs, elements outside viewBox, marker tips outside viewBox.
+Replace raw transform strings with typed `Translate/Scale/Rotate/Matrix`.
+
+### backlog-mermaid-p3-type-migrations
+
+**Deferred from `mermaid-p3` Stage 6:** Implement all twelve placeholder types as real native
+scene builders using shared Pillow text service and PaintTokens. Types: sequenceDiagram, erDiagram,
+gantt, quadrantChart, pie, xychart-beta, block-beta, packet-beta, kanban, journey,
+requirementDiagram, gitGraph. Each requires an immutable compiled model and scene serializer.
+See Stage 6 Wave A-D breakdown in the spec attachment.
+
+### backlog-mermaid-p3-timeline
+
+**Deferred from `mermaid-p3` Stage 8:** Timeline completion — replace fixed text assumptions with
+TextLayout for period/event/section labels, derive all heights from measured text, implement
+activity-line end marker, `disableMulticolor` config, content-tight bounds, theme tokens.
+`width_hint` must be output maximum not minimum canvas width.
+
+### backlog-mermaid-p3-architecture
+
+**Deferred from `mermaid-p3` Stage 9:** Architecture semantics — replace generic `_Node(shape="rect")`
+lowering with immutable `ArchitectureDiagramLayout` model. Service tiles with icon, measured label,
+side ports. Junction geometry. Group boundary/icon/label/hierarchy. BiRel → one path + two markers.
+Fix `architecture.py::graph_to_scene` call to use FinalizedLayout.
+
+### backlog-mermaid-p3-c4
+
+**Deferred from `mermaid-p3` Stage 10:** C4 completion — distinct painters for Person, System,
+SystemDb, SystemQueue, Container, Component (+ Ext variants). Nested boundaries with brace-stack
+behavior. BiRel → one path + two markers. Direction hints. Technology as separate text role.
+Label candidates avoid nodes and boundary titles.
+
+### backlog-mermaid-p3-state
+
+**Deferred from `mermaid-p3` Stage 11:** State diagram hierarchical semantics — dedicated immutable
+state model with AtomicState, CompositeState, InitialPseudoState, FinalPseudoState, Choice, Fork,
+Join, History, StateTransition, StateNote, StateGate. Composite algorithm with internal machine
+compilation, gate exposure, proxy-node expansion. Painter shapes for each pseudo-state type.
+
+### backlog-mermaid-p3-infra
+
+**Deferred from `mermaid-p3` Stage 12:** Theme token infrastructure (resolve PaintTokens once per
+RenderRequest, remove duplicate token sources), faithful-mode propagation, output-sizing function,
+`validate()` using compiled geometry, `to_png()` rasterizing native SVG. Also includes wiring
+`to_html()`, `to_png()`, `validate()` through `RenderRequest` (scoped out of Stage 2 in this loop).
+
+### backlog-mermaid-p3-class-compiler
+
+**Deferred from `mermaid-p3` Task 7:** Implement `_compile_classdiagram()` that parses `class X { members }`
+syntax and returns a `FinalizedLayout` with `NodeLayout.member_layouts` populated. Required to
+complete Stage 3 FinalizedLayout authority for classDiagram. Until this exists, classDiagram
+continues using `_class_topology_scene()` with mutable models.
+
+### backlog-mermaid-p3-semantic-tests
+
+**Deferred from `mermaid-p3` Stage 13:** Semantic tests and gallery — replace placeholder-validity
+tests with source-label + node-count + edge-count + shape-role assertions for every supported
+fixture. Fixture capability matrix (27 gallery fixtures). SVG-to-PowerPoint compatibility for every
+supported type. Oracle metrics comparison. Complete gallery with provenance metadata.
+
+### backlog-mindmap-tidy-tree
+
+**Deferred from `mermaid-p3` Stage 7 and `mermaid-p2`:** Implement Reingold-Tilford/Buchheim
+variable-size tidy-tree layout for Mind Map. Activated by `config: { layout: tidy-tree }` in
+frontmatter. Required algorithm phases: first walk, apportion, move subtree, execute shifts,
+second walk, normalization. Two-sided layout: root at center, split root children left/right
+deterministically. Mirror left side, align both sides to root, resolve vertical overlap.
+Radial mode remains unchanged when `layout: tidy-tree` is absent.

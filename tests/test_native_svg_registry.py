@@ -186,38 +186,38 @@ class TestRenderResult:
 
 class TestDispatchNativeResult:
     def test_flowchart_returns_render_result(self):
-        from scripts.mermaid_render.native_svg import dispatch_native_result
+        from scripts.mermaid_render import dispatch_native_result
         from scripts.mermaid_render.registry import RenderResult
         result = dispatch_native_result("flowchart TD\n    A-->B\n")
         assert isinstance(result, RenderResult)
         assert result.diagram_type == "flowchart"
 
     def test_flowchart_has_svg(self):
-        from scripts.mermaid_render.native_svg import dispatch_native_result
+        from scripts.mermaid_render import dispatch_native_result
         result = dispatch_native_result("flowchart TD\n    A-->B\n")
         assert result.svg is not None
         assert "<svg" in result.svg
 
     def test_flowchart_no_errors(self):
-        from scripts.mermaid_render.native_svg import dispatch_native_result
+        from scripts.mermaid_render import dispatch_native_result
         result = dispatch_native_result("flowchart TD\n    A-->B\n")
         assert not result.errors
 
     def test_flowchart_non_strict_success(self):
-        from scripts.mermaid_render.native_svg import dispatch_native_result
+        from scripts.mermaid_render import dispatch_native_result
         result = dispatch_native_result("flowchart TD\n    A-->B\n")
         # Non-strict: svg is not None and no errors
         assert result.is_success(strict=False)
 
     def test_flowchart_geometry_transient_state(self):
         """Flowchart geometry='unvalidated' until Phase 4 wires validation."""
-        from scripts.mermaid_render.native_svg import dispatch_native_result
+        from scripts.mermaid_render import dispatch_native_result
         result = dispatch_native_result("flowchart TD\n    A-->B\n")
         # Currently "unvalidated" — this is the correct transient state
         assert result.geometry in ("passed", "unvalidated")
 
     def test_legacy_only_returns_error_result(self):
-        from scripts.mermaid_render.native_svg import dispatch_native_result
+        from scripts.mermaid_render import dispatch_native_result
         result = dispatch_native_result("sequenceDiagram\n    Alice->>Bob: Hi\n")
         assert result.svg is None
         assert result.errors
@@ -279,26 +279,28 @@ class TestToSvgFallback:
         with pytest.raises(ValueError, match="Unknown fallback"):
             to_svg("flowchart TD\n    A-->B\n", fallback="unknown")
 
-    def test_no_fallback_legacy_raises_native_renderer_unavailable(self, monkeypatch):
+    def test_no_fallback_legacy_raises_native_render_error(self, monkeypatch):
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
-        from scripts.mermaid_render.errors import NativeRendererUnavailable
+        from scripts.mermaid_render.errors import NativeRenderError
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
-        with pytest.raises(NativeRendererUnavailable):
+        with pytest.raises(NativeRenderError) as exc_info:
             to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
+        assert exc_info.value.phase == "not-implemented"
 
-    def test_fallback_legacy_dom_catches_unavailable(self, monkeypatch):
-        """With fallback='legacy-dom', NativeRendererUnavailable is not propagated."""
+    def test_fallback_legacy_dom_catches_not_implemented(self, monkeypatch):
+        """With fallback='legacy-dom', NativeRenderError(phase='not-implemented') is not propagated."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
-        from scripts.mermaid_render.errors import NativeRendererUnavailable
+        from scripts.mermaid_render.errors import NativeRenderError
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
         try:
             to_svg(
                 "sequenceDiagram\n    Alice->>Bob: Hi\n",
                 fallback="legacy-dom",
             )
-        except NativeRendererUnavailable:
-            pytest.fail("Should not raise NativeRendererUnavailable with fallback='legacy-dom'")
+        except NativeRenderError as e:
+            if e.phase == "not-implemented":
+                pytest.fail("Should not raise NativeRenderError(phase='not-implemented') with fallback='legacy-dom'")
         except Exception:
             pass  # Playwright may not be installed; that's fine

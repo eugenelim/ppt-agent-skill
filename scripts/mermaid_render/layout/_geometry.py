@@ -678,7 +678,7 @@ class ValidationResult:
     syntax_coverage: str = "pass"     # "pass" | "partial" | "fail"
     geometry: str = "unvalidated"     # "pass" | "fail" | "unvalidated"
     mmdc_oracle: str = "unvalidated"  # "pass" | "warning" | "fail" | "unvalidated"
-    renderer_backend: str = ""        # e.g. "native" | "legacy-dom" | "native-svg-stub" | ""
+    renderer_backend: str = ""        # e.g. "native" | "legacy-dom" | "none" | ""
 
     @property
     def status(self) -> str:
