@@ -55,7 +55,35 @@
   "semantic": {
     "diagram_type": "sequence",
     "direction": null,
-    "entities": [],
+    "entities": [
+      {
+        "attributes": {},
+        "id": "Alice",
+        "kind": "participant",
+        "label": "Alice",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Bob",
+        "kind": "participant",
+        "label": "Bob",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Carol",
+        "kind": "participant",
+        "label": "Carol",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
     "groups": [],
     "metadata": {},
     "ordered_events": [],
