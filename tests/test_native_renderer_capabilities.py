@@ -91,7 +91,8 @@ def test_partial_directive_produces_svg_not_stub(directive, src):
     from scripts.mermaid_render import to_svg
 
     with patch.dict(os.environ, {"MERMAID_RENDER_SVG_BACKEND": "native"}):
-        result = to_svg(src)
+        # experimental=True needed for classdiagram (experimental); no-op for implemented types
+        result = to_svg(src, experimental=True)
 
     assert result, f"Empty SVG for {directive}"
     assert "<svg" in result, f"No <svg> tag for {directive}"
@@ -278,7 +279,7 @@ _FIXTURE_MATRIX = [
     ("journey",            "journey-basic.mmd",            30, ["Make tea"],             ["rect"],          None),
     ("quadrantchart",      "quadrant-basic.mmd",           15, ["Feature A"],            ["rect"],          None),
     ("requirementdiagram", "requirement-basic.mmd",        30, ["test_req"],             ["rect"],          None),
-    ("architecture-beta",  "architecture-basic.mmd",       15, ["api"],                  ["rect"],          None),
+    ("architecture-beta",  "architecture-basic.mmd",       15, ["API Gateway"],          ["rect"],          None),
     ("c4context",          "c4-basic.mmd",                 20, ["User"],                ["path", "rect"],  None),
     ("classdiagram",       "class-basic.mmd",              10, ["Animal"],               ["rect"],          None),
     ("block-beta",         "block-basic.mmd",              10, ["Process"],              ["rect"],          None),

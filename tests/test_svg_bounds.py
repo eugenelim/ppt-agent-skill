@@ -162,7 +162,7 @@ class TestSvgBoundsIntegration:
 
     def _get_svg(self, src: str) -> str:
         import mermaid_render
-        return mermaid_render.to_svg(src, theme="light")
+        return mermaid_render.to_svg(src, theme="light", experimental=True)
 
     def test_svg_not_1280_wide(self):
         """Exported SVG width must not be 1280 (the Playwright default viewport)."""

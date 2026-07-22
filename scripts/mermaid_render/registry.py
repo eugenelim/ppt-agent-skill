@@ -363,7 +363,7 @@ class RenderResult:
     svg               : produced SVG string, or None on failure
     diagram_type      : detected diagram-type key (canonical)
     backend           : name of the backend used (e.g. "native", "legacy-dom", "none")
-    semantic_adapter  : "passed" | "unsupported" | "failed"
+    semantic_adapter  : "passed" | "partial" | "unsupported" | "failed"
     syntax_coverage   : "passed" | "partial" | "failed"
     geometry          : "passed" | "unvalidated" | "failed"
     serialization     : "passed" | "failed"
@@ -373,7 +373,7 @@ class RenderResult:
     svg: Optional[str]
     diagram_type: str
     backend: str
-    semantic_adapter: Literal["passed", "unsupported", "failed"]
+    semantic_adapter: Literal["passed", "partial", "unsupported", "failed"]
     syntax_coverage: Literal["passed", "partial", "failed"]
     geometry: Literal["passed", "unvalidated", "failed"]
     serialization: Literal["passed", "failed"]
@@ -406,10 +406,23 @@ class RenderResult:
 
         Callers should raise the returned exception; they should not call this
         on a successful result.
+
+        Priority order (most-specific first):
+          1. semantic_adapter="partial"    → ExperimentalOptInRequired
+          2. semantic_adapter="unsupported" → UnsupportedDiagramType
+          3. geometry="failed"             → NativeRenderError(phase="geometry")
+          4. errors non-empty              → NativeRenderError(phase="pipeline")
+          5. svg is None                   → NativeRenderError(phase="build")
+          6. fallback                      → NativeRenderError(phase="unknown")
         """
-        from .errors import NativeRenderError
+        from .errors import (
+            NativeRenderError, UnsupportedDiagramType, ExperimentalOptInRequired,
+        )
+        if self.semantic_adapter == "partial":
+            return ExperimentalOptInRequired(self.diagram_type)
+        if self.semantic_adapter == "unsupported":
+            return UnsupportedDiagramType(self.diagram_type)
         if self.geometry == "failed":
-            # geometry failure takes priority; errors carry the validator messages
             cause = RuntimeError("; ".join(self.errors)) if self.errors else None
             return NativeRenderError(self.diagram_type, "geometry", cause=cause)
         if self.errors:

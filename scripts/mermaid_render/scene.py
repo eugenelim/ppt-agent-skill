@@ -435,9 +435,7 @@ def _reg(
 _reg("flowchart", NativeParityLevel.PARTIAL,
      supported=("nodes", "edges", "groups", "labels", "basic-shapes"),
      unsupported=("compound-layout-recursive",))
-_reg("graph", NativeParityLevel.PARTIAL,
-     supported=("nodes", "edges", "groups"),
-     unsupported=("compound-layout-recursive",))
+# "graph" is a DIRECTIVE_ALIASES alias → wired by _reconcile_with_renderer_registry()
 _reg("statediagram-v2", NativeParityLevel.PARTIAL,
      supported=("states", "transitions"),
      unsupported=("pseudo-states", "composite-states", "notes"))
@@ -509,6 +507,41 @@ _reg("sankey-beta", NativeParityLevel.UNSUPPORTED)
 _reg("zenuml", NativeParityLevel.UNSUPPORTED)
 
 del _reg
+
+
+def _reconcile_with_renderer_registry() -> None:
+    """Ensure NATIVE_RENDERER_REGISTRY stays in sync with RENDERER_REGISTRY.
+
+    - Adds any canonical type missing from NATIVE_RENDERER_REGISTRY (default: UNSUPPORTED).
+    - Propagates DIRECTIVE_ALIASES so alias keys resolve to the canonical entry.
+    - Removes stale keys not present in RENDERER_REGISTRY or its aliases.
+
+    Called once at module load after the _reg() block; idempotent.
+    """
+    from .registry import DIRECTIVE_ALIASES, RENDERER_REGISTRY  # noqa: PLC0415
+
+    # Add missing canonical types with a safe default parity.
+    for dtype in RENDERER_REGISTRY:
+        if dtype not in NATIVE_RENDERER_REGISTRY:
+            NATIVE_RENDERER_REGISTRY[dtype] = NativeRendererSpec(
+                directive=dtype,
+                parity=NativeParityLevel.UNSUPPORTED,
+            )
+
+    # Wire aliases to their canonical NativeRendererSpec.
+    for alias, canonical in DIRECTIVE_ALIASES.items():
+        if canonical in NATIVE_RENDERER_REGISTRY:
+            NATIVE_RENDERER_REGISTRY[alias] = NATIVE_RENDERER_REGISTRY[canonical]
+
+    # Remove stale keys no longer present in either registry.
+    valid = set(RENDERER_REGISTRY.keys()) | set(DIRECTIVE_ALIASES.keys())
+    for stale in list(NATIVE_RENDERER_REGISTRY.keys()):
+        if stale not in valid:
+            del NATIVE_RENDERER_REGISTRY[stale]
+
+
+_reconcile_with_renderer_registry()
+del _reconcile_with_renderer_registry
 
 
 # ── Legacy capability dataclass (kept for backward compat) ────────────────────

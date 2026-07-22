@@ -191,7 +191,7 @@ class TestRenderSvgResult:
         from scripts.mermaid_render.native_svg import render_svg_result
         result = render_svg_result("classDiagram\n  class Animal\n")
         assert result.syntax_coverage == "partial"
-        assert result.semantic_adapter == "unsupported"
+        assert result.semantic_adapter == "partial"  # was "unsupported"; "partial" = experimental
         assert result.geometry == "unvalidated"
 
     def test_render_svg_result_builder_exception_wraps_cause(self, monkeypatch):
@@ -285,10 +285,10 @@ class TestPipelineWiring:
         assert "overlap detected" in str(exc_info.value.__cause__)
 
     def test_sequence_native_produces_svg(self, monkeypatch):
-        """sequenceDiagram now has a native builder and must produce SVG."""
+        """sequenceDiagram has an experimental native builder; experimental=True required."""
         from scripts.mermaid_render import to_svg
         from scripts.mermaid_render.native_svg import BACKEND_ENV, BACKEND_NATIVE
         monkeypatch.setenv(BACKEND_ENV, BACKEND_NATIVE)
-        result = to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n")
+        result = to_svg("sequenceDiagram\n    Alice->>Bob: Hi\n", experimental=True)
         assert result
         assert "<svg" in result

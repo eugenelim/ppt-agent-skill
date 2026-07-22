@@ -53,6 +53,7 @@ from .errors import (  # noqa: F401 — re-exported
     NativeRendererUnavailable,
     UnsupportedDiagramType,
     UnsupportedDiagramFeature,
+    ExperimentalOptInRequired,
 )
 def __getattr__(name: str):
     # Lazy-load native_svg symbols so importing mermaid_render never eagerly
@@ -187,6 +188,8 @@ def to_svg(
     width_hint: int = 0,
     faithful: bool = False,
     fallback: "str | None" = None,
+    strict: bool = True,
+    experimental: bool = False,
 ) -> str:
     """Render a Mermaid source string to an SVG string.
 
@@ -200,6 +203,12 @@ def to_svg(
         if the native backend raises NativeRendererUnavailable.
         Raises ValueError for unrecognised fallback values.
         Set env var MERMAID_RENDER_SVG_BACKEND=legacy-dom for a process-wide default.
+    strict : bool
+        When True (default), IMPLEMENTED types must pass all validation lanes.
+        Experimental types require ``experimental=True`` to be set.
+    experimental : bool
+        When True, allows experimental (partial/unvalidated) output to be returned
+        without raising ExperimentalOptInRequired. Has no effect on IMPLEMENTED types.
     """
     if fallback is not None and fallback != "legacy-dom":
         raise ValueError(
@@ -217,8 +226,17 @@ def to_svg(
                 faithful=faithful,
                 width_hint=width_hint,
             )
-            if result.geometry == "failed":
-                raise result.to_exception()
+            if strict:
+                if result.semantic_adapter == "partial":
+                    if not experimental:
+                        raise result.to_exception()  # → ExperimentalOptInRequired
+                    # experimental=True opts in to unvalidated output for experimental types only.
+                    return result.svg  # type: ignore[return-value]
+                if not result.is_success(strict=True):
+                    raise result.to_exception()
+            else:
+                if result.geometry == "failed":
+                    raise result.to_exception()
             return result.svg  # type: ignore[union-attr]
         except NativeRendererUnavailable as _unavail:
             if fallback == "legacy-dom":
@@ -241,15 +259,26 @@ def to_svg(
     return _to_svg_from_html_string(html)
 
 
-def to_png(src: str, *, theme: Theme = None, scale: float = 1.0, width_hint: int = 0, faithful: bool = False) -> bytes:
+def to_png(
+    src: str,
+    *,
+    theme: Theme = None,
+    scale: float = 1.0,
+    width_hint: int = 0,
+    faithful: bool = False,
+    strict: bool = True,
+    experimental: bool = False,
+) -> bytes:
     """Render a Mermaid source string to PNG bytes (requires playwright).
 
     Calls to_svg() first and rasterizes the native SVG string via Playwright
     page.set_content. Falls back to the HTML render path if to_svg() raises
     NativeRenderError with phase 'not-implemented' (legacy-only diagram types).
+    strict and experimental are forwarded to to_svg() — see to_svg() docs.
     """
     try:
-        svg_str = to_svg(src, theme=theme, width_hint=width_hint, faithful=faithful)
+        svg_str = to_svg(src, theme=theme, width_hint=width_hint, faithful=faithful,
+                         strict=strict, experimental=experimental)
         from .png import _to_png_from_svg_string
         return _to_png_from_svg_string(svg_str, scale=scale)
     except NativeRenderError as _e:

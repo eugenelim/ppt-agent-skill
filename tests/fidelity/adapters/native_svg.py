@@ -455,7 +455,8 @@ class NativeSvgAdapter:
         source_sha256 = hashlib.sha256(case.source.encode("utf-8")).hexdigest()
 
         try:
-            svg_text = to_svg(case.source)
+            # experimental=True: fidelity adapter intentionally probes experimental renderers.
+            svg_text = to_svg(case.source, experimental=True)
         except (UnsupportedDiagramType, NativeRendererUnavailable, UnsupportedDiagramFeature) as e:
             # Intentional unsupported-family result — the only path to NATIVE_UNSUPPORTED.
             return Observation(

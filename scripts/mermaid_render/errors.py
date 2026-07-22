@@ -51,6 +51,23 @@ class UnsupportedDiagramType(ValueError):
         )
 
 
+class ExperimentalOptInRequired(ValueError):
+    """Raised when to_svg()/to_png() is called on an experimental renderer without experimental=True.
+
+    The diagram type has a native builder but it is classified as experimental —
+    it may produce partial or unvalidated output. Pass ``experimental=True`` to
+    opt in, or ``fallback='legacy-dom'`` for the legacy DOM path.
+    """
+
+    def __init__(self, diagram_type: str) -> None:
+        self.diagram_type = diagram_type
+        super().__init__(
+            f"Diagram type '{diagram_type}' has an experimental native renderer. "
+            "Pass experimental=True to to_svg() / to_png() to accept partial output, "
+            "or fallback='legacy-dom' to use the legacy DOM path."
+        )
+
+
 class UnsupportedDiagramFeature(ValueError):
     """A specific feature within a supported diagram type cannot be rendered natively."""
 
