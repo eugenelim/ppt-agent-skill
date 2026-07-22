@@ -333,6 +333,34 @@ class RoutingFailure:
     reason: str   # human-readable failure description
 
 
+# ── RouteBatch ────────────────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class RouteBatch:
+    """Typed result of a full routing pass.
+
+    routed: sequence of per-edge route dicts from _route_edges()
+    failures: sequence of RoutingFailure for edges that could not be routed
+
+    Supports the sequence protocol (iter/len/getitem) over `routed` for
+    backwards compatibility with callers that treated the result as a list.
+    """
+    routed: tuple  # tuple[dict, ...] — one entry per successfully routed edge
+    failures: tuple  # tuple[RoutingFailure, ...] — edges skipped or failed
+
+    def __iter__(self):
+        return iter(self.routed)
+
+    def __len__(self) -> int:
+        return len(self.routed)
+
+    def __getitem__(self, key):
+        return self.routed[key]
+
+    def __bool__(self) -> bool:
+        return bool(self.routed)
+
+
 # ── Diagnostics ───────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -365,11 +393,11 @@ class FinalizedLayout:
     routing_failures: tuple["RoutingFailure", ...] = ()  # default for compat; always set by pipeline
 
     def __post_init__(self) -> None:
-        # Wrap plain dicts in MappingProxyType for immutability
-        if not isinstance(self.node_layouts, MappingProxyType):
-            object.__setattr__(self, "node_layouts", MappingProxyType(self.node_layouts))
-        if not isinstance(self.group_layouts, MappingProxyType):
-            object.__setattr__(self, "group_layouts", MappingProxyType(self.group_layouts))
+        # Always deep-copy before wrapping: MappingProxyType(original) is a view — even
+        # if the caller already passes a proxy, the backing dict may still be mutated
+        # through a retained reference.
+        object.__setattr__(self, "node_layouts", MappingProxyType(dict(self.node_layouts)))
+        object.__setattr__(self, "group_layouts", MappingProxyType(dict(self.group_layouts)))
 
     def validate(self, metadata: "LayoutMetadata | None" = None) -> "ValidationResult":
         """Validate this layout against geometry invariants.
@@ -397,7 +425,7 @@ class LayoutMetadata:
     node_count: int
     group_count: int
     edge_count: int         # original parsed edge count (before routing)
-    algorithm: str          # e.g. "LongestPathRanker+BarycentricTransposeOrderer+IsotonicCoordinateAssigner"
+    algorithm: str          # e.g. "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
 
 
 # ── Compiled flowchart (shared result of _compile_flowchart) ──────────────────
@@ -514,6 +542,17 @@ def validate_finalized_layout(
                         f"Edge {re_obj.edge_id!r} has zero-length segment at index {i}"
                     )
 
+    # 6b. PortSide.AUTO forbidden in finalized output (item 11)
+    for re_obj in layout.routed_edges:
+        if re_obj.src_port.side == PortSide.AUTO:
+            errors.append(
+                f"Edge {re_obj.edge_id!r} src_port has PortSide.AUTO (must be resolved before finalization)"
+            )
+        if re_obj.dst_port.side == PortSide.AUTO:
+            errors.append(
+                f"Edge {re_obj.edge_id!r} dst_port has PortSide.AUTO (must be resolved before finalization)"
+            )
+
     # 7. No two ordinary non-dummy node outer_bounds overlap
     real_nodes = [(nid, nl) for nid, nl in layout.node_layouts.items() if not nl.is_dummy]
     for i in range(len(real_nodes)):
@@ -626,7 +665,11 @@ def validate_finalized_layout(
                         f"Tight clearance ({gap:.1f}px) between nodes"
                     )
 
-    return ValidationResult(errors=tuple(errors), warnings=tuple(warnings))
+    return ValidationResult(
+        errors=tuple(errors),
+        warnings=tuple(warnings),
+        geometry="fail" if errors else "pass",
+    )
 
 
 # ── Validation result ─────────────────────────────────────────────────────────

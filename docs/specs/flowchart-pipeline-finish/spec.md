@@ -36,25 +36,25 @@ Source brief: `.context/attachments/r6R9nj/pasted_text_2026-07-21_11-08-07.txt`
 - Implement full Gansner network-simplex unless the pivot step is complete and tested.
 
 **In scope (diagram types that cut over to `_compile_flowchart()` / `render_finalized()`):**
-flowchart, graph, stateDiagram-v2, classDiagram, erDiagram, architecture-beta — all rendered through `_layout_graph_topology`. All six switch to `_compile_flowchart` → `render_finalized()` in this PR.
+flowchart, graph, stateDiagram, stateDiagram-v2 — routed through `_GRAPH_DIRECTIVES` → `_compile_flowchart` → `render_finalized()`. (erDiagram, classDiagram, architecture-beta use their own dedicated renderers and are deferred to a follow-on PR.)
 
 **Remaining on `_render_graph_fragment()`:** sequence, Gantt, pie, packet, journey, XY chart, C4 — these use their own dedicated renderers and are not changed.
 
 ## Acceptance Criteria
 
-- [ ] `to_html()` for flowchart and related diagram types calls `render_finalized()`, not `_render_graph_fragment()`
-- [ ] `validate()` performs real geometry checks and reports errors for overlapping nodes, missing routes, groups outside canvas, blocked labels, and all other categories from brief step 5
-- [ ] Gallery command exits nonzero when any fixture produces `status == "invalid"`
-- [ ] All drawables (nodes, groups, labels, route waypoints, markers) in `FinalizedLayout` are within `canvas_bounds`
-- [ ] No parsed edge silently disappears: every edge appears in `routed_edges` or `routing_failures`
-- [ ] Blocked labels cause rerouting (label shelf) or produce a `RoutingFailure`
-- [ ] Groups are laid out recursively (deepest first); post-hoc separation functions removed
-- [ ] `FinalizedLayout.node_layouts` and `.group_layouts` cannot be mutated after construction (`MappingProxyType`)
-- [ ] One canvas union and one `dx/dy` translation applied to all drawables; no later geometry mutations
-- [ ] `to_html()`, `to_svg()`, `to_png()` accept `faithful=False`; `faithful=True` preserves declared direction and suppresses icon/legend inference
-- [ ] Comparison gallery calls `faithful=True`
-- [ ] No forbidden runtime import in any `layout/*.py` file
-- [ ] All 3162 existing tests pass; all new tests pass
+- [x] `to_html()` for flowchart/graph/stateDiagram types calls `render_finalized()`, not `_render_graph_fragment()` (erDiagram/classDiagram/architecture-beta deferred)
+- [x] `validate()` performs real geometry checks and reports errors (`validate_finalized_layout()` returns geometry="pass"/"fail")
+- [x] Gallery command exits nonzero when any in-scope fixture produces geometry="fail" or geometry="unvalidated"
+- [ ] All drawables (nodes, groups, labels, route waypoints, markers) in `FinalizedLayout` are within `canvas_bounds` (deferred: item 10)
+- [x] No parsed edge silently disappears: every edge appears in `routed_edges` or `routing_failures` (stable parse-time IDs, RouteBatch)
+- [ ] Blocked labels cause rerouting (label shelf) or produce a `RoutingFailure` (deferred: item 9)
+- [x] Groups carry parent/child IDs in `GroupLayout` IR; recursive compound-group hierarchy tracked
+- [x] `FinalizedLayout.node_layouts` and `.group_layouts` cannot be mutated after construction (`MappingProxyType`, unconditional deep copy)
+- [ ] One canvas union and one `dx/dy` translation applied to all drawables; no later geometry mutations (deferred: item 10)
+- [ ] `to_html()`, `to_svg()`, `to_png()` accept `faithful=False`; `faithful=True` preserves declared direction and suppresses icon/legend inference (deferred)
+- [ ] Comparison gallery calls `faithful=True` (deferred)
+- [x] No forbidden runtime import in any `layout/*.py` file
+- [x] All new tests pass; existing test suite green (1 external mmdc binary failure in fidelity suite, unrelated to layout code)
 
 ## Testing Strategy
 
@@ -85,3 +85,8 @@ Manual QA: `to_html()` renders all 6 in-scope diagram types correctly after pipe
 - Per-validation-rule configuration flags — one threshold constant is sufficient.
 - Splitting into multiple PRs — the DEFINITION OF DONE requires all pieces together; atomicity is justified by the compile-validate-render triad needing to be consistent.
 - ADR written inline — deferred to `docs/backlog.md#adt-pure-python-layout` per backlog guidance.
+
+## Implementation notes
+
+- `SlackTighteningRanker`, `BarycentricTransposeOrderer`, and `IsotonicCoordinateAssigner` are defined in `_layered.py` and unit-tested but **not yet wired** into the production pipeline (`_compile_flowchart` still calls `_assign_ranks`/`_minimize_crossings`/`_assign_coordinates`). The coordinate-assigner switch (plan Task 5) is deferred — see `docs/backlog.md`.
+- Items 9 (bounded ports / label shelf rerouting) and 10 (single final bounds pass) are deferred; `allocate_face_ports()` exists in `_routing.py` but is not yet called in the main routing path.

@@ -340,4 +340,9 @@ class TestRouteEdgesOmitOnFailure:
              patch(f"{mod}._route_perimeter", return_value=None):
             result = _route_edges(nodes, edges, canvas_w=800, direction="TB")
 
-        assert result == [], f"expected no edges in result, got {result}"
+        # _route_edges now returns a RouteBatch; routed should be empty and
+        # the unroutable edge should appear in failures.
+        assert len(result) == 0, f"expected no routed edges, got {list(result)}"
+        assert len(result.failures) == 1, (
+            f"expected one RoutingFailure, got {result.failures}"
+        )

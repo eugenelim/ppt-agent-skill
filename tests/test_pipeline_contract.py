@@ -445,3 +445,183 @@ class TestNoForbiddenRuntimeDependency:
         assert not violations, (
             "Forbidden imports found in layout modules:\n" + "\n".join(violations)
         )
+
+
+# ── Test 11: validate() never returns geometry="unvalidated" for graph directives ─
+
+class TestValidateNeverReturnsUnvalidatedForGraphDirectives:
+    """validate() must set geometry to 'pass' or 'fail' (never 'unvalidated') for
+    flowchart/graph/statediagram directives after a successful compile."""
+
+    GRAPH_DIRECTIVES = [
+        "flowchart TD\n    A --> B\n",
+        "graph LR\n    X --> Y\n",
+    ]
+
+    def test_validate_returns_concrete_geometry_for_graph_directives(self):
+        import mermaid_render
+        for src in self.GRAPH_DIRECTIVES:
+            vr = mermaid_render.validate(src)
+            assert vr.geometry != "unvalidated", (
+                f"validate() returned geometry='unvalidated' for {src!r}; "
+                "must be 'pass' or 'fail' after compile."
+            )
+
+
+# ── Test 12: FinalizedLayout deep-copies input dicts ─────────────────────────
+
+class TestFinalizedLayoutDeepCopiesInputDicts:
+    """FinalizedLayout must not share a reference with the caller's dict;
+    mutations to the original dict after construction must not be visible."""
+
+    def test_deep_copy_node_layouts(self):
+        from mermaid_render.layout._geometry import (
+            FinalizedLayout, NodeLayout, Rect, _empty_diagnostics,
+        )
+        r = Rect(0, 0, 100, 60)
+        node = NodeLayout(
+            node_id="A", semantic_shape="rect",
+            outer_bounds=r, content_bounds=r,
+            title_layout=None, subtitle_layout=None,
+            member_layouts=(), icon_bounds=None, ports=(),
+            css_classes=(), extra_css="",
+        )
+        original = {"A": node}
+        layout = FinalizedLayout(
+            node_layouts=original,
+            group_layouts={},
+            routed_edges=(),
+            visible_bounds=Rect(0, 0, 200, 150),
+            diagram_padding=20.0,
+            canvas_bounds=Rect(0, 0, 200, 150),
+            direction="TB",
+            diagnostics=_empty_diagnostics(),
+        )
+        # Mutate original after construction — should NOT affect the layout
+        original["B"] = node
+        assert "B" not in layout.node_layouts, (
+            "FinalizedLayout.node_layouts shares a reference with the input dict; "
+            "it must be deep-copied before wrapping in MappingProxyType."
+        )
+
+
+# ── Test 13: edge_count comes from parsed edges, not routing output ───────────
+
+class TestEdgeCountFromParsedEdges:
+    """LayoutMetadata.edge_count must equal the number of edges parsed before
+    _break_cycles, not the number of routed edges."""
+
+    def test_edge_count_matches_parsed_edge_count(self):
+        from mermaid_render.layout._strategies import _compile_flowchart
+        # Diagram with 3 logical edges
+        src = "flowchart TD\n    A --> B\n    B --> C\n    A --> C\n"
+        result = _compile_flowchart(src, width_hint=0, options=None)
+        # All 3 should be accounted for
+        routed = len(result.layout.routed_edges)
+        failed = len(result.layout.routing_failures)
+        assert result.metadata.edge_count == 3, (
+            f"edge_count={result.metadata.edge_count}, expected 3 (parsed edges). "
+            "edge_count must be set from the parsed edge list, not routing output."
+        )
+        assert routed + failed == result.metadata.edge_count, (
+            f"routed({routed}) + failed({failed}) != edge_count({result.metadata.edge_count})"
+        )
+
+
+# ── Test 14: RouteBatch returned by _route_edges ──────────────────────────────
+
+class TestRouteBatchReturnedByRouteEdges:
+    """_route_edges() must return a RouteBatch with .routed and .failures."""
+
+    def test_route_edges_returns_route_batch(self):
+        from mermaid_render.layout._routing import _route_edges
+        from mermaid_render.layout._geometry import RouteBatch
+        from mermaid_render.layout._constants import _Node, _Edge
+        nodes = {
+            "A": _Node(id="A", label="A", shape="rect", x=0, y=0, rank=0),
+            "B": _Node(id="B", label="B", shape="rect", x=0, y=100, rank=1),
+        }
+        edges = [_Edge(src="A", dst="B", edge_id="A->B")]
+        batch = _route_edges(nodes, edges, canvas_w=300, direction="TB")
+        assert isinstance(batch, RouteBatch), (
+            f"_route_edges() must return a RouteBatch, got {type(batch).__name__}"
+        )
+        assert hasattr(batch, "routed"), "RouteBatch must have .routed"
+        assert hasattr(batch, "failures"), "RouteBatch must have .failures"
+
+
+# ── Test 15: PortSide.AUTO must not appear in finalized output ────────────────
+
+class TestPortSideAutoForbiddenInFinalizedOutput:
+    """validate_finalized_layout() must report an error when a RoutedEdge port
+    has PortSide.AUTO — AUTO is a planning placeholder, not a valid geometry value."""
+
+    def test_port_side_auto_causes_validation_error(self):
+        from mermaid_render.layout._geometry import (
+            validate_finalized_layout, RoutedEdge, PortLayout, PortSide,
+            Point, Rect,
+        )
+        r = Rect(0, 0, 400, 300)
+        auto_port = PortLayout(node_id="A", side=PortSide.AUTO, position=Point(0, 0), direction=Point(0, 1))
+        ok_port = PortLayout(node_id="B", side=PortSide.BOTTOM, position=Point(0, 100), direction=Point(0, -1))
+        edge = RoutedEdge(
+            edge_id="A->B", src_node_id="A", dst_node_id="B",
+            src_port=auto_port, dst_port=ok_port,
+            waypoints=(Point(0, 0), Point(0, 100)),
+            edge_style="solid", has_marker_end=True, has_marker_start=False,
+            label_layout=None, src_label_layout=None, dst_label_layout=None,
+        )
+        layout = _make_minimal_finalized_layout(routed_edges=(edge,))
+        vr = validate_finalized_layout(layout)
+        assert vr.geometry == "fail", (
+            "validate_finalized_layout() must set geometry='fail' when a port has PortSide.AUTO"
+        )
+        assert any("AUTO" in e for e in vr.errors), (
+            "ValidationResult.errors must name the PortSide.AUTO violation"
+        )
+
+
+# ── Test 16: algorithm metadata matches actual calls ─────────────────────────
+
+class TestAlgorithmMetadataIsAccurate:
+    """LayoutMetadata.algorithm must name the algorithms actually invoked."""
+
+    EXPECTED = "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
+
+    def test_algorithm_metadata_matches_actual_calls(self):
+        from mermaid_render.layout._strategies import _compile_flowchart
+        src = "flowchart TD\n    A --> B\n    B --> C\n"
+        result = _compile_flowchart(src, width_hint=0, options=None)
+        assert result.metadata.algorithm == self.EXPECTED, (
+            f"metadata.algorithm={result.metadata.algorithm!r}, "
+            f"expected {self.EXPECTED!r}. "
+            "Must report the algorithms actually invoked, not the enhanced variants."
+        )
+
+
+# ── Test 17: gallery header has separate lane counts ─────────────────────────
+
+class TestGalleryHeaderHasSeparateCounts:
+    """Gallery index.html must show separate render/syntax/geometry/oracle counts."""
+
+    def test_gallery_header_has_lane_counts(self, tmp_path):
+        import importlib.util
+        runner = REPO_ROOT / "tools" / "compare_gallery.py"
+        if not runner.exists():
+            pytest.skip("compare_gallery.py not found")
+        spec = importlib.util.spec_from_file_location("compare_gallery", runner)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        mmd = tmp_path / "flowchart-header-test.mmd"
+        mmd.write_text("flowchart TD\n    A --> B\n", encoding="utf-8")
+        out_path = tmp_path / "out"
+        gallery_path, _ = mod._build_gallery([mmd], out_path)
+        # _build_gallery returns the path to index.html (or the gallery dir).
+        idx = gallery_path / "index.html" if gallery_path.is_dir() else gallery_path
+        html = idx.read_text(encoding="utf-8")
+        for lane in ("render", "syntax", "geometry", "oracle"):
+            assert lane in html, (
+                f"Gallery header missing '{lane}' count — "
+                "header must show separate render/syntax/geometry/oracle counts."
+            )

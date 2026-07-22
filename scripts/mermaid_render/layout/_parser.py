@@ -422,6 +422,15 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             if _e.dst == _cs_name:
                 _e.dst = _entry
 
+    # Assign stable parse-time edge IDs.  Duplicates get a #N suffix so every
+    # edge has a unique ID that survives across layout stages.
+    _id_counts: dict[str, int] = {}
+    for _e in edges:
+        _base = f"{_e.src}->{_e.dst}"
+        _n = _id_counts.get(_base, 0)
+        _id_counts[_base] = _n + 1
+        _e.edge_id = _base if _n == 0 else f"{_base}#{_n}"
+
     return nodes, edges, groups
 
 

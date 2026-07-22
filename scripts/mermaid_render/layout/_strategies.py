@@ -33,6 +33,7 @@ from ._constants import (
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
     _node_render_h, _load_icon,
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
+    _measure_text_width,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
 from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
@@ -4238,11 +4239,40 @@ def _layout_gitgraph(src: str, direction: str, width_hint: int) -> str:
 
 # ── compile-flowchart pipeline ───────────────────────────────────────────────
 
+_LABEL_FS: int = 12   # edge-label / group-label font size
+_LABEL_FW: int = 400  # edge-label / group-label font weight (regular)
+
+
+def _estimate_text_width(text: str, font_size: float = 12.0) -> float:
+    """Measure rendered text width using PIL font metrics when available.
+
+    Falls back to per-character width ratios for sans-serif if PIL measurement
+    returns zero (e.g., font not loaded yet).
+    """
+    px = _measure_text_width(text, int(font_size), _LABEL_FW)
+    if px > 0:
+        return max(30.0, px)
+    # PIL fallback: three-tier character classification
+    total = 0.0
+    for ch in text:
+        if ch in "iIlL|1!.,;:'\"` ":
+            total += 0.35 * font_size
+        elif ch in "mwMW":
+            total += 0.85 * font_size
+        elif ch.isupper():
+            total += 0.70 * font_size
+        elif ch.isdigit():
+            total += 0.60 * font_size
+        else:
+            total += 0.55 * font_size
+    return max(30.0, total)
+
+
 def _make_text_layout_ir(text: str) -> "TextLayout":
     """Minimal single-run TextLayout for building NodeLayout / GroupLayout IR."""
     from ._geometry import TextLayout, TextLine, TextRun, TextStyle
     style = TextStyle()
-    w = float(max(len(text) * 8, 30))
+    w = _estimate_text_width(text)
     run = TextRun(text=text, style=style, width=w, height=18.0)
     line = TextLine(runs=(run,), width=w, height=18.0, baseline=14.0)
     return TextLayout(
@@ -4322,6 +4352,11 @@ def _build_group_layouts_ir(
 ) -> "dict[str, GroupLayout]":
     from ._geometry import GroupLayout, Rect
     result: dict = {}
+    # Populate parent→child relationships from _Group.parent_group field.
+    child_ids: dict[str, list[str]] = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        if grp.parent_group and grp.parent_group in child_ids:
+            child_ids[grp.parent_group].append(gid)
     for gid, grp in groups.items():
         if gid not in group_bboxes:
             continue
@@ -4333,11 +4368,11 @@ def _build_group_layouts_ir(
         label_layout = _make_text_layout_ir(grp.label) if grp.label else None
         result[gid] = GroupLayout(
             group_id=gid,
-            parent_group_id=None,
+            parent_group_id=grp.parent_group or None,
             boundary_bounds=boundary,
             label_layout=label_layout,
             member_ids=tuple(grp.members),
-            child_group_ids=(),
+            child_group_ids=tuple(child_ids.get(gid, [])),
             local_direction=getattr(grp, "direction", "TB") or "TB",
         )
     return result
@@ -4358,25 +4393,60 @@ def _extract_waypoints_from_path(d: str) -> "tuple[Point, ...]":
     return tuple(pts)
 
 
-def _build_routed_edges_ir(route_results: "list[dict]") -> "tuple[RoutedEdge, ...]":
+def _infer_port_side(pts: "tuple | list", at_start: bool) -> "PortSide":
+    """Infer PortSide from the first two (src) or last two (dst) waypoints."""
+    from ._geometry import PortSide
+    if len(pts) < 2:
+        return PortSide.BOTTOM
+    if at_start:
+        p0, p1 = pts[0], pts[1]
+    else:
+        p0, p1 = pts[-2], pts[-1]
+    dx = (p1[0] if isinstance(p1, tuple) else p1.x) - (p0[0] if isinstance(p0, tuple) else p0.x)
+    dy = (p1[1] if isinstance(p1, tuple) else p1.y) - (p0[1] if isinstance(p0, tuple) else p0.y)
+    if abs(dx) >= abs(dy):
+        return PortSide.RIGHT if dx > 0 else PortSide.LEFT
+    return PortSide.BOTTOM if dy > 0 else PortSide.TOP
+
+
+def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, ...]":
     """Convert _route_edges() result dicts to typed RoutedEdge IR objects."""
     from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect
     results: list = []
-    seen_pairs: dict = {}
     for spec in route_results:
         src = spec.get("src", "")
         dst = spec.get("dst", "")
-        pair = (src, dst)
-        idx = seen_pairs.get(pair, 0)
-        seen_pairs[pair] = idx + 1
-        edge_id = f"{src}->{dst}" if idx == 0 else f"{src}->{dst}#{idx}"
+        edge_id = spec.get("edge_id") or f"{src}->{dst}"
 
-        waypoints = _extract_waypoints_from_path(spec.get("d", ""))
+        raw_wpts = spec.get("waypoints") or []
+        if raw_wpts:
+            # Drop consecutive duplicate points (zero-length segments from degenerate paths)
+            deduped: list = [raw_wpts[0]]
+            for _wp in raw_wpts[1:]:
+                if _wp != deduped[-1]:
+                    deduped.append(_wp)
+            raw_wpts = deduped
+        waypoints = (
+            tuple(Point(float(x), float(y)) for x, y in raw_wpts)
+            if raw_wpts
+            else _extract_waypoints_from_path(spec.get("d", ""))
+        )
         src_pos = waypoints[0] if waypoints else Point(0.0, 0.0)
         dst_pos = waypoints[-1] if waypoints else Point(0.0, 0.0)
 
-        src_port = PortLayout(node_id=src, side=PortSide.AUTO, position=src_pos, direction=Point(0.0, 1.0))
-        dst_port = PortLayout(node_id=dst, side=PortSide.AUTO, position=dst_pos, direction=Point(0.0, -1.0))
+        src_side = _infer_port_side(raw_wpts or waypoints, at_start=True)
+        dst_side = _infer_port_side(raw_wpts or waypoints, at_start=False)
+        src_dir = {
+            PortSide.RIGHT: Point(1.0, 0.0), PortSide.LEFT: Point(-1.0, 0.0),
+            PortSide.BOTTOM: Point(0.0, 1.0), PortSide.TOP: Point(0.0, -1.0),
+        }.get(src_side, Point(0.0, 1.0))
+        dst_dir = {
+            PortSide.RIGHT: Point(1.0, 0.0), PortSide.LEFT: Point(-1.0, 0.0),
+            PortSide.BOTTOM: Point(0.0, 1.0), PortSide.TOP: Point(0.0, -1.0),
+        }.get(dst_side, Point(0.0, -1.0))
+
+        src_port = PortLayout(node_id=src, side=src_side, position=src_pos, direction=src_dir)
+        dst_port = PortLayout(node_id=dst, side=dst_side, position=dst_pos, direction=dst_dir)
 
         raw_style = spec.get("style", "")
         if raw_style == "thick":
@@ -4672,6 +4742,7 @@ def _compile_flowchart(
     content_lines = lines[directive_index + 1:]
 
     nodes, edges, groups = _parse_graph_source(content_lines)
+    parsed_edge_count = len(edges)  # count before _break_cycles adds dummy edges
     if not _opts.faithful_mermaid and _opts.infer_icons:
         _infer_label_icons(nodes)
 
@@ -4781,12 +4852,12 @@ def _compile_flowchart(
             canvas_h = int(_max_bot) + CANVAS_PAD
 
     # Route edges
-    route_results = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
+    route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
 
     # Build typed IR
     node_layouts = _build_node_layouts_ir(nodes, groups)
     group_layouts = _build_group_layouts_ir(groups, _grp_bboxes)
-    routed_edges_ir = _build_routed_edges_ir(route_results)
+    routed_edges_ir = _build_routed_edges_ir(route_batch.routed)
 
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
 
@@ -4794,6 +4865,7 @@ def _compile_flowchart(
         node_layouts=node_layouts,
         group_layouts=group_layouts,
         routed_edges=routed_edges_ir,
+        routing_failures=route_batch.failures,
         visible_bounds=canvas_bounds,
         diagram_padding=float(_init_cfg.get("diagram_padding") or CANVAS_PAD),
         canvas_bounds=canvas_bounds,
@@ -4805,8 +4877,8 @@ def _compile_flowchart(
         direction=direction,
         node_count=len(real_nodes),
         group_count=len(groups),
-        edge_count=len(route_results),
-        algorithm="SlackTighteningRanker+BarycentricTransposeOrderer+IsotonicCoordinateAssigner",
+        edge_count=parsed_edge_count,
+        algorithm="LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner",
     )
 
     validation = validate_finalized_layout(finalized, metadata=metadata)
@@ -5015,21 +5087,7 @@ def _dispatch_validate(src: str) -> "ValidationResult":
                 geometry="unvalidated",
                 errors=(str(exc),),
             )
-        try:
-            from ..paint import finalized_layout_to_scene
-            scene = finalized_layout_to_scene(compiled.layout, diagram_type=d, title="")
-        except Exception as exc:
-            return ValidationResult(
-                render="fail",
-                geometry="unvalidated",
-                errors=(str(exc),),
-            )
-        from ..scene_bounds import validate_scene
-        scene_errors = validate_scene(scene)
-        return ValidationResult(
-            geometry="fail" if scene_errors else "pass",
-            errors=tuple(scene_errors),
-        )
+        return compiled.validation
 
     return ValidationResult(geometry="unvalidated")
 

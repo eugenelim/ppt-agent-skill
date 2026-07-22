@@ -469,6 +469,23 @@ def _build_gallery_into(
     total_diags = sum(len(v) for v in type_results.values())
     n_ours_ok = sum(1 for items in type_results.values() for _, _, vr, _, _, _, _ in items if vr.render == "pass")
     n_mmdc_ok = sum(m for items in type_results.values() for _, _, _, _, _, m, _ in items)
+    n_syntax_ok = sum(
+        1 for items in type_results.values()
+        for _, _, vr, _, _, _, _ in items if vr.syntax_coverage == "pass"
+    )
+    n_geom_ok = sum(
+        1 for items in type_results.values()
+        for _, _, vr, _, _, _, _ in items if vr.geometry == "pass"
+    )
+    n_geom_total = sum(
+        1 for dtype, items in type_results.items()
+        for _, _, vr, _, _, _, _ in items
+        if vr.geometry != "unvalidated"
+    )
+    n_oracle_ok = sum(
+        1 for items in type_results.values()
+        for _, _, vr, _, _, _, _ in items if vr.mmdc_oracle == "pass"
+    )
     n_types = len(type_results)
     nav_html = "\n".join(nav_parts)
 
@@ -486,7 +503,11 @@ def _build_gallery_into(
   <header>
     <h1>mermaid_render vs mmdc comparison</h1>
     <span>{total_diags} diagrams &nbsp;·&nbsp; {n_types} types &nbsp;·&nbsp;
-      render-ok {n_ours_ok}/{total_diags} &nbsp;·&nbsp; mmdc {n_mmdc_ok}/{total_diags} ok</span>
+      render {n_ours_ok}/{total_diags} &nbsp;·&nbsp;
+      syntax {n_syntax_ok}/{total_diags} &nbsp;·&nbsp;
+      geometry {n_geom_ok}/{n_geom_total} &nbsp;·&nbsp;
+      oracle {n_oracle_ok}/{total_diags} &nbsp;·&nbsp;
+      mmdc {n_mmdc_ok}/{total_diags}</span>
   </header>
   <nav>{nav_html}</nav>
 """)
@@ -581,12 +602,16 @@ def _build_gallery_into(
 </body>
 </html>""")
 
+    # "statediagram-v2" is unreachable: _diagram_type() returns name.split("-")[0],
+    # so statediagram-v2 fixtures produce dtype="statediagram".
+    _geom_validated_types = frozenset({"flowchart", "graph", "statediagram"})
     has_failures = any(
         vr.render == "fail"
         or vr.geometry == "fail"
+        or (vr.geometry == "unvalidated" and dtype in _geom_validated_types)
         or vr.renderer_backend.endswith("-stub")
         or bool(vr.errors)
-        for items in type_results.values()
+        for dtype, items in type_results.items()
         for _, _, vr, _, _, _, _ in items
     )
 
