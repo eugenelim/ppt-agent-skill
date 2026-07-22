@@ -4,7 +4,7 @@ import math
 import re
 from dataclasses import dataclass
 from html import escape as _h
-from typing import Optional
+from typing import Callable, Optional
 
 
 @dataclass(frozen=True)
@@ -35,8 +35,8 @@ from ._constants import (
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
-from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols, _apply_inner_direction_positions
-from ._routing import _route_edges, _arrowhead
+from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
+from ._routing import _route_edges, _arrowhead, _node_render_w
 from ._c4 import _render_c4_fragment, C4Item, C4Relationship, C4Boundary
 from ._renderer import (
     _render_graph_fragment,
@@ -4259,6 +4259,212 @@ def _render_legend_from_layout(layout: "FinalizedLayout") -> str:
     return _render_legend(stubs, layout.group_layouts)
 
 
+def _recursive_group_layout(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    groups: "dict[str, _Group]",
+    outer_direction: str,
+    col_gap: "int | None" = None,
+) -> None:
+    """Leaf-first recursive group position fixup.
+
+    After _assign_coordinates, for each group with a declared direction that
+    differs from the outer layout direction, re-positions that group's members
+    (and child groups as fixed-size units) in the group's local direction:
+      LR/RL — all members at the same y, placed left-to-right by topo order.
+      TB/TD — all members at the same x, placed top-to-bottom by topo order.
+
+    Replaces the _apply_inner_direction_positions call in _compile_flowchart.
+    Removes the need for the rank-flattening pre-pass: instead of forcing all
+    LR-group members to the same rank before coordinate assignment, we let
+    _assign_coordinates run normally and correct positions afterward.
+    """
+    _col_gap = col_gap if col_gap is not None else COL_GAP
+    # Match _assign_coordinates axis classification exactly: anything not LR/RL is vertical.
+    is_outer_tb = outer_direction.upper() not in ("LR", "RL")
+
+    # Build parent → children map
+    children: "dict[str, list[str]]" = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        if grp.parent_group and grp.parent_group in groups:
+            children[grp.parent_group].append(gid)
+    root_groups = [
+        gid for gid, grp in groups.items()
+        if not grp.parent_group or grp.parent_group not in groups
+    ]
+
+    def _all_member_nodes(gid: str, _seen: "set[str] | None" = None) -> "list[_Node]":
+        if _seen is None:
+            _seen = set()
+        if gid in _seen:
+            return []
+        _seen.add(gid)
+        result = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        for c in children[gid]:
+            result.extend(_all_member_nodes(c, _seen))
+        return result
+
+    def _group_bounds(gid: str) -> "tuple[float, float, float, float] | None":
+        mbrs = _all_member_nodes(gid)
+        if not mbrs:
+            return None
+        return (
+            float(min(n.x for n in mbrs)),
+            float(min(n.y for n in mbrs)),
+            float(max(n.x + _node_render_w(n) for n in mbrs)),
+            float(max(n.y + _node_render_h(n) for n in mbrs)),
+        )
+
+    def _shift_group(gid: str, dx: float, dy: float, _seen: "set[str] | None" = None) -> None:
+        if _seen is None:
+            _seen = set()
+        if gid in _seen:
+            return
+        _seen.add(gid)
+        for m in groups[gid].members:
+            if m in nodes:
+                nodes[m].x += dx
+                nodes[m].y += dy
+        for c in children[gid]:
+            _shift_group(c, dx, dy, _seen)
+
+    def _topo_order(member_ids: "list[str]", intra_edges: "list", sort_key: "Callable") -> "list[str]":
+        in_deg: "dict[str, int]" = {m: 0 for m in member_ids}
+        adj: "dict[str, list[str]]" = {m: [] for m in member_ids}
+        for e in intra_edges:
+            if e.src in adj and e.dst in in_deg and not e.reversed_:
+                adj[e.src].append(e.dst)
+                in_deg[e.dst] += 1
+        queue = sorted([m for m in member_ids if in_deg[m] == 0], key=sort_key)
+        result: "list[str]" = []
+        while queue:
+            cur = queue.pop(0)
+            result.append(cur)
+            nexts = sorted(adj[cur], key=sort_key)
+            for nb in nexts:
+                in_deg[nb] -= 1
+                if in_deg[nb] == 0:
+                    queue.append(nb)
+            queue.sort(key=sort_key)
+        for m in member_ids:
+            if m not in result:
+                result.append(m)
+        return result
+
+    # Process groups leaf-first (DFS post-order)
+    processed: "list[str]" = []
+    _visit_seen: "set[str]" = set()
+
+    def _visit(gid: str) -> None:
+        if gid in _visit_seen:
+            return
+        _visit_seen.add(gid)
+        for c in children[gid]:
+            _visit(c)
+        processed.append(gid)
+
+    for gid in root_groups:
+        _visit(gid)
+
+    for gid in processed:
+        grp = groups[gid]
+        if not grp.direction:
+            continue
+        inner_dir = grp.direction.upper()
+        # Only process groups whose direction differs from the outer direction
+        if is_outer_tb and inner_dir not in ("LR", "RL"):
+            continue
+        if not is_outer_tb and inner_dir not in ("TB", "TD"):
+            continue
+
+        direct_members = [m for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        child_gids = children[gid]
+
+        # Build item list: (kind, id, x, y, w, h)
+        items: "list[tuple]" = []
+        for m in direct_members:
+            n = nodes[m]
+            items.append(("node", m, float(n.x), float(n.y),
+                          float(_node_render_w(n)), float(_node_render_h(n))))
+        for c in child_gids:
+            bounds = _group_bounds(c)
+            if bounds:
+                x0, y0, x1, y1 = bounds
+                items.append(("group", c, x0, y0, x1 - x0, y1 - y0))
+
+        if not items:
+            continue
+
+        member_set = set(direct_members)
+        intra_edges = [e for e in edges if e.src in member_set and e.dst in member_set]
+
+        if inner_dir in ("LR", "RL"):
+            # LR/RL inner in TB outer: all members at same y, placed left-to-right (or right-to-left)
+            ordered_nodes = _topo_order(direct_members, intra_edges, lambda m: nodes[m].x)
+            if inner_dir == "RL":
+                ordered_nodes = list(reversed(ordered_nodes))
+
+            node_rank = {m: i for i, m in enumerate(ordered_nodes)}
+            rl_sign = -1 if inner_dir == "RL" else 1  # RL: descending x
+            if child_gids:
+                # Has child groups: sort all items by current x (groups have distinct x).
+                # RL reverses the sign so groups also respect right-to-left order.
+                items.sort(key=lambda it: (
+                    rl_sign * it[2],
+                    node_rank.get(it[1], float("inf")) if it[0] == "node" else float("inf"),
+                ))
+            else:
+                # Pure direct members: nodes may share the same col (same x due to
+                # centering); use topo order to determine left-to-right sequence
+                items.sort(key=lambda it: node_rank.get(it[1], float("inf")))
+
+            target_y = min(it[3] for it in items)
+            cur_x = min(it[2] for it in items)
+            for kind, item_id, _, _, w, h in items:
+                if kind == "node":
+                    n = nodes[item_id]
+                    n.x = cur_x
+                    n.y = target_y
+                    cur_x += _node_render_w(n) + _col_gap
+                else:
+                    bounds = _group_bounds(item_id)
+                    if bounds:
+                        x0, y0, x1, y1 = bounds
+                        _shift_group(item_id, cur_x - x0, target_y - y0)
+                        cur_x += (x1 - x0) + _col_gap
+
+        else:
+            # TB/TD inner in LR outer: all members at same x, placed top-to-bottom
+            # (BT is not a valid parsed inner direction — only TB/TD reach this branch)
+            ordered_nodes = _topo_order(direct_members, intra_edges, lambda m: nodes[m].y)
+
+            node_rank = {m: i for i, m in enumerate(ordered_nodes)}
+            if child_gids:
+                # Has child groups: sort by current y position
+                items.sort(key=lambda it: (
+                    it[3],
+                    node_rank.get(it[1], float("inf")) if it[0] == "node" else float("inf"),
+                ))
+            else:
+                # Pure direct members: use topo order
+                items.sort(key=lambda it: node_rank.get(it[1], float("inf")))
+
+            target_x = min(it[2] for it in items)
+            cur_y = min(it[3] for it in items)
+            for kind, item_id, _, _, w, h in items:
+                if kind == "node":
+                    n = nodes[item_id]
+                    n.x = target_x
+                    n.y = cur_y
+                    cur_y += _node_render_h(n) + _col_gap
+                else:
+                    bounds = _group_bounds(item_id)
+                    if bounds:
+                        x0, y0, x1, y1 = bounds
+                        _shift_group(item_id, target_x - x0, cur_y - y0)
+                        cur_y += (y1 - y0) + _col_gap
+
+
 def _compile_flowchart(
     src: str,
     width_hint: int,
@@ -4308,18 +4514,6 @@ def _compile_flowchart(
 
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
-
-    # Honor inner direction LR inside a TB subgraph
-    if direction.upper() in ("TB", "TD"):
-        for grp in groups.values():
-            if getattr(grp, "direction", "").upper() in ("LR", "RL") and grp.members:
-                _grp_ranks = [nodes[m].rank for m in grp.members if m in nodes]
-                if _grp_ranks:
-                    _flat_rank = min(_grp_ranks)
-                    for m in grp.members:
-                        if m in nodes:
-                            nodes[m].rank = _flat_rank
-
     _minimize_crossings(nodes, edges)
 
     # Auto-select direction (TB vs LR) when both size hints are given
@@ -4355,7 +4549,7 @@ def _compile_flowchart(
     )
 
     if groups:
-        _apply_inner_direction_positions(
+        _recursive_group_layout(
             nodes, edges, groups, direction,
             col_gap=_init_cfg.get("col_gap"),
         )
@@ -4610,11 +4804,13 @@ def _validate_sequence_geometry(geom: "SequenceGeometry") -> "list[str]":
 
 
 def _dispatch_validate(src: str) -> "ValidationResult":
-    """Validate Mermaid source including 11 geometry invariants (T9)."""
+    """Validate Mermaid source including geometry invariants."""
     from ._geometry import ValidationResult
     clean = _strip_frontmatter(src)
     directive, _ = _detect_directive(clean)
-    if directive.lower() == "sequencediagram":
+    d = directive.lower()
+
+    if d == "sequencediagram":
         try:
             _, geom = _layout_lifeline(clean, "LR", 900)
         except Exception as exc:
@@ -4634,6 +4830,33 @@ def _dispatch_validate(src: str) -> "ValidationResult":
             geometry=geom_status,
             warnings=tuple(violations),  # geometry violations go in warnings, not errors
         )
+
+    if d in _GRAPH_DIRECTIVES:
+        try:
+            compiled = _compile_flowchart(clean, 0, None)
+        except Exception as exc:
+            return ValidationResult(
+                render="fail",
+                syntax_coverage="fail",
+                geometry="unvalidated",
+                errors=(str(exc),),
+            )
+        try:
+            from ..paint import finalized_layout_to_scene
+            scene = finalized_layout_to_scene(compiled.layout, diagram_type=d, title="")
+        except Exception as exc:
+            return ValidationResult(
+                render="fail",
+                geometry="unvalidated",
+                errors=(str(exc),),
+            )
+        from ..scene_bounds import validate_scene
+        scene_errors = validate_scene(scene)
+        return ValidationResult(
+            geometry="fail" if scene_errors else "pass",
+            errors=tuple(scene_errors),
+        )
+
     return ValidationResult(geometry="unvalidated")
 
 

@@ -1,6 +1,6 @@
 # Mermaid P3 — Implementation Plan
 
-- **Status:** Done (Tasks 0-8 complete; Tasks 6-8 include reflective field-coverage tests)
+- **Status:** Done (Tasks 0-11 complete; Task 10 = Stage 4 recursive compound layout; Task 11 = Stage 5 scene bounds)
 
 ## Task 0: Record Baseline
 Verification: goal-based
@@ -129,9 +129,51 @@ Tests: all static assertions in test_no_native_stubs.py pass including:
 Done when: full `test_no_native_stubs.py` green
 Depends on: Tasks 3, 5, 7
 
-## Deferred tasks (Stages 4-13 — separate loops)
+## Task 9: Fix parent_group_id test coverage in test_finalized_layout_scene.py
+Verification: goal-based
+Tests: test_node_layout_field_coverage_reflective passes
+Depends on: none
+Done when: `parent_group_id` added to `_DECLARED_NON_CONSUMED`
+Approach: Document as layout hierarchy metadata, not a visual element.
+
+## Task 10: Stage 4 — Recursive compound layout
+Verification: TDD + goal-based
+Tests (tests/test_compound_layout.py):
+  - test_descendants_inside_ancestors: nodes in a group are within its bbox
+  - test_sibling_groups_no_overlap: two sibling groups have non-overlapping bboxes
+  - test_inner_dir_lr_in_tb_outer: LR group in TB outer places members horizontally
+  - test_nested_group_unit_treatment: child group treated as unit in parent's layout
+  - test_deterministic_compound_output: same input → same canvas dimensions
+  - test_no_rank_flattening: LR group members have DIFFERENT y positions (not flattened)
+Depends on: Task 9
+Approach:
+  - Add `_recursive_group_layout()` to `_strategies.py`
+  - Remove rank-flattening hack from `_compile_flowchart`
+  - Replace `_apply_inner_direction_positions` call in `_compile_flowchart` with `_recursive_group_layout`
+    (`_group_coherent_cols` and `_compact_group_columns` remain as prerequisite col-assignment passes)
+  - Update imports in `_strategies.py`
+
+## Task 11: Stage 5 — Scene bounds hardening
+Verification: TDD
+Tests (tests/test_scene_bounds.py):
+  - element_visible_bounds for all 10 element types
+  - _parse_translate: comma/space/single-arg/empty/unrecognised
+  - scene_visible_bounds: single element, multi-element union, empty → None, multi-layer
+  - validate_scene: clean scene, duplicate element_id, nested duplicate, blank ids OK,
+    negative width/height, negative radius, nested negative geometry
+Done when: 50 tests pass
+Approach:
+  - New module `scripts/mermaid_render/scene_bounds.py`
+  - Imports Rect/Point from layout/_geometry; imports scene types from scene.py (no circular deps)
+  - element_visible_bounds: dispatches on element type, parses translate() from transform str
+  - arc command endpoint: (cmd[6], cmd[7]) per ScenePath docstring ("A", rx,ry,xr,lf,sf,x,y)
+  - text bounds: per-line width estimate from len*font_size*0.6, respects text_anchor
+  - group bounds: recursive children union + translate parent transform on top
+  - scene_visible_bounds: union across all layers
+  - validate_scene: duplicate element_ids + negative geometry on rects/circles/ellipses
+
+## Deferred tasks (Stages 6-13 — separate loops)
 See docs/backlog.md entries:
-- backlog-mermaid-p3-compound-layout (Stage 4 recursive compound layout)
 - backlog-mermaid-p3-scene-bounds (Stage 5 scene IR hardening)
 - backlog-mermaid-p3-type-migrations (Stage 6 twelve placeholder types)
 - backlog-mindmap-tidy-tree (Stage 7 mind map tidy-tree)
