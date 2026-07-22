@@ -448,6 +448,7 @@ class ReferenceAdapter:
         if profile.mermaid_config:
             config_json = json.dumps(profile.mermaid_config)
 
+        source_sha256 = hashlib.sha256(case.source.encode("utf-8")).hexdigest()
         svg = _mmdc_render(case.source, config_json)
         impl = self.identity()
         env = _env_identity(profile)
@@ -470,6 +471,7 @@ class ReferenceAdapter:
                 status=ComparisonStatus.REFERENCE_RENDER_FAILURE,
                 reason="mmdc returned non-zero or no SVG",
                 capture_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                source_sha256=source_sha256,
             )
 
         semantic = _extract_semantic_from_svg(svg, case.source)
@@ -494,6 +496,7 @@ class ReferenceAdapter:
             status=ComparisonStatus.PASS,
             reason=None,
             capture_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            source_sha256=source_sha256,
         )
 
 

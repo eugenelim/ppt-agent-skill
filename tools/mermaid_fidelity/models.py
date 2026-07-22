@@ -251,6 +251,7 @@ class Observation:
     artifact_refs: dict[str, str] = field(default_factory=dict)
     diagnostics: list[str] = field(default_factory=list)
     capture_timestamp: str | None = None  # excluded from deterministic fingerprints
+    source_sha256: str | None = None      # SHA-256 of the .mmd source bytes
 
 
 # ── runner inputs ─────────────────────────────────────────────────────────────
@@ -262,6 +263,7 @@ class FidelityCase:
     source_path: Path
     source: str         # loaded .mmd content
     diagram: str        # "flowchart"|"sequence"|"architecture"|"er"|…
+    lifecycle: str = "active"   # "active" | "planned"
     tags: list[str] = field(default_factory=list)
     strict: list[str] = field(default_factory=list)
     scored: list[str] = field(default_factory=list)

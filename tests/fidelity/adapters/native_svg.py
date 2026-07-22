@@ -17,6 +17,12 @@ _REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_REPO / "scripts"))
 
 from mermaid_render import to_svg
+from mermaid_render.errors import (
+    NativeRendererUnavailable,
+    NativeRenderError,
+    UnsupportedDiagramFeature,
+    UnsupportedDiagramType,
+)
 
 sys.path.insert(0, str(_REPO / "tools"))
 
@@ -414,10 +420,32 @@ class NativeSvgAdapter:
             profile_id=profile.id,
         )
         env = _env_identity(profile)
+        source_sha256 = hashlib.sha256(case.source.encode("utf-8")).hexdigest()
 
         try:
             svg_text = to_svg(case.source)
+        except (UnsupportedDiagramType, NativeRendererUnavailable, UnsupportedDiagramFeature) as e:
+            # Intentional unsupported-family result — the only path to NATIVE_UNSUPPORTED.
+            return Observation(
+                schema_version=1,
+                case_id=case.id,
+                implementation=impl,
+                environment=env,
+                parse_result=ParseObservation(
+                    accepted=False,
+                    diagram_type=getattr(e, "diagram_type", None) or case.diagram,
+                    error_category="unsupported_diagram_type",
+                    source_position=None,
+                ),
+                semantic=None,
+                geometry=None,
+                quality=None,
+                status=ComparisonStatus.NATIVE_UNSUPPORTED,
+                reason=f"{type(e).__name__}: {str(e)[:120]}",
+                source_sha256=source_sha256,
+            )
         except ValueError as e:
+            # Unrelated ValueError from renderer — not an unsupported-family signal.
             return Observation(
                 schema_version=1,
                 case_id=case.id,
@@ -426,14 +454,15 @@ class NativeSvgAdapter:
                 parse_result=ParseObservation(
                     accepted=False,
                     diagram_type=None,
-                    error_category=_classify_error(str(e)),
+                    error_category="parse_error",
                     source_position=None,
                 ),
                 semantic=None,
                 geometry=None,
                 quality=None,
-                status=ComparisonStatus.NATIVE_UNSUPPORTED,
+                status=ComparisonStatus.INTERNAL_ERROR,
                 reason=f"ValueError: {str(e)[:120]}",
+                source_sha256=source_sha256,
             )
         except Exception as e:
             return Observation(
@@ -452,6 +481,7 @@ class NativeSvgAdapter:
                 quality=None,
                 status=ComparisonStatus.INTERNAL_ERROR,
                 reason=f"{type(e).__name__}: {str(e)[:120]}",
+                source_sha256=source_sha256,
             )
 
         # Detect mechanical stub — native renderer doesn't support this type yet
@@ -473,6 +503,7 @@ class NativeSvgAdapter:
                 status=ComparisonStatus.NATIVE_UNSUPPORTED,
                 reason=f"diagram type '{case.diagram}' not yet implemented in native renderer",
                 capture_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                source_sha256=source_sha256,
             )
 
         semantic = _extract_semantic_from_svg(svg_text, case.diagram)
@@ -498,4 +529,5 @@ class NativeSvgAdapter:
             reason=None,
             artifact_refs={"svg": f"native_{case.id}.svg"},
             capture_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            source_sha256=source_sha256,
         )

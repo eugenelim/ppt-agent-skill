@@ -134,6 +134,16 @@ def compare_relative_layout(
     ref_by_id = {eg.entity_id: eg for eg in ref_obs.entities}
     common_ids = set(nat_by_id) & set(ref_by_id)
 
+    # Guard: if both sides have entities but no overlap, this is an extractor gap,
+    # not a layout pass.  Return an explicit failure so the runner can surface
+    # EXTRACTOR_GAP rather than vacuously passing.
+    if not common_ids and (native_obs.entities or ref_obs.entities):
+        return RelativeLayoutResult(
+            passed=False,
+            failures=["no common entity IDs between native and reference — likely extractor gap"],
+            checks_run=["entity-id-overlap"],
+        )
+
     if not common_ids:
         return RelativeLayoutResult(passed=True, failures=[], checks_run=[])
 
@@ -152,10 +162,11 @@ def compare_relative_layout(
             )
 
     # Containment: entities in groups should be inside their group bbox.
+    # Convention: containment tuples are (child_id, parent_id).
     if "containment" in strict_fields:
         checks_run.append("containment")
         nat_groups = {gg.group_id: gg for gg in native_obs.groups}
-        for parent_id, child_id in native_obs.containment:
+        for child_id, parent_id in native_obs.containment:
             if parent_id not in nat_groups or child_id not in nat_by_id:
                 continue
             grp = nat_groups[parent_id].bbox

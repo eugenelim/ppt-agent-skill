@@ -20,7 +20,7 @@ from .compare.geometry import (
     score_layout_metrics,
 )
 from .compare.quality import QualityTolerances, run_quality_checks
-from .compare.semantic import SemanticComparisonResult, compare_semantic
+from .compare.semantic import SemanticComparisonResult, compare_semantic, compare_parse
 from .models import (
     ComparisonStatus,
     FidelityCase,
@@ -56,6 +56,12 @@ class RunSummary:
     extractor_gaps: int
     parse_mismatches: int
     other_failures: int
+    # Lifecycle breakdown
+    active_total: int = 0
+    active_passed: int = 0
+    active_failed: int = 0
+    planned_total: int = 0
+    planned_unsupported: int = 0
     results: list[CaseRunResult] = field(default_factory=list)
 
 
@@ -120,48 +126,101 @@ class FidelityRunner:
             status = ComparisonStatus.REFERENCE_RENDER_FAILURE
             reason = "reference render failed"
         else:
-            # Semantic comparison
-            if native_obs.semantic and ref_obs.semantic:
-                semantic_result = compare_semantic(
-                    ref_obs.semantic,
-                    native_obs.semantic,
-                    case.strict,
+            # Stale oracle detection: source hash mismatch
+            if (
+                native_obs.source_sha256
+                and ref_obs.source_sha256
+                and native_obs.source_sha256 != ref_obs.source_sha256
+            ):
+                status = ComparisonStatus.STALE_ORACLE
+                reason = (
+                    f"source hash mismatch: current={native_obs.source_sha256[:8]} "
+                    f"oracle={ref_obs.source_sha256[:8]}"
                 )
-                if not semantic_result.passed:
-                    status = ComparisonStatus.SEMANTIC_MISMATCH
-                    reason = "; ".join(semantic_result.diff.to_lines()[:5])
-                    diagnostics.extend(semantic_result.diff.to_lines())
 
-            # Geometry comparison
-            if native_obs.geometry and ref_obs.geometry:
-                native_norm = normalize_geometry(native_obs.geometry)
-                ref_norm = normalize_geometry(ref_obs.geometry)
+            if status == ComparisonStatus.PASS:
+                # Parse comparison
+                if "parse" in case.strict:
+                    parse_diffs = compare_parse(ref_obs.parse_result, native_obs.parse_result)
+                    if parse_diffs:
+                        status = ComparisonStatus.PARSE_MISMATCH
+                        reason = "; ".join(str(d) for d in parse_diffs[:3])
+                        diagnostics.extend(str(d) for d in parse_diffs)
 
-                layout_result = compare_relative_layout(
-                    native_obs.geometry,
-                    ref_obs.geometry,
-                    case.strict,
-                    native_obs.semantic.direction if native_obs.semantic else None,
-                )
-                if not layout_result.passed and status == ComparisonStatus.PASS:
-                    status = ComparisonStatus.RELATIVE_LAYOUT_MISMATCH
-                    reason = "; ".join(layout_result.failures[:3])
-                    diagnostics.extend(layout_result.failures)
-
-                if native_norm and ref_norm:
-                    scored = score_layout_metrics(
-                        native_norm, ref_norm,
-                        native_obs.geometry, ref_obs.geometry,
+            if status == ComparisonStatus.PASS:
+                # Semantic comparison
+                _SEMANTIC_STRICT_FIELDS = frozenset({
+                    "parse", "diagram-type", "direction", "entities", "labels",
+                    "relations", "edge-endpoints", "containment", "actor-order",
+                    "message-order", "cardinality", "identifying",
+                })
+                semantic_strict = [f for f in case.strict if f in _SEMANTIC_STRICT_FIELDS]
+                if native_obs.semantic and ref_obs.semantic:
+                    semantic_result = compare_semantic(
+                        ref_obs.semantic,
+                        native_obs.semantic,
+                        case.strict,
                     )
+                    if not semantic_result.passed:
+                        status = ComparisonStatus.SEMANTIC_MISMATCH
+                        reason = "; ".join(semantic_result.diff.to_lines()[:5])
+                        diagnostics.extend(semantic_result.diff.to_lines())
+                elif semantic_strict:
+                    # Strict semantic checks declared but one or both sides have no data.
+                    missing = []
+                    if not native_obs.semantic:
+                        missing.append("native")
+                    if not ref_obs.semantic:
+                        missing.append("reference")
+                    status = ComparisonStatus.EXTRACTOR_GAP
+                    reason = (
+                        f"strict checks {semantic_strict[:3]} declared but "
+                        f"{' and '.join(missing)} observation has no semantic data"
+                    )
+                    diagnostics.append(reason)
 
-            # Quality checks
-            if native_obs.geometry:
-                quality_findings = run_quality_checks(
-                    native_obs.geometry, self._tolerances
-                )
-                if quality_findings and status == ComparisonStatus.PASS:
-                    status = ComparisonStatus.QUALITY_FAILURE
-                    reason = quality_findings[0].message
+            if status == ComparisonStatus.PASS:
+                # Geometry comparison
+                if native_obs.geometry and ref_obs.geometry:
+                    native_norm = normalize_geometry(native_obs.geometry)
+                    ref_norm = normalize_geometry(ref_obs.geometry)
+
+                    layout_result = compare_relative_layout(
+                        native_obs.geometry,
+                        ref_obs.geometry,
+                        case.strict,
+                        native_obs.semantic.direction if native_obs.semantic else None,
+                    )
+                    if not layout_result.passed:
+                        # Check if this is an extractor gap (no entity overlap)
+                        gap_failure = any(
+                            "extractor gap" in f.lower() or "no common entity" in f.lower()
+                            for f in layout_result.failures
+                        )
+                        new_status = (
+                            ComparisonStatus.EXTRACTOR_GAP
+                            if gap_failure
+                            else ComparisonStatus.RELATIVE_LAYOUT_MISMATCH
+                        )
+                        status = new_status
+                        reason = "; ".join(layout_result.failures[:3])
+                        diagnostics.extend(layout_result.failures)
+
+                    if native_norm and ref_norm:
+                        scored = score_layout_metrics(
+                            native_norm, ref_norm,
+                            native_obs.geometry, ref_obs.geometry,
+                        )
+
+            if status == ComparisonStatus.PASS:
+                # Quality checks
+                if native_obs.geometry:
+                    quality_findings = run_quality_checks(
+                        native_obs.geometry, self._tolerances
+                    )
+                    if quality_findings:
+                        status = ComparisonStatus.QUALITY_FAILURE
+                        reason = quality_findings[0].message
 
         return CaseRunResult(
             case_id=case.id,
@@ -186,14 +245,42 @@ class FidelityRunner:
     ) -> RunSummary:
         cases = manifest.cases
         if case_ids:
-            cases = [c for c in cases if c.id in case_ids]
+            matched = [c for c in cases if c.id in case_ids]
+            unknown = set(case_ids) - {c.id for c in matched}
+            if unknown:
+                raise ValueError(f"Unknown case IDs: {sorted(unknown)}")
+            cases = matched
 
         results: list[CaseRunResult] = []
         for case in cases:
             result = self.run_case(case, profile, ref_id)
+
+            # Active case returning NATIVE_UNSUPPORTED is a hard failure.
+            if (
+                hasattr(case, "lifecycle")
+                and case.lifecycle == "active"
+                and result.final_status == ComparisonStatus.NATIVE_UNSUPPORTED
+            ):
+                result = CaseRunResult(
+                    case_id=result.case_id,
+                    native_obs=result.native_obs,
+                    ref_obs=result.ref_obs,
+                    semantic_result=result.semantic_result,
+                    layout_result=result.layout_result,
+                    native_norm=result.native_norm,
+                    ref_norm=result.ref_norm,
+                    scored_metrics=result.scored_metrics,
+                    final_status=ComparisonStatus.INTERNAL_ERROR,
+                    reason=(
+                        "Active case returned NATIVE_UNSUPPORTED — "
+                        "active cases must be rendered by the native adapter"
+                    ),
+                    diagnostics=result.diagnostics,
+                )
+
             results.append(result)
 
-        return _build_summary(results)
+        return _build_summary(manifest, results)
 
     def run_determinism(
         self,
@@ -236,13 +323,24 @@ class FidelityRunner:
         return report
 
 
-def _build_summary(results: list[CaseRunResult]) -> RunSummary:
+def _build_summary(manifest: FidelityManifest, results: list[CaseRunResult]) -> RunSummary:
     passed = sum(1 for r in results if r.final_status == ComparisonStatus.PASS)
     sem = sum(1 for r in results if r.final_status == ComparisonStatus.SEMANTIC_MISMATCH)
     qual = sum(1 for r in results if r.final_status == ComparisonStatus.QUALITY_FAILURE)
     gap = sum(1 for r in results if r.final_status == ComparisonStatus.EXTRACTOR_GAP)
     parse = sum(1 for r in results if r.final_status == ComparisonStatus.PARSE_MISMATCH)
     other = len(results) - passed - sem - qual - gap - parse
+
+    # Lifecycle breakdown
+    lifecycle_by_id = {c.id: getattr(c, "lifecycle", "active") for c in manifest.cases}
+    active_results = [r for r in results if lifecycle_by_id.get(r.case_id, "active") == "active"]
+    planned_results = [r for r in results if lifecycle_by_id.get(r.case_id, "active") == "planned"]
+
+    active_passed = sum(1 for r in active_results if r.final_status == ComparisonStatus.PASS)
+    active_failed = len(active_results) - active_passed
+    planned_unsupported = sum(
+        1 for r in planned_results if r.final_status == ComparisonStatus.NATIVE_UNSUPPORTED
+    )
 
     return RunSummary(
         total=len(results),
@@ -252,6 +350,11 @@ def _build_summary(results: list[CaseRunResult]) -> RunSummary:
         extractor_gaps=gap,
         parse_mismatches=parse,
         other_failures=other,
+        active_total=len(active_results),
+        active_passed=active_passed,
+        active_failed=active_failed,
+        planned_total=len(planned_results),
+        planned_unsupported=planned_unsupported,
         results=results,
     )
 
@@ -344,6 +447,7 @@ def _deserialize_observation(raw: dict) -> Observation:
         artifact_refs=raw.get("artifact_refs", {}),
         diagnostics=raw.get("diagnostics", []),
         capture_timestamp=raw.get("capture_timestamp"),
+        source_sha256=raw.get("source_sha256"),
     )
 
 

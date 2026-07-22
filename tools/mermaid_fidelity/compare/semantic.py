@@ -3,17 +3,26 @@
 Semantic checks are hard gates. Styling differences (palette, shadows,
 corner-radius) are ignored. Every declared strict field is checked for
 missing, extra, and changed objects — not just subset membership.
+
+Relation comparison uses a canonical multiset (Counter keyed on a
+7-field tuple) to preserve multiplicity.  Two identical unlabeled A→B
+edges compare as count 2, not count 1.
+
+Containment tuples are always (child_id, parent_id).
 """
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
 
 from ..canonical import canonical_label, sort_entities, sort_relations, sort_ordered_events
 from ..models import (
-    Entity, Group, OrderedEvent, Relation, SemanticDiagram,
+    Entity, Group, OrderedEvent, ParseObservation, Relation, SemanticDiagram,
 )
 
+
+# ── diff items ────────────────────────────────────────────────────────────────
 
 @dataclass
 class EntityDiff:
@@ -23,7 +32,10 @@ class EntityDiff:
     actual: Any
 
     def __str__(self) -> str:
-        return f'changed entity id={self.entity_id!r}: {self.field}: expected {self.expected!r}, got {self.actual!r}'
+        return (
+            f'changed entity id={self.entity_id!r}: {self.field}: '
+            f'expected {self.expected!r}, got {self.actual!r}'
+        )
 
 
 @dataclass
@@ -34,8 +46,23 @@ class RelationDiff:
     actual: Any
 
     def __str__(self) -> str:
-        return f'changed relation id={self.relation_id!r}: {self.field}: expected {self.expected!r}, got {self.actual!r}'
+        return (
+            f'changed relation id={self.relation_id!r}: {self.field}: '
+            f'expected {self.expected!r}, got {self.actual!r}'
+        )
 
+
+@dataclass
+class ParseDiff:
+    field: str
+    expected: Any
+    actual: Any
+
+    def __str__(self) -> str:
+        return f'parse mismatch: {self.field}: expected {self.expected!r}, got {self.actual!r}'
+
+
+# ── structured diff ───────────────────────────────────────────────────────────
 
 @dataclass
 class SemanticDiff:
@@ -44,8 +71,9 @@ class SemanticDiff:
     extra_entities: list[str] = field(default_factory=list)     # ids in actual, absent in expected
     changed_entities: list[EntityDiff] = field(default_factory=list)
 
-    missing_relations: list[tuple[str, str, str]] = field(default_factory=list)  # (src, dst, label)
-    extra_relations: list[tuple[str, str, str]] = field(default_factory=list)
+    # Relations keyed as canonical 7-tuples — reported as (key_tuple, count_exp, count_act)
+    missing_relations: list[tuple] = field(default_factory=list)
+    extra_relations: list[tuple] = field(default_factory=list)
     changed_relations: list[RelationDiff] = field(default_factory=list)
 
     missing_groups: list[str] = field(default_factory=list)
@@ -54,6 +82,8 @@ class SemanticDiff:
 
     direction_mismatch: str | None = None     # "expected TB, got LR"
     diagram_type_mismatch: str | None = None
+
+    parse_diffs: list[ParseDiff] = field(default_factory=list)
 
     missing_events: list[str] = field(default_factory=list)    # ordered event ids
     extra_events: list[str] = field(default_factory=list)
@@ -72,6 +102,7 @@ class SemanticDiff:
             and not self.changed_groups
             and self.direction_mismatch is None
             and self.diagram_type_mismatch is None
+            and not self.parse_diffs
             and not self.missing_events
             and not self.extra_events
             and not self.changed_events
@@ -83,16 +114,18 @@ class SemanticDiff:
             lines.append(f"diagram-type: {self.diagram_type_mismatch}")
         if self.direction_mismatch:
             lines.append(f"direction: {self.direction_mismatch}")
+        for pd in self.parse_diffs:
+            lines.append(str(pd))
         for eid in self.missing_entities:
             lines.append(f"missing entity: id={eid!r}")
         for eid in self.extra_entities:
             lines.append(f"extra entity: id={eid!r}")
         for d in self.changed_entities:
             lines.append(str(d))
-        for src, dst, lbl in self.missing_relations:
-            lines.append(f"missing relation: edge(source={src!r}, target={dst!r}, label={lbl!r})")
-        for src, dst, lbl in self.extra_relations:
-            lines.append(f"extra relation: edge(source={src!r}, target={dst!r}, label={lbl!r})")
+        for key in self.missing_relations:
+            lines.append(f"missing relation: {_rel_key_str(key)}")
+        for key in self.extra_relations:
+            lines.append(f"extra relation: {_rel_key_str(key)}")
         for d in self.changed_relations:
             lines.append(str(d))
         for gid in self.missing_groups:
@@ -110,6 +143,17 @@ class SemanticDiff:
         return lines
 
 
+def _rel_key_str(key: tuple) -> str:
+    """Human-readable representation of a canonical relation key."""
+    if len(key) >= 3:
+        kind, src, dst = key[0], key[1], key[2]
+        label = key[3] if len(key) > 3 else ""
+        return f"edge(kind={kind!r}, source={src!r}, target={dst!r}, label={label!r})"
+    return repr(key)
+
+
+# ── comparison result ─────────────────────────────────────────────────────────
+
 @dataclass
 class SemanticComparisonResult:
     passed: bool
@@ -118,6 +162,93 @@ class SemanticComparisonResult:
     skipped_fields: list[str]           # fields not checked due to extractor gap
 
 
+# ── parse comparison ──────────────────────────────────────────────────────────
+
+def compare_parse(
+    expected: ParseObservation,
+    actual: ParseObservation,
+) -> list[ParseDiff]:
+    """Compare two ParseObservations; return a list of ParseDiff items.
+
+    Outcomes:
+    - both accept same diagram family → []
+    - reference accepts, native rejects → ParseDiff on accepted
+    - reference rejects, native accepts → ParseDiff on accepted
+    - accepted family differs → ParseDiff on diagram_type
+    - both reject with compatible categories → []
+    """
+    diffs: list[ParseDiff] = []
+
+    if expected.accepted != actual.accepted:
+        diffs.append(ParseDiff(
+            field="accepted",
+            expected=expected.accepted,
+            actual=actual.accepted,
+        ))
+        return diffs  # accepted mismatch dominates
+
+    if not expected.accepted:
+        # Both rejected — compare normalized error category
+        exp_cat = expected.error_category or "unknown"
+        act_cat = actual.error_category or "unknown"
+        if exp_cat != act_cat:
+            diffs.append(ParseDiff(
+                field="error_category",
+                expected=exp_cat,
+                actual=act_cat,
+            ))
+        return diffs
+
+    # Both accepted
+    if expected.diagram_type and actual.diagram_type:
+        if _normalize_family(expected.diagram_type) != _normalize_family(actual.diagram_type):
+            diffs.append(ParseDiff(
+                field="diagram_type",
+                expected=expected.diagram_type,
+                actual=actual.diagram_type,
+            ))
+
+    return diffs
+
+
+def _normalize_family(family: str) -> str:
+    """Normalize Mermaid internal names to canonical families."""
+    mapping = {
+        "sequencediagram": "sequence",
+        "erdiagram": "er",
+        "classDiagram": "class",
+        "stateDiagram": "state",
+        "statediagram": "state",
+        "statediagram-v2": "state",
+        "architecture-beta": "architecture",
+        "architecturebeta": "architecture",
+        "graph": "flowchart",
+    }
+    return mapping.get(family.lower(), family.lower())
+
+
+# ── canonical relation key ────────────────────────────────────────────────────
+
+def _rel_multiset_key(r: Relation) -> tuple:
+    """Canonical 7-field key for a relation, used in multiset comparison.
+
+    Includes kind, source, target, label, arrow, cardinality fields, and identifying.
+    Parallel relations (same src/dst/label/arrow) produce identical keys and are
+    counted separately via Counter.
+    """
+    return (
+        r.kind or "",
+        r.source or "",
+        r.target or "",
+        canonical_label(r.label),
+        r.arrow or "",
+        r.attributes.get("cardinality_src") or "",
+        r.attributes.get("cardinality_dst") or "",
+    )
+
+
+# ── main comparator ───────────────────────────────────────────────────────────
+
 def compare_semantic(
     expected: SemanticDiagram,
     actual: SemanticDiagram,
@@ -125,8 +256,8 @@ def compare_semantic(
 ) -> SemanticComparisonResult:
     """Compare expected vs actual SemanticDiagram for the given strict fields.
 
-    Returns a structured diff. A field check is skipped when the expected
-    diagram lacks data for it (not an extractor gap on the comparison side).
+    A field check is skipped (EXTRACTOR_GAP) when the expected diagram genuinely
+    has no data for it (field is None/unavailable, not just empty).
     """
     diff = SemanticDiff()
     checked: list[str] = []
@@ -157,6 +288,15 @@ def compare_semantic(
             diff.missing_entities = sorted(exp_ids - act_ids)
             diff.extra_entities = sorted(act_ids - exp_ids)
 
+            # Shape: compare explicitly — treat None on native side as distinct from a value.
+            for eid in exp_ids & act_ids:
+                exp_shape = exp_by_id[eid].shape
+                act_shape = act_by_id[eid].shape
+                # Only flag mismatch when reference has a shape; None on reference means
+                # reference didn't extract it (not a mismatch signal).
+                if exp_shape is not None and exp_shape != act_shape:
+                    diff.changed_entities.append(EntityDiff(eid, "shape", exp_shape, act_shape))
+
         if "labels" in strict_fields:
             checked.append("labels")
             for eid in exp_ids & act_ids:
@@ -165,55 +305,70 @@ def compare_semantic(
                 if exp_lbl != act_lbl:
                     diff.changed_entities.append(EntityDiff(eid, "label", exp_lbl, act_lbl))
 
-        # shape check when entities strict
-        if "entities" in strict_fields:
-            for eid in exp_ids & act_ids:
-                exp_shape = exp_by_id[eid].shape
-                act_shape = act_by_id[eid].shape
-                if exp_shape and act_shape and exp_shape != act_shape:
-                    diff.changed_entities.append(EntityDiff(eid, "shape", exp_shape, act_shape))
-
     if "relations" in strict_fields:
         checked.append("relations")
-        # Key relations by (source, target, label_canonical) since IDs may differ
-        def _rel_key(r: Relation) -> tuple[str, str, str]:
-            return (r.source, r.target, canonical_label(r.label))
+        # Counter-based multiset to preserve parallel edges.
+        exp_counts: Counter = Counter(_rel_multiset_key(r) for r in expected.relations)
+        act_counts: Counter = Counter(_rel_multiset_key(r) for r in actual.relations)
 
-        exp_rels = {_rel_key(r) for r in expected.relations}
-        act_rels = {_rel_key(r) for r in actual.relations}
-        diff.missing_relations = sorted(exp_rels - act_rels)
-        diff.extra_relations = sorted(act_rels - exp_rels)
+        for key in exp_counts:
+            exp_n = exp_counts[key]
+            act_n = act_counts.get(key, 0)
+            if act_n < exp_n:
+                for _ in range(exp_n - act_n):
+                    diff.missing_relations.append(key)
+
+        for key in act_counts:
+            exp_n = exp_counts.get(key, 0)
+            act_n = act_counts[key]
+            if act_n > exp_n:
+                for _ in range(act_n - exp_n):
+                    diff.extra_relations.append(key)
 
     if "edge-endpoints" in strict_fields:
         checked.append("edge-endpoints")
-        exp_endpoints = {(r.source, r.target) for r in expected.relations}
-        act_endpoints = {(r.source, r.target) for r in actual.relations}
-        for src, dst in exp_endpoints - act_endpoints:
-            if (src, dst, "") not in {(m, e, c) for m, e, c in diff.missing_relations}:
-                diff.missing_relations.append((src, dst, ""))
-        for src, dst in act_endpoints - exp_endpoints:
-            if (src, dst, "") not in {(m, e, c) for m, e, c in diff.extra_relations}:
-                diff.extra_relations.append((src, dst, ""))
+        exp_endpoints: Counter = Counter((r.source, r.target) for r in expected.relations)
+        act_endpoints: Counter = Counter((r.source, r.target) for r in actual.relations)
+        all_pairs = set(exp_endpoints) | set(act_endpoints)
+        for pair in all_pairs:
+            exp_n = exp_endpoints.get(pair, 0)
+            act_n = act_endpoints.get(pair, 0)
+            if act_n < exp_n:
+                diff.missing_relations.extend([pair] * (exp_n - act_n))
+            elif act_n > exp_n:
+                diff.extra_relations.extend([pair] * (act_n - exp_n))
 
     if "containment" in strict_fields:
         checked.append("containment")
-        exp_membership: dict[str, set[str]] = {}
-        for g in expected.groups:
-            exp_membership[g.id] = set(g.members)
-        act_membership: dict[str, set[str]] = {}
-        for g in actual.groups:
-            act_membership[g.id] = set(g.members)
-        for gid, exp_members in exp_membership.items():
-            act_members = act_membership.get(gid, set())
-            missing = exp_members - act_members
-            extra = act_members - exp_members
-            if missing:
+        # First: check group existence
+        exp_groups_by_id = {g.id: g for g in expected.groups}
+        act_groups_by_id = {g.id: g for g in actual.groups}
+        exp_gids = set(exp_groups_by_id)
+        act_gids = set(act_groups_by_id)
+
+        diff.missing_groups = sorted(exp_gids - act_gids)
+        diff.extra_groups = sorted(act_gids - exp_gids)
+
+        # For existing groups: check membership
+        for gid in exp_gids & act_gids:
+            exp_members = set(exp_groups_by_id[gid].members)
+            act_members = set(act_groups_by_id[gid].members)
+            missing_m = exp_members - act_members
+            extra_m = act_members - exp_members
+            if missing_m:
                 diff.changed_groups.append(
-                    f"group {gid!r}: missing members {sorted(missing)}"
+                    f"group {gid!r}: missing members {sorted(missing_m)}"
                 )
-            if extra:
+            if extra_m:
                 diff.changed_groups.append(
-                    f"group {gid!r}: extra members {sorted(extra)}"
+                    f"group {gid!r}: extra members {sorted(extra_m)}"
+                )
+            # Parent group
+            exp_parent = exp_groups_by_id[gid].parent_id
+            act_parent = act_groups_by_id[gid].parent_id
+            if exp_parent != act_parent:
+                diff.changed_groups.append(
+                    f"group {gid!r}: parent changed from {exp_parent!r} to {act_parent!r}"
                 )
 
     # Sequence-specific: actor order and message order
@@ -238,7 +393,7 @@ def compare_semantic(
         act_set = set(act_ids)
         diff.missing_events = sorted(exp_set - act_set)
         diff.extra_events = sorted(act_set - exp_set)
-        # Check ordering of common events
+        # Check ordering of common events (order is semantically meaningful)
         common_exp = [e.id for e in exp_events if e.id in act_set]
         common_act = [e.id for e in act_events if e.id in exp_set]
         if common_exp != common_act:
@@ -281,6 +436,11 @@ def compare_semantic(
                     diff.changed_relations.append(RelationDiff(
                         r.id, "identifying", exp_id, act_id
                     ))
+
+    # parse check is handled at runner level to produce PARSE_MISMATCH status;
+    # we include it in checked so that report knows it ran.
+    if "parse" in strict_fields:
+        checked.append("parse")
 
     passed = diff.is_empty()
     return SemanticComparisonResult(
