@@ -461,7 +461,7 @@ def dispatch_native(
     if d in _GRAPH_DIRECTIVES:
         from .layout._strategies import _compile_flowchart, RenderOptions
         from .layout._renderer import _extract_diagram_title
-        from .paint import finalized_layout_to_scene
+        from .paint import finalized_layout_to_scene, _tokens_from_theme
         _opts = RenderOptions(faithful_mermaid=request.faithful)
         compiled = _compile_flowchart(
             clean, width_hint, _opts,
@@ -469,7 +469,10 @@ def dispatch_native(
             height_hint=height_hint,
         )
         title = _extract_diagram_title(clean)
-        scene = finalized_layout_to_scene(compiled.layout, diagram_type=d, title=title)
+        scene = finalized_layout_to_scene(
+            compiled.layout, diagram_type=d, title=title,
+            tokens=_tokens_from_theme(request.theme),
+        )
     elif d == "classdiagram":
         scene = _class_scene(clean, direction, width_hint)
     elif d == "timeline":
@@ -500,7 +503,7 @@ def _build_graph_pipeline(request: RenderRequest, diagram_type: str) -> "tuple[S
     """
     from .layout._strategies import _compile_flowchart, RenderOptions
     from .layout._renderer import _extract_diagram_title
-    from .paint import finalized_layout_to_scene
+    from .paint import finalized_layout_to_scene, _tokens_from_theme
 
     _opts = RenderOptions(faithful_mermaid=request.faithful)
     compiled = _compile_flowchart(
@@ -511,7 +514,8 @@ def _build_graph_pipeline(request: RenderRequest, diagram_type: str) -> "tuple[S
         height_hint=request.height_hint,
     )
     title = _extract_diagram_title(request.clean_source)
-    scene = finalized_layout_to_scene(compiled.layout, diagram_type=diagram_type, title=title)
+    tokens = _tokens_from_theme(request.theme)
+    scene = finalized_layout_to_scene(compiled.layout, diagram_type=diagram_type, title=title, tokens=tokens)
     return scene, compiled.validation
 
 

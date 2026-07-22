@@ -170,11 +170,13 @@ def to_html(src: str, *, theme: Theme = None, width_hint: int = 0, faithful: boo
     faithful: when True, preserves declared direction, suppresses icon/legend inference,
         and does not auto-flip direction for aspect ratio.
     """
+    from .layout._parser import _strip_frontmatter
     from .layout._strategies import _dispatch, RenderOptions
     from .themes import render_page
 
+    clean = _strip_frontmatter(src)
     opts = RenderOptions(faithful_mermaid=faithful) if faithful else None
-    fragment = _dispatch(src, None, width_hint, opts=opts)
+    fragment = _dispatch(clean, None, width_hint, opts=opts)
     return render_page(fragment, theme)
 
 
@@ -240,9 +242,20 @@ def to_svg(
 
 
 def to_png(src: str, *, theme: Theme = None, scale: float = 1.0, width_hint: int = 0, faithful: bool = False) -> bytes:
-    """Render a Mermaid source string to PNG bytes (requires playwright)."""
-    resolved = theme if theme is not None else "adaptive-light"
-    html = to_html(src, theme=resolved, width_hint=width_hint, faithful=faithful)
-    from .png import _to_png_from_html_string
+    """Render a Mermaid source string to PNG bytes (requires playwright).
 
-    return _to_png_from_html_string(html, scale=scale)
+    Calls to_svg() first and rasterizes the native SVG string via Playwright
+    page.set_content. Falls back to the HTML render path if to_svg() raises
+    NativeRenderError with phase 'not-implemented' (legacy-only diagram types).
+    """
+    try:
+        svg_str = to_svg(src, theme=theme, width_hint=width_hint, faithful=faithful)
+        from .png import _to_png_from_svg_string
+        return _to_png_from_svg_string(svg_str, scale=scale)
+    except NativeRenderError as _e:
+        if _e.phase == "not-implemented":
+            resolved = theme if theme is not None else "adaptive-light"
+            html = to_html(src, theme=resolved, width_hint=width_hint, faithful=faithful)
+            from .png import _to_png_from_html_string
+            return _to_png_from_html_string(html, scale=scale)
+        raise

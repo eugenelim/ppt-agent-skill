@@ -57,6 +57,42 @@ class _Tokens:
 
 _DEFAULT_TOKENS = _Tokens()
 
+
+def _tokens_from_theme(theme: "str | None") -> _Tokens:
+    """Map a theme name onto _Tokens using the CSS-var palette from themes.py.
+
+    Returns _DEFAULT_TOKENS for None / adaptive / auto (light defaults).
+    Supports "adaptive-light", "light", "adaptive-dark", "dark", or a dict
+    of CSS vars mirroring the THEME_ADAPTIVE_* shape.
+    """
+    from .themes import THEME_ADAPTIVE_DARK, THEME_ADAPTIVE_LIGHT
+
+    if theme in ("dark", "adaptive-dark"):
+        pal: dict = THEME_ADAPTIVE_DARK
+    elif theme in ("light", "adaptive-light"):
+        pal = THEME_ADAPTIVE_LIGHT
+    elif isinstance(theme, dict):
+        pal = theme
+    else:
+        return _DEFAULT_TOKENS
+
+    t = _Tokens()
+    t.bg = pal.get("--bg-primary", t.bg)
+    t.node_fill = pal.get("--card-bg-from", t.node_fill)
+    t.node_stroke = pal.get("--accent-1", t.node_stroke)
+    t.text_fill = pal.get("--text-primary", t.text_fill)
+    t.edge_stroke = pal.get("--text-secondary", t.edge_stroke)
+    t.arrowhead_fill = pal.get("--text-secondary", t.arrowhead_fill)
+    t.label_text = pal.get("--text-primary", t.label_text)
+    return t
+
+
+def _natural_size(scene: "SvgScene") -> "tuple[float, float]":
+    """Return (width, height) from the scene's view_box visible bounds."""
+    vb = scene.view_box
+    return (vb[2], vb[3])
+
+
 # Accent colors for groups — indexed by group position
 _ACCENT_COLORS = [
     ("#3F7D5A", "rgba(63,125,90,0.05)"),
