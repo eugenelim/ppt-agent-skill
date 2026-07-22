@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:39:31.354438+00:00",
+  "capture_timestamp": "2026-07-22T18:05:46.363709+00:00",
   "case_id": "sequence.complex",
   "diagnostics": [],
   "environment": {
@@ -98,5 +98,6 @@
     "ordered_events": [],
     "relations": []
   },
+  "source_sha256": "92ac4a0f85f239742fff49c4a8299f92e43f68bace2a57cfb5f42f042609bc20",
   "status": "PASS"
 }

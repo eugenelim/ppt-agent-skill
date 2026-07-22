@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:38:53.388571+00:00",
+  "capture_timestamp": "2026-07-22T18:05:29.343190+00:00",
   "case_id": "flowchart.self.loops",
   "diagnostics": [],
   "environment": {
@@ -130,5 +130,6 @@
       }
     ]
   },
+  "source_sha256": "b4a12948b2a709456558c62bed2712a24d3d793867a40cef9d1dbe8d017916ac",
   "status": "PASS"
 }

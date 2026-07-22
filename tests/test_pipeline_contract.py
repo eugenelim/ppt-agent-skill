@@ -324,7 +324,7 @@ class TestGalleryInvalidFixtureExitsNonzero:
 
         mermaid_render.validate = _always_invalid
         try:
-            _, has_failures = mod._build_gallery([fixture], tmp_path / "out")
+            _, has_failures, _ = mod._build_gallery([fixture], tmp_path / "out")
         finally:
             mermaid_render.validate = original_validate
 
@@ -616,7 +616,7 @@ class TestGalleryHeaderHasSeparateCounts:
         mmd = tmp_path / "flowchart-header-test.mmd"
         mmd.write_text("flowchart TD\n    A --> B\n", encoding="utf-8")
         out_path = tmp_path / "out"
-        gallery_path, _ = mod._build_gallery([mmd], out_path)
+        gallery_path, _, _ = mod._build_gallery([mmd], out_path)
         # _build_gallery returns the path to index.html (or the gallery dir).
         idx = gallery_path / "index.html" if gallery_path.is_dir() else gallery_path
         html = idx.read_text(encoding="utf-8")

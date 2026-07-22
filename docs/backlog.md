@@ -454,12 +454,13 @@ syntax and returns a `FinalizedLayout` with `NodeLayout.member_layouts` populate
 complete Stage 3 FinalizedLayout authority for classDiagram. Until this exists, classDiagram
 continues using `_class_topology_scene()` with mutable models.
 
-### backlog-mermaid-p3-semantic-tests
+### ~~backlog-mermaid-p3-semantic-tests~~ *(shipped — mermaid-p3 Stage 13)*
 
-**Deferred from `mermaid-p3` Stage 13:** Semantic tests and gallery — replace placeholder-validity
-tests with source-label + node-count + edge-count + shape-role assertions for every supported
-fixture. Fixture capability matrix (27 gallery fixtures). SVG-to-PowerPoint compatibility for every
-supported type. Oracle metrics comparison. Complete gallery with provenance metadata.
+Task A: parametrized registry semantic assertions (source-label/node-count/shape-role) for all
+PARTIAL/FULL directives. Task B: fixture capability matrix (22 fixtures, 19 types). Task C:
+SVG-to-PowerPoint compat via SvgConverter for all PARTIAL/FULL types. Task D: gallery provenance
+metadata (diagram_type, renderer_backend, geometry, render, timestamp_utc) written to metadata.json.
+Task E: oracle source_sha256 added to all 24 case JSONs via capture-reference.
 
 ### backlog-mindmap-tidy-tree
 
@@ -472,9 +473,10 @@ Radial mode remains unchanged when `layout: tidy-tree` is absent.
 
 ## mermaid-fidelity-hardening
 
-### mmdc-oracle-recapture
+### ~~mmdc-oracle-recapture~~ *(shipped — mermaid-p3 Stage 13 Task E)*
 
-**Deferred from `mermaid-fidelity-hardening` ACs 18–19:** Re-run `capture-reference` with mmdc available and commit new oracle JSON that includes `source_sha256` fields. Until recaptured, oracle observations don't carry hashes and stale-oracle detection is inert on real data. Unblocked when mmdc/Node.js/Playwright are available in CI or a one-off runner.
+24 case JSONs recaptured with mmdc 11.15.0; all include `source_sha256`.
+`mermaid-fidelity-hardening` ACs 18–19 marked `[x]`.
 
 ### mmdc-geometry-capture
 

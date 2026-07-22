@@ -44,8 +44,8 @@ infrastructure-ready but deferred to a follow-on mmdc-access pass.
 - [ ] AC15: Connector paths sampled (deferred: browser-geometry-capture)
 - [ ] AC16: Scored metrics use actual measured geometry (deferred: mmdc-geometry-capture)
 - [x] AC17: Native clipping/overlap/containment quality checks run on real SVG output
-- [ ] AC18: All 13 active cases have fresh oracle observations (deferred: mmdc-oracle-recapture)
-- [ ] AC19: All active observations include `source_sha256`; stale oracle detected (deferred: mmdc-oracle-recapture)
+- [x] AC18: All 13 active cases have fresh oracle observations — 24 cases recaptured with mmdc 11.15.0
+- [x] AC19: All active observations include `source_sha256`; stale oracle detected — recapture via mermaid-p3 Stage 13
 - [ ] AC20: Exact Mermaid/mmdc/Node/Playwright/Chromium provenance (deferred: browser-probing)
 - [x] AC21: Oracle capture is transactional (temp dir → validate → atomically replace)
 - [x] AC22: Active determinism runs use only successfully rendered active cases

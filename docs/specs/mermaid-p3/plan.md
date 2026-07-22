@@ -296,14 +296,30 @@ Done when:
   - docs/backlog.md `backlog-mermaid-p3-type-migrations` entry marked complete
 Depends on: Task 16
 
-## Deferred tasks (Stages 7-13 — separate loops)
-See docs/backlog.md entries:
-- backlog-mermaid-p3-type-migrations (Stage 6 twelve placeholder types)
-- backlog-mindmap-tidy-tree (Stage 7 mind map tidy-tree)
-- backlog-mermaid-p3-timeline (Stage 8 timeline completion)
-- backlog-mermaid-p3-architecture (Stage 9 architecture semantics)
-- backlog-mermaid-p3-c4 (Stage 10 C4 completion)
-- backlog-mermaid-p3-state (Stage 11 state diagrams)
-- backlog-mermaid-p3-infra (Stage 12 themes/faithful/sizing/PNG + to_html/validate wiring)
+## Deferred tasks (Stages 7-12 — implemented in separate loops)
+Previously deferred, now complete:
+- backlog-mermaid-p3-type-migrations (Stage 6 twelve placeholder types) ✓
+- backlog-mindmap-tidy-tree (Stage 7 mind map tidy-tree) ✓
+- backlog-mermaid-p3-timeline (Stage 8 timeline completion) ✓
+- backlog-mermaid-p3-architecture (Stage 9 architecture semantics) ✓
+- backlog-mermaid-p3-c4 (Stage 10 C4 completion) ✓
+- backlog-mermaid-p3-state (Stage 11 state diagrams) ✓
+- backlog-mermaid-p3-infra (Stage 12 themes/faithful/sizing/PNG + to_html/validate wiring) ✓
+
+Still deferred (outside Stage 13 scope):
 - backlog-mermaid-p3-class-compiler (classDiagram FinalizedLayout compiler)
-- backlog-mermaid-p3-semantic-tests (Stage 13 semantic tests + gallery)
+
+## Task 13: Semantic tests and gallery (Stage 13)
+Verification: TDD + goal-based
+Depends on: all previous tasks complete
+Tests:
+  - Task A: _REGISTRY_SEMANTIC_PARAMS in test_native_renderer_capabilities.py — parameterized
+    over every PARTIAL/FULL registry entry; source_label_present, node_count, shape_role
+  - Task B: _FIXTURE_MATRIX — 22 gallery fixtures across 19 diagram types
+  - Task C: test_svg_pptx_compat.py — SVG embed path via SvgConverter; no crash, zero errors
+  - Task D: fixture_results in compare_gallery.py metadata.json; test_compare_gallery.py asserts
+  - Task E: oracle cases carry source_sha256 after capture-reference recapture
+Done when:
+  - pytest tests/ -x -q passes
+  - spec.md Stage 13 marked [x]
+  - spec Status updated to "Done (Stages 0-13)"

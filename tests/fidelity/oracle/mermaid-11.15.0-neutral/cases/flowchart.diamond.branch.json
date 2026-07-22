@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:38:10.493367+00:00",
+  "capture_timestamp": "2026-07-22T18:05:12.414557+00:00",
   "case_id": "flowchart.diamond.branch",
   "diagnostics": [],
   "environment": {
@@ -206,5 +206,6 @@
       }
     ]
   },
+  "source_sha256": "af71e8d59750fd570d415bc2ab0ce67f383bab5456afce845957e19a3693baec",
   "status": "PASS"
 }

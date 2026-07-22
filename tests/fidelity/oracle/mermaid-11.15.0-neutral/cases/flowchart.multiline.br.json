@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:38:44.933586+00:00",
+  "capture_timestamp": "2026-07-22T18:05:25.169056+00:00",
   "case_id": "flowchart.multiline.br",
   "diagnostics": [],
   "environment": {
@@ -110,5 +110,6 @@
       }
     ]
   },
+  "source_sha256": "9c1a16396bea08b10c066fc13521bce55e32f8d2feff839a58ca04da35af7037",
   "status": "PASS"
 }

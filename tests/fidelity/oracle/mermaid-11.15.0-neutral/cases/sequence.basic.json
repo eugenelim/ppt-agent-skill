@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:39:04.232426+00:00",
+  "capture_timestamp": "2026-07-22T18:05:33.603986+00:00",
   "case_id": "sequence.basic",
   "diagnostics": [],
   "environment": {
@@ -55,30 +55,12 @@
   "semantic": {
     "diagram_type": "sequence",
     "direction": null,
-    "entities": [
-      {
-        "attributes": {},
-        "id": "Client",
-        "kind": "participant",
-        "label": "Client",
-        "order": 0,
-        "parent_id": null,
-        "shape": null
-      },
-      {
-        "attributes": {},
-        "id": "Server",
-        "kind": "participant",
-        "label": "Server",
-        "order": 1,
-        "parent_id": null,
-        "shape": null
-      }
-    ],
+    "entities": [],
     "groups": [],
     "metadata": {},
     "ordered_events": [],
     "relations": []
   },
+  "source_sha256": "b5ed26cc4d1319ae88fcc4e6d6c248686b4a155558d1ed546bc9a0444eb77fe1",
   "status": "PASS"
 }

@@ -455,7 +455,7 @@ def _atomic_write_gallery(out_dir: Path, *, raise_mid_write: bool = False) -> No
         raise
 
 
-def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0, strict: bool = False) -> "tuple[Path, bool]":
+def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0, strict: bool = False) -> "tuple[Path, bool, list[dict]]":
     import shutil
 
     # Build into a temp directory; atomically replace dest at the end.
@@ -473,7 +473,7 @@ def _build_gallery_into(
     dest_dir: Path,
     width_hint: int,
     strict: bool = False,
-) -> "tuple[Path, bool]":
+) -> "tuple[Path, bool, list[dict]]":
     import shutil
     from collections import defaultdict
     from mermaid_render.layout._geometry import ValidationResult
@@ -485,9 +485,12 @@ def _build_gallery_into(
     # vr: ValidationResult with four-status lanes.
     # ours_html is NOT held in memory — written to disk, re-read per section.
     type_results: dict[str, list[tuple]] = defaultdict(list)
+    # Per-fixture provenance records (Task D).
+    fixture_results: list[dict] = []
 
     sorted_files = sorted(mmd_files)
     n_total = len(sorted_files)
+    run_timestamp = datetime.datetime.now(datetime.UTC).isoformat()
     for i, mmd_path in enumerate(sorted_files):
         name = mmd_path.stem
         src = mmd_path.read_text(encoding="utf-8").strip()
@@ -518,6 +521,14 @@ def _build_gallery_into(
 
         dtype = _diagram_type(name)
         type_results[dtype].append((name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
+        fixture_results.append({
+            "path": str(mmd_path.relative_to(ROOT)) if mmd_path.is_relative_to(ROOT) else str(mmd_path),
+            "diagram_type": dtype,
+            "renderer_backend": vr.renderer_backend,
+            "geometry": vr.geometry,
+            "render": vr.render,
+            "timestamp_utc": run_timestamp,
+        })
 
     # Build nav — requires all results, so collected first.
     nav_parts: list[str] = []
@@ -711,7 +722,7 @@ def _build_gallery_into(
         shutil.rmtree(dest_dir)
     os.rename(str(tmp_dir), str(dest_dir))
 
-    return dest_dir / "index.html", has_failures
+    return dest_dir / "index.html", has_failures, fixture_results
 
 
 def main() -> None:
@@ -783,7 +794,12 @@ def main() -> None:
     print(f"Metadata: {meta_path}")
 
     print(f"Building comparison gallery for {len(mmd_files)} diagram(s)...")
-    index_path, has_failures = _build_gallery(mmd_files, out_dir, width_hint=args.width_hint, strict=args.strict)
+    index_path, has_failures, fixture_results = _build_gallery(
+        mmd_files, out_dir, width_hint=args.width_hint, strict=args.strict
+    )
+    # Add per-fixture provenance to metadata (Task D).
+    metadata["fixture_results"] = fixture_results
+    meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(f"Gallery: file://{index_path}")
 
     if args.open:
