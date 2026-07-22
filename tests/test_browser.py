@@ -105,47 +105,107 @@ class TestGetBrowserErrorWrapping:
         """Non-'Executable doesn't exist' Playwright errors are converted to RuntimeError."""
         if not _browser._PLAYWRIGHT_AVAILABLE:
             pytest.skip("playwright not importable")
-        # Patch chromium.launch to raise a non-install error
-        fake_browser = mock.MagicMock()
         fake_chromium = mock.MagicMock()
         fake_chromium.launch.side_effect = Exception("some unexpected crash")
         fake_pw = mock.MagicMock()
         fake_pw.chromium = fake_chromium
 
         with mock.patch("_browser.sync_playwright") as mock_sp:
-            mock_sp.return_value.__enter__.return_value = fake_pw
-            mock_sp.return_value.__exit__.return_value = False
+            mock_sp.return_value.start.return_value = fake_pw
             with pytest.raises(RuntimeError, match="Chromium launch failed"):
                 with _browser.get_browser():
                     pass
 
-    def test_lazy_install_triggered_on_missing_executable(self):
-        """'Executable doesn't exist' triggers playwright install and retries launch."""
+    def test_fail_fast_on_missing_executable(self):
+        """'Executable doesn't exist' raises RuntimeError immediately — no install attempt."""
+        if not _browser._PLAYWRIGHT_AVAILABLE:
+            pytest.skip("playwright not importable")
+        fake_chromium = mock.MagicMock()
+        fake_chromium.launch.side_effect = Exception("Executable doesn't exist")
+        fake_pw = mock.MagicMock()
+        fake_pw.chromium = fake_chromium
+
+        with mock.patch("_browser.sync_playwright") as mock_sp:
+            mock_sp.return_value.start.return_value = fake_pw
+            with pytest.raises(RuntimeError, match="playwright install chromium"):
+                with _browser.get_browser():
+                    pass
+
+
+class TestBrowserSession:
+    """BrowserSession owns one browser for multi-render use."""
+
+    def test_browser_session_lifecycle(self):
+        """BrowserSession calls launch once and close once."""
         if not _browser._PLAYWRIGHT_AVAILABLE:
             pytest.skip("playwright not importable")
         fake_browser = mock.MagicMock()
         fake_chromium = mock.MagicMock()
-        # First call raises the install-trigger error; second succeeds.
-        fake_chromium.launch.side_effect = [
-            Exception("Executable doesn't exist"),
-            fake_browser,
-        ]
+        fake_chromium.launch.return_value = fake_browser
         fake_pw = mock.MagicMock()
         fake_pw.chromium = fake_chromium
 
-        with mock.patch("_browser.sync_playwright") as mock_sp, \
-             mock.patch("_browser.subprocess.run") as mock_run:
-            mock_sp.return_value.__enter__.return_value = fake_pw
-            mock_sp.return_value.__exit__.return_value = False
-            mock_run.return_value = mock.MagicMock(returncode=0)
-            with _browser.get_browser() as b:
-                assert b is fake_browser
-            # install command was issued exactly once
-            assert mock_run.call_count == 1
-            install_cmd = mock_run.call_args[0][0]
-            assert "playwright" in install_cmd
-            assert "install" in install_cmd
-            assert "chromium" in install_cmd
+        with mock.patch("_browser.sync_playwright") as mock_sp:
+            mock_sp.return_value.start.return_value = fake_pw
+            with _browser.BrowserSession() as session:
+                assert session._browser is fake_browser
+            fake_chromium.launch.assert_called_once()
+            fake_browser.close.assert_called_once()
+            fake_pw.stop.assert_called_once()
+
+    def test_browser_session_reuses_browser_across_renders(self, tmp_path):
+        """Two render_to_png calls use new_context twice but chromium.launch once."""
+        if not _browser._PLAYWRIGHT_AVAILABLE:
+            pytest.skip("playwright not importable")
+        html = tmp_path / "t.html"
+        html.write_text("<html><body>hi</body></html>")
+
+        fake_page = mock.MagicMock()
+        fake_page.screenshot.return_value = b"\x89PNG\r\n"
+        fake_context = mock.MagicMock()
+        fake_context.new_page.return_value = fake_page
+        fake_browser = mock.MagicMock()
+        fake_browser.new_context.return_value = fake_context
+        fake_chromium = mock.MagicMock()
+        fake_chromium.launch.return_value = fake_browser
+        fake_pw = mock.MagicMock()
+        fake_pw.chromium = fake_chromium
+
+        with mock.patch("_browser.sync_playwright") as mock_sp:
+            mock_sp.return_value.start.return_value = fake_pw
+            with _browser.BrowserSession() as session:
+                session.render_to_png(html)
+                session.render_to_png(html)
+
+        fake_chromium.launch.assert_called_once()
+        assert fake_browser.new_context.call_count == 2
+
+    def test_browser_session_page_closes_after_render_failure(self, tmp_path):
+        """page.close and context.close are called even when goto raises."""
+        if not _browser._PLAYWRIGHT_AVAILABLE:
+            pytest.skip("playwright not importable")
+        html = tmp_path / "t.html"
+        html.write_text("<html><body>hi</body></html>")
+
+        fake_page = mock.MagicMock()
+        fake_page.goto.side_effect = RuntimeError("network error")
+        fake_context = mock.MagicMock()
+        fake_context.new_page.return_value = fake_page
+        fake_browser = mock.MagicMock()
+        fake_browser.new_context.return_value = fake_context
+        fake_chromium = mock.MagicMock()
+        fake_chromium.launch.return_value = fake_browser
+        fake_pw = mock.MagicMock()
+        fake_pw.chromium = fake_chromium
+
+        with mock.patch("_browser.sync_playwright") as mock_sp:
+            mock_sp.return_value.start.return_value = fake_pw
+            with _browser.BrowserSession() as session:
+                with pytest.raises(RuntimeError):
+                    session.render_to_png(html)
+
+        fake_page.close.assert_called_once()
+        fake_context.close.assert_called_once()
 
 
 class TestDegradationGuard:

@@ -143,6 +143,28 @@ python tools/smoke_skill.py     # Step 3/4 end-to-end smoke (validators + visual
 python tools/check_skill.py     # doc↔code contract-drift check — run after editing SKILL.md / prompts / validators
 ```
 
+**Mermaid test tiers** (cost-aware; run the narrowest tier that covers your change):
+
+```bash
+# Fast / default — zero browsers, zero mmdc, zero subprocess renders
+pytest -m "not browser and not snapshot and not external_reference and not isolation" tests/
+
+# Browser tests (Playwright, not snapshots) — needs: playwright install chromium
+pytest -m "browser and not snapshot" tests/
+
+# Snapshot regression — one browser session for all fixtures; do NOT combine with -n
+pytest -m snapshot tests/test_snapshots.py
+
+# Oracle — committed data only (no external tools required)
+pytest tests/test_oracle.py -m "not external_reference"
+
+# Oracle — live differential (requires: npm i -g @mermaid-js/mermaid-cli)
+pytest tests/test_oracle.py -m external_reference
+
+# All tests (intentional)
+pytest tests/
+```
+
 <!-- No linter or build step is configured: this is a Python script pipeline,
      not a packaged build. The render pipeline (html_packager → html2svg →
      svg2pptx) is runtime output, not a repo build artifact — see

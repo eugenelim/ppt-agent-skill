@@ -187,6 +187,7 @@ _DIFF_FIXTURES = [
 ]
 
 
+@pytest.mark.external_reference
 @pytest.mark.skipif(
     not _HAVE_MMDC,
     reason="differential mode needs mmdc (npm i -g @mermaid-js/mermaid-cli)",

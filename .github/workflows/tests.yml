@@ -29,9 +29,11 @@ jobs:
           python-version: "3.13"
           cache: "pip"
       - run: pip install -r requirements-dev.txt
-      # Differential mode (vs real mermaid.js via mermaidx) + block-safe
-      # self-consistency. mermaidx is declared in requirements-dev.txt so the
-      # differential mode actually runs here instead of skipping.
+      # Self-consistency oracle (no external tools required): every edge endpoint
+      # our emitter draws must resolve to a declared node. Runs for all fixture types.
+      # Differential mode (vs real mermaid.js via mmdc) requires the mmdc npm CLI
+      # binary (@mermaid-js/mermaid-cli); it is marked @pytest.mark.external_reference
+      # and skips cleanly when the binary is absent.
       - run: python3 -m pytest tests/test_oracle.py -q
 
   mermaid-render-guards:
@@ -51,6 +53,8 @@ jobs:
       # top-level CLI smoke tests (playwright-free subcommands).
       # test_svg2pptx_shapes needs lxml + python-pptx (requirements.txt)
       # so it runs in render-scripts, not here.
+      # test_mermaid_render_cli.py includes test_svg_stdout which uses the native
+      # SVG backend (no Playwright required for supported diagram types like flowchart).
       - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py tests/test_mermaid_render_cli.py -q
       - run: python3 tests/test_icon_search.py
 
@@ -66,14 +70,16 @@ jobs:
       - run: pip install -r requirements.txt
       - run: pip install pytest
       - run: playwright install chromium --with-deps
-      # Security helpers, error-wrapping, lazy-provisioning, and behavioral
+      # Security helpers, fail-fast Chromium error wrapping, and behavioral
       # degradation tests (test_browser.py); Playwright-contract assertions and
       # the out-of-root image confinement test (test_html2svg_tmp_isolation.py);
-      # source-level contract checks for html2png and build_pdf; top-level CLI
-      # svg/png subcommand smoke tests (test_mermaid_render_cli_playwright.py).
+      # source-level contract checks for html2png and build_pdf; CLI png subprocess
+      # smoke test (test_mermaid_render_cli_playwright.py — svg test is in the
+      # browser-free job above); resource-contract tests including BrowserSession
+      # lifecycle and flock (test_resource_contracts.py).
       # Snapshot pixel-comparison tests are skipped — baselines are captured on
       # macOS and cross-platform pixel-exact comparison is unreliable in CI.
-      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py tests/test_svg2pptx_shapes.py tests/test_mermaid_render_cli_playwright.py -q
+      - run: python3 -m pytest tests/test_browser.py tests/test_html2svg_tmp_isolation.py tests/test_html2png_cwd.py tests/test_build_pdf.py tests/test_svg2pptx_shapes.py tests/test_mermaid_render_cli_playwright.py tests/test_resource_contracts.py -q
 
   fidelity-unit:
     name: fidelity harness unit tests (no browser)

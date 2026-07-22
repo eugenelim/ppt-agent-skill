@@ -1,10 +1,20 @@
-"""Smoke tests for python3 -m mermaid_render svg/png subcommands (requires Playwright)."""
+"""Subprocess smoke tests for python3 -m mermaid_render png subcommand (requires Playwright).
+
+The svg subcommand uses the native pure-Python backend for supported diagram types
+(e.g. flowchart) and does NOT require Playwright; that test lives in
+test_mermaid_render_cli.py as a browser-free in-process test.
+
+The png subcommand always needs Playwright; it is tested here via subprocess to
+verify process-boundary wiring (import isolation + real Chromium path).
+"""
 from __future__ import annotations
 
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
 
@@ -19,12 +29,8 @@ def _run(*args):
     )
 
 
-def test_svg_stdout():  # STUB: AC6
-    r = _run("svg", "--source", "flowchart LR\n  A --> B")
-    assert r.returncode == 0
-    assert b"<svg" in r.stdout
-
-
+@pytest.mark.browser
+@pytest.mark.isolation
 def test_png_output_file(tmp_path):  # STUB: AC7
     out = tmp_path / "out.png"
     r = _run("png", "--source", "flowchart LR\n  A --> B", "--output", str(out))
