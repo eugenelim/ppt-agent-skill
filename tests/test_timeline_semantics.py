@@ -8,7 +8,7 @@ import pytest
 from scripts.mermaid_render.layout.timeline import (
     layout_timeline_scene,
     _parse_timeline_source,
-    _COL_W, _EVENT_H, _PERIOD_H,
+    _COL_W,
 )
 from scripts.mermaid_render.scene import (
     SceneCircle, SceneRoundedRect, SceneLine, SceneText, SvgScene,
@@ -102,8 +102,21 @@ class TestLayoutTimelineScene:
         assert layout_timeline_scene(SIMPLE).diagram_type == "timeline"
 
     def test_width_hint_respected(self):
+        # width_hint is an output-maximum constraint: canvas must not exceed it
         scene = layout_timeline_scene(SIMPLE, width_hint=1000)
-        assert scene.width >= 1000
+        assert scene.width <= 1000
+
+    def test_width_hint_zero_is_content_tight(self):
+        # width_hint=0 means unconstrained: canvas == natural content width
+        scene_no_hint = layout_timeline_scene(SIMPLE)
+        scene_large_hint = layout_timeline_scene(SIMPLE, width_hint=9999)
+        # Both should produce the same content-tight width
+        assert scene_no_hint.width == scene_large_hint.width
+
+    def test_width_hint_constrains_below_natural(self):
+        # width_hint smaller than natural width: canvas is capped at width_hint
+        scene = layout_timeline_scene(SIMPLE, width_hint=200)
+        assert scene.width <= 200
 
     def test_has_edges_layer_spine(self):
         scene = layout_timeline_scene(SIMPLE)
@@ -234,3 +247,87 @@ class TestLayoutTimelineScene:
         # Spine: y1 == y2 (horizontal)
         spine_candidates = [l for l in lines if l.y1 == l.y2]
         assert len(spine_candidates) >= 1
+
+
+class TestDisableMulticolor:
+    """disableMulticolor: all section bands use the same neutral color."""
+
+    SECTIONS_SRC = """\
+timeline
+    title Demo
+    section Alpha
+    2020 : A
+    section Beta
+    2021 : B
+    section Gamma
+    2022 : C
+"""
+
+    def _band_colors(self, scene: "SvgScene") -> list[str]:
+        bounds = scene.get_layer(LAYER_BOUNDARIES)
+        colors = []
+        for el in bounds:
+            if isinstance(el, SceneRoundedRect) and el.paint and el.paint.fill:
+                colors.append(el.paint.fill.color)
+        return colors
+
+    def test_multicolor_default_uses_distinct_colors(self):
+        scene = layout_timeline_scene(self.SECTIONS_SRC)
+        colors = self._band_colors(scene)
+        assert len(colors) >= 2
+        # Default: at least two distinct colors
+        assert len(set(colors)) > 1
+
+    def test_disable_multicolor_uses_single_color(self):
+        scene = layout_timeline_scene(
+            self.SECTIONS_SRC,
+            diagram_config={"timeline": {"disableMulticolor": True}},
+        )
+        colors = self._band_colors(scene)
+        assert len(colors) >= 2
+        # All bands use the same color
+        assert len(set(colors)) == 1
+
+    def test_disable_multicolor_false_is_default(self):
+        scene_default = layout_timeline_scene(self.SECTIONS_SRC)
+        scene_false = layout_timeline_scene(
+            self.SECTIONS_SRC,
+            diagram_config={"timeline": {"disableMulticolor": False}},
+        )
+        # Both should produce the same multi-color pattern
+        assert self._band_colors(scene_default) == self._band_colors(scene_false)
+
+
+class TestMeasuredHeights:
+    """Heights are derived from text measurement, not fixed constants."""
+
+    def test_period_chips_have_positive_height(self):
+        scene = layout_timeline_scene(SIMPLE)
+        nodes = scene.get_layer(LAYER_NODES)
+        period_rects = [el for el in nodes if isinstance(el, SceneRoundedRect)
+                        and "timeline-period" in (el.css_classes or ())]
+        for r in period_rects:
+            assert r.h > 0
+
+    def test_event_cards_have_positive_height(self):
+        scene = layout_timeline_scene(MULTI_EVENT)
+        nodes = scene.get_layer(LAYER_NODES)
+        event_rects = [el for el in nodes if isinstance(el, SceneRoundedRect)
+                       and "timeline-event" in (el.css_classes or ())]
+        assert event_rects, "No event cards found"
+        for r in event_rects:
+            assert r.h > 0
+
+    def test_canvas_height_exceeds_content_minimum(self):
+        # Canvas height must contain title + section + spine + periods + events
+        scene = layout_timeline_scene(WITH_SECTIONS)
+        # Rough lower bound: at least 80px for a titled, sectioned, evented diagram
+        assert scene.height > 80
+
+    def test_canvas_width_is_content_tight(self):
+        # Without width_hint, canvas = natural content width (no artificial inflation)
+        from scripts.mermaid_render.layout.timeline import _COL_W, _COL_GAP, _PAD_H
+        scene = layout_timeline_scene(SIMPLE)
+        n = 3  # SIMPLE has 3 periods
+        expected_w = _PAD_H * 2 + n * _COL_W + (n - 1) * _COL_GAP
+        assert scene.width == float(expected_w)
