@@ -2371,6 +2371,178 @@ def _layout_pie(src: str, direction: str, width_hint: int) -> str:
 
     parts.append('</div>')
     return "\n".join(parts)
+
+
+# ── T3: sankey-beta ─────────────────────────────────────────────────────────────
+
+_SANKEY_LINK_CAP = 200
+
+
+def _layout_sankey(src: str, direction: str, width_hint: int) -> str:
+    """sankey-beta: CSV ``source,target,value`` flows rendered as a Sankey diagram.
+
+    Nodes are laid out in columns by longest-path depth; each node's height is
+    proportional to its throughput (max of in/out flow). Links are drawn as
+    cubic-Bézier ribbons whose thickness encodes the flow value, tinted by the
+    source node's colour. A leading ``source,target,value`` header row (non-numeric
+    third column) is skipped automatically.
+    """
+    import csv as _csv
+    from collections import defaultdict
+
+    # ── parse CSV rows (quote-aware; skips comments and the optional header) ───
+    raw_lines = [
+        ln for ln in _directive_content(src)
+        if ln.strip() and not ln.strip().startswith(("%%", "//"))
+    ]
+    links: list[tuple[str, str, float]] = []
+    order: list[str] = []
+    seen: set[str] = set()
+
+    def _see(name: str) -> None:
+        if name not in seen:
+            seen.add(name)
+            order.append(name)
+
+    for row in _csv.reader(raw_lines):
+        if len(row) < 3:
+            continue
+        s, t, v_raw = row[0].strip(), row[1].strip(), row[2].strip()
+        if not s or not t:
+            continue
+        try:
+            v = float(v_raw)
+        except ValueError:
+            continue  # skips the "source,target,value" header line
+        if v <= 0:
+            continue
+        _see(s)
+        _see(t)
+        links.append((s, t, v))
+        if len(links) >= _SANKEY_LINK_CAP:
+            break
+
+    if not links:
+        raise ValueError("No sankey links found (expected 'source,target,value' rows).")
+
+    # ── depth (column) via longest-path relaxation ────────────────────────────
+    depth: dict[str, int] = {n: 0 for n in order}
+    for _ in range(len(order)):
+        changed = False
+        for s, t, _v in links:
+            if depth[t] < depth[s] + 1:
+                depth[t] = depth[s] + 1
+                changed = True
+        if not changed:
+            break  # also terminates cleanly on the iteration cap for cyclic input
+
+    incoming: dict[str, float] = defaultdict(float)
+    outgoing: dict[str, float] = defaultdict(float)
+    for s, t, v in links:
+        outgoing[s] += v
+        incoming[t] += v
+    value = {n: max(incoming[n], outgoing[n], 0.0) for n in order}
+
+    cols: dict[int, list[str]] = defaultdict(list)
+    for n in order:
+        cols[depth[n]].append(n)
+    n_cols = max(depth.values()) + 1
+
+    # ── geometry ──────────────────────────────────────────────────────────────
+    PAD = 20
+    NODE_W = 16
+    NODE_GAP = 14
+    canvas_w = width_hint or 760
+    canvas_h = 460
+    step = (canvas_w - 2 * PAD - NODE_W) / (n_cols - 1) if n_cols > 1 else 0.0
+
+    col_totals = {c: sum(value[n] for n in ns) for c, ns in cols.items()}
+    max_units = max(col_totals.values()) if col_totals else 1.0
+    max_gaps = max((len(ns) - 1) for ns in cols.values()) if cols else 0
+    avail_h = canvas_h - 2 * PAD - max_gaps * NODE_GAP
+    scale = (avail_h / max_units) if max_units > 0 else 1.0
+
+    node_h = {n: max(3.0, value[n] * scale) for n in order}
+    node_x: dict[str, float] = {}
+    node_y: dict[str, float] = {}
+    color: dict[str, str] = {n: _PIE_ACCENTS[i % len(_PIE_ACCENTS)] for i, n in enumerate(order)}
+
+    for c in sorted(cols):
+        col_nodes = cols[c]
+        total = sum(node_h[n] for n in col_nodes) + NODE_GAP * (len(col_nodes) - 1)
+        y = PAD + max(0.0, (canvas_h - 2 * PAD - total) / 2)
+        x = PAD + c * step
+        for n in col_nodes:
+            node_x[n] = x
+            node_y[n] = y
+            y += node_h[n] + NODE_GAP
+
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    parts: list[str] = []
+    parts.append(
+        f'<div class="diagram mermaid-layout" style="'
+        f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
+    )
+    parts.append(
+        f'<svg style="position:absolute;inset:0;width:{canvas_w}px;height:{canvas_h}px;'
+        f'overflow:visible;pointer-events:none;">'
+    )
+
+    # ── ribbons (drawn first, behind the node bars) ───────────────────────────
+    out_off: dict[str, float] = defaultdict(float)
+    in_off: dict[str, float] = defaultdict(float)
+    for s, t, v in links:
+        th = max(1.0, v * scale)
+        x0 = node_x[s] + NODE_W
+        y0 = node_y[s] + out_off[s]
+        x1 = node_x[t]
+        y1 = node_y[t] + in_off[t]
+        out_off[s] += th
+        in_off[t] += th
+        xm = (x0 + x1) / 2
+        d = (
+            f"M {x0:.2f},{y0:.2f} "
+            f"C {xm:.2f},{y0:.2f} {xm:.2f},{y1:.2f} {x1:.2f},{y1:.2f} "
+            f"L {x1:.2f},{y1 + th:.2f} "
+            f"C {xm:.2f},{y1 + th:.2f} {xm:.2f},{y0 + th:.2f} {x0:.2f},{y0 + th:.2f} Z"
+        )
+        parts.append(
+            f'<path d="{d}" fill="{color[s]}" fill-opacity="0.4" '
+            f'data-sankey-link="{_h(s)}→{_h(t)}"/>'
+        )
+
+    # ── node bars ─────────────────────────────────────────────────────────────
+    for n in order:
+        parts.append(
+            f'<rect x="{node_x[n]:.2f}" y="{node_y[n]:.2f}" '
+            f'width="{NODE_W}" height="{node_h[n]:.2f}" rx="2" '
+            f'fill="{color[n]}" data-sankey-node="{_h(n)}"/>'
+        )
+    parts.append('</svg>')
+
+    # ── node labels (right of node, except last column labels sit to the left) ─
+    max_depth = n_cols - 1
+    for n in order:
+        left_side = depth[n] == max_depth and max_depth > 0
+        ly = node_y[n] + node_h[n] / 2 - 7
+        if left_side:
+            style = (
+                f'right:{canvas_w - node_x[n] + 6:.0f}px;text-align:right;'
+            )
+        else:
+            style = f'left:{node_x[n] + NODE_W + 6:.0f}px;text-align:left;'
+        parts.append(
+            f'<span style="position:absolute;top:{ly:.0f}px;{style}'
+            f'font-size:10px;font-weight:600;white-space:nowrap;'
+            f'color:var(--node-fg,var(--text-primary,#191A17));'
+            f'font-family:{_lf};pointer-events:none;">'
+            f'{_h(n)}</span>'
+        )
+
+    parts.append('</div>')
+    return "\n".join(parts)
+
+
 # ── T3: xychart-beta ──────────────────────────────────────────────────────────
 
 def _layout_xychart(src: str, direction: str, width_hint: int) -> str:
@@ -4703,8 +4875,10 @@ def _dispatch(
         return _layout_requirement(clean, direction, width_hint)
     if d == "gitgraph":
         return _layout_gitgraph(clean, direction, width_hint)
+    if d == "sankey-beta":
+        return _layout_sankey(clean, direction, width_hint)
 
-    if d in ("sankey-beta", "zenuml"):
+    if d == "zenuml":
         raise ValueError(
             f"Mermaid directive '{directive}' is not supported by the pure-Python renderer. "
             "Use mmdc (mermaid-js CLI) for this diagram type."
