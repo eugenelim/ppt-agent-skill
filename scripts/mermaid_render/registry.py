@@ -199,19 +199,19 @@ RENDERER_REGISTRY: dict[str, RendererCapability] = {
     "timeline":          _make("timeline",            "experimental", builder=_build_timeline),
     "mindmap":           _make("mindmap",             "experimental", builder=_build_mindmap),
 
-    # ── Legacy-only (HTML/Playwright renderer handles these) ──────────────────
-    "sequencediagram":   _make("sequencediagram",    "legacy-only"),
-    "erdiagram":         _make("erdiagram",           "legacy-only"),
-    "gantt":             _make("gantt",               "legacy-only"),
-    "quadrantchart":     _make("quadrantchart",       "legacy-only"),
-    "pie":               _make("pie",                 "legacy-only"),
-    "xychart-beta":      _make("xychart-beta",        "legacy-only"),
-    "block-beta":        _make("block-beta",          "legacy-only"),
-    "packet-beta":       _make("packet-beta",         "legacy-only"),
-    "kanban":            _make("kanban",              "legacy-only"),
-    "journey":           _make("journey",             "legacy-only"),
-    "requirementdiagram": _make("requirementdiagram", "legacy-only"),
-    "gitgraph":          _make("gitgraph",            "legacy-only"),
+    # ── Experimental (Stage 6 PARTIAL builders; native output may vary) ──────────
+    "sequencediagram":   _make("sequencediagram",    "experimental"),
+    "erdiagram":         _make("erdiagram",           "experimental"),
+    "gantt":             _make("gantt",               "experimental"),
+    "quadrantchart":     _make("quadrantchart",       "experimental"),
+    "pie":               _make("pie",                 "experimental"),
+    "xychart-beta":      _make("xychart-beta",        "experimental"),
+    "block-beta":        _make("block-beta",          "experimental"),
+    "packet-beta":       _make("packet-beta",         "experimental"),
+    "kanban":            _make("kanban",              "experimental"),
+    "journey":           _make("journey",             "experimental"),
+    "requirementdiagram": _make("requirementdiagram", "experimental"),
+    "gitgraph":          _make("gitgraph",            "experimental"),
 
     # ── Unsupported (no DOM fallback either; requires dedicated engine) ───────
     "sankey-beta":       _make("sankey-beta",         "unsupported"),

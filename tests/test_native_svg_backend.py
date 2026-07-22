@@ -173,10 +173,10 @@ class TestStateDiagram:
         assert "Idle" in svg or "Running" in svg
 
 
-# ── Legacy-only types — must raise NativeRendererUnavailable ──────────────────
+# ── Stage 6 types — now produce SVG natively ─────────────────────────────────
 
-class TestLegacyOnlyTypes:
-    """LEGACY_ONLY types raise NativeRendererUnavailable from dispatch_native."""
+class TestNewlyImplementedTypes:
+    """Stage 6 PARTIAL types produce real SVG from dispatch_native (no longer raise)."""
 
     @pytest.mark.parametrize("src, dtype", [
         (SEQUENCE_DIAGRAM, "sequencediagram"),
@@ -184,21 +184,15 @@ class TestLegacyOnlyTypes:
         ("gantt\n    title MyProject\n    section A\n    Task1 :t1, 2024-01-01, 7d\n", "gantt"),
         ("pie\n    title Colors\n    \"Red\" : 30\n    \"Blue\" : 70\n", "pie"),
     ])
-    def test_legacy_only_raises_native_render_error(self, src, dtype):
-        with pytest.raises(NativeRenderError) as exc_info:
-            dispatch_native(src)
-        assert exc_info.value.phase == "not-implemented"
+    def test_newly_implemented_produces_svg(self, src, dtype):
+        result = dispatch_native(src)
+        assert "<svg" in result, f"No <svg> tag for {dtype}"
+        assert "foreignObject" not in result, f"<foreignObject> in {dtype} output"
 
-    def test_legacy_only_is_value_error_subclass(self):
-        """NativeRenderError subclasses ValueError for backward compat."""
-        with pytest.raises(ValueError):
-            dispatch_native(SEQUENCE_DIAGRAM)
-
-    def test_dispatch_native_result_legacy_only_has_errors(self):
+    def test_dispatch_native_result_sequence_has_svg(self):
         result = dispatch_native_result(SEQUENCE_DIAGRAM)
-        assert result.svg is None
-        assert result.errors
-        assert not result.is_success(strict=False)
+        assert result.svg is not None
+        assert "<svg" in result.svg
 
 
 # ── to_svg() public API integration ──────────────────────────────────────────

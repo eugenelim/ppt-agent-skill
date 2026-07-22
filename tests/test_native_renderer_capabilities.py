@@ -34,15 +34,15 @@ def test_registry_contains_known_directives():
         assert d in NATIVE_RENDERER_REGISTRY, f"Missing directive in registry: {d}"
 
 
-def test_registry_contains_not_implemented_directives():
+def test_registry_contains_newly_implemented_directives():
     for d in (
         "sequencediagram", "erdiagram", "gantt", "quadrantchart", "pie",
         "xychart-beta", "block-beta", "packet-beta", "kanban", "journey",
         "requirementdiagram", "gitgraph",
     ):
         assert d in NATIVE_RENDERER_REGISTRY, f"Missing directive in registry: {d}"
-        assert NATIVE_RENDERER_REGISTRY[d].parity == NativeParityLevel.NOT_IMPLEMENTED, (
-            f"Expected {d} to be NOT_IMPLEMENTED, got {NATIVE_RENDERER_REGISTRY[d].parity}"
+        assert NATIVE_RENDERER_REGISTRY[d].parity == NativeParityLevel.PARTIAL, (
+            f"Expected {d} to be PARTIAL, got {NATIVE_RENDERER_REGISTRY[d].parity}"
         )
 
 
@@ -107,21 +107,35 @@ def test_partial_directive_contains_source_labels(directive, src):
         assert label in result, f"Label {label!r} missing from {directive} SVG output"
 
 
-# ── NOT_IMPLEMENTED and UNSUPPORTED directives raise ─────────────────────────
+# ── Newly-implemented PARTIAL directives produce SVG ─────────────────────────
 
-@pytest.mark.parametrize("directive", [
-    "sequencediagram", "erdiagram", "gantt", "quadrantchart", "pie",
-    "xychart-beta", "block-beta", "packet-beta", "kanban", "journey",
-    "requirementdiagram", "gitgraph",
-])
-def test_not_implemented_directives_raise_native_render_error(directive):
+_NEWLY_IMPLEMENTED_FIXTURES = [
+    ("sequencediagram", "sequenceDiagram\n  Alice->>Bob: Hello"),
+    ("erdiagram", "erDiagram\n  PERSON { string name }"),
+    ("gantt", "gantt\n  title G\n  section A\n    Task1 :t1, 2024-01-01, 7d"),
+    ("quadrantchart", "quadrantChart\n  x-axis Low --> High\n  y-axis Low --> High"),
+    ("pie", "pie\n  title Pets\n  \"Dogs\" : 386"),
+    ("xychart-beta", "xychart-beta\n  x-axis [a, b, c]\n  y-axis 0 --> 10\n  bar [5, 3, 8]"),
+    ("block-beta", "block-beta\n  A B C"),
+    ("packet-beta", "packet-beta\n  0-7: Source Port"),
+    ("kanban", "kanban\n  column1\n    item1[Task 1]"),
+    ("journey", "journey\n  title My day\n  section Go\n    Task: 5: Me"),
+    ("requirementdiagram", "requirementDiagram\n  requirement req1 {\n    id: 1\n    text: Example\n  }"),
+    ("gitgraph", "gitGraph\n  commit"),
+]
+
+
+@pytest.mark.parametrize("directive,src", _NEWLY_IMPLEMENTED_FIXTURES)
+def test_newly_implemented_directives_produce_svg(directive, src):
+    """Stage 6 PARTIAL types must produce real SVG output, not raise."""
     from scripts.mermaid_render.native_svg import dispatch_native
 
     with patch.dict(os.environ, {"MERMAID_RENDER_SVG_BACKEND": "native"}):
-        with pytest.raises(NativeRenderError) as exc_info:
-            dispatch_native(f"{directive}\n  content")
-    assert exc_info.value.phase == "not-implemented"
-    assert directive in exc_info.value.diagram_type
+        result = dispatch_native(src)
+
+    assert result, f"Empty result for {directive}"
+    assert "<svg" in result, f"No <svg> tag for {directive}"
+    assert "foreignObject" not in result, f"<foreignObject> in {directive} output"
 
 
 @pytest.mark.parametrize("directive,src", [

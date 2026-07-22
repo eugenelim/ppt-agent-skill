@@ -466,19 +466,49 @@ _reg("c4component", NativeParityLevel.PARTIAL,
      supported=("elements", "boundaries", "relations"),
      unsupported=("distinct-shapes", "birel-single-path"))
 
-# Not-yet-implemented types (will raise NativeRenderError; use legacy-dom for now)
-for _d in (
-    "sequencediagram", "erdiagram", "gantt", "quadrantchart", "pie",
-    "xychart-beta", "block-beta", "packet-beta", "kanban", "journey",
-    "requirementdiagram", "gitgraph",
-):
-    _reg(_d, NativeParityLevel.NOT_IMPLEMENTED)
+# Newly-implemented types (Stage 6) — PARTIAL parity
+_reg("sequencediagram", NativeParityLevel.PARTIAL,
+     supported=("participants", "messages", "notes", "lifelines"),
+     unsupported=("activations", "loops", "fragments", "measured-text"))
+_reg("erdiagram", NativeParityLevel.PARTIAL,
+     supported=("entities", "attributes", "relations", "cardinality"),
+     unsupported=("measured-text", "cardinality-markers", "identifying-lines"))
+_reg("gantt", NativeParityLevel.PARTIAL,
+     supported=("sections", "tasks", "status-colours", "relative-dates"),
+     unsupported=("measured-text", "weekend-exclusions", "theme-tokens"))
+_reg("quadrantchart", NativeParityLevel.PARTIAL,
+     supported=("axes", "quadrant-labels", "data-points"),
+     unsupported=("measured-text", "theme-tokens"))
+_reg("pie", NativeParityLevel.PARTIAL,
+     supported=("slices", "legend", "percentages", "showdata"),
+     unsupported=("measured-text", "theme-tokens"))
+_reg("xychart-beta", NativeParityLevel.PARTIAL,
+     supported=("bar-series", "line-series", "axes", "grid"),
+     unsupported=("measured-text", "theme-tokens"))
+_reg("block-beta", NativeParityLevel.PARTIAL,
+     supported=("blocks", "grid-layout", "edges"),
+     unsupported=("nested-blocks", "measured-text"))
+_reg("packet-beta", NativeParityLevel.PARTIAL,
+     supported=("fields", "bit-ranges", "relative-widths", "row-wrap"),
+     unsupported=("measured-text", "theme-tokens"))
+_reg("kanban", NativeParityLevel.PARTIAL,
+     supported=("columns", "cards", "metadata"),
+     unsupported=("measured-text", "theme-tokens"))
+_reg("journey", NativeParityLevel.PARTIAL,
+     supported=("sections", "tasks", "score-colours", "actors"),
+     unsupported=("measured-text", "theme-tokens"))
+_reg("requirementdiagram", NativeParityLevel.PARTIAL,
+     supported=("requirements", "elements", "relations"),
+     unsupported=("measured-text", "requirement-types", "theme-tokens"))
+_reg("gitgraph", NativeParityLevel.PARTIAL,
+     supported=("commits", "branches", "merges", "tags", "cherry-pick"),
+     unsupported=("measured-text", "theme-tokens"))
 
 # Explicitly unsupported
 _reg("sankey-beta", NativeParityLevel.UNSUPPORTED)
 _reg("zenuml", NativeParityLevel.UNSUPPORTED)
 
-del _d, _reg
+del _reg
 
 
 # ── Legacy capability dataclass (kept for backward compat) ────────────────────
