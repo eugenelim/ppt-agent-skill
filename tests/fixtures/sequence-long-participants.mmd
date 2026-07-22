@@ -1,0 +1,5 @@
+sequenceDiagram
+  participant LongNameAlice as Long Name Alice Service
+  participant LongNameBob as Long Name Bob Worker
+  LongNameAlice->>LongNameBob: request with very long label text
+  LongNameBob-->>LongNameAlice: response with long label text too

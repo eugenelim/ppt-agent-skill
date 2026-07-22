@@ -22,6 +22,7 @@ import datetime
 import hashlib
 import html as _html_mod
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -112,11 +113,14 @@ def _collect_metadata(
             "sha256": hashlib.sha256(data).hexdigest(),
         })
 
-    # SHA256 of key renderer source files
-    strategies_file = ROOT / "scripts" / "mermaid_render" / "layout" / "_strategies.py"
-    text_file = ROOT / "scripts" / "mermaid_render" / "layout" / "_text.py"
-    strategies_sha = hashlib.sha256(strategies_file.read_bytes()).hexdigest() if strategies_file.exists() else None
-    text_sha = hashlib.sha256(text_file.read_bytes()).hexdigest() if text_file.exists() else None
+    # SHA256 of key renderer source files (stored in modules dict keyed by filename)
+    _layout_dir = ROOT / "scripts" / "mermaid_render" / "layout"
+    _tracked_modules = ["_strategies.py", "_text.py", "_geometry.py"]
+    modules: dict = {}
+    for _mod_name in _tracked_modules:
+        _mod_file = _layout_dir / _mod_name
+        _mod_sha = hashlib.sha256(_mod_file.read_bytes()).hexdigest() if _mod_file.exists() else None
+        modules[_mod_name] = {"sha256": _mod_sha, "path": str(_mod_file)}
     module_path = str(Path(mermaid_render.__file__).resolve())
 
     return {
@@ -133,8 +137,7 @@ def _collect_metadata(
         "renderer_width_hint": width_hint,
         "renderer_schema_version": _RENDERER_SCHEMA_VERSION,
         "mermaid_render_module_path": module_path,
-        "strategies_sha256": strategies_sha,
-        "text_sha256": text_sha,
+        "modules": modules,
         "output_dir": str(out_dir),
         "fixture_paths": [r["path"] for r in fixture_records],
         "fixture_sha256": {r["path"]: r["sha256"] for r in fixture_records},
@@ -368,6 +371,52 @@ def _render_ours(src: str, width_hint: int = 0) -> tuple[str | None, str]:
         return None, str(e)
 
 
+def _compare_mmdc_semantic(src: str, mmdc_svg_path: Path) -> str:
+    """Compare mmdc SVG semantic elements against our SequenceGeometry.
+
+    Returns "pass", "warning", or "unvalidated".
+    - "pass": participant and message counts match
+    - "warning": counts differ (soft mismatch)
+    - "unvalidated": not a sequence diagram, or mmdc SVG unparseable
+    """
+    from mermaid_render.layout._parser import _detect_directive, _strip_frontmatter  # noqa: PLC0415
+    from mermaid_render.layout._strategies import compile_sequence  # noqa: PLC0415
+
+    clean = _strip_frontmatter(src)
+    directive, _ = _detect_directive(clean)
+    if directive.lower() != "sequencediagram":
+        return "unvalidated"
+
+    try:
+        tree = ET.parse(mmdc_svg_path)
+        root = tree.getroot()
+        ns = root.tag.split("}")[0].lstrip("{") if "}" in root.tag else ""
+        ns_prefix = f"{{{ns}}}" if ns else ""
+
+        def _count_data_et(et_val: str) -> int:
+            return sum(
+                1 for el in root.iter()
+                if el.get("data-et") == et_val
+            )
+
+        mmdc_participants = _count_data_et("participant")
+        mmdc_messages = _count_data_et("message")
+    except Exception:
+        return "unvalidated"
+
+    try:
+        compiled = compile_sequence(clean)
+        geom = compiled.geometry
+        our_participants = len(geom.participants)
+        our_messages = len(geom.messages)
+    except Exception:
+        return "unvalidated"
+
+    if mmdc_participants == our_participants and mmdc_messages == our_messages:
+        return "pass"
+    return "warning"
+
+
 def _diagram_type(name: str) -> str:
     """Extract diagram type prefix from fixture filename, e.g. 'flowchart-basic' → 'flowchart'."""
     return name.split("-")[0]
@@ -384,15 +433,35 @@ def _lane_badge_cls(status: str) -> str:
     return "badge-unvalidated"
 
 
-def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0) -> "tuple[Path, bool]":
+def _atomic_write_gallery(out_dir: Path, *, raise_mid_write: bool = False) -> None:
+    """Atomically stage a gallery into out_dir via a temp directory.
+
+    Creates a sibling temp dir, then renames it over out_dir only after all
+    writes succeed — so a failure mid-write leaves the existing out_dir intact.
+
+    raise_mid_write: test-only flag; raises RuntimeError before the swap to
+    verify the atomicity guarantee without touching out_dir.
+    """
     import shutil
-    from collections import defaultdict
-    from mermaid_render.layout._geometry import ValidationResult
+    tmp = Path(tempfile.mkdtemp(dir=out_dir.parent, prefix="gallery_atomic_"))
+    try:
+        if raise_mid_write:
+            raise RuntimeError("simulated mid-write failure (test-only)")
+        if out_dir.exists():
+            shutil.rmtree(out_dir)
+        os.rename(str(tmp), str(out_dir))
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+
+
+def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0, strict: bool = False) -> "tuple[Path, bool]":
+    import shutil
 
     # Build into a temp directory; atomically replace dest at the end.
-    tmp_dir = Path(tempfile.mkdtemp(prefix="gallery_tmp_"))
+    tmp_dir = Path(tempfile.mkdtemp(dir=out_dir.parent, prefix="gallery_tmp_"))
     try:
-        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint)
+        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint, strict=strict)
     except Exception:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
@@ -403,6 +472,7 @@ def _build_gallery_into(
     tmp_dir: Path,
     dest_dir: Path,
     width_hint: int,
+    strict: bool = False,
 ) -> "tuple[Path, bool]":
     import shutil
     from collections import defaultdict
@@ -433,9 +503,16 @@ def _build_gallery_into(
         mmdc_svg_path = tmp_dir / "mmdc" / f"{name}.svg"
         mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
 
+        if mmdc_ok:
+            from dataclasses import replace as _dc_replace  # noqa: PLC0415
+            oracle = _compare_mmdc_semantic(src, mmdc_svg_path)
+            vr = _dc_replace(vr, mmdc_oracle=oracle)
+
         print(
             f"render:{vr.render}  syntax:{vr.syntax_coverage}  "
-            f"geometry:{vr.geometry}  oracle:{vr.mmdc_oracle}  "
+            f"structural_geometry:{vr.structural_geometry}  "
+            f"semantic_geometry:{vr.semantic_geometry}  "
+            f"oracle:{vr.mmdc_oracle}  "
             f"mmdc:{'ok' if mmdc_ok else 'err'}"
         )
 
@@ -556,8 +633,9 @@ def _build_gallery_into(
   <div class="status-lanes">
     <span class="status-badge {_lane_badge_cls(vr.render)} badge-render">render: {vr.render}</span>
     <span class="status-badge {_lane_badge_cls(vr.syntax_coverage)} badge-syntax">syntax: {vr.syntax_coverage}</span>
-    <span class="status-badge {_lane_badge_cls(vr.geometry)} badge-geometry">geometry: {vr.geometry}</span>
-    <span class="status-badge {_lane_badge_cls(vr.mmdc_oracle)} badge-oracle">oracle: {vr.mmdc_oracle}</span>
+    <span class="status-badge {_lane_badge_cls(vr.structural_geometry)} badge-structural-geometry">structural_geometry: {vr.structural_geometry}</span>
+    <span class="status-badge {_lane_badge_cls(vr.semantic_geometry)} badge-semantic-geometry">semantic_geometry: {vr.semantic_geometry}</span>
+    <span class="status-badge {_lane_badge_cls(vr.mmdc_oracle)} badge-oracle">mmdc_oracle: {vr.mmdc_oracle}</span>
     <span class="status-badge badge-{"ok" if mmdc_ok else "err"}">mmdc: {mmdc_status}</span>
   </div>
   <div class="comparison-grid">
@@ -615,11 +693,23 @@ def _build_gallery_into(
         for _, _, vr, _, _, _, _ in items
     )
 
+    if strict:
+        has_failures = has_failures or any(
+            vr.structural_geometry == "fail"
+            or vr.semantic_geometry == "fail"
+            or any(
+                getattr(d, "severity", None) == "error"
+                for d in vr.diagnostics
+            )
+            for items in type_results.values()
+            for _, _, vr, _, _, _, _ in items
+        )
+
     # Atomically replace destination with tmp_dir.
     import shutil
     if dest_dir.exists():
         shutil.rmtree(dest_dir)
-    shutil.move(str(tmp_dir), str(dest_dir))
+    os.rename(str(tmp_dir), str(dest_dir))
 
     return dest_dir / "index.html", has_failures
 
@@ -636,6 +726,8 @@ def main() -> None:
                     help="Write only metadata.json to --output-dir; skip gallery HTML")
     ap.add_argument("--width-hint", dest="width_hint", type=int, default=0,
                     help="Renderer width hint in px (default: 0 = auto); does not alter gallery CSS")
+    ap.add_argument("--strict", action="store_true",
+                    help="Exit non-zero if any fixture has render/structural_geometry fail or error-severity diagnostic")
     args = ap.parse_args()
 
     out_dir = Path(args.output_dir).resolve() if args.output_dir else OUT_DIR
@@ -661,14 +753,37 @@ def main() -> None:
     # Always write metadata.json first so provenance is recorded even on failures.
     out_dir.mkdir(parents=True, exist_ok=True)
     metadata = _collect_metadata(mmd_files, out_dir, args.width_hint, sys.argv[1:])
-    (out_dir / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
-    print(f"Metadata: {out_dir}/metadata.json")
+    meta_path = out_dir / "metadata.json"
 
     if args.metadata_only:
+        # Provenance check: compare stored module SHAs vs freshly computed SHAs.
+        if meta_path.exists():
+            stored = json.loads(meta_path.read_text(encoding="utf-8"))
+            stored_modules = stored.get("modules", {})
+            fresh_modules = metadata.get("modules", {})
+            mismatch_found = False
+            for mod_name, fresh_entry in fresh_modules.items():
+                stored_entry = stored_modules.get(mod_name, {})
+                if stored_entry.get("sha256") != fresh_entry.get("sha256"):
+                    print(
+                        f"ERROR: module SHA256 mismatch for {mod_name}: "
+                        f"stored={stored_entry.get('sha256')!r} "
+                        f"computed={fresh_entry.get('sha256')!r}",
+                        file=sys.stderr,
+                    )
+                    mismatch_found = True
+            if mismatch_found:
+                sys.exit(1)
+        meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        print(f"Metadata: {meta_path}")
         return
 
+    meta_path.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    (out_dir / "metadata.json.bak").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    print(f"Metadata: {meta_path}")
+
     print(f"Building comparison gallery for {len(mmd_files)} diagram(s)...")
-    index_path, has_failures = _build_gallery(mmd_files, out_dir, width_hint=args.width_hint)
+    index_path, has_failures = _build_gallery(mmd_files, out_dir, width_hint=args.width_hint, strict=args.strict)
     print(f"Gallery: file://{index_path}")
 
     if args.open:

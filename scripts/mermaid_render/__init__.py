@@ -20,7 +20,7 @@ to_png(src, *, theme=None, scale=1.0, width_hint=0) -> bytes
     Requires playwright.
 
 validate(src) -> ValidationResult
-    Geometry validation.
+    Geometry validation with per-type structural and semantic checks.
 
 get_capability(diagram_type) -> RendererCapability
     Return the native-backend capability record for a diagram type.

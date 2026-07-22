@@ -1,0 +1,11 @@
+sequenceDiagram
+  participant Alice
+  participant Bob
+  participant Carol
+  participant Dave
+  Alice->>Bob: step one
+  Bob->>Carol: step two
+  Carol->>Dave: step three
+  Dave-->>Carol: ack
+  Carol-->>Bob: ack
+  Bob-->>Alice: complete
