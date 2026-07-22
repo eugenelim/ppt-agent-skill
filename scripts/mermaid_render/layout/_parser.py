@@ -329,6 +329,20 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             _ensure(_alias_m.group(2), _alias_m.group(1), "rect", "")
             continue
 
+        # stateDiagram-v2 pseudo-state: state X <<fork|join|choice|history|historydeep>>
+        _pseudo_m = re.match(r'^state\s+(\w+)\s+<<(\w+)>>', line, re.I)
+        if _pseudo_m:
+            _ps_id, _ps_kind = _pseudo_m.group(1), _pseudo_m.group(2).lower()
+            if _ps_kind in ("fork", "join"):
+                _ensure(_ps_id, _ps_id, "bar", f"state-{_ps_kind}")
+            elif _ps_kind == "choice":
+                _ensure(_ps_id, _ps_id, "diamond", "state-choice")
+            elif _ps_kind in ("history", "historydeep", "deephistory"):
+                _ensure(_ps_id, _ps_id, "circle", "state-history")
+            else:
+                _ensure(_ps_id, _ps_id, "rect", "")
+            continue
+
         # stateDiagram-v2 composite state: state ID { (opens a nested group)
         _composite_m = re.match(r'^state\s+(\w+)\s*\{', line)
         if _composite_m:

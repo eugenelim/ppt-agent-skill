@@ -9,6 +9,7 @@ from ._constants import (
     GROUP_CAP, GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _NODE_H_TECH, ICON_COL_WIDTH,
     _TERMINAL_NODE_SIZE, _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
+    _BAR_W, _BAR_H,
     _is_terminal_circle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
@@ -85,6 +86,7 @@ _NODE_CSS = {
     "cylinder": "",  # SVG overlay draws the silo shape; no CSS border-radius needed
     "circle": "border-radius:50%;",
     "flag": "border-radius:0;",
+    "bar": "",  # UML fork/join sync bar — no border-radius; shape drawn via inner div
 }
 
 # clip-path polygons for polygon shapes — applied to the background div, NOT the outer container,
@@ -545,6 +547,27 @@ def _render_graph_fragment(
                     f'display:flex; flex-direction:column; align-items:center; justify-content:center; '
                     f'text-align:center;">'
                     f'{inner}</div>'
+                )
+            elif n.shape == "bar":
+                # UML fork/join sync bar: a solid horizontal rectangle with a label below.
+                _bar_w = n.width if n.width > 0 else _BAR_W
+                _bar_top = (node_h - _BAR_H) // 2
+                parts.append(
+                    f'<div class="node node-bar{extra_cls}" {_node_data_attrs(nid, n)} style="'
+                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                    f'width:{_bar_w}px; height:{node_h}px; '
+                    f'box-sizing:border-box; overflow:visible;">'
+                    f'<div style="position:absolute; left:0; top:{_bar_top}px; '
+                    f'width:{_bar_w}px; height:{_BAR_H}px; '
+                    f'background:var(--node-fg,var(--text-primary,#191A17)); '
+                    f'border-radius:2px;"></div>'
+                    f'<span class="node-label" style="'
+                    f'position:absolute; left:0; top:{_bar_top + _BAR_H + 2}px; '
+                    f'width:{_bar_w}px; font-size:9px; text-align:center; '
+                    f'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+                    f'">{_nh(n.label)}</span>'
+                    f'</div>'
                 )
             else:
                 # Polygon shapes: clip-path goes on a background div (not the outer container)
@@ -1591,6 +1614,8 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             _border_css = ""
         elif shape in ("hexagon", "trapezoid", "trapezoid-alt"):
             _border_css = ""
+        elif shape == "bar":
+            _border_css = ""  # bar shape draws its own inner rect; no outer border
         elif shape == "stadium":
             _border_css = f'border:1.5px solid {accent};'
         else:
@@ -1724,6 +1749,28 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
                 f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent}" stroke-width="1.5"/>'
                 f'</svg></div>'
+            )
+        elif shape == "bar":
+            # UML fork/join sync bar: solid horizontal rectangle with label below.
+            _bar_top = (nh - _BAR_H) // 2
+            parts.append(
+                f'<div class="node node-bar{extra_cls}" data-node-id="{_h(nid)}"'
+                f' data-kind="node" data-label="{_fid_label}" data-shape="bar"'
+                f' data-order="{nl.rank}"{_fid_parent} style="'
+                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
+                f'width:{nw}px; height:{nh}px; '
+                f'box-sizing:border-box; overflow:visible;">'
+                f'<div style="position:absolute; left:0; top:{_bar_top}px; '
+                f'width:{nw}px; height:{_BAR_H}px; '
+                f'background:var(--node-fg,var(--text-primary,#191A17)); '
+                f'border-radius:2px;"></div>'
+                f'<span class="node-label" style="'
+                f'position:absolute; left:0; top:{_bar_top + _BAR_H + 2}px; '
+                f'width:{nw}px; font-size:9px; text-align:center; '
+                f'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+                f'">{_h(raw_label)}</span>'
+                f'</div>'
             )
         else:
             # Standard node (includes diamond, hexagon, trapezoid overlays)

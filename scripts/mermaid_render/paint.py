@@ -265,6 +265,21 @@ def _node_scene_elements(node: Any, tokens: _Tokens, order: int = 0) -> list:
             paint=_make_node_paint(tokens.node_stroke, tokens.node_fill, tokens.node_stroke_w),
         ))
 
+    elif shape == "bar":
+        # UML fork/join sync bar: solid horizontal rectangle centered vertically
+        _bar_h = 8.0
+        _bar_y = y + (nh - _bar_h) / 2
+        elements.append(SceneRect(
+            element_id=eid,
+            x=x, y=_bar_y, w=nw, h=_bar_h,
+            css_classes=("node", "node-bar"),
+            data_attrs=_node_data,
+            paint=PaintStyle(
+                fill=FillStyle(color=tokens.text_fill),
+                stroke=StrokeStyle(color="none", width=0),
+            ),
+        ))
+
     else:
         # Default: rounded rect
         elements.append(SceneRoundedRect(
@@ -839,6 +854,20 @@ def finalized_layout_to_scene(
                 element_id=eid + "-top",
                 cx=x + nw / 2, cy=y + cap_ry, rx=nw / 2, ry=cap_ry,
                 paint=node_paint,
+            ))
+        elif shape == "bar":
+            # UML fork/join sync bar: a solid horizontal rectangle centered vertically.
+            _bar_h = 8.0
+            _bar_y = y + (nh - _bar_h) / 2
+            node_elements.append(SceneRect(
+                element_id=eid,
+                x=x, y=_bar_y, w=nw, h=_bar_h,
+                css_classes=("node", "node-bar") + extra_css,
+                data_attrs=_node_data_attrs,
+                paint=PaintStyle(
+                    fill=FillStyle(color=t.text_fill),
+                    stroke=StrokeStyle(color="none", width=0),
+                ),
             ))
         else:
             node_elements.append(SceneRoundedRect(

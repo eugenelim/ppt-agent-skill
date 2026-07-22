@@ -1,0 +1,512 @@
+"""Tests for Stage 11 — State diagram hierarchical semantics.
+
+Tests the immutable state model types, compile_state_machine(), state_model_to_graph(),
+and integration through the existing rendering pipeline for bar/diamond pseudo-states.
+"""
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+
+from mermaid_render.layout.statediagram import (
+    AtomicState,
+    Choice,
+    CompositeState,
+    FinalPseudoState,
+    Fork,
+    History,
+    InitialPseudoState,
+    Join,
+    StateGate,
+    StateMachineModel,
+    StateNote,
+    StateTransition,
+    compile_state_machine,
+    state_model_to_graph,
+)
+from mermaid_render import to_html
+from mermaid_render.native_svg import dispatch_native
+
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _node_labels(html: str) -> list[str]:
+    return re.findall(r'class="(?:node|group)-label"[^>]*>([^<]+)', html)
+
+
+# ── model type: frozen / hashable ─────────────────────────────────────────────
+
+class TestModelTypes:
+    """All model types must be frozen (immutable) and hashable."""
+
+    def test_atomic_state_frozen(self):
+        s = AtomicState(id="A", label="Alpha")
+        with pytest.raises((AttributeError, TypeError)):
+            s.id = "B"  # type: ignore[misc]
+
+    def test_atomic_state_hashable(self):
+        s = AtomicState(id="A", label="Alpha")
+        assert hash(s) is not None
+        assert {s}  # membership test
+
+    def test_initial_pseudo_frozen(self):
+        s = InitialPseudoState(id="_sm_start_")
+        with pytest.raises((AttributeError, TypeError)):
+            s.id = "x"  # type: ignore[misc]
+
+    def test_final_pseudo_frozen(self):
+        s = FinalPseudoState(id="_sm_end_")
+        with pytest.raises((AttributeError, TypeError)):
+            s.id = "x"  # type: ignore[misc]
+
+    def test_choice_frozen(self):
+        c = Choice(id="C", label="c")
+        with pytest.raises((AttributeError, TypeError)):
+            c.id = "D"  # type: ignore[misc]
+
+    def test_fork_frozen(self):
+        f = Fork(id="F", label="f")
+        with pytest.raises((AttributeError, TypeError)):
+            f.id = "G"  # type: ignore[misc]
+
+    def test_join_frozen(self):
+        j = Join(id="J", label="j")
+        with pytest.raises((AttributeError, TypeError)):
+            j.id = "K"  # type: ignore[misc]
+
+    def test_history_frozen(self):
+        h = History(id="H1", kind="shallow")
+        with pytest.raises((AttributeError, TypeError)):
+            h.kind = "deep"  # type: ignore[misc]
+
+    def test_history_deep_kind(self):
+        h = History(id="H2", kind="deep")
+        assert h.kind == "deep"
+
+    def test_state_gate_frozen(self):
+        g = StateGate(id="g", kind="entry", composite_id="S")
+        with pytest.raises((AttributeError, TypeError)):
+            g.kind = "exit"  # type: ignore[misc]
+
+    def test_state_transition_frozen(self):
+        t = StateTransition(src_id="A", dst_id="B", label="go")
+        with pytest.raises((AttributeError, TypeError)):
+            t.label = "stop"  # type: ignore[misc]
+
+    def test_state_note_frozen(self):
+        n = StateNote(target_id="A", position="right", text="note")
+        with pytest.raises((AttributeError, TypeError)):
+            n.text = "other"  # type: ignore[misc]
+
+    def test_composite_state_frozen(self):
+        cs = CompositeState(id="S", label="State")
+        with pytest.raises((AttributeError, TypeError)):
+            cs.label = "Changed"  # type: ignore[misc]
+
+    def test_state_machine_model_frozen(self):
+        m = StateMachineModel(states=(), transitions=())
+        with pytest.raises((AttributeError, TypeError)):
+            m.states = ()  # type: ignore[misc]
+
+    def test_all_types_hashable(self):
+        objects = [
+            AtomicState(id="A", label="Alpha"),
+            InitialPseudoState(id="_sm_start_"),
+            FinalPseudoState(id="_sm_end_"),
+            Choice(id="C"),
+            Fork(id="F"),
+            Join(id="J"),
+            History(id="H", kind="shallow"),
+            StateGate(id="g", kind="entry", composite_id="S"),
+            StateTransition(src_id="A", dst_id="B"),
+            StateNote(target_id="A"),
+            CompositeState(id="S", label="S"),
+        ]
+        assert len({hash(o) for o in objects}) == len(objects)  # all distinct
+
+
+# ── compile_state_machine ──────────────────────────────────────────────────────
+
+class TestCompileStateMachine:
+    """compile_state_machine() produces correct StateMachineModel from source lines."""
+
+    def test_empty_input(self):
+        m = compile_state_machine([])
+        assert m.states == ()
+        assert m.transitions == ()
+
+    def test_simple_transition(self):
+        m = compile_state_machine(["A --> B"])
+        assert any(isinstance(s, AtomicState) and s.id == "A" for s in m.states)
+        assert any(isinstance(s, AtomicState) and s.id == "B" for s in m.states)
+        assert any(t.src_id == "A" and t.dst_id == "B" for t in m.transitions)
+
+    def test_initial_state_from_star(self):
+        m = compile_state_machine(["[*] --> Idle"])
+        ids = {s.id for s in m.states}
+        assert "_sm_start_" in ids
+        init = next(s for s in m.states if s.id == "_sm_start_")
+        assert isinstance(init, InitialPseudoState)
+
+    def test_final_state_from_star(self):
+        m = compile_state_machine(["Done --> [*]"])
+        ids = {s.id for s in m.states}
+        assert "_sm_end_" in ids
+        final = next(s for s in m.states if s.id == "_sm_end_")
+        assert isinstance(final, FinalPseudoState)
+
+    def test_fork_pseudo_state(self):
+        m = compile_state_machine(["state fork_state <<fork>>"])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "fork_state"), None)
+        assert state is not None
+        assert isinstance(state, Fork)
+
+    def test_join_pseudo_state(self):
+        m = compile_state_machine(["state join_state <<join>>"])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "join_state"), None)
+        assert state is not None
+        assert isinstance(state, Join)
+
+    def test_choice_pseudo_state(self):
+        m = compile_state_machine(["state choice_state <<choice>>"])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "choice_state"), None)
+        assert state is not None
+        assert isinstance(state, Choice)
+
+    def test_history_shallow(self):
+        m = compile_state_machine(["state H1 <<history>>"])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "H1"), None)
+        assert isinstance(state, History)
+        assert state.kind == "shallow"
+
+    def test_history_deep(self):
+        m = compile_state_machine(["state H2 <<historydeep>>"])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "H2"), None)
+        assert isinstance(state, History)
+        assert state.kind == "deep"
+
+    def test_alias(self):
+        m = compile_state_machine(['state "Long Label" as short_id'])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "short_id"), None)
+        assert state is not None
+        assert isinstance(state, AtomicState)
+        assert state.label == "Long Label"
+
+    def test_description_sets_label(self):
+        m = compile_state_machine(["idle : Idle State"])
+        state = next((s for s in m.states if hasattr(s, "id") and s.id == "idle"), None)
+        assert state is not None
+        assert state.label == "Idle State"
+
+    def test_transition_label(self):
+        m = compile_state_machine(["A --> B : go"])
+        t = next((t for t in m.transitions if t.src_id == "A" and t.dst_id == "B"), None)
+        assert t is not None
+        assert t.label == "go"
+
+    def test_inline_note(self):
+        m = compile_state_machine(["A --> B", "note right of A : This is A"])
+        assert any(n.target_id == "A" and n.text == "This is A" for n in m.notes)
+
+    def test_multiline_note(self):
+        m = compile_state_machine([
+            "A --> B",
+            "note left of B",
+            "Line one",
+            "Line two",
+            "end note",
+        ])
+        note = next((n for n in m.notes if n.target_id == "B"), None)
+        assert note is not None
+        assert "Line one" in note.text
+        assert "Line two" in note.text
+        assert note.position == "left"
+
+    def test_composite_state_produces_composite(self):
+        m = compile_state_machine(["state Active {", "  A --> B", "}"])
+        cs = next((s for s in m.states if isinstance(s, CompositeState) and s.id == "Active"), None)
+        assert cs is not None
+
+    def test_composite_state_has_gates(self):
+        m = compile_state_machine(["state Active {", "  [*] --> A", "}"])
+        cs = next(s for s in m.states if isinstance(s, CompositeState) and s.id == "Active")
+        assert cs.entry_gate is not None
+        assert cs.entry_gate.kind == "entry"
+        assert cs.exit_gate is not None
+        assert cs.exit_gate.kind == "exit"
+
+    def test_concurrent_separator_ignored(self):
+        m = compile_state_machine(["state S {", "  A --> B", "  --", "  C --> D", "}"])
+        # Should not raise; -- is ignored
+        assert any(t.src_id == "A" for t in m.transitions)
+        assert any(t.src_id == "C" for t in m.transitions)
+
+    def test_direction_directive_ignored(self):
+        m = compile_state_machine(["direction LR", "A --> B"])
+        assert any(t.src_id == "A" for t in m.transitions)
+
+    def test_comment_line_skipped(self):
+        m = compile_state_machine(["%%comment line", "A --> B"])
+        assert any(t.src_id == "A" for t in m.transitions)
+
+    def test_fork_join_full_diagram(self):
+        lines = [
+            "state fork_state <<fork>>",
+            "state join_state <<join>>",
+            "[*] --> fork_state",
+            "fork_state --> s1",
+            "fork_state --> s2",
+            "s1 --> join_state",
+            "s2 --> join_state",
+            "join_state --> [*]",
+        ]
+        m = compile_state_machine(lines)
+        ids = {s.id for s in m.states if hasattr(s, "id")}
+        assert "fork_state" in ids
+        assert "join_state" in ids
+        fork = next(s for s in m.states if hasattr(s, "id") and s.id == "fork_state")
+        join = next(s for s in m.states if hasattr(s, "id") and s.id == "join_state")
+        assert isinstance(fork, Fork)
+        assert isinstance(join, Join)
+
+
+# ── state_model_to_graph shapes ────────────────────────────────────────────────
+
+class TestStateModelToGraph:
+    """state_model_to_graph() produces correct _Node shapes for each pseudo-state type."""
+
+    def _graph_from(self, lines: list[str]):
+        m = compile_state_machine(lines)
+        return state_model_to_graph(m)
+
+    def test_atomic_state_is_rect(self):
+        nodes, _, _ = self._graph_from(["A --> B"])
+        assert nodes["A"].shape == "rect"
+        assert nodes["B"].shape == "rect"
+
+    def test_initial_pseudo_is_circle(self):
+        nodes, _, _ = self._graph_from(["[*] --> Idle"])
+        assert nodes["_sm_start_"].shape == "circle"
+
+    def test_final_pseudo_is_circle(self):
+        nodes, _, _ = self._graph_from(["Done --> [*]"])
+        assert nodes["_sm_end_"].shape == "circle"
+
+    def test_initial_pseudo_label_filled_circle(self):
+        nodes, _, _ = self._graph_from(["[*] --> Idle"])
+        assert nodes["_sm_start_"].label == "●"
+
+    def test_final_pseudo_label_double_circle(self):
+        nodes, _, _ = self._graph_from(["Done --> [*]"])
+        assert nodes["_sm_end_"].label == "◎"
+
+    def test_fork_is_bar(self):
+        nodes, _, _ = self._graph_from(["state F <<fork>>", "[*] --> F"])
+        assert nodes["F"].shape == "bar"
+
+    def test_join_is_bar(self):
+        nodes, _, _ = self._graph_from(["state J <<join>>", "A --> J"])
+        assert nodes["J"].shape == "bar"
+
+    def test_fork_css_class(self):
+        nodes, _, _ = self._graph_from(["state F <<fork>>", "[*] --> F"])
+        assert nodes["F"].css_class == "state-fork"
+
+    def test_join_css_class(self):
+        nodes, _, _ = self._graph_from(["state J <<join>>", "A --> J"])
+        assert nodes["J"].css_class == "state-join"
+
+    def test_choice_is_diamond(self):
+        nodes, _, _ = self._graph_from(["state C <<choice>>", "[*] --> C"])
+        assert nodes["C"].shape == "diamond"
+
+    def test_choice_css_class(self):
+        nodes, _, _ = self._graph_from(["state C <<choice>>", "[*] --> C"])
+        assert nodes["C"].css_class == "state-choice"
+
+    def test_history_shallow_is_circle(self):
+        nodes, _, _ = self._graph_from(["state H <<history>>", "A --> H"])
+        assert nodes["H"].shape == "circle"
+
+    def test_history_shallow_label(self):
+        nodes, _, _ = self._graph_from(["state H <<history>>", "A --> H"])
+        assert nodes["H"].label == "H"
+
+    def test_history_deep_label(self):
+        nodes, _, _ = self._graph_from(["state H <<historydeep>>", "A --> H"])
+        assert nodes["H"].label == "H*"
+
+    def test_composite_produces_group(self):
+        nodes, _, groups = self._graph_from([
+            "state Active {",
+            "  [*] --> Ready",
+            "}",
+        ])
+        assert any(g.label == "Active" for g in groups.values())
+
+    def test_edges_present(self):
+        _, edges, _ = self._graph_from(["A --> B"])
+        assert any(e.src == "A" and e.dst == "B" for e in edges)
+
+    def test_transition_label_preserved(self):
+        _, edges, _ = self._graph_from(["A --> B : go"])
+        edge = next(e for e in edges if e.src == "A" and e.dst == "B")
+        assert edge.label == "go"
+
+
+# ── integration: bar and diamond shapes in rendered HTML ──────────────────────
+
+class TestBarShapeIntegration:
+    """Fork/join pseudo-states render as bar-shaped nodes in HTML output."""
+
+    _SRC = (
+        "stateDiagram-v2\n"
+        "  state fork_state <<fork>>\n"
+        "  state join_state <<join>>\n"
+        "  [*] --> fork_state\n"
+        "  fork_state --> s1\n"
+        "  fork_state --> s2\n"
+        "  s1 --> join_state\n"
+        "  s2 --> join_state\n"
+        "  join_state --> [*]\n"
+    )
+
+    def test_renders_without_crash(self):
+        html = to_html(self._SRC)
+        assert "diagram mermaid-layout" in html
+
+    def test_fork_label_present(self):
+        html = to_html(self._SRC)
+        assert "fork_state" in _node_labels(html)
+
+    def test_join_label_present(self):
+        html = to_html(self._SRC)
+        assert "join_state" in _node_labels(html)
+
+    def test_bar_shape_class_present(self):
+        """node-bar CSS class is emitted for fork/join nodes."""
+        html = to_html(self._SRC)
+        assert "node-bar" in html
+
+    def test_no_spurious_state_node(self):
+        """Bug fix: 'state' is not created as a spurious atomic node."""
+        html = to_html(self._SRC)
+        labels = _node_labels(html)
+        assert "state" not in labels, f"Spurious 'state' node found: {labels}"
+
+    def test_branches_present(self):
+        html = to_html(self._SRC)
+        labels = _node_labels(html)
+        assert "s1" in labels
+        assert "s2" in labels
+
+
+class TestChoiceShapeIntegration:
+    """Choice pseudo-states render as diamond-shaped nodes in HTML output."""
+
+    _SRC = (
+        "stateDiagram-v2\n"
+        "  state choice_state <<choice>>\n"
+        "  [*] --> choice_state\n"
+        "  choice_state --> s1 : if x\n"
+        "  choice_state --> s2 : if not x\n"
+    )
+
+    def test_renders_without_crash(self):
+        html = to_html(self._SRC)
+        assert "diagram mermaid-layout" in html
+
+    def test_choice_label_present(self):
+        html = to_html(self._SRC)
+        assert "choice_state" in _node_labels(html)
+
+    def test_diamond_shape_class_present(self):
+        """node-diamond CSS class is emitted for choice nodes."""
+        html = to_html(self._SRC)
+        assert "node-diamond" in html
+
+    def test_no_spurious_state_node(self):
+        html = to_html(self._SRC)
+        labels = _node_labels(html)
+        assert "state" not in labels, f"Spurious 'state' node found: {labels}"
+
+
+class TestHistoryShapeIntegration:
+    """History pseudo-states render as circle nodes with H label."""
+
+    _SRC = (
+        "stateDiagram-v2\n"
+        "  state Outer {\n"
+        "    state H1 <<history>>\n"
+        "    [*] --> H1\n"
+        "    H1 --> Running\n"
+        "  }\n"
+    )
+
+    def test_renders_without_crash(self):
+        html = to_html(self._SRC)
+        assert "diagram mermaid-layout" in html
+
+    def test_no_spurious_state_node(self):
+        html = to_html(self._SRC)
+        labels = _node_labels(html)
+        assert "state" not in labels, f"Spurious 'state' node found: {labels}"
+
+
+# ── integration: SVG path (dispatch_native) ────────────────────────────────────
+
+_FORK_JOIN_SRC = (
+    "stateDiagram-v2\n"
+    "  state fork_state <<fork>>\n"
+    "  state join_state <<join>>\n"
+    "  [*] --> fork_state\n"
+    "  fork_state --> s1\n"
+    "  fork_state --> s2\n"
+    "  s1 --> join_state\n"
+    "  s2 --> join_state\n"
+    "  join_state --> [*]\n"
+)
+
+_CHOICE_SRC = (
+    "stateDiagram-v2\n"
+    "  state choice_state <<choice>>\n"
+    "  [*] --> choice_state\n"
+    "  choice_state --> s1 : if x\n"
+    "  choice_state --> s2 : if not x\n"
+)
+
+
+class TestBarShapeSvgPath:
+    """Fork/join bar shape renders correctly via dispatch_native() SVG path."""
+
+    def test_fork_join_svg_renders(self):
+        """Fork/join diagram produces valid SVG via dispatch_native()."""
+        svg = dispatch_native(_FORK_JOIN_SRC)
+        assert "<svg" in svg
+
+    def test_fork_join_svg_no_crash(self):
+        """Fork/join diagram does not raise during SVG rendering."""
+        svg = dispatch_native(_FORK_JOIN_SRC)
+        assert svg  # non-empty
+
+    def test_fork_join_bar_class_in_svg(self):
+        """node-bar class appears in SVG output for fork/join nodes."""
+        svg = dispatch_native(_FORK_JOIN_SRC)
+        assert "node-bar" in svg, "bar shape CSS class missing from SVG"
+
+    def test_fork_join_no_spurious_state_in_svg(self):
+        """Spurious 'state' node is not created in SVG rendering."""
+        svg = dispatch_native(_FORK_JOIN_SRC)
+        assert 'data-label="state"' not in svg
+
+    def test_choice_diamond_in_svg(self):
+        """Choice pseudo-state renders as diamond (polygon) in SVG."""
+        svg = dispatch_native(_CHOICE_SRC)
+        assert "<svg" in svg
+        assert "node-diamond" in svg, "diamond shape CSS class missing from SVG"

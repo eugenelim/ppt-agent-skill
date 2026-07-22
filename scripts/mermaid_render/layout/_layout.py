@@ -7,7 +7,7 @@ from ._constants import (
     _Node, _Edge, _Group,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     NODE_MIN_W, NODE_MAX_W, NODE_HPAD, ICON_COL_WIDTH,
-    _DIAMOND_SIZE, _HEXAGON_SIZE,
+    _DIAMOND_SIZE, _HEXAGON_SIZE, _BAR_W, _BAR_H, _BAR_LABEL_H,
     CROSSING_PASSES, GROUP_CAP,
     _node_render_h, _measure_text_width, _load_icon,
     _node_size_circle, _node_size_diamond, _node_size_hexagon, _node_size_diamond_hex,
@@ -268,7 +268,7 @@ def _assign_coordinates(
     # so the text column budget (n.width - NODE_HPAD - ICON_COL_WIDTH) can fit the label.
     # For nodes with pipe-separated member rows (class/ER diagrams), the longest member
     # line drives the width so it doesn't overflow the rendered box.
-    # Dynamic sizing for circle/diamond/hexagon (must run before text-box width loop)
+    # Dynamic sizing for circle/diamond/hexagon/bar (must run before text-box width loop)
     for n in nodes.values():
         if n.width == 0 and not n.is_dummy:
             if n.shape in ("circle", "doublecircle"):
@@ -281,7 +281,10 @@ def _assign_coordinates(
                 _hex_w, _hex_h = _node_size_hexagon(n)
                 n.width = _hex_w
                 n.height = _hex_h  # hexagon has independent width and height
-    _fixed_shapes = {"circle", "doublecircle", "diamond", "hexagon"}
+            elif n.shape == "bar":
+                n.width = _BAR_W
+                n.height = _BAR_H + _BAR_LABEL_H
+    _fixed_shapes = {"circle", "doublecircle", "diamond", "hexagon", "bar"}
     for n in nodes.values():
         if n.width == 0 and not n.is_dummy and n.shape not in _fixed_shapes:
             _has_icon = bool(
