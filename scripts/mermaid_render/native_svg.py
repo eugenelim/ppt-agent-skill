@@ -95,7 +95,10 @@ def parse_render_request(
 
     Strips frontmatter once. Detects directive and direction. Preserves
     frontmatter and diagram config for downstream renderers.
+    The directive is canonicalized via DIRECTIVE_ALIASES (e.g. "graph" → "flowchart").
     """
+    from .registry import canonicalize_directive
+
     clean_after_fm, frontmatter = _parse_frontmatter(src)
     diagram_config = _parse_diagram_config(clean_after_fm)
 
@@ -107,7 +110,7 @@ def parse_render_request(
     return RenderRequest(
         original_source=src,
         clean_source=clean_source,
-        directive=directive.lower(),
+        directive=canonicalize_directive(directive),
         direction=auto_direction.upper(),
         frontmatter=MappingProxyType(frontmatter),
         diagram_config=MappingProxyType(diagram_config),
@@ -413,17 +416,7 @@ def _dispatch_scene(
     elif d in ("sankey-beta", "zenuml"):
         raise UnsupportedDiagramType(d)
     else:
-        # Unknown directive — attempt flowchart pipeline as best-effort
-        from .layout._strategies import _compile_flowchart, RenderOptions
-        from .layout._renderer import _extract_diagram_title
-        from .paint import finalized_layout_to_scene
-        compiled = _compile_flowchart(
-            clean, width_hint, RenderOptions(),
-            direction_override=direction,
-            height_hint=height_hint,
-        )
-        title = _extract_diagram_title(clean)
-        return finalized_layout_to_scene(compiled.layout, diagram_type=d, title=title)
+        raise UnsupportedDiagramType(d)
 
 
 def dispatch_native(
@@ -490,5 +483,144 @@ def dispatch_native(
         raise NativeRenderError(d, "dispatch")
 
     return scene_to_svg_str(scene)
+
+
+# ── Registry-backed pipeline ──────────────────────────────────────────────────
+
+def _build_graph_pipeline(request: RenderRequest, diagram_type: str) -> "tuple[SvgScene, object]":
+    """Build (SvgScene, ValidationResult) for graph-topology types (flowchart, statediagram*).
+
+    Called by the registry lazy builders (_build_flowchart, etc.) to avoid
+    duplicating the compile/layout/paint pipeline.
+    """
+    from .layout._strategies import _compile_flowchart, RenderOptions
+    from .layout._renderer import _extract_diagram_title
+    from .paint import finalized_layout_to_scene
+
+    _opts = RenderOptions(faithful_mermaid=request.faithful)
+    compiled = _compile_flowchart(
+        request.clean_source,
+        request.width_hint,
+        _opts,
+        direction_override=request.direction,
+        height_hint=request.height_hint,
+    )
+    title = _extract_diagram_title(request.clean_source)
+    scene = finalized_layout_to_scene(compiled.layout, diagram_type=diagram_type, title=title)
+    return scene, compiled.validation
+
+
+def render_svg_result(
+    src: str,
+    *,
+    theme: "str | None" = None,
+    width_hint: int = 0,
+    height_hint: int = 0,
+    faithful: bool = False,
+    fallback: "str | None" = None,
+) -> "object":  # -> RenderResult, imported lazily to avoid circular import
+    """Render Mermaid source to a typed RenderResult via the registry pipeline.
+
+    This is the authoritative dispatch path.  to_svg() and dispatch_native_result()
+    both delegate here.
+
+    Raises typed errors (not RenderResult) on hard failures:
+      - UnsupportedDiagramType  — diagram type is "unsupported" in the registry or unknown
+      - NativeRendererUnavailable — diagram type is "legacy-only" and no fallback was requested
+      - NativeRenderError       — builder/serializer raised an unexpected exception
+
+    On success: returns RenderResult with is_success(strict=True) == True for IMPLEMENTED
+    types whose geometry validation passed.
+    """
+    from .registry import RENDERER_REGISTRY, canonicalize_directive, RenderResult
+    from .errors import (
+        NativeRenderError, NativeRendererUnavailable, UnsupportedDiagramType,
+        UnsupportedDiagramFeature,
+    )
+
+    request = parse_render_request(
+        src,
+        theme=theme,
+        faithful=faithful,
+        width_hint=width_hint,
+        height_hint=height_hint,
+    )
+    canonical = request.directive  # already canonicalized by parse_render_request()
+
+    cap = RENDERER_REGISTRY.get(canonical)
+    if cap is None:
+        raise UnsupportedDiagramType(canonical)
+
+    if cap.native_status == "unsupported":
+        raise UnsupportedDiagramType(canonical)
+
+    if cap.native_status == "legacy-only":
+        raise NativeRendererUnavailable(canonical)
+
+    if cap.native_builder is None:
+        raise NativeRenderError(
+            canonical, "dispatch",
+            cause=NotImplementedError(f"No native_builder registered for {canonical!r}"),
+        )
+
+    # Call the builder
+    try:
+        result = cap.native_builder(request)
+        if isinstance(result, tuple) and len(result) == 2:
+            scene, validation = result
+        else:
+            scene, validation = result, None
+    except NativeRenderError:
+        raise  # already typed, preserve exactly
+    except Exception as e:
+        raise NativeRenderError(canonical, "build", cause=e) from e
+
+    # Determine geometry status from validation result
+    geometry_errors: "tuple[str, ...]" = ()
+    if validation is not None and cap.native_status == "implemented":
+        errors_list = getattr(validation, "errors", None)
+        if errors_list is not None:
+            if errors_list:
+                geometry: str = "failed"
+                geometry_errors = tuple(str(e) for e in errors_list)
+            else:
+                geometry = "passed"
+        else:
+            geometry = "unvalidated"
+    else:
+        geometry = "unvalidated"
+
+    # Determine semantic lanes based on status.
+    # Experimental types also force geometry="unvalidated" regardless of what the
+    # builder returned — but because the implemented-guard above only fires for
+    # cap.native_status=="implemented", experimental builders never populate
+    # geometry_errors, so errors stays () on the experimental path.
+    if cap.native_status == "experimental":
+        sem_adapter: str = "unsupported"
+        syntax_cov: str = "partial"
+        geometry = "unvalidated"
+    else:
+        sem_adapter = "passed"
+        syntax_cov = "passed"
+
+    # Serialize
+    try:
+        svg_str = scene_to_svg_str(scene)
+    except Exception as e:
+        raise NativeRenderError(canonical, "serialize", cause=e) from e
+
+    backend = getattr(scene, "renderer_backend", "native")
+
+    return RenderResult(
+        svg=svg_str,
+        diagram_type=canonical,
+        backend=backend,
+        semantic_adapter=sem_adapter,
+        syntax_coverage=syntax_cov,
+        geometry=geometry,
+        serialization="passed",
+        warnings=(),
+        errors=geometry_errors,
+    )
 
 

@@ -708,6 +708,43 @@ class TestSmoothOrthogonalPath:
         d = _smooth_orthogonal_path([(0, 0), (100, 0), (100, 100)], r=6)
         assert "Q" in d or "L" in d
 
+    def _extracted_pts(self, d: str) -> "list[tuple[float, float]]":
+        """Parse M/L/Q endpoints from an SVG path string."""
+        import re
+        pts = []
+        for cmd, nums_str in re.findall(r'([MLQ])\s*((?:[-\d.]+\s*)*)', d):
+            nums = [float(x) for x in nums_str.split() if x]
+            if cmd in ('M', 'L') and len(nums) >= 2:
+                pts.append((nums[0], nums[1]))
+            elif cmd == 'Q' and len(nums) >= 4:
+                pts.append((nums[2], nums[3]))
+        return pts
+
+    def test_collinear_dedup_no_zero_length_segments(self):
+        """Collinear same-column waypoints (x1==x2 fast path) must not produce
+        consecutive identical extracted waypoints after dedup."""
+        # Simulate the fast-path duplicate: middle two points identical
+        pts = [(100, 0), (100, 446), (100, 446), (200, 446)]
+        d = _smooth_orthogonal_path(pts, r=10)
+        extracted = self._extracted_pts(d)
+        for i in range(len(extracted) - 1):
+            assert extracted[i] != extracted[i + 1], (
+                f"Zero-length segment at index {i}: {extracted[i]} → {extracted[i+1]}"
+            )
+
+    def test_short_segment_no_zero_length_L(self):
+        """When a segment is shorter than 2r, arc-start of the next corner equals
+        the arc-end of the current corner; the intermediate L must be suppressed."""
+        # Segment (100,0)→(106,0) has length 6; r=10 → min(r, 3)=3 on both sides
+        # arc-end at (103,0) == arc-start at (103,0) → L suppressed
+        pts = [(0, 0), (100, 0), (106, 0), (206, 0)]
+        d = _smooth_orthogonal_path(pts, r=10)
+        extracted = self._extracted_pts(d)
+        for i in range(len(extracted) - 1):
+            assert extracted[i] != extracted[i + 1], (
+                f"Zero-length segment at index {i}: {extracted[i]} → {extracted[i+1]}"
+            )
+
 
 # ── TestFanOffset ─────────────────────────────────────────────────────────────
 

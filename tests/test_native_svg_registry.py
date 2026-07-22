@@ -89,9 +89,10 @@ class TestGetCapability:
         cap = get_capability("flowchart")
         assert cap.native_status == "implemented"
 
-    def test_unknown_raises_key_error(self):
+    def test_unknown_raises_unsupported_diagram_type(self):
         from scripts.mermaid_render.registry import get_capability
-        with pytest.raises(KeyError):
+        from scripts.mermaid_render.errors import UnsupportedDiagramType
+        with pytest.raises(UnsupportedDiagramType):
             get_capability("nonexistent-type-xyz")
 
     def test_public_from_package(self):

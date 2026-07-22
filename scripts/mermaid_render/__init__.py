@@ -5,20 +5,36 @@ to_html(src, *, theme=None, width_hint=0) -> str
 
 to_svg(src, *, theme=None, width_hint=0, fallback=None) -> str
     Pure-Python native SVG backend (default).
+    Consumes render_svg_result() internally.
     Set MERMAID_RENDER_SVG_BACKEND=legacy-dom or pass fallback='legacy-dom'
     to use the Playwright DOM path for types without a native renderer.
+
+render_svg_result(src, *, ...) -> RenderResult
+    Full pipeline: parse → capability lookup → builder → validator → serialize.
+    Returns RenderResult; raises typed errors on hard failures.
+
+dispatch_native_result(src, *, ...) -> RenderResult
+    Thin wrapper around render_svg_result(); never raises — returns error RenderResult.
 
 to_png(src, *, theme=None, scale=1.0, width_hint=0) -> bytes
     Requires playwright.
 
 validate(src) -> ValidationResult
-    Geometry validation; partial — full per-type validation is Phase 4.
+    Geometry validation.
 
 get_capability(diagram_type) -> RendererCapability
     Return the native-backend capability record for a diagram type.
+    Accepts raw or canonical directives (e.g. "graph" → flowchart entry).
+    Raises UnsupportedDiagramType for unknown types.
+
+canonicalize_directive(raw) -> str
+    Normalize a raw directive string to its canonical registry key.
 
 RENDERER_REGISTRY : dict[str, RendererCapability]
-    The full capability map.
+    The full capability map (canonical keys).
+
+DIRECTIVE_ALIASES : dict[str, str]
+    Raw → canonical directive alias map.
 """
 from __future__ import annotations
 
@@ -29,6 +45,8 @@ from .registry import (  # noqa: F401 — re-exported
     RENDERER_REGISTRY,
     RenderResult,
     get_capability,
+    canonicalize_directive,
+    DIRECTIVE_ALIASES,
 )
 from .errors import (  # noqa: F401 — re-exported
     NativeRenderError,
@@ -36,6 +54,14 @@ from .errors import (  # noqa: F401 — re-exported
     UnsupportedDiagramType,
     UnsupportedDiagramFeature,
 )
+def __getattr__(name: str):
+    # Lazy-load native_svg symbols so importing mermaid_render never eagerly
+    # pulls in lxml (svg_serializer dep) — required for test_to_html_runs_without_site_packages.
+    if name == "render_svg_result":
+        from .native_svg import render_svg_result as _rsr
+        globals()["render_svg_result"] = _rsr
+        return _rsr
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def dispatch_native_result(
@@ -49,17 +75,26 @@ def dispatch_native_result(
 
     Returns a RenderResult with svg=None and errors populated on failure.
     Never silently falls back to a placeholder or legacy renderer.
+    Delegates to render_svg_result() for the actual pipeline.
     """
-    from .native_svg import _dispatch_scene
-    from .layout._parser import _detect_directive, _strip_frontmatter
-    from .svg_serializer import scene_to_svg_str
+    from .native_svg import render_svg_result
+    from .registry import canonicalize_directive
 
+    # Detect canonical directive upfront to label error RenderResults consistently.
+    # render_svg_result() runs its own parse_render_request() internally; both
+    # paths must use canonicalize_directive() so they agree on the type string.
+    from .layout._parser import _detect_directive, _strip_frontmatter
     clean = _strip_frontmatter(src)
-    directive, auto_direction = _detect_directive(clean)
-    d = directive.lower()
+    raw_directive, _ = _detect_directive(clean)
+    d = canonicalize_directive(raw_directive)
 
     try:
-        scene = _dispatch_scene(clean, directive, auto_direction.upper(), width_hint, height_hint)
+        return render_svg_result(
+            src,
+            theme=theme,
+            width_hint=width_hint,
+            height_hint=height_hint,
+        )
     except (NativeRendererUnavailable, UnsupportedDiagramType) as e:
         return RenderResult(
             svg=None,
@@ -84,18 +119,6 @@ def dispatch_native_result(
             warnings=(),
             errors=(str(e),),
         )
-    except ValueError as e:
-        return RenderResult(
-            svg=None,
-            diagram_type=d,
-            backend="native",
-            semantic_adapter="failed",
-            syntax_coverage="failed",
-            geometry="unvalidated",
-            serialization="failed",
-            warnings=(),
-            errors=(str(e),),
-        )
     except Exception as e:
         wrapped = NativeRenderError(d, "dispatch", cause=e)
         return RenderResult(
@@ -109,45 +132,6 @@ def dispatch_native_result(
             warnings=(),
             errors=(str(wrapped),),
         )
-
-    # Serialise
-    try:
-        svg_str = scene_to_svg_str(scene)
-    except Exception as e:
-        return RenderResult(
-            svg=None,
-            diagram_type=d,
-            backend=getattr(scene, "renderer_backend", "native"),
-            semantic_adapter="passed",
-            syntax_coverage="passed",
-            geometry="unvalidated",
-            serialization="failed",
-            warnings=(),
-            errors=(f"Serialization failed: {e}",),
-        )
-
-    backend = getattr(scene, "renderer_backend", "native")
-
-    # For experimental types, validation lanes are not yet wired — downgrade from "passed"
-    cap = RENDERER_REGISTRY.get(d)
-    if cap is not None and cap.native_status == "experimental":
-        sem_adapter: str = "unsupported"
-        syntax_cov: str = "partial"
-    else:
-        sem_adapter = "passed"
-        syntax_cov = "passed"
-
-    return RenderResult(
-        svg=svg_str,
-        diagram_type=d,
-        backend=backend,
-        semantic_adapter=sem_adapter,
-        syntax_coverage=syntax_cov,
-        geometry="unvalidated",   # Phase 4 will wire per-type validation
-        serialization="passed",
-        warnings=(),
-        errors=(),
-    )
 
 
 def validate(src: str) -> ValidationResult:
@@ -205,6 +189,7 @@ def to_svg(
     """Render a Mermaid source string to an SVG string.
 
     Uses the native pure-Python SVG backend by default (no Playwright, deterministic).
+    Consumes render_svg_result() internally so the result contract is enforced.
 
     Parameters
     ----------
@@ -220,18 +205,29 @@ def to_svg(
             "The only supported value is 'legacy-dom'."
         )
 
-    from .native_svg import _use_native, dispatch_native
+    from .native_svg import _use_native, render_svg_result
 
     if _use_native():
         try:
-            return dispatch_native(src, theme=theme, faithful=faithful, width_hint=width_hint)
-        except NativeRendererUnavailable:
+            result = render_svg_result(
+                src,
+                theme=theme,
+                faithful=faithful,
+                width_hint=width_hint,
+            )
+            if result.geometry == "failed":
+                raise result.to_exception()
+            return result.svg  # type: ignore[union-attr]
+        except NativeRendererUnavailable as _unavail:
             if fallback == "legacy-dom":
                 pass  # Fall through to legacy DOM path below
             else:
-                raise
+                # Preserve legacy contract: callers expect NativeRenderError(phase="not-implemented")
+                raise NativeRenderError(
+                    _unavail.diagram_type, "not-implemented", cause=_unavail
+                ) from _unavail
         except NativeRenderError as _e:
-            if fallback == "legacy-dom" and _e.phase == "not-implemented":
+            if fallback == "legacy-dom" and _e.phase in ("not-implemented", "build"):
                 pass  # Fall through to legacy DOM path below
             else:
                 raise
