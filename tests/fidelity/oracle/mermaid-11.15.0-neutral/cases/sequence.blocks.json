@@ -55,12 +55,40 @@
   "semantic": {
     "diagram_type": "sequence",
     "direction": null,
-    "entities": [],
+    "entities": [
+      {
+        "attributes": {},
+        "id": "Client",
+        "kind": "participant",
+        "label": "Client",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Server",
+        "kind": "participant",
+        "label": "Server",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "DB",
+        "kind": "participant",
+        "label": "DB",
+        "order": 2,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
     "groups": [],
     "metadata": {},
     "ordered_events": [],
     "relations": []
   },
-  "source_sha256": "dccdbf3c083cfc4d79edc2a3b204532072b134c05ee400bd0796e3a86a8a9d11",
-  "status": "PASS"
+  "status": "PASS",
+  "source_sha256": "dccdbf3c083cfc4d79edc2a3b204532072b134c05ee400bd0796e3a86a8a9d11"
 }

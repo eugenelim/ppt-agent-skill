@@ -119,15 +119,55 @@
       {
         "arrow": null,
         "attributes": {},
-        "id": "D__E__1",
+        "id": "A__C__1",
         "kind": "edge",
         "label": "",
         "order": 1,
+        "source": "A",
+        "target": "C"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "A__D__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
+        "source": "A",
+        "target": "D"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "B__E__3",
+        "kind": "edge",
+        "label": "",
+        "order": 3,
+        "source": "B",
+        "target": "E"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "C__E__4",
+        "kind": "edge",
+        "label": "",
+        "order": 4,
+        "source": "C",
+        "target": "E"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "D__E__5",
+        "kind": "edge",
+        "label": "",
+        "order": 5,
         "source": "D",
         "target": "E"
       }
     ]
   },
-  "source_sha256": "31ffc8c880fb70a3af0b7ae96bdd503e7173d9857207f959babc5652ba44c099",
-  "status": "PASS"
+  "status": "PASS",
+  "source_sha256": "31ffc8c880fb70a3af0b7ae96bdd503e7173d9857207f959babc5652ba44c099"
 }

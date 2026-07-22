@@ -55,12 +55,31 @@
   "semantic": {
     "diagram_type": "sequence",
     "direction": null,
-    "entities": [],
+    "entities": [
+      {
+        "attributes": {},
+        "id": "Service",
+        "kind": "participant",
+        "label": "Service",
+        "order": 0,
+        "parent_id": null,
+        "shape": null
+      },
+      {
+        "attributes": {},
+        "id": "Client",
+        "kind": "participant",
+        "label": "Client",
+        "order": 1,
+        "parent_id": null,
+        "shape": null
+      }
+    ],
     "groups": [],
     "metadata": {},
     "ordered_events": [],
     "relations": []
   },
-  "source_sha256": "1e8e602a6d3efaf1db9db36736a69b1efafadcbac1cb9b17555e85874dc38bde",
-  "status": "PASS"
+  "status": "PASS",
+  "source_sha256": "1e8e602a6d3efaf1db9db36736a69b1efafadcbac1cb9b17555e85874dc38bde"
 }
