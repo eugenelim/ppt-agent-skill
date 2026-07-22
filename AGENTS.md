@@ -147,23 +147,33 @@ python tools/check_skill.py     # doc↔code contract-drift check — run after 
 
 ```bash
 # Fast / default — zero browsers, zero mmdc, zero subprocess renders
-pytest -m "not browser and not snapshot and not external_reference and not isolation" tests/
+pytest tests/
 
-# Browser tests (Playwright, not snapshots) — needs: playwright install chromium
-pytest -m "browser and not snapshot" tests/
+# Browser tests (Playwright, no snapshots) — needs: playwright install chromium
+pytest --run-browser tests/
 
-# Snapshot regression — one browser session for all fixtures; do NOT combine with -n
-pytest -m snapshot tests/test_snapshots.py
+# Snapshot regression (one browser session, all baselines)
+pytest --run-snapshots tests/test_snapshots.py
 
-# Oracle — committed data only (no external tools required)
-pytest tests/test_oracle.py -m "not external_reference"
+# Snapshot regression — representative subset only (21 families, 42 items)
+pytest --run-snapshots-quick tests/test_snapshots.py
+
+# Oracle — committed data only (no mmdc)
+pytest tests/test_oracle.py
 
 # Oracle — live differential (requires: npm i -g @mermaid-js/mermaid-cli)
-pytest tests/test_oracle.py -m external_reference
+pytest --run-external-reference tests/test_oracle.py
 
-# All tests (intentional)
-pytest tests/
+# Isolation / subprocess tests
+pytest --run-isolation tests/
+
+# All tests (intentional; requires playwright + mmdc)
+pytest --run-all-expensive tests/
 ```
+
+Snapshot tests are not xdist-safe (session cache + single browser). Do NOT combine
+`--run-snapshots` with `-n auto` or `-n N > 1` — the conftest xdist guard will raise
+`pytest.UsageError`.
 
 <!-- No linter or build step is configured: this is a Python script pipeline,
      not a packaged build. The render pipeline (html_packager → html2svg →
