@@ -45,16 +45,15 @@ jobs:
         with:
           python-version: "3.13"
           cache: "pip"
-      - run: pip install pytest Pillow
+      - run: pip install pytest Pillow lxml
       # Guards run without playwright installed so the playwright-cleanliness
       # test is meaningful. Includes sibling-import AST scan, adaptive-theme
       # unit tests, vendor bundle parity, the full mermaid_layout shim
       # regression suite (playwright-free), icon catalog drift lint, and
       # top-level CLI smoke tests (playwright-free subcommands).
-      # test_svg2pptx_shapes needs lxml + python-pptx (requirements.txt)
-      # so it runs in render-scripts, not here.
-      # test_mermaid_render_cli.py includes test_svg_stdout which uses the native
-      # SVG backend (no Playwright required for supported diagram types like flowchart).
+      # test_svg2pptx_shapes needs python-pptx (requirements.txt) so it runs
+      # in render-scripts, not here. lxml is installed here for test_svg_stdout
+      # (native SVG backend — no Playwright required for supported types like flowchart).
       - run: python3 -m pytest tests/test_mermaid_render_guards.py tests/test_payload_boundary.py tests/test_mermaid_layout.py tests/test_mermaid_render_cli.py -q
       - run: python3 tests/test_icon_search.py
 
