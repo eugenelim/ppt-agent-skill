@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:38:05.899074+00:00",
+  "capture_timestamp": "2026-07-22T18:05:10.224086+00:00",
   "case_id": "flowchart.shapes.all",
   "diagnostics": [],
   "environment": {
@@ -182,104 +182,95 @@
       {
         "arrow": null,
         "attributes": {},
-        "id": "B__C__1",
+        "id": "C__D__1",
         "kind": "edge",
         "label": "",
         "order": 1,
-        "source": "B",
-        "target": "C"
-      },
-      {
-        "arrow": null,
-        "attributes": {},
-        "id": "C__D__2",
-        "kind": "edge",
-        "label": "",
-        "order": 2,
         "source": "C",
         "target": "D"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "C__E__3",
+        "id": "C__E__2",
         "kind": "edge",
         "label": "",
-        "order": 3,
+        "order": 2,
         "source": "C",
         "target": "E"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "D__F__4",
+        "id": "D__F__3",
         "kind": "edge",
         "label": "",
-        "order": 4,
+        "order": 3,
         "source": "D",
         "target": "F"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "E__G__5",
+        "id": "E__G__4",
         "kind": "edge",
         "label": "",
-        "order": 5,
+        "order": 4,
         "source": "E",
         "target": "G"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "F__H__6",
+        "id": "F__H__5",
         "kind": "edge",
         "label": "",
-        "order": 6,
+        "order": 5,
         "source": "F",
         "target": "H"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "G__I__7",
+        "id": "G__I__6",
         "kind": "edge",
         "label": "",
-        "order": 7,
+        "order": 6,
         "source": "G",
         "target": "I"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "H__J__8",
+        "id": "H__J__7",
         "kind": "edge",
         "label": "",
-        "order": 8,
+        "order": 7,
         "source": "H",
         "target": "J"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "I__K__9",
+        "id": "I__K__8",
         "kind": "edge",
         "label": "",
-        "order": 9,
+        "order": 8,
         "source": "I",
         "target": "K"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "J__L__10",
+        "id": "J__L__9",
         "kind": "edge",
         "label": "",
-        "order": 10,
+        "order": 9,
         "source": "J",
         "target": "L"
       }
     ]
   },
+  "source_sha256": "c05c444fd742cf4b4dceaf46e2886499bca8710db6366029490848604315e605",
   "status": "PASS"
 }

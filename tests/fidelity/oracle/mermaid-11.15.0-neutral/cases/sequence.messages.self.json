@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:39:27.304319+00:00",
+  "capture_timestamp": "2026-07-22T18:05:44.098301+00:00",
   "case_id": "sequence.messages.self",
   "diagnostics": [],
   "environment": {
@@ -80,5 +80,6 @@
     "ordered_events": [],
     "relations": []
   },
-  "status": "PASS"
+  "status": "PASS",
+  "source_sha256": "1e8e602a6d3efaf1db9db36736a69b1efafadcbac1cb9b17555e85874dc38bde"
 }

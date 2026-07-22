@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:39:08.301175+00:00",
+  "capture_timestamp": "2026-07-22T18:05:35.704475+00:00",
   "case_id": "sequence.activation",
   "diagnostics": [],
   "environment": {
@@ -89,5 +89,6 @@
     "ordered_events": [],
     "relations": []
   },
-  "status": "PASS"
+  "status": "PASS",
+  "source_sha256": "de7e1865e05f5a747dde3032ef4fce1dfe2bffcc74e7673760028a0e14ba6d5e"
 }

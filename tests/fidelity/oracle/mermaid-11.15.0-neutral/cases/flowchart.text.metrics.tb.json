@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:38:39.567771+00:00",
+  "capture_timestamp": "2026-07-22T18:05:23.037474+00:00",
   "case_id": "flowchart.text.metrics.tb",
   "diagnostics": [],
   "environment": {
@@ -110,5 +110,6 @@
       }
     ]
   },
+  "source_sha256": "e8cf991205b8ce2bfaa9f72acda356a13287daf1b31b80d33d9a8e1de158b9e1",
   "status": "PASS"
 }

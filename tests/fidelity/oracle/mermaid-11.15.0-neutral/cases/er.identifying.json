@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:40:01.644180+00:00",
+  "capture_timestamp": "2026-07-22T18:05:59.419944+00:00",
   "case_id": "er.identifying",
   "diagnostics": [],
   "environment": {
@@ -89,5 +89,6 @@
     "ordered_events": [],
     "relations": []
   },
+  "source_sha256": "79e756a57fc5bafcda2a43ed029d0a585fea6bbdcdc4f5045129c59562c8649f",
   "status": "PASS"
 }

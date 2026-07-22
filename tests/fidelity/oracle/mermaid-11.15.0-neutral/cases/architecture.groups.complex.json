@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:39:40.715348+00:00",
+  "capture_timestamp": "2026-07-22T18:05:50.715045+00:00",
   "case_id": "architecture.groups.complex",
   "diagnostics": [],
   "environment": {
@@ -148,5 +148,6 @@
       }
     ]
   },
+  "source_sha256": "e8f54ee830a54fea51b0c3ed20a069484e1f48366a38b0449ba2df6ce9917faf",
   "status": "PASS"
 }

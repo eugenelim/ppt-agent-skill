@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-21T23:38:16.083959+00:00",
+  "capture_timestamp": "2026-07-22T18:05:14.494211+00:00",
   "case_id": "flowchart.groups.complex",
   "diagnostics": [],
   "environment": {
@@ -206,5 +206,6 @@
       }
     ]
   },
+  "source_sha256": "6abb31553b81dfbb6da25c4bda0a27a461e08841a0ebc29f6bd097daaba53659",
   "status": "PASS"
 }

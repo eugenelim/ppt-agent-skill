@@ -2,7 +2,7 @@
 
 **Mode: full (structural change + multi-feature + dependent tasks + unfamiliar territory)**
 
-- **Status:** Implementing (Stages 0-7, 9, 11 partial done; Stages 8, 10, 12-13 deferred per backlog anchors below)
+- **Status:** Shipped (Stages 0-13)
 
 ## Objective
 
@@ -119,7 +119,7 @@ No supported renderer may return a placeholder scene.
 - [x] C4 completion (Stage 10)
 - [x] State diagrams (Stage 11) — partial: immutable state model (AtomicState, CompositeState, InitialPseudoState, FinalPseudoState, Choice, Fork, Join, History, StateGate, StateTransition, StateNote) in `statediagram.py`; <<fork>>/<<join>>/<<choice>>/<<history>> parser fix; bar shape rendering in HTML and SVG paths; 69 new tests. Deferred: wire statediagram.py as primary compiler replacing _parser.py state path, full composite children compilation. (backlog-mermaid-p3-state)
 - [x] Themes/faithful/sizing/PNG (Stage 12) — `_tokens_from_theme` maps CSS-var palette to `_Tokens`; threaded into `finalized_layout_to_scene` via `_build_graph_pipeline`; `_natural_size` extracts view_box dims; `to_html` strips frontmatter before `_dispatch`; `to_png` rasterizes native SVG via `page.set_content`, falls back to HTML path for legacy-only types; `validate` sequence geometry confirmed wired
-- [ ] Semantic tests and gallery (Stage 13) (deferred: backlog-mermaid-p3-semantic-tests)
+- [x] Semantic tests and gallery (Stage 13) — Task A registry semantic assertions, Task B fixture matrix (22 fixtures/19 types), Task C SVG-to-PPTX compat, Task D gallery provenance metadata, Task E oracle source_sha256 via capture-reference
 
 ## Testing Strategy
 
