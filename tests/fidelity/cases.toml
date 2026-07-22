@@ -29,9 +29,10 @@ source = "../fixtures/flowchart-groups-complex.mmd"
 diagram = "flowchart"
 lifecycle = "active"
 tags = ["groups", "containment", "edges"]
-strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "containment", "edge-endpoints"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "edge-endpoints"]
 scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths", "text-lines"]
 ignored = ["palette", "shadow", "corner-radius", "raw-dom-structure", "raw-pixels"]
+notes = "containment dropped from strict: reference oracle (mmdc regex adapter) cannot extract subgraph boundaries, so extra-group comparison is always vacuous."
 
 [[case]]
 id = "flowchart.html.entities"
@@ -207,9 +208,10 @@ source = "../fixtures/architecture-complex.mmd"
 diagram = "architecture"
 lifecycle = "active"
 tags = ["architecture", "groups", "containment"]
-strict = ["parse", "diagram-type", "entities", "relations", "labels", "containment", "edge-endpoints"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "edge-endpoints"]
 scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths"]
 ignored = ["palette", "shadow", "corner-radius"]
+notes = "containment dropped from strict: reference oracle (mmdc regex adapter) cannot extract architecture group boundaries, so extra-group comparison is always vacuous."
 
 # ── ER (4 cases) ──────────────────────────────────────────────────────────────
 

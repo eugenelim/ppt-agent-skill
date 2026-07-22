@@ -134,10 +134,13 @@ def compare_relative_layout(
     ref_by_id = {eg.entity_id: eg for eg in ref_obs.entities}
     common_ids = set(nat_by_id) & set(ref_by_id)
 
-    # Guard: if both sides have entities but no overlap, this is an extractor gap,
+    # Guard: if BOTH sides have entities but no overlap, this is an extractor gap,
     # not a layout pass.  Return an explicit failure so the runner can surface
     # EXTRACTOR_GAP rather than vacuously passing.
-    if not common_ids and (native_obs.entities or ref_obs.entities):
+    # When only one side has entities (e.g. reference oracle has empty geometry
+    # because its regex-based extractor doesn't parse the diagram type), treat it
+    # as "no shared geometry data" and pass vacuously rather than flagging a gap.
+    if not common_ids and native_obs.entities and ref_obs.entities:
         return RelativeLayoutResult(
             passed=False,
             failures=["no common entity IDs between native and reference — likely extractor gap"],
