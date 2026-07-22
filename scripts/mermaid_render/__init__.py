@@ -153,15 +153,17 @@ def dispatch_native_result(
 def validate(src: str) -> ValidationResult:
     """Validate Mermaid source string and return a ValidationResult.
 
-    Currently implements full geometry validation for sequenceDiagram;
-    returns geometry='unvalidated' for all other types until Phase 4.
+    Graph directives and sequenceDiagram compile to a scene and run geometry
+    checks. Other directives return geometry='unvalidated'.
     renderer_backend is populated from the actual dispatch result so the
     gallery has_failures guard catches any stub-backend regression.
     """
     from dataclasses import replace as _dc_replace
+    from .native_svg import parse_render_request
     from .layout._strategies import _dispatch_validate
 
-    result = _dispatch_validate(src)
+    request = parse_render_request(src)
+    result = _dispatch_validate(request.clean_source)
 
     # Run native dispatch to capture the actual backend name.
     # Errors (NativeRenderError, UnsupportedDiagramType, …) are
