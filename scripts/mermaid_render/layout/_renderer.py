@@ -1777,11 +1777,24 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             # Clip-path shapes need a background overlay div (so text isn't clipped)
             clip_css = _CLIP_PATH_CSS.get(shape, "")
             bg_overlay = ""
+            label_html = inner
             if clip_css:
                 bg_overlay = (
                     f'<div style="position:absolute; inset:0; {clip_css} '
                     f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
                     f'var(--node-bg-to,var(--card-bg-to,#F7F6F2))); pointer-events:none;"></div>'
+                )
+                # bg_overlay is absolutely positioned, so it paints on top of any
+                # in-flow (static) label — hiding it. Lift the label into its own
+                # absolutely-positioned layer that follows in DOM order, so it paints
+                # above the overlay. Centre it: polygon tips leave no room for the
+                # flush-left flow alignment used by rectangular nodes.
+                label_html = (
+                    f'<div style="position:absolute; inset:0; display:flex; '
+                    f'flex-direction:column; align-items:center; justify-content:center; '
+                    f'text-align:center; box-sizing:border-box; '
+                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+                    f'pointer-events:none;">{inner}</div>'
                 )
             parts.append(
                 f'<div data-node-id="{_h(nid)}"'
@@ -1797,7 +1810,7 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f' display:flex; flex-direction:column; align-items:flex-start; justify-content:center;'
                 f' padding:var(--node-pad-v,12px) var(--node-pad-h,12px);'
                 f' {nl.extra_css}">'
-                f'{shape_overlay}{bg_overlay}{inner}'
+                f'{shape_overlay}{bg_overlay}{label_html}'
                 f'</div>'
             )
 
