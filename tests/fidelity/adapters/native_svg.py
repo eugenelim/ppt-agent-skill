@@ -216,6 +216,38 @@ def _extract_semantic_from_svg(svg_text: str, diagram_type: str) -> SemanticDiag
                     gid = _html_lib.unescape(parent_id)
                     group_member_map.setdefault(gid, []).append(semantic_id)
 
+        # Sequence participants: data-data-id (sequencediagram native builder)
+        did_raw = el.get("data-data-id")
+        if did_raw and tag not in ("text", "tspan"):
+            did = _html_lib.unescape(did_raw)
+            if did and did not in seen_node_ids:
+                seen_node_ids.add(did)
+                entities.append(Entity(
+                    id=did,
+                    kind="participant",
+                    label=did,
+                    shape=None,
+                    parent_id=None,
+                    order=order,
+                ))
+                order += 1
+
+        # ER entities: data-data-entity (erdiagram native builder)
+        dent_raw = el.get("data-data-entity")
+        if dent_raw and tag not in ("text", "tspan"):
+            dent = _html_lib.unescape(dent_raw)
+            if dent and dent not in seen_node_ids:
+                seen_node_ids.add(dent)
+                entities.append(Entity(
+                    id=dent,
+                    kind="entity",
+                    label=dent,
+                    shape=None,
+                    parent_id=None,
+                    order=order,
+                ))
+                order += 1
+
         # Edges: path/line elements with data-src and data-dst
         src_raw = el.get("data-src")
         dst_raw = el.get("data-dst")
