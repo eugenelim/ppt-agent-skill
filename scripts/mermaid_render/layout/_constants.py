@@ -178,6 +178,9 @@ DIAMOND_MIN = 80          # minimum diamond side length
 _HEXAGON_SIZE = 100       # px square for hexagon nodes (keeps aspect ratio 1:1)
 HEX_MIN_W = 80            # minimum hexagon width
 HEX_MIN_H = 60            # minimum hexagon height
+_BAR_W = 60               # px width of fork/join bar (horizontal UML sync bar)
+_BAR_H = 8                # px height of the visible bar stroke
+_BAR_LABEL_H = 20         # px height reserved below bar for the node label text
 ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
 NODE_MAX_W: int = 220     # upper bound for text-box node widths (circle/diamond/hexagon uncapped)
 # Self-loop direction-aware routing constants
@@ -492,6 +495,8 @@ def _node_render_h(n: "_Node") -> int:
         return n.width if n.width > 0 else _DIAMOND_SIZE
     if n.shape == "hexagon":
         return n.height if n.height > 0 else _HEXAGON_SIZE
+    if n.shape == "bar":
+        return _BAR_H + _BAR_LABEL_H
 
     raw_label = n.label.split("|", 1)[0].strip() if "|" in n.label else n.label
     main_label, sub_label = _split_sub_label(raw_label)

@@ -2,7 +2,7 @@
 
 **Mode: full (structural change + multi-feature + dependent tasks + unfamiliar territory)**
 
-- **Status:** Done (Stages 0-5, 7, 9); Stages 6, 8, 10-13 deferred per backlog anchors below
+- **Status:** Done (Stages 0-5, 7, 9, 11 partial); Stages 6, 8, 10, 12-13 deferred per backlog anchors below
 
 ## Objective
 
@@ -117,7 +117,7 @@ No supported renderer may return a placeholder scene.
 - [ ] Timeline measurement completion (Stage 8) (deferred: backlog-mermaid-p3-timeline)
 - [x] Architecture semantics (Stage 9) — `ArchitectureDiagramLayout` compiled model; service tiles with measured label, icon_bounds, side ports; junction geometry; group hierarchy; BiRel → one path + two markers; `finalized_layout_to_scene` replaces `graph_to_scene`
 - [x] C4 completion (Stage 10)
-- [ ] State diagrams (Stage 11) (deferred: backlog-mermaid-p3-state)
+- [x] State diagrams (Stage 11) — partial: immutable state model (AtomicState, CompositeState, InitialPseudoState, FinalPseudoState, Choice, Fork, Join, History, StateGate, StateTransition, StateNote) in `statediagram.py`; <<fork>>/<<join>>/<<choice>>/<<history>> parser fix; bar shape rendering in HTML and SVG paths; 69 new tests. Deferred: wire statediagram.py as primary compiler replacing _parser.py state path, full composite children compilation. (backlog-mermaid-p3-state)
 - [ ] Themes/faithful/sizing/PNG (Stage 12) (deferred: backlog-mermaid-p3-infra)
 - [ ] Semantic tests and gallery (Stage 13) (deferred: backlog-mermaid-p3-semantic-tests)
 

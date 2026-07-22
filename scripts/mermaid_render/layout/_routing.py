@@ -10,7 +10,7 @@ from ._constants import (
     BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD,
     GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
-    _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
+    _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE, _BAR_W,
 )
 from ._geometry import Rect, RoutingFailure, RouteBatch
 
@@ -36,6 +36,8 @@ def _node_render_w(n: "_Node") -> int:
         return n.width if n.width > 0 else _DIAMOND_SIZE
     if n.shape == "hexagon":
         return n.width if n.width > 0 else _HEXAGON_SIZE
+    if n.shape == "bar":
+        return n.width if n.width > 0 else _BAR_W
     return n.width or NODE_W
 
 
