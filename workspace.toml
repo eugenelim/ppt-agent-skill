@@ -58,14 +58,10 @@ open = [
   # npm ci --prefix scripts/mermaid_render/layout; then pytest tests/test_compound_layout.py -m requires_elk
   {slug = "backlog-compound-elk-ac1-ac3"},
 
-  # ── Group 2: Investigation + implementation ───────────────────────────────
+  # ── Group 2: Investigation + implementation (requires mmdc) ─────────────────
 
   # Probe mmdc 11.15 SVG output to confirm <g data-et="participant"> selector attribute names used in T11
   {slug = "seq-corr-mmdc-data-et-selectors"},
-  # Regenerate smoke_skill.py fixtures against current charts/ and styles/ file set; fix cli-cheatsheet:275 runtime-style ref
-  {slug = "smoke-skill-pre-existing-fixture-drift"},
-  # Create scripts/assemble_diagram_slide.py [--fragment] [--style] [--title] [--annotation] [--output]; auto-read fragment dims
-  {slug = "fragment-to-slide-assembler"},
   # Investigate mmdc layout rule for single-participant fragment headers wider than natural canvas; implement override
   {slug = "seq-corr-single-participant-fragment-long-header"},
 
