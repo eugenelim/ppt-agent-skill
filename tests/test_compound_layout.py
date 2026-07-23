@@ -758,3 +758,486 @@ class TestCrossScopeFixtureEdges:
         assert ("B", "C") in edge_pairs, f"B→C missing; edges: {edge_pairs}"
         assert ("C", "D") in edge_pairs, f"C→D missing; edges: {edge_pairs}"
         assert ("D", "E") in edge_pairs, f"D→E missing; edges: {edge_pairs}"
+
+
+# ── Task 1: CompoundNode and BoundaryGate dataclasses ────────────────────────
+
+
+class TestCompoundNodeBoundaryGateDataclasses:
+    """Task 1 tests: CompoundNode and BoundaryGate frozen dataclasses."""
+
+    def test_compound_node_frozen(self):
+        """Mutating a CompoundNode field raises FrozenInstanceError."""
+        import dataclasses
+        from mermaid_render.layout._geometry import CompoundNode
+
+        cn = CompoundNode(
+            group_id="g1",
+            label_layout=None,
+            local_direction="LR",
+            child_node_ids=("A", "B"),
+            child_groups=(),
+            padding=16.0,
+            minimum_size=(80.0, 40.0),
+        )
+        with pytest.raises((dataclasses.FrozenInstanceError, AttributeError, TypeError)):
+            cn.group_id = "g2"  # type: ignore[misc]
+
+    def test_boundary_gate_fields(self):
+        """BoundaryGate has all six required fields and they are accessible."""
+        from mermaid_render.layout._geometry import (
+            BoundaryGate, BoundaryGateKind, PortSide, Point,
+        )
+
+        gate = BoundaryGate(
+            gate_id="gate_0",
+            group_id="g1",
+            side=PortSide.RIGHT,
+            point=Point(100.0, 50.0),
+            semantic_node_id="A",
+            edge_id="A->B",
+            kind=BoundaryGateKind.EXIT,
+        )
+        assert gate.gate_id == "gate_0"
+        assert gate.group_id == "g1"
+        assert gate.side is PortSide.RIGHT
+        assert gate.point == Point(100.0, 50.0)
+        assert gate.semantic_node_id == "A"
+        assert gate.edge_id == "A->B"
+        assert gate.kind is BoundaryGateKind.EXIT
+
+    def test_boundary_gate_kind_entry_exit_distinct(self):
+        """BoundaryGateKind.ENTRY and BoundaryGateKind.EXIT are distinct."""
+        from mermaid_render.layout._geometry import BoundaryGateKind
+
+        assert BoundaryGateKind.ENTRY is not BoundaryGateKind.EXIT
+        assert BoundaryGateKind.ENTRY != BoundaryGateKind.EXIT
+        assert BoundaryGateKind.ENTRY.value == "ENTRY"
+        assert BoundaryGateKind.EXIT.value == "EXIT"
+
+
+# ── Task 2: build_compound_tree ───────────────────────────────────────────────
+
+
+def _make_layout_node(nid: str, parent_id: str | None = None):
+    from mermaid_render.layout._geometry import LayoutNode
+    return LayoutNode(
+        id=nid,
+        measured_width=80.0,
+        measured_height=40.0,
+        shape_id="rect",
+        parent_id=parent_id,
+        ports=[],
+        labels=[nid],
+    )
+
+
+def _make_layout_group(gid: str, parent_id: str | None = None,
+                       local_direction: str | None = None):
+    from mermaid_render.layout._geometry import LayoutGroup
+    return LayoutGroup(
+        id=gid,
+        label=gid,
+        label_width=float(len(gid) * 8),
+        label_height=20.0,
+        parent_id=parent_id,
+        padding=16.0,
+        local_direction=local_direction,
+        minimum_width=80.0,
+        minimum_height=40.0,
+    )
+
+
+def _make_layout_graph(nodes, groups, direction="TB"):
+    from mermaid_render.layout._geometry import LayoutGraph
+    return LayoutGraph(
+        nodes=list(nodes.values()),
+        groups=list(groups.values()),
+        edges=[],
+        direction=direction,
+    )
+
+
+class TestBuildCompoundTree:
+    """Task 2 tests: build_compound_tree."""
+
+    def test_tree_covers_all_groups(self):
+        """Three nested groups all appear in the tree."""
+        from mermaid_render.layout._pipeline import build_compound_tree
+
+        nodes = {
+            "A": _make_layout_node("A", parent_id="inner"),
+            "B": _make_layout_node("B", parent_id="mid"),
+        }
+        groups = {
+            "outer": _make_layout_group("outer"),
+            "mid": _make_layout_group("mid", parent_id="outer"),
+            "inner": _make_layout_group("inner", parent_id="mid"),
+        }
+        graph = _make_layout_graph(nodes, groups)
+
+        roots = build_compound_tree(graph)
+
+        def _collect(cnodes):
+            ids = set()
+            for c in cnodes:
+                ids.add(c.group_id)
+                ids |= _collect(c.child_groups)
+            return ids
+
+        all_ids = _collect(roots)
+        assert "outer" in all_ids
+        assert "mid" in all_ids
+        assert "inner" in all_ids
+
+    def test_tree_parent_child_relations(self):
+        """Inner CompoundNode appears in outer's child_groups."""
+        from mermaid_render.layout._pipeline import build_compound_tree
+
+        nodes = {
+            "A": _make_layout_node("A", parent_id="inner"),
+        }
+        groups = {
+            "outer": _make_layout_group("outer"),
+            "inner": _make_layout_group("inner", parent_id="outer"),
+        }
+        graph = _make_layout_graph(nodes, groups)
+
+        roots = build_compound_tree(graph)
+
+        outer_cn = next((r for r in roots if r.group_id == "outer"), None)
+        assert outer_cn is not None, "outer should be a root"
+        child_ids = [c.group_id for c in outer_cn.child_groups]
+        assert "inner" in child_ids, f"inner should be a child of outer; got {child_ids}"
+
+    def test_tree_leaf_nodes_in_child_node_ids(self):
+        """All direct leaf node IDs appear in the CompoundNode's child_node_ids."""
+        from mermaid_render.layout._pipeline import build_compound_tree
+
+        nodes = {
+            "A": _make_layout_node("A", parent_id="g1"),
+            "B": _make_layout_node("B", parent_id="g1"),
+            "C": _make_layout_node("C", parent_id=None),  # ungrouped
+        }
+        groups = {
+            "g1": _make_layout_group("g1"),
+        }
+        graph = _make_layout_graph(nodes, groups)
+
+        roots = build_compound_tree(graph)
+
+        g1_cn = next((r for r in roots if r.group_id == "g1"), None)
+        assert g1_cn is not None, "g1 should be a root"
+        assert "A" in g1_cn.child_node_ids, f"A not in child_node_ids: {g1_cn.child_node_ids}"
+        assert "B" in g1_cn.child_node_ids, f"B not in child_node_ids: {g1_cn.child_node_ids}"
+        assert "C" not in g1_cn.child_node_ids, "ungrouped C should not appear in g1's child_node_ids"
+
+
+# ── Task 3: EdgePartition / make_edge_partition ───────────────────────────────
+
+
+class TestEdgePartitionDataclass:
+    """Task 3 tests: EdgePartition typed dataclass."""
+
+    def test_intra_group_edge_classification(self):
+        """Edge where both endpoints share a group → intra."""
+        from mermaid_render.layout._pipeline import make_edge_partition
+
+        nodes = {
+            "C": _make_node("C", x=0, y=0, group="g1"),
+            "D": _make_node("D", x=100, y=0, group="g1"),
+        }
+        groups = {"g1": _make_group("g1", ["C", "D"])}
+        edges = [_make_edge("C", "D")]
+
+        ep = make_edge_partition(edges, nodes, groups)
+        assert len(ep.intra) == 1
+        assert len(ep.free) == 0
+        assert len(ep.cross) == 0
+
+    def test_free_edge_classification(self):
+        """Edge where neither endpoint is in a group → free."""
+        from mermaid_render.layout._pipeline import make_edge_partition
+
+        nodes = {
+            "A": _make_node("A", x=0, y=0),
+            "B": _make_node("B", x=100, y=0),
+        }
+        groups = {}
+        edges = [_make_edge("A", "B")]
+
+        ep = make_edge_partition(edges, nodes, groups)
+        assert len(ep.free) == 1
+        assert len(ep.intra) == 0
+        assert len(ep.cross) == 0
+
+    def test_cross_boundary_edge_classification(self):
+        """Edge across groups → cross."""
+        from mermaid_render.layout._pipeline import make_edge_partition
+
+        nodes = {
+            "A": _make_node("A", x=0, y=0, group="g1"),
+            "B": _make_node("B", x=100, y=0, group="g2"),
+        }
+        groups = {
+            "g1": _make_group("g1", ["A"]),
+            "g2": _make_group("g2", ["B"]),
+        }
+        edges = [_make_edge("A", "B")]
+
+        ep = make_edge_partition(edges, nodes, groups)
+        assert len(ep.cross) == 1
+        assert len(ep.free) == 0
+        assert len(ep.intra) == 0
+
+    def test_partition_exhaustive(self):
+        """All edges appear in exactly one bucket."""
+        from mermaid_render.layout._pipeline import make_edge_partition
+
+        nodes = {
+            "A": _make_node("A", x=0, y=0, group="g1"),
+            "B": _make_node("B", x=100, y=0, group="g1"),
+            "C": _make_node("C", x=200, y=0, group="g2"),
+            "D": _make_node("D", x=300, y=0),
+        }
+        groups = {
+            "g1": _make_group("g1", ["A", "B"]),
+            "g2": _make_group("g2", ["C"]),
+        }
+        edges = [
+            _make_edge("A", "B"),   # intra
+            _make_edge("A", "C"),   # cross
+            _make_edge("D", "A"),   # cross (D ungrouped → A in g1)
+        ]
+        ep = make_edge_partition(edges, nodes, groups)
+        total = len(ep.free) + len(ep.intra) + len(ep.cross)
+        assert total == len(edges), "Buckets must be exhaustive"
+
+
+# ── Task 4: recursive_compound_layout ────────────────────────────────────────
+
+
+class TestRecursiveCompoundLayout:
+    """Task 4 tests: recursive_compound_layout."""
+
+    def _two_group_setup(self):
+        """Two sibling groups g1 (A, B) and g2 (C, D) with LR outer direction."""
+        nodes = {
+            "A": _make_node("A", x=50, y=50, group="g1"),
+            "B": _make_node("B", x=200, y=50, group="g1"),
+            "C": _make_node("C", x=50, y=200, group="g2"),
+            "D": _make_node("D", x=200, y=200, group="g2"),
+        }
+        edges = [
+            _make_edge("A", "B"),
+            _make_edge("C", "D"),
+        ]
+        groups = {
+            "g1": _make_group("g1", ["A", "B"], direction="LR"),
+            "g2": _make_group("g2", ["C", "D"], direction="LR"),
+        }
+        return nodes, edges, groups
+
+    def test_recursive_compound_layout_returns_bboxes(self):
+        """recursive_compound_layout returns non-empty bboxes for each group."""
+        from mermaid_render.layout._pipeline import recursive_compound_layout
+
+        nodes, edges, groups = self._two_group_setup()
+        grp_bboxes, boundary_gates = recursive_compound_layout(
+            nodes, edges, groups, "LR", 800, 600,
+        )
+        assert "g1" in grp_bboxes, "g1 should have a bbox"
+        assert "g2" in grp_bboxes, "g2 should have a bbox"
+
+    def test_sibling_groups_non_overlapping(self):
+        """Two sibling groups' bounding boxes do not intersect (AC4)."""
+        from mermaid_render.layout._pipeline import recursive_compound_layout
+
+        nodes, edges, groups = self._two_group_setup()
+        grp_bboxes, _ = recursive_compound_layout(
+            nodes, edges, groups, "LR", 800, 600,
+        )
+        x0_g1, y0_g1, x1_g1, y1_g1 = grp_bboxes["g1"]
+        x0_g2, y0_g2, x1_g2, y1_g2 = grp_bboxes["g2"]
+
+        # Boxes must not overlap: either one ends before the other starts in X or Y
+        x_overlap = x0_g1 < x1_g2 and x0_g2 < x1_g1
+        y_overlap = y0_g1 < y1_g2 and y0_g2 < y1_g1
+        assert not (x_overlap and y_overlap), (
+            f"Groups overlap: g1={grp_bboxes['g1']}, g2={grp_bboxes['g2']}"
+        )
+
+    def test_recursive_compound_layout_deterministic(self):
+        """Two calls with identical inputs produce identical bboxes."""
+        from mermaid_render.layout._pipeline import recursive_compound_layout
+        import copy
+
+        nodes1, edges1, groups1 = self._two_group_setup()
+        nodes2 = copy.deepcopy(nodes1)
+        edges2 = copy.deepcopy(edges1)
+        groups2 = copy.deepcopy(groups1)
+
+        bboxes1, _ = recursive_compound_layout(nodes1, edges1, groups1, "LR", 800, 600)
+        bboxes2, _ = recursive_compound_layout(nodes2, edges2, groups2, "LR", 800, 600)
+
+        for gid in bboxes1:
+            assert bboxes1[gid] == bboxes2[gid], (
+                f"Non-deterministic bbox for {gid}: {bboxes1[gid]} vs {bboxes2[gid]}"
+            )
+
+
+# ── Task 5: BoundaryGate creation for cross-boundary edges ───────────────────
+
+
+class TestBoundaryGateCreation:
+    """Task 5 tests: BoundaryGate objects for cross-boundary edges."""
+
+    def test_boundary_gate_per_cross_boundary_edge(self):
+        """One EXIT + one ENTRY gate per cross-boundary edge (AC5)."""
+        from mermaid_render.layout._pipeline import recursive_compound_layout
+        from mermaid_render.layout._geometry import BoundaryGateKind
+
+        nodes = {
+            "A": _make_node("A", x=50, y=50, group="g1"),
+            "B": _make_node("B", x=200, y=50, group="g2"),
+        }
+        edges = [_make_edge("A", "B")]
+        # Set up edge_id so BoundaryGate can reference it
+        edges[0].edge_id = "A->B"
+        groups = {
+            "g1": _make_group("g1", ["A"], direction="LR"),
+            "g2": _make_group("g2", ["B"], direction="LR"),
+        }
+
+        _, boundary_gates = recursive_compound_layout(
+            nodes, edges, groups, "LR", 800, 600,
+        )
+
+        exits = [g for g in boundary_gates if g.kind is BoundaryGateKind.EXIT]
+        entries = [g for g in boundary_gates if g.kind is BoundaryGateKind.ENTRY]
+        assert len(exits) >= 1, f"Expected ≥1 EXIT gate, got {exits}"
+        assert len(entries) >= 1, f"Expected ≥1 ENTRY gate, got {entries}"
+
+    def test_gate_ids_unique(self):
+        """All gate_id values are distinct across the diagram."""
+        from mermaid_render.layout._pipeline import recursive_compound_layout
+
+        nodes = {
+            "A": _make_node("A", x=50, y=50, group="g1"),
+            "B": _make_node("B", x=200, y=50, group="g2"),
+            "C": _make_node("C", x=350, y=50, group="g3"),
+        }
+        e1 = _make_edge("A", "B"); e1.edge_id = "A->B"
+        e2 = _make_edge("B", "C"); e2.edge_id = "B->C"
+        edges = [e1, e2]
+        groups = {
+            "g1": _make_group("g1", ["A"], direction="LR"),
+            "g2": _make_group("g2", ["B"], direction="LR"),
+            "g3": _make_group("g3", ["C"], direction="LR"),
+        }
+
+        _, boundary_gates = recursive_compound_layout(
+            nodes, edges, groups, "LR", 1200, 600,
+        )
+
+        gate_ids = [g.gate_id for g in boundary_gates]
+        assert len(gate_ids) == len(set(gate_ids)), (
+            f"Duplicate gate_ids found: {gate_ids}"
+        )
+
+
+# ── Task 6: Empty group handling ─────────────────────────────────────────────
+
+
+class TestEmptyGroupHandling:
+    """Task 6 tests: empty groups have positive, deterministic bounds."""
+
+    EMPTY_SUBGRAPH_SRC = """flowchart LR
+    subgraph empty_group
+    end
+    A --> B
+"""
+
+    def test_empty_group_non_zero_bounds(self):
+        """Empty subgraph produces a GroupLayout with positive width and height."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+
+        result = _compile_flowchart(self.EMPTY_SUBGRAPH_SRC, width_hint=0, options=None)
+        gl = result.layout.group_layouts
+
+        for gid, group_layout in gl.items():
+            b = group_layout.boundary_bounds
+            assert b.w > 0, f"Group {gid} has zero width"
+            assert b.h > 0, f"Group {gid} has zero height"
+
+    def test_empty_group_deterministic(self):
+        """Same source compiled twice → identical group bounds."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+
+        r1 = _compile_flowchart(self.EMPTY_SUBGRAPH_SRC, width_hint=0, options=None)
+        r2 = _compile_flowchart(self.EMPTY_SUBGRAPH_SRC, width_hint=0, options=None)
+
+        for gid in r1.layout.group_layouts:
+            b1 = r1.layout.group_layouts[gid].boundary_bounds
+            b2 = r2.layout.group_layouts[gid].boundary_bounds
+            assert (b1.x, b1.y, b1.w, b1.h) == (b2.x, b2.y, b2.w, b2.h), (
+                f"Non-deterministic bounds for {gid}: {b1} vs {b2}"
+            )
+
+
+# ── Task 7: No post-layout correction passes in primary path ──────────────────
+
+
+class TestNoPostLayoutCorrectionInPrimaryPath:
+    """Task 7 goal-based check: no coordinate correction patterns in primary path."""
+
+    def test_no_banned_patterns_in_strategies(self):
+        """grep for group_separation/member_pushing/bbox_recomputation returns 0 matches."""
+        import subprocess
+        from pathlib import Path
+
+        strategies_py = Path(__file__).parent.parent / "scripts" / "mermaid_render" / "layout" / "_strategies.py"
+        patterns = ["group_separation", "member_pushing", "bbox_recomputation"]
+        for pat in patterns:
+            result = subprocess.run(
+                ["grep", "-n", pat, str(strategies_py)],
+                capture_output=True, text=True,
+            )
+            assert result.returncode != 0 or result.stdout.strip() == "", (
+                f"Pattern '{pat}' found in _strategies.py: {result.stdout}"
+            )
+
+    def test_boundary_gates_field_on_finalized_layout(self):
+        """FinalizedLayout has boundary_gates field (default empty tuple)."""
+        from mermaid_render.layout._geometry import FinalizedLayout
+        import dataclasses
+
+        fields = {f.name for f in dataclasses.fields(FinalizedLayout)}
+        assert "boundary_gates" in fields, (
+            f"boundary_gates not found in FinalizedLayout fields: {fields}"
+        )
+
+    def test_no_post_layout_corrections_in_compiled_output(self):
+        """Compile a compound flowchart; boundary_gates is accessible on the result."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+
+        src = """flowchart LR
+    subgraph g1
+        A --> B
+    end
+    subgraph g2
+        C --> D
+    end
+    B --> C
+"""
+        result = _compile_flowchart(src, width_hint=0, options=None)
+        # boundary_gates must be accessible (not raise AttributeError)
+        gates = result.layout.boundary_gates
+        assert isinstance(gates, tuple), f"boundary_gates should be a tuple, got {type(gates)}"
+
