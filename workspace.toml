@@ -50,15 +50,11 @@ shipped = [
   "docs/specs/er-finalized-layout-and-dynamic-width",
   "docs/specs/requirement-finalized-layout-sizing",
   "docs/specs/seq-corr-mmdc-data-et-selectors",
+  "docs/specs/seq-corr-single-participant-fragment-long-header",
 ]
 
 [backlog]
 open = [
-  # ── Group 2: Investigation + implementation (requires mmdc) ─────────────────
-
-  # Investigate mmdc layout rule for single-participant fragment headers wider than natural canvas; implement override
-  {slug = "seq-corr-single-participant-fragment-long-header"},
-
   # ── Group 3: Needs spec / design first ───────────────────────────────────
 
   # Write a dedicated sequence-box spec covering box label + fill rendering (box directive parsed but not rendered)
