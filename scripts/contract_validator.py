@@ -331,7 +331,7 @@ def validate_grounding_mode(anchors: dict[str, str], result: ValidationResult, l
     raw = anchors.get("grounding_mode")
     if not is_non_empty_string(raw):
         return  # missing-anchor error is raised by validate_required_anchor_fields
-    token = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    token = raw.strip().lower().replace("-", "_").replace(" ", "_")  # type: ignore[union-attr]
     token = GROUNDING_MODE_ALIASES.get(token, token)
     if token not in VALID_GROUNDING_MODES:
         result.error(
@@ -468,7 +468,7 @@ def validate_outline(path: Path) -> tuple[ValidationResult, dict[str, Any]]:
         lower_rank = density_rank(page["density_lower"])
         target_rank = density_rank(page["density_target"])
         upper_rank = density_rank(page["density_upper"])
-        if None not in (lower_rank, target_rank, upper_rank) and not (lower_rank <= target_rank <= upper_rank):
+        if None not in (lower_rank, target_rank, upper_rank) and not (lower_rank <= target_rank <= upper_rank):  # type: ignore[operator]
             result.error(f"{page_label}: 密度窗口非法，必须满足 下限 <= 目标 <= 上限")
 
         rhythm_action = page["rhythm_action"]
@@ -925,7 +925,7 @@ def validate_images(path: Path, require_paths: bool) -> tuple[ValidationResult, 
         page_label = f"slide {slide_number if slide_number is not None else '?'}"
         cards = page.get("cards") if isinstance(page.get("cards"), list) else []
 
-        for index, card in enumerate(cards, start=1):
+        for index, card in enumerate(cards, start=1):  # type: ignore[arg-type]
             if not isinstance(card, dict):
                 continue
             total_cards += 1

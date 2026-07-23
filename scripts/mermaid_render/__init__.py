@@ -90,7 +90,7 @@ def dispatch_native_result(
     d = canonicalize_directive(raw_directive)
 
     try:
-        return render_svg_result(
+        return render_svg_result(  # type: ignore[return-value]
             src,
             theme=theme,
             width_hint=width_hint,
@@ -236,23 +236,23 @@ def to_svg(
         try:
             result = render_svg_result(
                 src,
-                theme=theme,
+                theme=theme,  # type: ignore[arg-type]
                 faithful=faithful,
                 width_hint=width_hint,
                 height_hint=height_hint,
             )
             if strict:
-                if result.semantic_adapter == "partial":
+                if result.semantic_adapter == "partial":  # type: ignore[attr-defined]
                     if not experimental:
-                        raise result.to_exception()  # → ExperimentalOptInRequired
+                        raise result.to_exception()  # type: ignore[attr-defined]  # → ExperimentalOptInRequired
                     # experimental=True opts in to unvalidated output for experimental types only.
-                    return result.svg  # type: ignore[return-value]
-                if not result.is_success(strict=True):
-                    raise result.to_exception()
+                    return result.svg  # type: ignore[return-value,attr-defined]
+                if not result.is_success(strict=True):  # type: ignore[attr-defined]
+                    raise result.to_exception()  # type: ignore[attr-defined]
             else:
-                if result.geometry == "failed":
-                    raise result.to_exception()
-            return result.svg  # type: ignore[union-attr]
+                if result.geometry == "failed":  # type: ignore[attr-defined]
+                    raise result.to_exception()  # type: ignore[attr-defined]
+            return result.svg  # type: ignore[union-attr,attr-defined]
         except NativeRendererUnavailable as _unavail:
             if fallback == "legacy-dom":
                 pass  # Fall through to legacy DOM path below

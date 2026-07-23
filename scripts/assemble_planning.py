@@ -269,7 +269,7 @@ def assemble_page(payload: dict, refs_dir: Path | None = None) -> tuple[dict, li
     if not cards_in:
         raise AssemblyError("page: at least one card is required")
     cards = [
-        _assemble_card(c, slide_number, i, density_contract["max_lines_per_card"],
+        _assemble_card(c, slide_number, i, density_contract["max_lines_per_card"],  # type: ignore[arg-type]
                        refs_dir, dropped)
         for i, c in enumerate(cards_in, start=1)
     ]

@@ -17,7 +17,7 @@ import hashlib
 import math
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from lxml import etree
+from lxml import etree  # type: ignore[import-untyped]
 
 from .scene import (
     SvgScene, SceneGroup, SceneRect, SceneRoundedRect, SceneCircle, SceneEllipse,

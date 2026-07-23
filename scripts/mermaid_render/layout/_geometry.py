@@ -315,8 +315,8 @@ class RoutedEdge:
     dst_label_layout: Optional[EdgeLabelLayout]
     is_reversed: bool = False      # back-edge (drawn reversed)
     route_diagnostics: str = ""    # "ok" | "fallback" | "failed:..."
-    source_marker: "MarkerKind" = None  # type: ignore[assignment]  — set post-init below
-    target_marker: "MarkerKind" = None  # type: ignore[assignment]  — set post-init below
+    source_marker: "MarkerKind" = None  # type: ignore[assignment]
+    target_marker: "MarkerKind" = None  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         # Coerce None defaults to MarkerKind.NONE so callers that don't set these fields

@@ -80,17 +80,17 @@ class RendererCapability:
 
 def _build_flowchart(request: object) -> tuple:  # type: ignore[type-arg]
     from .native_svg import _build_graph_pipeline
-    return _build_graph_pipeline(request, "flowchart")
+    return _build_graph_pipeline(request, "flowchart")  # type: ignore[arg-type]
 
 
 def _build_statediagram_v2(request: object) -> tuple:  # type: ignore[type-arg]
     from .native_svg import _build_graph_pipeline
-    return _build_graph_pipeline(request, "statediagram-v2")
+    return _build_graph_pipeline(request, "statediagram-v2")  # type: ignore[arg-type]
 
 
 def _build_statediagram(request: object) -> tuple:  # type: ignore[type-arg]
     from .native_svg import _build_graph_pipeline
-    return _build_graph_pipeline(request, "statediagram")
+    return _build_graph_pipeline(request, "statediagram")  # type: ignore[arg-type]
 
 
 def _build_classdiagram(request: object) -> tuple:  # type: ignore[type-arg]

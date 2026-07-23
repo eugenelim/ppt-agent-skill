@@ -55,7 +55,7 @@ def _thumb(path: Path, w: int, h: int) -> Image.Image:
     try:
         img = Image.open(path).convert("RGB")
         img.thumbnail((w * 2, h * 2))
-        return img.resize((w, h), Image.LANCZOS)
+        return img.resize((w, h), Image.LANCZOS)  # type: ignore[attr-defined]
     except Exception as exc:  # noqa: BLE001 — any decode failure -> placeholder
         print(f"slide_montage: skipping unreadable {path.name}: {exc}", file=sys.stderr)
         placeholder = Image.new("RGB", (w, h), (40, 40, 48))

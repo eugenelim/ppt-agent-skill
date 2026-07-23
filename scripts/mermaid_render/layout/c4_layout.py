@@ -574,7 +574,7 @@ def _make_c4_edge_elements(
             lx = 0.25 * sx + 0.5 * ctrl_x + 0.25 * ex
             ly = 0.25 * sy + 0.5 * ctrl_y + 0.25 * ey
         else:
-            cmds = (
+            cmds = (  # type: ignore[assignment]
                 ("M", float(sx), float(sy)),
                 ("L", float(ex), float(ey)),
             )
@@ -759,7 +759,7 @@ def layout_c4_scene(
 
     # ── Nodes ─────────────────────────────────────────────────────────────────
     for item in packing_order:
-        box = box_map.get(item.alias)
+        box = box_map.get(item.alias)  # type: ignore[assignment]
         if box:
             els = _make_c4_node_elements(item, box, scene_hash)
             for el in els:

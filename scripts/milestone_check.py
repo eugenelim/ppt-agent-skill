@@ -314,7 +314,7 @@ class Checker:
             and isinstance(card.get("image"), dict)
             and bool(card.get("image", {}).get("needed"))
             for page in pages
-            for card in (page.get("cards") if isinstance(page.get("cards"), list) else [])
+            for card in (page.get("cards") if isinstance(page.get("cards"), list) else [])  # type: ignore[union-attr]
         )
         if needs_external_images:
             self.must_dir(images_dir)

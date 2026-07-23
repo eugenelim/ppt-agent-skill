@@ -253,7 +253,7 @@ def _make_node_element(
     sec = section_of[idx]
     label = nd["label"]
     fill_c, stroke_c = _node_fill_stroke(depth, sec, shape)
-    elements = []
+    elements: list = []
 
     font_size = 13.0 if depth == 0 else 12.0
     font_weight = 700 if depth == 0 else 400
@@ -463,23 +463,23 @@ def _tt_apportion(v: _TidyNode, default_ancestor: _TidyNode) -> _TidyNode:
     sol = vol.mod
 
     while _tt_next_right(vil) and _tt_next_left(vir):
-        vil = _tt_next_right(vil)
-        vir = _tt_next_left(vir)
-        vol = _tt_next_left(vol)
-        vor = _tt_next_right(vor)
+        vil = _tt_next_right(vil)  # type: ignore[assignment]
+        vir = _tt_next_left(vir)  # type: ignore[assignment]
+        vol = _tt_next_left(vol)  # type: ignore[assignment]
+        vor = _tt_next_right(vor)  # type: ignore[assignment]
         vor.ancestor = v
 
-        shift = (vil.prelim + sil) - (vir.prelim + sir) + _tt_sep(vil, vir)
+        shift = (vil.prelim + sil) - (vir.prelim + sir) + _tt_sep(vil, vir)  # type: ignore[union-attr,arg-type]
         if shift > 0:
-            a = _tt_ancestor(vil, v, default_ancestor)
+            a = _tt_ancestor(vil, v, default_ancestor)  # type: ignore[arg-type]
             _tt_move_subtree(a, v, shift)
             sir += shift
             sor += shift
 
-        sil += vil.mod
-        sir += vir.mod
-        sol += vol.mod
-        sor += vor.mod
+        sil += vil.mod  # type: ignore[union-attr]
+        sir += vir.mod  # type: ignore[union-attr]
+        sol += vol.mod  # type: ignore[union-attr]
+        sor += vor.mod  # type: ignore[union-attr]
 
     if _tt_next_right(vil) and not _tt_next_right(vor):
         vor.thread = _tt_next_right(vil)

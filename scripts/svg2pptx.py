@@ -19,7 +19,7 @@ from pathlib import Path
 
 from proof_gate import check_deliverable_gate
 
-from lxml import etree
+from lxml import etree  # type: ignore[import-untyped]
 from pptx import Presentation
 from pptx.util import Emu
 

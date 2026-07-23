@@ -359,14 +359,14 @@ def validate_card(
     if argument_role and argument_role not in VALID_ARGUMENT_ROLES:
         result.warn(f"{card_label}: unknown argument_role '{argument_role}'")
 
-    has_headline = isinstance(card.get("headline"), str) and card.get("headline").strip()
+    has_headline = isinstance(card.get("headline"), str) and card.get("headline").strip()  # type: ignore[union-attr]
     has_body = bool([item for item in as_list(card.get("body")) if isinstance(item, str) and item.strip()])
     has_items = bool([item for item in as_list(card.get("items")) if (item.strip() if isinstance(item, str) else item)])
     has_data = bool([item for item in as_list(card.get("data_points")) if isinstance(item, dict)])
     chart = card.get("chart") if isinstance(card.get("chart"), dict) else {}
-    has_chart = bool(chart.get("chart_type"))
+    has_chart = bool(chart.get("chart_type"))  # type: ignore[union-attr]
     image_contract = card.get("image") if isinstance(card.get("image"), dict) else {}
-    has_image_content = bool(image_contract.get("needed"))
+    has_image_content = bool(image_contract.get("needed"))  # type: ignore[union-attr]
     # 真正的内容信号：正文 / 列表项 / 数据点 / 图表 / 所需配图，其一即可。
     # headline 不算内容——只有 headline 就是骨架卡（skeleton），须拦下。
     has_content = has_body or has_items or has_data or has_chart or has_image_content
@@ -378,8 +378,8 @@ def validate_card(
         else:
             result.error(f"{card_label}: empty card payload")
 
-    if has_chart and chart.get("chart_type") not in VALID_CHART_TYPES:
-        result.error(f"{card_label}: invalid chart_type '{chart.get('chart_type')}'")
+    if has_chart and chart.get("chart_type") not in VALID_CHART_TYPES:  # type: ignore[union-attr,operator]
+        result.error(f"{card_label}: invalid chart_type '{chart.get('chart_type')}'")  # type: ignore[union-attr]
 
     budget = card.get("content_budget")
     if not isinstance(budget, dict):
@@ -387,7 +387,7 @@ def validate_card(
     else:
         max_lines = budget.get("body_max_lines")
         density_contract = page.get("density_contract") if isinstance(page.get("density_contract"), dict) else {}
-        contract_max_lines = density_contract.get("max_lines_per_card")
+        contract_max_lines = density_contract.get("max_lines_per_card")  # type: ignore[union-attr]
         if isinstance(max_lines, int) and isinstance(contract_max_lines, int) and max_lines > contract_max_lines:
             result.error(
                 f"{card_label}: content_budget.body_max_lines={max_lines} exceeds density_contract.max_lines_per_card={contract_max_lines}"
@@ -413,7 +413,7 @@ def validate_card(
                 result.warn(f"{card_label}: image.needed=false so image.{field_name} should be null")
 
     density_contract = page.get("density_contract") if isinstance(page.get("density_contract"), dict) else {}
-    image_policy = density_contract.get("image_policy")
+    image_policy = density_contract.get("image_policy")  # type: ignore[union-attr]
     if image_policy == "support_only":
         if isinstance(image, dict) and image.get("needed") and image.get("usage") == "hero-background":
             result.error(f"{card_label}: image_policy=support_only forbids hero-background images")
@@ -489,9 +489,9 @@ def validate_density_contract(page: dict[str, Any], label: str, result: Validati
     lower_rank = density_rank(lower)
     upper_rank = density_rank(upper)
     label_rank = density_rank(density_label)
-    if None not in (lower_rank, upper_rank) and lower_rank > upper_rank:
+    if None not in (lower_rank, upper_rank) and lower_rank > upper_rank:  # type: ignore[operator]
         result.error(f"{label}: density_contract.page_lower_bound cannot be greater than page_upper_bound")
-    if None not in (lower_rank, upper_rank, label_rank) and not (lower_rank <= label_rank <= upper_rank):
+    if None not in (lower_rank, upper_rank, label_rank) and not (lower_rank <= label_rank <= upper_rank):  # type: ignore[operator]
         result.error(f"{label}: density_label must stay within density_contract page bounds")
 
     for field_name in ("max_cards", "max_charts", "min_body_font_px", "max_lines_per_card"):

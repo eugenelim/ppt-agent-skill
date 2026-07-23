@@ -2,9 +2,18 @@ from __future__ import annotations
 
 import math
 import re
+import types as _types
 from dataclasses import dataclass
 from html import escape as _h
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
+
+if TYPE_CHECKING:
+    from ._geometry import (
+        ArrowSpec, CompiledFlowchart, FinalizedLayout,
+        TextLayout, NodeLayout, GroupLayout, Point, PortSide,
+        RoutedEdge, SequenceCompileResult, SequenceGeometry,
+        SequenceValidationResult, ValidationResult, LayoutGraph,
+    )
 
 
 @dataclass(frozen=True)
@@ -258,7 +267,7 @@ _SEQ_ELSE_RE = re.compile(r'^(else|and|option)\s*(.*)', re.I)
 
 def _layout_lifeline(
     src: str, direction: str, width_hint: int
-) -> "tuple[str, object]":
+) -> "tuple[str, SequenceGeometry]":
     """sequenceDiagram: participants as columns, messages as horizontal arrows."""
     from ._geometry import (  # noqa: PLC0415
         Bounds, ParticipantGeometry, MessageGeometry, ActivationGeometry,
@@ -700,7 +709,7 @@ def _layout_lifeline(
         _nprimary = _npids[0] if _npids else ""
         if _npos == "left_of" and _nprimary in _p_index:
             _nx = _cx(_nprimary) - _box_hw(_nprimary) * 2 - SIDE_NOTE_GAP
-            _min_note_x = min(_min_note_x, _nx)
+            _min_note_x = min(_min_note_x, _nx)  # type: ignore[assignment]
         elif _npos == "right_of" and _nprimary in _p_index:
             _nx = _cx(_nprimary) + SIDE_NOTE_GAP
             _max_note_x = max(_max_note_x, _nx + _box_hw(_nprimary) * 2)
@@ -1583,8 +1592,8 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
         # Reserve space for cardinality glyphs before drawing the main line
         card_src = rel["card_src"]
         card_dst = rel["card_dst"]
-        src_r = _er_glyph_reserve(card_src) if card_src else 4.0
-        dst_r = _er_glyph_reserve(card_dst) if card_dst else 4.0
+        src_r = _er_glyph_reserve(card_src) if card_src else 4.0  # type: ignore[arg-type]
+        dst_r = _er_glyph_reserve(card_dst) if card_dst else 4.0  # type: ignore[arg-type]
         lx1 = src_ex + uvx * src_r
         ly1 = src_ey + uvy * src_r
         lx2 = dst_ex - uvx * dst_r
@@ -1609,13 +1618,13 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
 
         # Cardinality glyphs: direction from boundary outward toward the other entity
         if card_src:
-            parts.extend(_render_crow_foot(src_ex, src_ey, uvx, uvy, card_src, _edge_color))
+            parts.extend(_render_crow_foot(src_ex, src_ey, uvx, uvy, card_src, _edge_color))  # type: ignore[arg-type]
         if card_dst:
-            parts.extend(_render_crow_foot(dst_ex, dst_ey, -uvx, -uvy, card_dst, _edge_color))
+            parts.extend(_render_crow_foot(dst_ex, dst_ey, -uvx, -uvy, card_dst, _edge_color))  # type: ignore[arg-type]
 
         if rel["label"]:
             # Label on the longest (only) segment: trimmed midpoint
-            edge_labels.append((
+            edge_labels.append((  # type: ignore[arg-type]
                 (lx1 + lx2) / 2.0,
                 (ly1 + ly2) / 2.0,
                 rel["label"],
@@ -1920,8 +1929,8 @@ def _compile_classdiagram(
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
 
     finalized = FinalizedLayout(
-        node_layouts=node_layouts,
-        group_layouts={},
+        node_layouts=_types.MappingProxyType(node_layouts),
+        group_layouts=_types.MappingProxyType({}),
         routed_edges=routed_edges_ir,
         routing_failures=route_batch.failures,
         visible_bounds=canvas_bounds,
@@ -4961,7 +4970,7 @@ def _clip_cross_scope_exit_waypoints(routed, src_group_map, grp_bboxes) -> None:
         if len(wps) < 2:
             continue
         first_out = next(
-            (i for i, p in enumerate(wps) if not _inside(*_xy(p), bbox)),
+            (i for i, p in enumerate(wps) if not _inside(*_xy(p), bbox)),  # type: ignore[call-arg]
             None,
         )
         # None -> whole route inside the box; 0 -> already starts outside. Skip both.
@@ -5105,7 +5114,7 @@ def _render_legend_from_layout(layout: "FinalizedLayout") -> str:
             self.style = style
             self.reversed_ = rev
     stubs = [_EdgeProxy(re.edge_style, re.is_reversed) for re in layout.routed_edges]
-    return _render_legend(stubs, layout.group_layouts)
+    return _render_legend(stubs, layout.group_layouts)  # type: ignore[arg-type]
 
 
 def _recursive_group_layout(
@@ -5172,8 +5181,8 @@ def _recursive_group_layout(
         _seen.add(gid)
         for m in groups[gid].members:
             if m in nodes:
-                nodes[m].x += dx
-                nodes[m].y += dy
+                nodes[m].x += dx  # type: ignore[assignment]
+                nodes[m].y += dy  # type: ignore[assignment]
         for c in children[gid]:
             _shift_group(c, dx, dy, _seen)
 
@@ -5604,7 +5613,7 @@ def _compile_flowchart(
                 "edge_id": _er["id"],
             })
         from ._routing import RouteBatch as _RouteBatch
-        route_batch = _RouteBatch(routed=_elk_route_dicts, failures=())
+        route_batch = _RouteBatch(routed=tuple(_elk_route_dicts), failures=())
     else:
         # Python Sugiyama + A* path.
         # Auto-select direction (TB vs LR) when both size hints are given
@@ -5740,8 +5749,8 @@ def _compile_flowchart(
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
 
     finalized = FinalizedLayout(
-        node_layouts=node_layouts,
-        group_layouts=group_layouts,
+        node_layouts=_types.MappingProxyType(node_layouts),
+        group_layouts=_types.MappingProxyType(group_layouts),
         routed_edges=routed_edges_ir,
         routing_failures=route_batch.failures,
         visible_bounds=canvas_bounds,
@@ -6122,7 +6131,7 @@ def _dispatch_validate(src: str) -> "ValidationResult":
 
     if d in _GRAPH_DIRECTIVES:
         try:
-            compiled = _compile_flowchart(clean, 0, None)
+            compiled_fc = _compile_flowchart(clean, 0, None)
         except Exception as exc:
             return ValidationResult(
                 render="fail",
@@ -6130,7 +6139,7 @@ def _dispatch_validate(src: str) -> "ValidationResult":
                 geometry="unvalidated",
                 errors=(str(exc),),
             )
-        return compiled.validation
+        return compiled_fc.validation
 
     return ValidationResult(geometry="unvalidated")
 

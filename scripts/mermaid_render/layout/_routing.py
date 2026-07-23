@@ -13,7 +13,7 @@ from ._constants import (
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE, _BAR_W,
     _measure_text_width,
 )
-from ._geometry import Rect, RoutingFailure, RouteBatch, MarkerKind as _MarkerKind
+from ._geometry import Rect, RoutingFailure, RouteBatch, MarkerKind as _MarkerKind, PortAllocation
 from .shape_geometry import SHAPE_REGISTRY
 
 # Maps class-diagram MarkerKind values to the SVG marker-def IDs in the renderer.
@@ -156,7 +156,7 @@ def _astar_route(
     blocked: "set[tuple]",
     occupied: "set[tuple] | None" = None,
     _failures: "list | None" = None,
-) -> "list[tuple[int, int]]":
+) -> "list[tuple[int, int]] | None":
     """Obstacle-avoiding A* on sparse orthogonal routing grid.
 
     Cost function: seg_length + SEG_COST per segment + BEND per 90° bend
@@ -504,7 +504,7 @@ def _smooth_orthogonal_path(pts: list[tuple[int, int]], r: int = 10) -> str:
             by_ = curr[1] + dy2 / len2 * min(r, len2 / 2)
             # Skip the L if the arc-start equals the previous Q endpoint
             # (happens when a short segment consumes all r on both sides).
-            if _prev_qx is not None and abs(ax - _prev_qx) < 0.05 and abs(ay - _prev_qy) < 0.05:
+            if _prev_qx is not None and _prev_qy is not None and abs(ax - _prev_qx) < 0.05 and abs(ay - _prev_qy) < 0.05:
                 d += f" Q {curr[0]} {curr[1]} {bx:.1f} {by_:.1f}"
             else:
                 d += (f" L {ax:.1f} {ay:.1f}"
@@ -834,9 +834,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     for _i, _e in enumerate(edges):
         if nodes.get(_e.dst) and nodes[_e.dst].is_dummy:
             continue  # skip intermediate segments
-        _real_s = _e.orig_src or _e.src
-        _real_d = _e.orig_dst or _e.dst
-        _key = (_real_s, _real_d)
+        _real_src = _e.orig_src or _e.src
+        _real_dst = _e.orig_dst or _e.dst
+        _key = (_real_src, _real_dst)
         parallel_edge_idx[_i] = _par_count.get(_key, 0)
         _par_count[_key] = _par_count.get(_key, 0) + 1
 
@@ -1197,19 +1197,19 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if s.shape in _POLY_CLIP_SHAPES and _src_port is None:
                 _lsw, _lsh = _node_render_w(s), _node_render_h(s)
                 _lsx, _lsy = s.x + _lsw // 2, s.y + _lsh // 2
-                x1, y1 = SHAPE_REGISTRY[s.shape].boundary_intersection(
+                x1, y1 = map(int, SHAPE_REGISTRY[s.shape].boundary_intersection(
                     float(_lsx), float(_lsy),
                     float(_lsw), float(_lsh),
                     float(x1) - float(_lsx), float(y1) - float(_lsy),
-                )
+                ))
             if d.shape in _POLY_CLIP_SHAPES and _dst_port is None:
                 _ldw, _ldh = _node_render_w(d), _node_render_h(d)
                 _ldx2, _ldy2 = d.x + _ldw // 2, d.y + _ldh // 2
-                x2, y2 = SHAPE_REGISTRY[d.shape].boundary_intersection(
+                x2, y2 = map(int, SHAPE_REGISTRY[d.shape].boundary_intersection(
                     float(_ldx2), float(_ldy2),
                     float(_ldw), float(_ldh),
                     float(x2) - float(_ldx2), float(y2) - float(_ldy2),
-                )
+                ))
 
             # 3-segment fast path (right → vertical → right); fall back to A* if blocked.
             # Skip fast path when ports are pinned to non-standard faces.
@@ -1219,7 +1219,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if not _has_fixed_port and _try_3seg_clear(_fast_lr, _routing_obs):
                 _pts_lr = _fast_lr
             else:
-                _pts_lr = _astar_route(int(x1), int(y1), int(x2), int(y2),
+                _pts_lr = _astar_route(int(x1), int(y1), int(x2), int(y2),  # type: ignore[assignment]
                                        _grid_xs, _grid_ys, _blocked, _occupied)
                 if _pts_lr is None:
                     for _margin in (16, 32, 64, 128):
@@ -1305,19 +1305,19 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if s.shape in _POLY_CLIP_SHAPES and _src_port_tb is None:
             _sw, _sh = _node_render_w(s), _node_render_h(s)
             _sx, _sy = s.x + _sw // 2, s.y + _sh // 2
-            x1, y1 = SHAPE_REGISTRY[s.shape].boundary_intersection(
+            x1, y1 = map(int, SHAPE_REGISTRY[s.shape].boundary_intersection(
                 float(_sx), float(_sy),
                 float(_sw), float(_sh),
                 float(x1) - float(_sx), float(y1) - float(_sy),
-            )
+            ))
         if d.shape in _POLY_CLIP_SHAPES and _dst_port_tb is None:
             _dw2, _dh2 = _node_render_w(d), _node_render_h(d)
             _dx2, _dy2 = d.x + _dw2 // 2, d.y + _dh2 // 2
-            x2, y2 = SHAPE_REGISTRY[d.shape].boundary_intersection(
+            x2, y2 = map(int, SHAPE_REGISTRY[d.shape].boundary_intersection(
                 float(_dx2), float(_dy2),
                 float(_dw2), float(_dh2),
                 float(x2) - float(_dx2), float(y2) - float(_dy2),
-            )
+            ))
 
         # Route: 3-segment fast path (down → across → down); fall back to A* if blocked.
         # Skip fast path when ports are pinned to non-standard faces.
@@ -1326,7 +1326,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if not _has_fixed_port_tb and _try_3seg_clear(_fast, _routing_obs):
             _pts = _fast
         else:
-            _pts = _astar_route(int(x1), int(y1), int(x2), int(y2),
+            _pts = _astar_route(int(x1), int(y1), int(x2), int(y2),  # type: ignore[assignment]
                                 _grid_xs, _grid_ys, _blocked, _occupied)
             if _pts is None:
                 for _margin in (16, 32, 64, 128):

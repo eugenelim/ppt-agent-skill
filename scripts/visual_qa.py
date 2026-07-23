@@ -210,7 +210,7 @@ def check_blank_ratio(img: Image.Image, threshold: float = 0.40,
     不再对浅底误报为「大面积空白」（修复 BLANK-01 在浅底 deck 的假阳）。
     """
     # 缩放以加速
-    small = img.resize((128, 72), Image.LANCZOS)
+    small = img.resize((128, 72), Image.LANCZOS)  # type: ignore[attr-defined]
     pixels = list(small.getdata())
     total = len(pixels)
 
@@ -222,7 +222,7 @@ def check_blank_ratio(img: Image.Image, threshold: float = 0.40,
         color_count[quantized] = color_count.get(quantized, 0) + 1
 
     # 找最高频色
-    dominant_color = max(color_count, key=color_count.get)
+    dominant_color = max(color_count, key=color_count.get)  # type: ignore[arg-type]
     dominant_ratio = color_count[dominant_color] / total
 
     if dominant_ratio <= threshold:
@@ -259,7 +259,7 @@ def check_vertical_text(img: Image.Image) -> dict:
     """
     w, h = img.size
     right_half = img.crop((w // 2, 0, w, h))
-    small = right_half.resize((256, 144), Image.LANCZOS).convert("L")
+    small = right_half.resize((256, 144), Image.LANCZOS).convert("L")  # type: ignore[attr-defined]
     pixels = small.load()
     sw, sh = small.size
 
@@ -268,13 +268,13 @@ def check_vertical_text(img: Image.Image) -> dict:
 
     x = 0
     while x < sw:
-        col_content = sum(1 for y in range(sh) if pixels[x, y] > threshold)
+        col_content = sum(1 for y in range(sh) if pixels[x, y] > threshold)  # type: ignore[index,operator,misc]
 
         if col_content > sh * 0.25:  # 宽松阈值，宁可误报
             band_start = x
             band_end = x
             while band_end < sw - 1:
-                next_content = sum(1 for y in range(sh) if pixels[band_end + 1, y] > threshold)
+                next_content = sum(1 for y in range(sh) if pixels[band_end + 1, y] > threshold)  # type: ignore[index,operator,misc]
                 if next_content > sh * 0.15:
                     band_end += 1
                 else:
@@ -284,7 +284,7 @@ def check_vertical_text(img: Image.Image) -> dict:
             content_rows = set()
             for bx in range(band_start, band_end + 1):
                 for y in range(sh):
-                    if pixels[bx, y] > threshold:
+                    if pixels[bx, y] > threshold:  # type: ignore[index,operator]
                         content_rows.add(y)
 
             content_height = (max(content_rows) - min(content_rows) + 1) if content_rows else 0
@@ -324,7 +324,7 @@ def check_overflow_cutoff(img: Image.Image, bg_rgb: tuple | None = None) -> dict
     bottom_total = w * 4
     for y in range(h - 4, h):
         for x in range(w):
-            if _rgb_dist(pixels[x, y][:3], bg) > CUT_EDGE_DIST:
+            if _rgb_dist(pixels[x, y][:3], bg) > CUT_EDGE_DIST:  # type: ignore[index]
                 bottom_content_pixels += 1
 
     bottom_ratio = bottom_content_pixels / bottom_total if bottom_total > 0 else 0
@@ -334,7 +334,7 @@ def check_overflow_cutoff(img: Image.Image, bg_rgb: tuple | None = None) -> dict
     right_total = h * 4
     for x in range(w - 4, w):
         for y in range(h):
-            if _rgb_dist(pixels[x, y][:3], bg) > CUT_EDGE_DIST:
+            if _rgb_dist(pixels[x, y][:3], bg) > CUT_EDGE_DIST:  # type: ignore[index]
                 right_content_pixels += 1
 
     right_ratio = right_content_pixels / right_total if right_total > 0 else 0
@@ -361,9 +361,9 @@ def _infer_bg_from_corners(img: Image.Image) -> tuple:
     for ox, oy in regions:
         for x in range(ox, min(ox + s, w)):
             for y in range(oy, min(oy + s, h)):
-                q = tuple(c // 8 * 8 for c in px[x, y][:3])
+                q = tuple(c // 8 * 8 for c in px[x, y][:3])  # type: ignore[index]
                 counts[q] = counts.get(q, 0) + 1
-    return max(counts, key=counts.get) if counts else (0, 0, 0)
+    return max(counts, key=counts.get) if counts else (0, 0, 0)  # type: ignore[arg-type]
 
 
 def check_contrast_zones(img: Image.Image) -> dict:
@@ -383,7 +383,7 @@ def check_contrast_zones(img: Image.Image) -> dict:
     for gx in range(grid_w):
         for gy in range(grid_h):
             block = img.crop((gx * block_w, gy * block_h, (gx + 1) * block_w, (gy + 1) * block_h))
-            small_block = block.resize((16, 16), Image.LANCZOS)
+            small_block = block.resize((16, 16), Image.LANCZOS)  # type: ignore[attr-defined]
             pixels = list(small_block.getdata())
             brightnesses = [sum(p[:3]) / 3 for p in pixels]
 
@@ -480,14 +480,14 @@ def check_planning_cards_coverage(img: Image.Image, planning_path: Path) -> dict
         return {"id": "CARD-01", "status": "PASS", "msg": "planning 无卡片定义"}
 
     w, h = img.size
-    small = img.resize((64, 36), Image.LANCZOS).convert("L")
+    small = img.resize((64, 36), Image.LANCZOS).convert("L")  # type: ignore[attr-defined]
     pixels = small.load()
     sw, sh = small.size
 
     edge_count = 0
     for y in range(sh):
         for x in range(1, sw):
-            diff = abs(pixels[x, y] - pixels[x - 1, y])
+            diff = abs(pixels[x, y] - pixels[x - 1, y])  # type: ignore[index,operator]
             if diff > 30:
                 edge_count += 1
 
@@ -598,7 +598,7 @@ def check_html_contracts(html_path: Path, planning_path: Path | None) -> list[di
         object_fit_ok = "object-fit: cover" in text.lower() or "object-fit:contain" in text.lower() or "object-fit: contain" in text.lower()
         results.append({"id": "HTML-05", "status": "PASS" if object_fit_ok else "WARN", "msg": "检测到 img 且 object-fit 已声明" if object_fit_ok else "检测到 img，但未发现 object-fit 声明，建议人工确认是否会拉伸"})
 
-    min_body_font = density_contract.get("min_body_font_px")
+    min_body_font = density_contract.get("min_body_font_px")  # type: ignore[union-attr]
     if isinstance(min_body_font, int):
         font_sizes = [int(item) for item in re.findall(r"font-size\s*:\s*(\d+)px", text, flags=re.IGNORECASE)]
         if font_sizes:
@@ -610,7 +610,7 @@ def check_html_contracts(html_path: Path, planning_path: Path | None) -> list[di
             else:
                 results.append({"id": "HTML-06", "status": "PASS", "msg": f"未检测到明显低于 {min_body_font}px 的字体"})
 
-    decoration_budget = density_contract.get("decoration_budget")
+    decoration_budget = density_contract.get("decoration_budget")  # type: ignore[union-attr]
     decoration_tags = re.findall(
         r"<[^>]*data-decoration-layer\s*=\s*(['\"])(background|floating|page-accent)\1[^>]*>",
         text,
@@ -799,7 +799,7 @@ def check_palette_adherence(img: Image.Image, palette: list[tuple[int, int, int]
     """PAL-01：离色像素占比（相对 :root 调色板）。无调色板来源则 WARN 提示。"""
     if not palette:
         return {"id": "PAL-01", "status": "WARN", "msg": "无法从 :root 读取调色板，跳过离色检测"}
-    small = img.resize((96, 54), Image.LANCZOS)
+    small = img.resize((96, 54), Image.LANCZOS)  # type: ignore[attr-defined]
     pixels = list(small.getdata())
     off = 0
     counted = 0
@@ -834,12 +834,12 @@ def deck_signal(png: Path, html_path: Path | None) -> dict:
     sig: dict = {"name": png.name, "bg": None, "palette": frozenset(), "sizes": frozenset()}
     try:
         img = Image.open(png).convert("RGB")
-        small = img.resize((64, 36), Image.LANCZOS)
+        small = img.resize((64, 36), Image.LANCZOS)  # type: ignore[attr-defined]
         counts: dict[tuple, int] = {}
-        for p in small.getdata():
+        for p in small.getdata():  # type: ignore[attr-defined]
             q = (p[0] // 16 * 16, p[1] // 16 * 16, p[2] // 16 * 16)
             counts[q] = counts.get(q, 0) + 1
-        sig["bg"] = max(counts, key=counts.get)
+        sig["bg"] = max(counts, key=counts.get)  # type: ignore[arg-type]
     except Exception:
         pass
     if html_path and Path(html_path).exists():
@@ -855,7 +855,7 @@ def _mode(items: list):
     freq: dict = {}
     for it in items:
         freq[it] = freq.get(it, 0) + 1
-    return max(freq, key=freq.get) if freq else None
+    return max(freq, key=freq.get) if freq else None  # type: ignore[arg-type]
 
 
 def check_deck_consistency(signals: list[dict]) -> list[dict]:

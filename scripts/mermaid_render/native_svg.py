@@ -249,7 +249,7 @@ def _class_topology_scene(src: str, direction: str, width_hint: int) -> SvgScene
         nodes=nodes,
         edges=edges,
         groups=groups,
-        routes=routes,
+        routes=routes,  # type: ignore[arg-type]
         canvas_w=canvas_w,
         canvas_h=canvas_h,
         diagram_type="classdiagram",
@@ -643,9 +643,9 @@ def render_svg_result(
         svg=svg_str,
         diagram_type=canonical,
         backend=backend,
-        semantic_adapter=sem_adapter,
-        syntax_coverage=syntax_cov,
-        geometry=geometry,
+        semantic_adapter=sem_adapter,  # type: ignore[arg-type]
+        syntax_coverage=syntax_cov,  # type: ignore[arg-type]
+        geometry=geometry,  # type: ignore[arg-type]
         serialization="passed",
         warnings=(),
         errors=geometry_errors,

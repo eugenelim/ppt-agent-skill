@@ -35,7 +35,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _browser import get_browser, new_page
+from _browser import get_browser, new_page  # type: ignore[attr-defined]
 
 ROOT = Path(__file__).resolve().parent.parent
 
