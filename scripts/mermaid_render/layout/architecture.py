@@ -475,7 +475,8 @@ def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
 
 
 def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
-                            width_hint: int = 0) -> object:
+                            width_hint: int = 0,
+                            edge_sides: "dict | None" = None) -> object:
     """Enrich an ELK FinalizedLayout with architecture-beta metadata (icons, labels, accent colors).
 
     Takes the raw FinalizedLayout returned by layout_with_elk() and merges
@@ -483,18 +484,24 @@ def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
     parsed nodes dict.  Merges label_layout and child_group_ids from the
     original groups dict.  Stamps 'elk-js' into diagnostics.warnings.
 
-    routed_edges, canvas_bounds, and visible_bounds are passed through unchanged
-    from elk_fl — ELK is authoritative for geometry.
+    edge_sides: optional dict mapping edge_id -> (src_side: PortSide | None, dst_side: PortSide | None).
+    When provided, fixed-side port constraints are applied to each RoutedEdge — declared
+    sides are NEVER replaced by AUTO or by tangent-derived sides (spec NEVER constraint).
+
+    Measured labels: service labels and group labels are measured via _MEASURER. Edge labels
+    are re-measured using _MEASURER (EDGE_LABEL style) so all labels use TextLayout objects
+    from the shared text measurer rather than raw ELK character-count estimates.
     """
     import dataclasses as _dc
     from ._geometry import (
         FinalizedLayout, LayoutDiagnostics, NodeLayout, GroupLayout, RoutedEdge,
-        Rect, Point, PortLayout, PortSide,
+        Rect, Point, PortLayout, PortSide, EdgeLabelLayout,
     )
     from ._constants import NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H
     import types as _types
 
     _fl: FinalizedLayout = elk_fl  # type: ignore[assignment]
+    _edge_sides: dict = edge_sides or {}
 
     node_grp_idx: dict = {}
     for gi, gid in enumerate(groups):
@@ -571,6 +578,40 @@ def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
             child_group_ids=child_ids,  # type: ignore[arg-type]
         )
 
+    # Apply fixed-side port constraints and re-measure edge labels.
+    # NEVER replace a declared fixed side with AUTO or a tangent-derived side (spec constraint).
+    # Edge labels are re-measured via _MEASURER so all TextLayout objects come from the
+    # shared measurer rather than from ELK's character-count estimates.
+    new_routed_edges: list = []
+    for _re in _fl.routed_edges:
+        _sides = _edge_sides.get(_re.edge_id)
+        _src_port = _re.src_port
+        _dst_port = _re.dst_port
+        if _sides:
+            _declared_src, _declared_dst = _sides
+            if _declared_src is not None:
+                _src_port = PortLayout(
+                    node_id=_src_port.node_id, side=_declared_src,
+                    position=_src_port.position, direction=_src_port.direction,
+                )
+            if _declared_dst is not None:
+                _dst_port = PortLayout(
+                    node_id=_dst_port.node_id, side=_declared_dst,
+                    position=_dst_port.position, direction=_dst_port.direction,
+                )
+        _label_layout = _re.label_layout
+        if _label_layout is not None and _label_layout.text:
+            _new_tl = _MEASURER.layout(_label_layout.text, EDGE_LABEL, None)
+            _label_layout = EdgeLabelLayout(
+                text=_label_layout.text,
+                layout=_new_tl,
+                bounds=_label_layout.bounds,
+                anchor_point=_label_layout.anchor_point,
+            )
+        if _src_port is not _re.src_port or _dst_port is not _re.dst_port or _label_layout is not _re.label_layout:
+            _re = _dc.replace(_re, src_port=_src_port, dst_port=_dst_port, label_layout=_label_layout)
+        new_routed_edges.append(_re)
+
     diag = _fl.diagnostics
     enriched_diag = LayoutDiagnostics(
         unsupported_options=diag.unsupported_options,
@@ -580,7 +621,7 @@ def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
     return FinalizedLayout(
         node_layouts=_types.MappingProxyType(new_node_layouts),
         group_layouts=_types.MappingProxyType(new_group_layouts),
-        routed_edges=_fl.routed_edges,
+        routed_edges=tuple(new_routed_edges),
         visible_bounds=_fl.visible_bounds,
         diagram_padding=_fl.diagram_padding,
         canvas_bounds=_fl.canvas_bounds,
@@ -758,6 +799,17 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
             raise ValueError(
                 f"ELK returned incomplete layout: missing nodes {_missing}"
             )
+        # Validate edge sections: every expected edge must be present in routed_edges.
+        # If ELK returns an edge with empty sections (no waypoints), _from_elk_result
+        # silently skips it — detect this here and raise ElkInvalidResult.
+        _expected_eids = {_e.id for _e in _lg.edges}  # type: ignore[attr-defined]
+        _routed_eids = {_re.edge_id for _re in _raw_fl.routed_edges}
+        _missing_edges = _expected_eids - _routed_eids
+        if _missing_edges:
+            from .elk_adapter import ElkInvalidResult as _ElkInvalidResult
+            raise _ElkInvalidResult(
+                f"ELK returned incomplete edge sections: missing edges {_missing_edges}"
+            )
         _elk_fl = _raw_fl
         _backend = "elk-js"
     except ElkUnavailable:
@@ -769,26 +821,36 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
         raise ArchitectureLayoutError("layout", cause=_exc) from _exc
 
     if _elk_fl is not None:
-        # ELK path: use ELK geometry — no _compute_group_bboxes / _route_edges
-        for _nid, _nl in _elk_fl.node_layouts.items():
-            if _nid in nodes:
-                _n = nodes[_nid]
-                _n.x = float(_nl.outer_bounds.x)
-                _n.y = float(_nl.outer_bounds.y)
-                _n.width = _n.width or float(_nl.outer_bounds.w)
-                _n.height = _n.height or float(_nl.outer_bounds.h)
-        canvas_w = _elk_fl.canvas_bounds.w
-        canvas_h = _elk_fl.canvas_bounds.h
-        group_bboxes: dict = {}
-        for _gid, _gl in _elk_fl.group_layouts.items():
-            _bb = _gl.boundary_bounds
-            group_bboxes[_gid] = (_bb.x, _bb.y, _bb.x + _bb.w, _bb.y + _bb.h)
-        routes: list = _elk_routes_to_specs(_elk_fl, edges)  # type: ignore[assignment]
-    else:
-        # Fallback path: heuristic placement + Python router
-        canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
-        group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
-        routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)  # type: ignore[assignment]
+        # ELK path: enrich FinalizedLayout directly and return — no _elk_routes_to_specs.
+        # Build edge_sides dict keyed by edge_id for fixed-side port preservation.
+        # NEVER use (src, dst) tuple as edge identity — keyed by edge_id instead.
+        _char_to_side = {
+            "L": PortSide.LEFT, "R": PortSide.RIGHT,
+            "T": PortSide.TOP, "B": PortSide.BOTTOM,
+        }
+        _edge_sides: dict = {}
+        _seen_edge_ids: dict = {}
+        for _e in edges:
+            if getattr(_e, "reversed_", False):
+                continue
+            _base_eid = f"{_e.src}->{_e.dst}"
+            _eidx = _seen_edge_ids.get(_base_eid, 0)
+            _seen_edge_ids[_base_eid] = _eidx + 1
+            _eid = _base_eid if _eidx == 0 else f"{_base_eid}#{_eidx}"
+            _ss = (getattr(_e, "src_side", None) or "").upper()
+            _ds = (getattr(_e, "dst_side", None) or "").upper()
+            if _ss or _ds:
+                _edge_sides[_eid] = (
+                    _char_to_side.get(_ss) if _ss else None,
+                    _char_to_side.get(_ds) if _ds else None,
+                )
+        return _arch_elk_to_finalized(_elk_fl, nodes, groups,
+                                       edge_sides=_edge_sides, width_hint=width_hint)
+
+    # Fallback path: heuristic placement + Python router (ElkUnavailable was raised).
+    canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
+    group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
+    routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)  # type: ignore[assignment]
 
     zoom = 1.0
     if width_hint and canvas_w > 0 and canvas_w > width_hint:
@@ -960,12 +1022,19 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
 
 # ── arch_to_finalized ──────────────────────────────────────────────────────────
 
-def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
-    """Lower ArchitectureDiagramLayout to a FinalizedLayout for painting."""
+def arch_to_finalized(arch: object) -> object:
+    """Lower ArchitectureDiagramLayout to a FinalizedLayout for painting.
+
+    If arch is already a FinalizedLayout (returned directly by the ELK success path),
+    it is returned unchanged — no double-conversion.
+    """
     from ._geometry import (
         FinalizedLayout, LayoutDiagnostics, NodeLayout, GroupLayout, RoutedEdge, Rect,
         _empty_diagnostics, MarkerKind,
     )
+    # Pass-through: ELK success path returns FinalizedLayout directly.
+    if isinstance(arch, FinalizedLayout):
+        return arch
 
     node_layouts: dict = {}
 
@@ -1074,14 +1143,22 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
 def arch_to_html(src: str, *, width_hint: int = 0) -> str:
     """Render architecture-beta source as a self-contained HTML div string."""
     from ._renderer import render_finalized
+    from ._geometry import FinalizedLayout
 
-    arch = compile_architecture(src, width_hint=width_hint)
-    finalized = arch_to_finalized(arch)
+    result = compile_architecture(src, width_hint=width_hint)
+    if isinstance(result, FinalizedLayout):
+        finalized = result
+        zoom = 1.0
+        if width_hint and finalized.canvas_bounds.w > 0 and finalized.canvas_bounds.w > width_hint:
+            zoom = width_hint / finalized.canvas_bounds.w
+    else:
+        finalized = arch_to_finalized(result)
+        zoom = result.zoom  # type: ignore[union-attr]
     html = render_finalized(finalized)
-    if abs(arch.zoom - 1.0) > 0.005:
+    if abs(zoom - 1.0) > 0.005:
         html = (
             f'<div class="diagram-zoom-wrapper"'
-            f' style="display:contents; zoom:{arch.zoom:.4f};">'
+            f' style="display:contents; zoom:{zoom:.4f};">'
             f"{html}</div>"
         )
     return html
@@ -1093,9 +1170,17 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     """Parse architecture-beta source and return an SvgScene."""
     from ._renderer import _extract_diagram_title
     from ..paint import finalized_layout_to_scene
+    from ._geometry import FinalizedLayout
 
-    arch = compile_architecture(src, width_hint=width_hint)
-    finalized = arch_to_finalized(arch)
+    result = compile_architecture(src, width_hint=width_hint)
+    if isinstance(result, FinalizedLayout):
+        finalized = result
+        zoom = 1.0
+        if width_hint and finalized.canvas_bounds.w > 0 and finalized.canvas_bounds.w > width_hint:
+            zoom = width_hint / finalized.canvas_bounds.w
+    else:
+        finalized = arch_to_finalized(result)
+        zoom = result.zoom  # type: ignore[union-attr]
     title = _extract_diagram_title(src)
 
     scene = finalized_layout_to_scene(
@@ -1105,11 +1190,11 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     )
 
     # Apply zoom: scale physical width/height while keeping coordinate viewBox intact.
-    if arch.zoom != 1.0:
+    if zoom != 1.0:
         scene = dataclasses.replace(
             scene,
-            width=scene.view_box[2] * arch.zoom,
-            height=scene.view_box[3] * arch.zoom,
+            width=scene.view_box[2] * zoom,
+            height=scene.view_box[3] * zoom,
         )
 
     return scene

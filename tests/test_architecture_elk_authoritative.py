@@ -363,47 +363,51 @@ class TestNoRerouteOnElkPath:
 class TestPortSidesElk:
     @requires_elk
     def test_lb_exits_east_api_enters_west(self):
-        from mermaid_render.layout._geometry import PortSide
-        arch = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        for edge in arch.edges:
-            if edge.src_id == "lb" and edge.dst_id == "api":
-                assert edge.src_port.side == PortSide.RIGHT, \
-                    f"lb should exit EAST (RIGHT), got {edge.src_port.side}"
-                assert edge.dst_port.side == PortSide.LEFT, \
-                    f"api should enter WEST (LEFT), got {edge.dst_port.side}"
+        from mermaid_render.layout._geometry import PortSide, FinalizedLayout
+        result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        fl = result if isinstance(result, FinalizedLayout) else arch_to_finalized(result)
+        for re in fl.routed_edges:
+            if re.src_node_id == "lb" and re.dst_node_id == "api":
+                assert re.src_port.side == PortSide.RIGHT, \
+                    f"lb should exit EAST (RIGHT), got {re.src_port.side}"
+                assert re.dst_port.side == PortSide.LEFT, \
+                    f"api should enter WEST (LEFT), got {re.dst_port.side}"
                 return
-        pytest.skip("lb->api edge not found (ELK may not expose port sides in ArchEdge)")
+        pytest.skip("lb->api edge not found in routed_edges")
 
     @requires_elk
     def test_api_db_exits_east_enters_west(self):
-        from mermaid_render.layout._geometry import PortSide
-        arch = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        for edge in arch.edges:
-            if edge.src_id == "api" and edge.dst_id == "db":
-                assert edge.src_port.side == PortSide.RIGHT
-                assert edge.dst_port.side == PortSide.LEFT
+        from mermaid_render.layout._geometry import PortSide, FinalizedLayout
+        result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        fl = result if isinstance(result, FinalizedLayout) else arch_to_finalized(result)
+        for re in fl.routed_edges:
+            if re.src_node_id == "api" and re.dst_node_id == "db":
+                assert re.src_port.side == PortSide.RIGHT
+                assert re.dst_port.side == PortSide.LEFT
                 return
         pytest.skip("api->db edge not found")
 
     @requires_elk
     def test_api_cache_exits_south_enters_north(self):
-        from mermaid_render.layout._geometry import PortSide
-        arch = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        for edge in arch.edges:
-            if edge.src_id == "api" and edge.dst_id == "cache":
-                assert edge.src_port.side == PortSide.BOTTOM
-                assert edge.dst_port.side == PortSide.TOP
+        from mermaid_render.layout._geometry import PortSide, FinalizedLayout
+        result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        fl = result if isinstance(result, FinalizedLayout) else arch_to_finalized(result)
+        for re in fl.routed_edges:
+            if re.src_node_id == "api" and re.dst_node_id == "cache":
+                assert re.src_port.side == PortSide.BOTTOM
+                assert re.dst_port.side == PortSide.TOP
                 return
         pytest.skip("api->cache edge not found")
 
     @requires_elk
     def test_api_queue_exits_east_enters_west(self):
-        from mermaid_render.layout._geometry import PortSide
-        arch = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        for edge in arch.edges:
-            if edge.src_id == "api" and edge.dst_id == "queue":
-                assert edge.src_port.side == PortSide.RIGHT
-                assert edge.dst_port.side == PortSide.LEFT
+        from mermaid_render.layout._geometry import PortSide, FinalizedLayout
+        result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        fl = result if isinstance(result, FinalizedLayout) else arch_to_finalized(result)
+        for re in fl.routed_edges:
+            if re.src_node_id == "api" and re.dst_node_id == "queue":
+                assert re.src_port.side == PortSide.RIGHT
+                assert re.dst_port.side == PortSide.LEFT
                 return
         pytest.skip("api->queue edge not found")
 
@@ -413,28 +417,35 @@ class TestPortSidesElk:
 class TestContainmentElk:
     @requires_elk
     def test_all_services_contained_in_cloud(self):
-        arch = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        cloud = next(g for g in arch.groups if g.group_id == "cloud")
-        for svc in arch.services:
-            assert _contains(cloud.boundary_bounds, svc.outer_bounds), \
-                f"{svc.node_id} outer_bounds {svc.outer_bounds} not inside cloud {cloud.boundary_bounds}"
+        from mermaid_render.layout._geometry import FinalizedLayout
+        result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        fl = result if isinstance(result, FinalizedLayout) else arch_to_finalized(result)
+        cloud_gl = fl.group_layouts.get("cloud")
+        assert cloud_gl is not None, "cloud group layout not found"
+        for nid, nl in fl.node_layouts.items():
+            if nl.parent_group_id == "cloud" and not nl.is_dummy:
+                assert _contains(cloud_gl.boundary_bounds, nl.outer_bounds), \
+                    f"{nid} outer_bounds {nl.outer_bounds} not inside cloud {cloud_gl.boundary_bounds}"
 
     @requires_elk
     def test_no_edge_waypoint_inside_service(self):
         from mermaid_render.layout._constants import GROUP_PAD_Y_TOP
-        arch = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        svc_bounds = {svc.node_id: svc.outer_bounds for svc in arch.services}
-        groups = {g.group_id: g for g in arch.groups}
-        for edge in arch.edges:
-            for wp in edge.waypoints:
+        from mermaid_render.layout._geometry import FinalizedLayout
+        result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        fl = result if isinstance(result, FinalizedLayout) else arch_to_finalized(result)
+        svc_bounds = {nid: nl.outer_bounds for nid, nl in fl.node_layouts.items()
+                      if not nl.is_dummy}
+        for re in fl.routed_edges:
+            for wp in re.waypoints:
                 for nid, b in svc_bounds.items():
                     assert not _point_in_rect(wp.x, wp.y, b), \
-                        f"Edge {edge.edge_id} waypoint {wp} is inside service {nid} bounds {b}"
-                for gid, grp in groups.items():
-                    bb = grp.boundary_bounds
-                    title_strip = type(bb)(x=bb.x, y=bb.y, w=bb.w, h=float(GROUP_PAD_Y_TOP))
+                        f"Edge {re.edge_id} waypoint {wp} is inside service {nid} bounds {b}"
+                for gid, gl in fl.group_layouts.items():
+                    bb = gl.boundary_bounds
+                    from mermaid_render.layout._geometry import Rect
+                    title_strip = Rect(x=bb.x, y=bb.y, w=bb.w, h=float(GROUP_PAD_Y_TOP))
                     assert not _point_in_rect(wp.x, wp.y, title_strip), \
-                        f"Edge {edge.edge_id} waypoint {wp} is inside group {gid} title strip"
+                        f"Edge {re.edge_id} waypoint {wp} is inside group {gid} title strip"
 
 
 # ── AC11: backend provenance ──────────────────────────────────────────────────
