@@ -3989,11 +3989,39 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
     if not nodes:
         raise ValueError("No services found in architecture-beta.")
 
-    # Architecture diagrams flow left-to-right by convention (services as columns).
-    _break_cycles(nodes, edges)
-    _assign_ranks(nodes, edges)
-    _minimize_crossings(nodes, edges)
-    canvas_w, canvas_h = _assign_coordinates(nodes, "LR")
+    # Try ELK compound layout (respects port constraints like api:B → cache:T).
+    # Fall back to heuristic grid, then to forced-LR Sugiyama if both fail.
+    canvas_w = canvas_h = 0
+    try:
+        from .architecture import _build_arch_layout_graph, _heuristic_arch_placement
+        from .elk_adapter import layout_with_elk as _layout_with_elk
+        _lg = _build_arch_layout_graph(nodes, groups, edges)
+        _fl = _layout_with_elk(_lg)  # type: ignore[arg-type]
+        _expected_nids = {n.id for n in _lg.nodes}  # type: ignore[attr-defined]
+        if _expected_nids - set(_fl.node_layouts.keys()):
+            raise RuntimeError("ELK returned incomplete node positions")
+        for _nid, _nl in _fl.node_layouts.items():
+            if _nid in nodes:
+                _n = nodes[_nid]
+                _n.x = int(_nl.outer_bounds.x)
+                _n.y = int(_nl.outer_bounds.y)
+                _n.width = _n.width or int(_nl.outer_bounds.w)
+                _n.height = _n.height or int(_nl.outer_bounds.h)
+        canvas_w = int(_fl.canvas_bounds.w)
+        canvas_h = int(_fl.canvas_bounds.h)
+    except Exception:
+        pass
+
+    if canvas_w == 0 or canvas_h == 0:
+        try:
+            from .architecture import _heuristic_arch_placement
+            canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
+        except Exception:
+            _break_cycles(nodes, edges)
+            _assign_ranks(nodes, edges)
+            _minimize_crossings(nodes, edges)
+            canvas_w, canvas_h = _assign_coordinates(nodes, "LR")
+
     zoom = 1.0
     if width_hint and canvas_w > 0 and canvas_w > width_hint:
         zoom = width_hint / canvas_w

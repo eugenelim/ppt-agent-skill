@@ -143,6 +143,203 @@ _ARCH_ACCENT_CYCLE = (
 _ARCH_ACCENT_DEFAULT = "var(--node-title-fg,var(--accent-1,#60a5fa))"
 
 
+# ── Layout helpers ─────────────────────────────────────────────────────────────
+
+def _build_arch_layout_graph(nodes: dict, groups: dict, edges: list) -> object:
+    """Build a LayoutGraph from parsed architecture-beta _Node/_Group/_Edge dicts.
+
+    Collects unique port sides from edge annotations and attaches PortSpec objects
+    to each node. Side effect: sets n.width and n.height on non-dummy nodes.
+    """
+    from ._geometry import LayoutGraph, LayoutNode, LayoutGroup, LayoutEdge, MarkerKind, PortSpec
+    from ._constants import NODE_W, _node_render_h
+    from ._routing import _node_render_w
+
+    _side_to_elk = {"L": "WEST", "R": "EAST", "T": "NORTH", "B": "SOUTH"}
+
+    # Collect which sides each node is referenced from in edge annotations
+    node_sides: dict[str, set] = {nid: set() for nid in nodes}
+    for e in edges:
+        ss = (getattr(e, "src_side", None) or "").upper()
+        ds = (getattr(e, "dst_side", None) or "").upper()
+        if ss and e.src in node_sides:
+            node_sides[e.src].add(ss)
+        if ds and e.dst in node_sides:
+            node_sides[e.dst].add(ds)
+
+    layout_nodes = []
+    for nid, n in nodes.items():
+        if n.is_dummy:
+            continue
+        nw = _node_render_w(n) or NODE_W
+        nh = _node_render_h(n)
+        n.width = n.width or nw
+        n.height = n.height or nh
+
+        ports = []
+        for i, side_char in enumerate(sorted(node_sides.get(nid, set()))):
+            elk_side = _side_to_elk.get(side_char)
+            if elk_side is None:
+                continue
+            ports.append(PortSpec(
+                id=f"{nid}_{side_char}", node_id=nid, side=elk_side,
+                index=i, fixed_side=True, fixed_order=False,
+            ))
+
+        layout_nodes.append(LayoutNode(
+            id=nid,
+            measured_width=float(nw),
+            measured_height=float(nh),
+            shape_id=n.shape or "rect",
+            parent_id=n.group or None,
+            ports=ports,
+            labels=[n.label or nid],
+            semantic_data={},
+        ))
+
+    layout_groups = []
+    for gid, g in groups.items():
+        label = g.label or ""
+        layout_groups.append(LayoutGroup(
+            id=gid,
+            parent_id=getattr(g, "parent_group", None) or None,
+            label=label,
+            label_width=float(max(80, len(label) * 8)),
+            label_height=20.0,
+            padding=16.0,
+            local_direction=None,
+            minimum_width=0.0,
+            minimum_height=0.0,
+        ))
+
+    seen_ids: dict[str, int] = {}
+    layout_edges = []
+    for e in edges:
+        if getattr(e, "reversed_", False):
+            continue
+        base_id = f"{e.src}->{e.dst}"
+        idx = seen_ids.get(base_id, 0)
+        seen_ids[base_id] = idx + 1
+        eid = base_id if idx == 0 else f"{base_id}#{idx}"
+        ss = (getattr(e, "src_side", None) or "").upper()
+        ds = (getattr(e, "dst_side", None) or "").upper()
+        bidir = getattr(e, "bidir", False)
+        layout_edges.append(LayoutEdge(
+            id=eid,
+            sources=[e.src],
+            targets=[e.dst],
+            source_port=f"{e.src}_{ss}" if ss else None,
+            target_port=f"{e.dst}_{ds}" if ds else None,
+            source_marker=MarkerKind.ARROW if bidir else MarkerKind.NONE,
+            target_marker=MarkerKind.ARROW if getattr(e, "arrow", True) else MarkerKind.NONE,
+            line_style=e.style or "solid",
+            label=e.label or "",
+            semantic_data={},
+        ))
+
+    return LayoutGraph(nodes=layout_nodes, groups=layout_groups,
+                       edges=layout_edges, direction="LR")
+
+
+def _heuristic_arch_placement(nodes: dict, edges: list, groups: dict) -> tuple:
+    """Constraint-propagating 2D grid placement for architecture-beta nodes.
+
+    Uses R→L / L→R edge annotations for column ordering and B→T / T→B for row
+    stacking within a column. Resolves (col, row) collisions sequentially.
+    Side effect: sets n.x, n.y, n.width, n.height on each non-dummy _Node.
+    Returns (canvas_w, canvas_h).
+    """
+    from ._constants import (
+        NODE_W, _node_render_h, CANVAS_PAD, RANK_GAP, COL_GAP,
+        GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
+    )
+    from ._routing import _node_render_w
+
+    nids = [nid for nid, n in nodes.items() if not n.is_dummy]
+
+    for nid, n in nodes.items():
+        if n.is_dummy:
+            continue
+        n.width = n.width or (_node_render_w(n) or NODE_W)
+        n.height = n.height or _node_render_h(n)
+
+    col: dict[str, int] = {nid: 0 for nid in nids}
+    row: dict[str, int] = {nid: 0 for nid in nids}
+
+    # Step 1: column assignment from horizontal port constraints
+    for _ in range(20):
+        changed = False
+        for e in edges:
+            src, dst = e.src, e.dst
+            if src not in col or dst not in col:
+                continue
+            ss = (getattr(e, "src_side", None) or "").upper()
+            ds = (getattr(e, "dst_side", None) or "").upper()
+            if (ss == "R" and ds == "L") or (not ss and not ds):
+                if col[dst] <= col[src]:
+                    col[dst] = col[src] + 1
+                    changed = True
+            elif ss == "L" and ds == "R":
+                if col[src] <= col[dst]:
+                    col[src] = col[dst] + 1
+                    changed = True
+        if not changed:
+            break
+
+    # Step 2: row assignment from vertical port constraints (same column as parent)
+    for _ in range(20):
+        changed = False
+        for e in edges:
+            src, dst = e.src, e.dst
+            if src not in col or dst not in col:
+                continue
+            ss = (getattr(e, "src_side", None) or "").upper()
+            ds = (getattr(e, "dst_side", None) or "").upper()
+            if ss == "B" and ds == "T":
+                col[dst] = col[src]
+                if row[dst] <= row[src]:
+                    row[dst] = row[src] + 1
+                    changed = True
+            elif ss == "T" and ds == "B":
+                col[src] = col[dst]
+                if row[src] <= row[dst]:
+                    row[src] = row[dst] + 1
+                    changed = True
+        if not changed:
+            break
+
+    # Step 3: resolve (col, row) collisions by bumping to next free row
+    occupied: dict[tuple, str] = {}
+    for nid in nids:
+        c, r = col[nid], row[nid]
+        while (c, r) in occupied:
+            r += 1
+        occupied[(c, r)] = nid
+        row[nid] = r
+
+    # Step 4: compute coordinates
+    max_row = max(row.values(), default=0)
+    row_h: dict[int, int] = {r: 0 for r in range(max_row + 1)}
+    for nid in nids:
+        row_h[row[nid]] = max(row_h[row[nid]], nodes[nid].height or 48)
+
+    has_group = any(n.group for n in nodes.values() if not n.is_dummy)
+    pad_x = CANVAS_PAD + (GROUP_PAD_X if has_group else 0)
+    pad_y = CANVAS_PAD + (GROUP_PAD_Y_TOP if has_group else 0)
+
+    for nid in nids:
+        c, r = col[nid], row[nid]
+        n = nodes[nid]
+        n.x = pad_x + c * (NODE_W + RANK_GAP)
+        n.y = pad_y + sum(row_h[ri] + COL_GAP for ri in range(r))
+
+    max_x = max((nodes[nid].x + (nodes[nid].width or NODE_W) for nid in nids), default=CANVAS_PAD)
+    max_y = max((nodes[nid].y + (nodes[nid].height or 48) for nid in nids), default=CANVAS_PAD)
+    canvas_w = max_x + CANVAS_PAD + (GROUP_PAD_X if has_group else 0)
+    canvas_h = max_y + CANVAS_PAD + (GROUP_PAD_Y_BOT if has_group else 0)
+    return canvas_w, canvas_h
+
+
 # ── compile_architecture ───────────────────────────────────────────────────────
 
 def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagramLayout:
@@ -151,7 +348,6 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
         _Node, _Group, _Edge, NODE_CAP, _ARCH_ICON_MAP,
         NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H,
     )
-    from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates
     from ._renderer import _compute_group_bboxes
     from ._routing import _route_edges
     from ._geometry import Rect, Point, PortLayout, PortSide, EdgeLabelLayout
@@ -248,10 +444,28 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
         raise ValueError(f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}).")
 
     # ── Layout ─────────────────────────────────────────────────────────────────
-    _break_cycles(nodes, edges)
-    _assign_ranks(nodes, edges)
-    _minimize_crossings(nodes, edges)
-    canvas_w, canvas_h = _assign_coordinates(nodes, "LR")
+    canvas_w = canvas_h = 0
+    try:
+        from .elk_adapter import layout_with_elk as _layout_with_elk
+        _lg = _build_arch_layout_graph(nodes, groups, edges)
+        _fl = _layout_with_elk(_lg)  # type: ignore[arg-type]
+        _expected_nids = {n.id for n in _lg.nodes}  # type: ignore[attr-defined]
+        if _expected_nids - set(_fl.node_layouts.keys()):
+            raise RuntimeError("ELK returned incomplete node positions")
+        for _nid, _nl in _fl.node_layouts.items():
+            if _nid in nodes:
+                _n = nodes[_nid]
+                _n.x = int(_nl.outer_bounds.x)
+                _n.y = int(_nl.outer_bounds.y)
+                _n.width = _n.width or int(_nl.outer_bounds.w)
+                _n.height = _n.height or int(_nl.outer_bounds.h)
+        canvas_w = int(_fl.canvas_bounds.w)
+        canvas_h = int(_fl.canvas_bounds.h)
+    except Exception:
+        pass
+
+    if canvas_w == 0 or canvas_h == 0:
+        canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
 
     zoom = 1.0
     if width_hint and canvas_w > 0 and canvas_w > width_hint:

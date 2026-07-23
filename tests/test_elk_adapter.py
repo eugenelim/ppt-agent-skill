@@ -16,9 +16,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 import mermaid_render.layout.elk_adapter as _mod
-from mermaid_render.layout.elk_adapter import ElkUnavailable, layout_with_elk
+from mermaid_render.layout.elk_adapter import ElkUnavailable, layout_with_elk, _to_elk_json, _from_elk_result
 from mermaid_render.layout._geometry import (
-    LayoutEdge, LayoutGraph, LayoutNode, MarkerKind,
+    LayoutEdge, LayoutGraph, LayoutGroup, LayoutNode, MarkerKind, PortSpec,
 )
 
 
@@ -114,6 +114,144 @@ class TestElkAdapterMocked:
             layout_with_elk(_simple_graph())
         _, kwargs = mock.call_args
         assert kwargs.get("timeout") == 30
+
+
+# ── Compound layout unit tests (pure, no subprocess) ─────────────────────────
+
+def _compound_graph() -> LayoutGraph:
+    """Graph with one group 'cloud' containing two nodes lb and api."""
+    lb_port = PortSpec(id="lb_R", node_id="lb", side="EAST", index=0,
+                       fixed_side=True, fixed_order=False)
+    api_port = PortSpec(id="api_L", node_id="api", side="WEST", index=0,
+                        fixed_side=True, fixed_order=False)
+    return LayoutGraph(
+        nodes=[
+            LayoutNode("lb", 192, 48, "rect", "cloud", [lb_port], ["lb"], {}),
+            LayoutNode("api", 192, 48, "rect", "cloud", [api_port], ["api"], {}),
+        ],
+        groups=[
+            LayoutGroup(id="cloud", parent_id=None, label="Cloud",
+                        label_width=80.0, label_height=20.0, padding=16.0,
+                        local_direction="LR", minimum_width=0.0, minimum_height=0.0),
+        ],
+        edges=[
+            LayoutEdge("e0", ["lb"], ["api"], "lb_R", "api_L",
+                       MarkerKind.NONE, MarkerKind.ARROW, "solid", "", {}),
+        ],
+        direction="LR",
+    )
+
+
+class TestElkJsonCompound:
+    """Unit tests for _to_elk_json with compound group hierarchy."""
+
+    def test_group_is_root_child(self):
+        """The 'cloud' group must appear as a root-level child, not a flat node."""
+        j = _to_elk_json(_compound_graph())
+        root_ids = [c["id"] for c in j["children"]]
+        assert "cloud" in root_ids, f"cloud should be root child, got: {root_ids}"
+        assert "lb" not in root_ids
+        assert "api" not in root_ids
+
+    def test_nodes_nested_inside_group(self):
+        """lb and api must be nested inside the 'cloud' compound node."""
+        j = _to_elk_json(_compound_graph())
+        cloud = next(c for c in j["children"] if c["id"] == "cloud")
+        nested_ids = [n["id"] for n in cloud.get("children", [])]
+        assert "lb" in nested_ids
+        assert "api" in nested_ids
+
+    def test_port_constraint_set_on_nodes_with_ports(self):
+        """Nodes with PortSpec should have portConstraints=FIXED_SIDE."""
+        j = _to_elk_json(_compound_graph())
+        cloud = next(c for c in j["children"] if c["id"] == "cloud")
+        for node in cloud["children"]:
+            assert node.get("properties", {}).get("portConstraints") == "FIXED_SIDE"
+
+    def test_edge_uses_port_ids_at_root(self):
+        """Edge sources/targets reference port IDs; edges live at root level."""
+        j = _to_elk_json(_compound_graph())
+        assert len(j["edges"]) == 1
+        e = j["edges"][0]
+        assert e["sources"] == ["lb_R"]
+        assert e["targets"] == ["api_L"]
+
+    def test_group_padding_in_layout_options(self):
+        """The group's layoutOptions must include elk.padding."""
+        j = _to_elk_json(_compound_graph())
+        cloud = next(c for c in j["children"] if c["id"] == "cloud")
+        assert "elk.padding" in cloud.get("layoutOptions", {})
+
+    def test_nested_group_child_list_shared(self):
+        """A child group added after parent group construction must appear in parent's children."""
+        # Simulates a group-in-group scenario: cloud → az (child group) → svc (node)
+        svc_port = PortSpec(id="svc_R", node_id="svc", side="EAST", index=0,
+                            fixed_side=True, fixed_order=False)
+        g = LayoutGraph(
+            nodes=[LayoutNode("svc", 192, 48, "rect", "az", [svc_port], ["svc"], {})],
+            groups=[
+                LayoutGroup(id="cloud", parent_id=None, label="Cloud",
+                            label_width=80.0, label_height=20.0, padding=16.0,
+                            local_direction="LR", minimum_width=0.0, minimum_height=0.0),
+                LayoutGroup(id="az", parent_id="cloud", label="AZ-1",
+                            label_width=60.0, label_height=20.0, padding=16.0,
+                            local_direction="LR", minimum_width=0.0, minimum_height=0.0),
+            ],
+            edges=[],
+            direction="LR",
+        )
+        j = _to_elk_json(g)
+        cloud = next(c for c in j["children"] if c["id"] == "cloud")
+        nested_ids = [c["id"] for c in cloud.get("children", [])]
+        assert "az" in nested_ids, (
+            f"child group 'az' must be in cloud.children; got {nested_ids}"
+        )
+
+
+class TestElkFromResultCompound:
+    """Unit tests for _from_elk_result with compound ELK output."""
+
+    def _compound_output(self) -> dict:
+        """Synthetic ELK compound output: cloud at (48, 48), lb at (28, 36) relative."""
+        return {
+            "id": "root", "x": 0, "y": 0, "width": 600, "height": 300,
+            "children": [{
+                "id": "cloud", "x": 48, "y": 48, "width": 460, "height": 200,
+                "children": [
+                    {"id": "lb", "x": 28, "y": 36, "width": 192, "height": 48},
+                    {"id": "api", "x": 240, "y": 36, "width": 192, "height": 48},
+                ],
+            }],
+            "edges": [],
+        }
+
+    def test_nodes_get_absolute_positions(self):
+        """lb and api positions must be group-offset + local coords."""
+        result = _from_elk_result(self._compound_output(), _compound_graph())
+        assert "lb" in result.node_layouts
+        assert "api" in result.node_layouts
+        lb = result.node_layouts["lb"].outer_bounds
+        api = result.node_layouts["api"].outer_bounds
+        # lb absolute: (48+28, 48+36) = (76, 84)
+        assert abs(lb.x - 76.0) < 1
+        assert abs(lb.y - 84.0) < 1
+        # api absolute: (48+240, 48+36) = (288, 84)
+        assert abs(api.x - 288.0) < 1
+        assert abs(api.y - 84.0) < 1
+
+    def test_group_layout_built(self):
+        """GroupLayout for 'cloud' should be populated with the group's bounds."""
+        result = _from_elk_result(self._compound_output(), _compound_graph())
+        assert "cloud" in result.group_layouts
+        b = result.group_layouts["cloud"].boundary_bounds
+        assert abs(b.x - 48.0) < 1
+        assert abs(b.y - 48.0) < 1
+        assert abs(b.w - 460.0) < 1
+
+    def test_api_right_of_lb(self):
+        """After compound layout, api.x should be greater than lb.x."""
+        result = _from_elk_result(self._compound_output(), _compound_graph())
+        assert result.node_layouts["api"].outer_bounds.x > result.node_layouts["lb"].outer_bounds.x
 
 
 # ── Real Node subprocess tests (isolation tier) ───────────────────────────────
