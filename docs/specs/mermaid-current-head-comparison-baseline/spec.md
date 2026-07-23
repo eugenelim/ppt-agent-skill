@@ -2,7 +2,7 @@
 
 Mode: full (structural change, multi-feature, new tooling surface)
 
-- **Status:** Implementing
+- **Status:** Shipped
 
 ## Objective
 
