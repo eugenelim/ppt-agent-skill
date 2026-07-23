@@ -32,32 +32,23 @@
 ["ini-001"]
 name = "Mermaid Rendering Correctness"
 milestone = "san-juan-v1"
-status = "active"
+status = "shipped"
 
 ["ini-001".work]
-queue = [
-  # 1 — Gallery baseline: provenance-locked reference artifact for all comparison work
-  "docs/specs/mermaid-current-head-comparison-baseline",
-  # 2 — Non-vacuous oracle: comparator must prove checks ran before reporting pass
-  "docs/specs/mermaid-non-vacuous-oracle",
-  # 3 — Lossless ELK round trip: prerequisite for items 4, 5, 8, 10
-  "docs/specs/elk-finalized-layout-roundtrip",
-  # 4 — Single FinalizedLayout pipeline for ER, requirement, architecture
-  {path = "docs/specs/mermaid-single-finalized-layout-pipeline", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
-  # 5 — Architecture full-ELK consumption: ELK authoritative for placement and routing
-  {path = "docs/specs/architecture-elk-authoritative-layout", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
-  # 6 — ShapeGeometry painters: one implementation per shape for HTML and SVG
-  "docs/specs/shape-geometry-authoritative-painters",
-  # 8 — Flowchart routing regressions: ELK sections + fallback correctness for 6 fixtures
-  {path = "docs/specs/flowchart-elk-routing-regression-pack", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
-  # 9 — State local cycles and semantic endpoints
-  "docs/specs/state-diagram-local-cycle-routing",
-]
+queue = []
 active = []
 shipped = [
+  "docs/specs/mermaid-current-head-comparison-baseline",
+  "docs/specs/mermaid-non-vacuous-oracle",
+  "docs/specs/elk-finalized-layout-roundtrip",
+  "docs/specs/mermaid-single-finalized-layout-pipeline",
+  "docs/specs/architecture-elk-authoritative-layout",
+  "docs/specs/shape-geometry-authoritative-painters",
+  "docs/specs/class-diagram-marker-clearance",
+  "docs/specs/flowchart-elk-routing-regression-pack",
+  "docs/specs/state-diagram-local-cycle-routing",
   "docs/specs/er-finalized-layout-and-dynamic-width",
   "docs/specs/requirement-finalized-layout-sizing",
-  "docs/specs/class-diagram-marker-clearance",
 ]
 
 [backlog]
@@ -103,11 +94,6 @@ open = [
 
   # Wrap Puppeteer render in a minimal container with seccomp/AppArmor; remove --no-sandbox inside it (AST06/ASI02)
   {slug = "no-sandbox-container-isolation"},
-
-  # ── Group 5: Deferred until regression observed ───────────────────────────
-
-  # Extend _routing.py with per-edge column-confinement hints for cycle-back transitions — defer until _routing.py decouples back-edge detection from global lane assignment
-  {slug = "state-diagram-local-cycle-routing"},
 
   # ── Group 6: Environment-blocked / requires manual QA ────────────────────
 
