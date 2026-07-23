@@ -143,7 +143,7 @@ def _class_topology_scene(src: str, direction: str, width_hint: int) -> SvgScene
         _Node, _Edge, NODE_CAP, NODE_W, CANVAS_PAD,
         _node_render_h, _TERMINAL_NODE_SIZE, _is_terminal_circle,
     )
-    from .layout._strategies import _CLASS_REL_RE, _class_rel_style, _directive_content
+    from .layout._strategies import _CLASS_REL_RE, _class_rel_markers, _directive_content
     from .layout._layout import (
         _break_cycles, _assign_ranks, _minimize_crossings,
         _assign_coordinates,
@@ -185,11 +185,11 @@ def _class_topology_scene(src: str, direction: str, width_hint: int) -> SvgScene
             for cid in (c1, c2):
                 nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
                 class_members.setdefault(cid, [])
-            arrow_src = op.startswith(("<|", "*", "o"))
+            src_spec, tgt_spec, line_style = _class_rel_markers(op)
             edges.append(_Edge(
                 src=c1, dst=c2, label=lbl.strip(),
-                style=_class_rel_style(op), arrow=True,
-                arrow_src=arrow_src,
+                style=line_style, arrow=True,
+                source_marker=src_spec, target_marker=tgt_spec,
                 src_label=mul_src, dst_label=mul_dst,
             ))
             continue

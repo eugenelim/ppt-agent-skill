@@ -959,12 +959,46 @@ class MarkerKind(str, enum.Enum):
     OPEN_ARROW = "open_arrow"
     DIAMOND = "diamond"
     FILLED_DIAMOND = "filled_diamond"
+    HOLLOW_TRIANGLE = "hollow_triangle"   # UML inheritance / realization
+    HOLLOW_DIAMOND = "hollow_diamond"     # UML aggregation
     CIRCLE = "circle"
     CROSS = "cross"
     CROW_ONE = "crow_one"
     CROW_MANY = "crow_many"
     CROW_ZERO_ONE = "crow_zero_one"
     CROW_ZERO_MANY = "crow_zero_many"
+
+
+@dataclass(frozen=True)
+class MarkerSpec:
+    """Full specification for one UML marker at a single edge endpoint.
+
+    Replaces the ``arrow_src: bool`` field on ``_Edge`` for class-diagram
+    relations.  Two ``MarkerSpec`` instances (source + target) represent both
+    ends independently, letting the renderer derive orientation and clearance
+    from the final route tangent without re-encoding the relationship type.
+
+    Attributes:
+        kind:       Shape drawn at this endpoint (NONE = no marker).
+        end:        Which end of the edge this spec belongs to: "SOURCE" or "TARGET".
+        size:       Marker size in px (governs viewBox / markerWidth).
+        line_join:  SVG stroke-linejoin for the marker outline.
+        fill:       SVG fill override; "" = inherit from theme token.
+        stroke:     SVG stroke override; "" = inherit from theme token.
+        clearance:  How far (px) to shorten the route so the marker tip lands
+                    at the card face rather than inside it.
+    """
+    kind: MarkerKind
+    end: str              # "SOURCE" | "TARGET"
+    size: float = 10.0
+    line_join: str = "miter"
+    fill: str = ""
+    stroke: str = ""
+    clearance: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.end not in ("SOURCE", "TARGET"):
+            raise ValueError(f"MarkerSpec.end must be 'SOURCE' or 'TARGET', got {self.end!r}")
 
 
 @dataclass(frozen=True)

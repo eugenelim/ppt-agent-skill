@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from ._geometry import MarkerKind
+from ._geometry import MarkerKind, MarkerSpec
 
 # ── icon loader ───────────────────────────────────────────────────────────────
 
@@ -238,6 +238,12 @@ class _Node:
     height: int = 0               # computed per-node render height (0 → use _node_render_h)
 
 
+# Sentinel MarkerSpec values used as default field values on _Edge.
+# Frozen dataclasses are immutable so they are safe as dataclass defaults.
+_NONE_SRC_SPEC: MarkerSpec = MarkerSpec(kind=MarkerKind.NONE, end="SOURCE")
+_NONE_TGT_SPEC: MarkerSpec = MarkerSpec(kind=MarkerKind.NONE, end="TARGET")
+
+
 @dataclass
 class _Edge:
     src: str
@@ -247,9 +253,8 @@ class _Edge:
     arrow: bool = True
     reversed_: bool = False       # back-edge flag
     bidir: bool = False           # True for <--> edges — renders marker-start in addition to marker-end
-    arrow_src: bool = False       # True when the UML marker belongs at SRC (e.g. Animal <|-- Dog)
-    source_marker: MarkerKind = MarkerKind.NONE  # deferred: backlog#arrow-semantics-cleanup
-    target_marker: MarkerKind = MarkerKind.NONE  # deferred: backlog#arrow-semantics-cleanup
+    source_marker: MarkerSpec = field(default_factory=lambda: _NONE_SRC_SPEC)
+    target_marker: MarkerSpec = field(default_factory=lambda: _NONE_TGT_SPEC)
     src_label: str = ""           # text label near source endpoint (e.g. class multiplicities)
     dst_label: str = ""           # text label near destination endpoint
     cardinality_src: Optional[str] = None  # ER crow's foot: 'one'|'zero-one'|'many'|'zero-many'

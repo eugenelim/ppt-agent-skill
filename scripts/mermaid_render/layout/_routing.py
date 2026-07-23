@@ -13,8 +13,17 @@ from ._constants import (
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE, _BAR_W,
     _measure_text_width,
 )
-from ._geometry import Rect, RoutingFailure, RouteBatch
+from ._geometry import Rect, RoutingFailure, RouteBatch, MarkerKind as _MarkerKind
 from .shape_geometry import SHAPE_REGISTRY
+
+# Maps class-diagram MarkerKind values to the SVG marker-def IDs in the renderer.
+# For source-end markers the router appends "-rev"; for target-end it uses these as-is.
+_CLS_KIND_TO_MARKER_ID = {
+    _MarkerKind.HOLLOW_TRIANGLE: "cls-inherit",
+    _MarkerKind.FILLED_DIAMOND:  "cls-composition",
+    _MarkerKind.HOLLOW_DIAMOND:  "cls-aggregation",
+    _MarkerKind.OPEN_ARROW:      "cls-dep",
+}
 
 
 @dataclass(frozen=True)
@@ -791,19 +800,28 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if e.style == "thick":
             ah_kw: dict = {"back": 11, "half_w": 5}
             _mid = "arrow-thick"
-        elif e.style.startswith("cls-"):
+            marker_id: str | None = _mid if e.arrow else None
+        elif e.style.startswith("cls"):
+            # Class diagram edge: derive marker ID from source_marker / target_marker kind.
             ah_kw = {"back": 9, "half_w": 4}
-            # Class markers: strip optional "-dotted" suffix to get the marker id
-            _mid = e.style.replace("-dotted", "")
+            _sm = e.source_marker
+            _tm = e.target_marker
+            _src_kind = _sm.kind if hasattr(_sm, "kind") else _MarkerKind.NONE
+            _tgt_kind = _tm.kind if hasattr(_tm, "kind") else _MarkerKind.NONE
+            if _src_kind != _MarkerKind.NONE and e.arrow:
+                # Source-end marker → use "-rev" so renderer emits marker-start
+                _mid = _CLS_KIND_TO_MARKER_ID.get(_src_kind, "cls-dep")
+                marker_id = _mid + "-rev"
+            elif _tgt_kind != _MarkerKind.NONE and e.arrow:
+                _mid = _CLS_KIND_TO_MARKER_ID.get(_tgt_kind, "cls-dep")
+                marker_id = _mid
+            else:
+                _mid = "cls-dep"
+                marker_id = None
         else:
             ah_kw = {"back": 9, "half_w": 4}
             _mid = "arrow-open" if e.style == "dotted" else "arrow-normal"
-        # arrow_src=True: UML marker belongs at the source end; use a -rev ID so
-        # the renderer emits marker-start with orient="auto-start-reverse".
-        if e.arrow and getattr(e, "arrow_src", False):
-            marker_id: str | None = _mid + "-rev"
-        else:
-            marker_id: str | None = _mid if e.arrow else None
+            marker_id = _mid if e.arrow else None
 
         # Self-loop: direction-aware rectangular orthogonal loop.
         # LR: exits top face (even lane_idx) / bottom face (odd lane_idx).

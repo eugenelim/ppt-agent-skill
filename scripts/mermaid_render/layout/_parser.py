@@ -8,7 +8,7 @@ from ._constants import (
     _Node, _Edge, _Group,
     _GRAPH_DIRECTIVES,
 )
-from ._geometry import MarkerKind
+from ._geometry import MarkerKind, MarkerSpec
 
 # ── source preprocessing ──────────────────────────────────────────────────────
 
@@ -549,8 +549,8 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     style = "dotted" if "-.-" in arrow else ("thick" if "==" in arrow else "solid")
     is_bidir = arrow == "<-->"
     has_arrow = is_bidir or arrow.endswith(">")
-    _src_mk = MarkerKind.ARROW if is_bidir else MarkerKind.NONE
-    _dst_mk = MarkerKind.ARROW if has_arrow else MarkerKind.NONE
+    _src_mk = MarkerSpec(kind=MarkerKind.ARROW, end="SOURCE") if is_bidir else MarkerSpec(kind=MarkerKind.NONE, end="SOURCE")
+    _dst_mk = MarkerSpec(kind=MarkerKind.ARROW, end="TARGET") if has_arrow else MarkerSpec(kind=MarkerKind.NONE, end="TARGET")
 
     src_id, src_lbl, src_shp, src_cls = _parse_spec_and_class(src_raw)
     if not re.match(r'[A-Za-z_]', src_id):

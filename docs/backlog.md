@@ -30,6 +30,32 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
+## class-diagram-marker-semantics
+
+### class-diagram-marker-clearance
+
+**Deferred from AC:** Route paths for class edges shortened by `MarkerSpec.clearance`
+so the marker tip lands at the card face rather than inside it.
+Spec sets `clearance=0.0` as default; Assumptions specify 12.0 (triangle/diamond) /
+9.0 (open arrow) as the intended values.
+Blocked on: setting non-zero clearance in `_class_rel_markers()` and reading
+`MarkerSpec.clearance` in `_route_edges()` to shorten the polyline endpoints.
+Unblocked by: a dedicated routing-geometry spec (can be light-mode; single file change).
+
+### class-diagram-route-clip
+
+**Deferred from AC:** Route entry/exit points clipped to actual class-card bounding rect.
+Pre-existing routing clips to `_Node` bounds; no regression observed. Deferred until
+a fixture demonstrates visible overshoot that needs explicit clamping.
+
+### class-diagram-label-segment
+
+**Deferred from AC:** Edge labels placed on longest stable segment (≥40 px).
+Pre-existing label placement uses midpoint of the polyline. Deferred until label-overlap
+regression is observed in the fixture gallery.
+
+---
+
 ## sequence-renderer-correctness-pass
 
 ### seq-corr-box-unsupported-fixture

@@ -1601,7 +1601,11 @@ _CLASS_REL_RE = re.compile(
 )
 
 def _class_rel_style(op: str) -> str:
-    """Map a class relationship operator to an _Edge style value."""
+    """Map a class relationship operator to an _Edge style value.
+
+    Kept for backward compatibility with tests that import this function.
+    New code should use _class_rel_markers() which returns MarkerSpec objects.
+    """
     is_dashed = ".." in op
     if "<|" in op or "|>" in op:
         base = "cls-inherit"
@@ -1612,6 +1616,52 @@ def _class_rel_style(op: str) -> str:
     else:
         base = "cls-dep"
     return base + ("-dotted" if is_dashed else "")
+
+
+def _class_rel_markers(op: str) -> "tuple":
+    """Map a Mermaid classDiagram operator to (source_spec, target_spec, line_style).
+
+    Returns:
+        source_spec:  MarkerSpec for the source (left/A) endpoint.
+        target_spec:  MarkerSpec for the target (right/B) endpoint.
+        line_style:   "cls-solid" or "cls-dotted".
+
+    Operator → marker mapping:
+        <|--  / <|..   → HOLLOW_TRIANGLE @ SOURCE
+        *--             → FILLED_DIAMOND  @ SOURCE
+        --*             → FILLED_DIAMOND  @ TARGET
+        o--             → HOLLOW_DIAMOND  @ SOURCE
+        --o             → HOLLOW_DIAMOND  @ TARGET
+        |>              → HOLLOW_TRIANGLE @ TARGET (right-side inheritance)
+        ..|>            → HOLLOW_TRIANGLE @ TARGET, dotted (realization)
+        --> / ..>       → OPEN_ARROW      @ TARGET
+        .. / ||         → OPEN_ARROW      @ TARGET  (plain/association lines)
+        ..>|            → OPEN_ARROW      @ TARGET, dotted (fallback)
+    """
+    from ._geometry import MarkerKind as _MK, MarkerSpec as _MS
+    is_dashed = ".." in op
+    line_style = "cls-dotted" if is_dashed else "cls-solid"
+    NONE_SRC = _MS(kind=_MK.NONE, end="SOURCE")
+    NONE_TGT = _MS(kind=_MK.NONE, end="TARGET")
+
+    # Source-end markers (left / A-end)
+    if op.startswith("<|"):          # <|--, <|..
+        return (_MS(kind=_MK.HOLLOW_TRIANGLE, end="SOURCE"), NONE_TGT, line_style)
+    if op.startswith("*"):           # *--
+        return (_MS(kind=_MK.FILLED_DIAMOND, end="SOURCE"), NONE_TGT, line_style)
+    if op.startswith("o"):           # o--
+        return (_MS(kind=_MK.HOLLOW_DIAMOND, end="SOURCE"), NONE_TGT, line_style)
+
+    # Target-end markers (right / B-end)
+    if op.endswith("*"):             # --*
+        return (NONE_SRC, _MS(kind=_MK.FILLED_DIAMOND, end="TARGET"), line_style)
+    if op.endswith("o"):             # --o
+        return (NONE_SRC, _MS(kind=_MK.HOLLOW_DIAMOND, end="TARGET"), line_style)
+    if op.endswith("|>") or op == "|>":   # ..|>, |>
+        return (NONE_SRC, _MS(kind=_MK.HOLLOW_TRIANGLE, end="TARGET"), line_style)
+
+    # Default: open arrow at target (-->, ..>, .., ||, ..>|, etc.)
+    return (NONE_SRC, _MS(kind=_MK.OPEN_ARROW, end="TARGET"), line_style)
 
 
 def _layout_class(src: str, direction: str, width_hint: int) -> str:
@@ -1648,12 +1698,10 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
             for cid in (c1, c2):
                 nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
                 _class_members.setdefault(cid, [])
-            # For operators where the UML marker is on the LEFT (c1) side,
-            # arrow_src=True so the renderer places marker-start at c1.
-            _arrow_src = op.startswith(("<|", "*", "o"))
+            src_spec, tgt_spec, line_style = _class_rel_markers(op)
             edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(),
-                               style=_class_rel_style(op), arrow=True,
-                               arrow_src=_arrow_src,
+                               style=line_style, arrow=True,
+                               source_marker=src_spec, target_marker=tgt_spec,
                                src_label=mul_src, dst_label=mul_dst))
             continue
         # Bare "A : method()" — just ensure class exists
@@ -4955,8 +5003,11 @@ def _build_layout_graph(
         n = seen_edge_ids.get(base_id, 0)
         seen_edge_ids[base_id] = n + 1
         eid = base_id if n == 0 else f"{base_id}#{n}"
-        src_mk = getattr(e, "source_marker", MarkerKind.NONE)
-        dst_mk = getattr(e, "target_marker", MarkerKind.ARROW if e.arrow else MarkerKind.NONE)
+        _sm = e.source_marker
+        _tm = e.target_marker
+        src_mk = _sm.kind if hasattr(_sm, "kind") else (MarkerKind(_sm) if isinstance(_sm, str) else MarkerKind.NONE)
+        _tm_kind = _tm.kind if hasattr(_tm, "kind") else (MarkerKind(_tm) if isinstance(_tm, str) else MarkerKind.NONE)
+        dst_mk = _tm_kind if _tm_kind != MarkerKind.NONE else (MarkerKind.ARROW if e.arrow else MarkerKind.NONE)
         layout_edges.append(LayoutEdge(
             id=eid,
             sources=[e.orig_src or e.src],
@@ -5216,8 +5267,8 @@ def _compile_flowchart(
                 "src_label": _e_obj.src_label if _e_obj else "",
                 "dst_label": _e_obj.dst_label if _e_obj else "",
                 "bidir": _e_obj.bidir if _e_obj else False,
-                "source_marker": _e_obj.source_marker if _e_obj else None,
-                "target_marker": _e_obj.target_marker if _e_obj else None,
+                "source_marker": (_e_obj.source_marker.kind if hasattr(_e_obj.source_marker, "kind") else _e_obj.source_marker) if _e_obj else None,
+                "target_marker": (_e_obj.target_marker.kind if hasattr(_e_obj.target_marker, "kind") else _e_obj.target_marker) if _e_obj else None,
                 "edge_id": _er["id"],
             })
         from ._routing import RouteBatch as _RouteBatch
