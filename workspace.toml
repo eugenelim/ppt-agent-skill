@@ -49,19 +49,13 @@ shipped = [
   "docs/specs/state-diagram-local-cycle-routing",
   "docs/specs/er-finalized-layout-and-dynamic-width",
   "docs/specs/requirement-finalized-layout-sizing",
+  "docs/specs/seq-corr-mmdc-data-et-selectors",
 ]
 
 [backlog]
 open = [
-  # ── Group 1: Environment-blocked quick wins ───────────────────────────────
-
-  # npm ci --prefix scripts/mermaid_render/layout; then pytest tests/test_compound_layout.py -m requires_elk
-  {slug = "backlog-compound-elk-ac1-ac3"},
-
   # ── Group 2: Investigation + implementation (requires mmdc) ─────────────────
 
-  # Probe mmdc 11.15 SVG output to confirm <g data-et="participant"> selector attribute names used in T11
-  {slug = "seq-corr-mmdc-data-et-selectors"},
   # Investigate mmdc layout rule for single-participant fragment headers wider than natural canvas; implement override
   {slug = "seq-corr-single-participant-fragment-long-header"},
 

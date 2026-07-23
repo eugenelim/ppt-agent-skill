@@ -553,8 +553,8 @@ def _compare_mmdc_semantic(src: str, mmdc_svg_path: Path) -> str:
     """Compare mmdc SVG semantic elements against our SequenceGeometry.
 
     Returns "pass", "warning", or "unvalidated".
-    - "pass": participant and message counts match
-    - "warning": counts differ (soft mismatch)
+    - "pass": participant, message, note, and fragment counts all match
+    - "warning": any count differs (soft mismatch)
     - "unvalidated": not a sequence diagram, or mmdc SVG unparseable
     """
     from mermaid_render.layout._parser import _detect_directive, _strip_frontmatter  # noqa: PLC0415
@@ -579,6 +579,8 @@ def _compare_mmdc_semantic(src: str, mmdc_svg_path: Path) -> str:
 
         mmdc_participants = _count_data_et("participant")
         mmdc_messages = _count_data_et("message")
+        mmdc_notes = _count_data_et("note")
+        mmdc_fragments = _count_data_et("control-structure")
     except Exception:
         return "unvalidated"
 
@@ -587,10 +589,15 @@ def _compare_mmdc_semantic(src: str, mmdc_svg_path: Path) -> str:
         geom = compiled.geometry
         our_participants = len(geom.participants)
         our_messages = len(geom.messages)
+        our_notes = len(geom.notes)
+        our_fragments = len(geom.fragments)
     except Exception:
         return "unvalidated"
 
-    if mmdc_participants == our_participants and mmdc_messages == our_messages:
+    if (mmdc_participants == our_participants
+            and mmdc_messages == our_messages
+            and mmdc_notes == our_notes
+            and mmdc_fragments == our_fragments):
         return "pass"
     return "warning"
 
