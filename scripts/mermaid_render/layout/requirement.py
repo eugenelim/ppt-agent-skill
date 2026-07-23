@@ -36,6 +36,10 @@ from ..scene import (
     SvgScene,
     make_scene_id,
 )
+from ._text import get_default_measurer, REQUIREMENT_FIELD
+
+# Process-wide text measurer singleton
+_MEASURER = get_default_measurer()
 
 
 # ── Color tokens ──────────────────────────────────────────────────────────────
@@ -66,7 +70,6 @@ _COL_GAP = 64
 _FONT_HEADER = 12
 _FONT_ATTR = 10
 _FONT_REL = 9
-_TEXT_WRAP_CHARS = 30   # approximate chars per line at 10px font in a 220px card
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -130,6 +133,18 @@ def _wrap_text(text: str, max_chars: int) -> list[str]:
     return lines
 
 
+def _wrap_text_px(text: str, max_width_px: float) -> list[str]:
+    """Word-wrap ``text`` to at most ``max_width_px`` pixel width.
+
+    Uses the process-wide text measurer with REQUIREMENT_FIELD style.
+    Replaces the old character-count-based ``_TEXT_WRAP_CHARS`` approach.
+    Long unbroken tokens are hard-broken at character boundaries
+    (``allow_emergency_break=True``) to prevent overflow.
+    """
+    tl = _MEASURER.layout(text, REQUIREMENT_FIELD, max_width_px, allow_emergency_break=True)
+    return ["".join(run.text for run in line.runs) for line in tl.lines] or [""]
+
+
 def _parse_requirement_source(src: str) -> tuple[dict, list[dict]]:
     """Return ``(nodes, relations)``.
 
@@ -190,29 +205,34 @@ def _parse_requirement_source(src: str) -> tuple[dict, list[dict]]:
 def _node_height(node: dict) -> float:
     """Card height: header + wrapped attribute rows + vertical padding.
 
-    Every attribute display line (``key: value``) is word-wrapped, so a long
-    value on any field — not just ``text`` — grows the card rather than
+    Every attribute display line (``key: value``) is pixel-wrapped at
+    ``_NODE_W - 2 * _ATTR_PAD`` so a long value grows the card rather than
     overflowing it.  Must stay in lockstep with the render loop in
     :func:`layout_requirement_scene`.
     """
+    _max_w = float(_NODE_W - 2 * _ATTR_PAD)
     n_lines = 0
     for key, val in node.get("attrs", {}).items():
-        n_lines += len(_wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS))
+        tl = _MEASURER.layout(f"{key}: {val}", REQUIREMENT_FIELD, _max_w, allow_emergency_break=True)
+        n_lines += len(tl.lines)
     return float(_HEADER_H + max(n_lines, 1) * _ATTR_H + _ATTR_PAD * 2)
 
 
 def _node_width(node: dict, name: str) -> float:
-    """Estimated card width from the longest rendered line + horizontal padding.
+    """Measured card width from the longest rendered line + horizontal padding.
 
-    Uses char-count * font-size * 0.6 as a pixel approximation.  The result is
+    Uses the process-wide text measurer for accurate pixel widths.  The result is
     clamped to at least _NODE_W so this is always a minimum-preserving measure.
     """
-    header_w = float(len(name)) * _FONT_HEADER * 0.6
-    subtype_w = float(len(node.get("subtype", ""))) * _FONT_ATTR * 0.6
+    from ._geometry import TextStyle as _TextStyle
+    _header_style = _TextStyle(font_size=float(_FONT_HEADER), font_weight=700)
+    header_w = _MEASURER.layout(name, _header_style, None).width
+    subtype_w = _MEASURER.layout(node.get("subtype", ""), REQUIREMENT_FIELD, None).width
     max_w = max(header_w, subtype_w)
+    _max_px = float(_NODE_W - 2 * _ATTR_PAD)
     for key, val in node.get("attrs", {}).items():
-        for line in _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS):
-            max_w = max(max_w, float(len(line)) * _FONT_ATTR * 0.6)
+        attr_layout = _MEASURER.layout(f"{key}: {val}", REQUIREMENT_FIELD, _max_px)
+        max_w = max(max_w, attr_layout.width)
     return max(float(_NODE_W), max_w + 2 * _ATTR_PAD)
 
 
@@ -438,6 +458,7 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
         Rect,
         RoutedEdge,
         TextLayout,
+        TextStyle,
         _empty_diagnostics,
     )
 
@@ -594,12 +615,14 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
             dx0, dy0, dxn, dyn = 0.0, 1.0, 0.0, 1.0
 
         rel_type = rel["rel_type"]
-        lbl_w = float(len(rel_type)) * _FONT_REL * 0.65
+        _rel_style = TextStyle(font_size=float(_FONT_REL), font_weight=400)
+        _lbl_tl = _MEASURER.layout(rel_type, _rel_style, None)
+        lbl_w = _lbl_tl.width
         lp_x, lp_y = _label_point(tuple((wp.x, wp.y) for wp in waypoints))
         lbl_layout = EdgeLabelLayout(
             text=rel_type,
-            layout=_stub_text_layout(lbl_w, float(_FONT_REL)),
-            bounds=Rect(lp_x - lbl_w / 2, lp_y - float(_FONT_REL), lbl_w, float(_FONT_REL)),
+            layout=_lbl_tl,
+            bounds=Rect(lp_x - lbl_w / 2, lp_y - _lbl_tl.height, lbl_w, _lbl_tl.height),
             anchor_point=Point(lp_x, lp_y),
         )
 
@@ -830,7 +853,7 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0, height_hint: int 
 
         ay = float(py + _HEADER_H + _ATTR_PAD)
         for key, val in node.get("attrs", {}).items():
-            wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
+            wrapped = _wrap_text_px(f"{key}: {val}", float(_NODE_W - 2 * _ATTR_PAD))
             for li, line_text in enumerate(wrapped):
                 display = line_text if li == 0 else f"  {line_text}"
                 label_elements.append(SceneText(
@@ -985,7 +1008,7 @@ def requirement_to_html(src: str, *, width_hint: int = 0, height_hint: int = 0) 
             f'font-size:{_FONT_ATTR}px; color:{_TEXT_COLOR}; overflow:hidden;">'
         )
         for key, val in node.get("attrs", {}).items():
-            wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
+            wrapped = _wrap_text_px(f"{key}: {val}", float(_NODE_W - 2 * _ATTR_PAD))
             for li, line_text in enumerate(wrapped):
                 display = line_text if li == 0 else f"  {line_text}"
                 parts.append(

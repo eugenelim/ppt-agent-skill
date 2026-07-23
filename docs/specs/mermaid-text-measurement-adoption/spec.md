@@ -2,7 +2,7 @@
 
 Mode: full (multi-file; touches multiple layout categories; structural)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 ## Objective
 
