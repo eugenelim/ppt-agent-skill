@@ -336,6 +336,32 @@ class SceneImage(_SceneElement):
             raise ValueError("SceneImage.href must be a data: URI")
 
 
+@dataclass(frozen=True)
+class SceneRaw(_SceneElement):
+    """Raw SVG fragment for shapes rendered by a ShapeGeometry painter.
+
+    The ``svg`` field contains the SVG fragment string (multiple elements,
+    no wrapping ``<g>``).  ``x``, ``y``, ``w``, ``h`` describe the
+    bounding box in canvas coordinates and are informational only.
+    """
+    svg: str = ""
+    x: float = 0.0
+    y: float = 0.0
+    w: float = 0.0
+    h: float = 0.0
+
+    def __post_init__(self) -> None:
+        _check_finite(self.x, "SceneRaw.x")
+        _check_finite(self.y, "SceneRaw.y")
+        _check_finite(self.w, "SceneRaw.w")
+        _check_finite(self.h, "SceneRaw.h")
+
+    def to_svg(self) -> str:
+        """Return the raw SVG fragment string."""
+        return self.svg
+
+
+
 # ── Groups and layers ─────────────────────────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -356,6 +382,7 @@ SceneElement = (
     | ScenePath
     | SceneText
     | SceneImage
+    | SceneRaw
     | SceneGroup
 )
 

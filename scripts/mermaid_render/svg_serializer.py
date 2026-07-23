@@ -22,7 +22,7 @@ from lxml import etree  # type: ignore[import-untyped]
 from .scene import (
     SvgScene, SceneGroup, SceneRect, SceneRoundedRect, SceneCircle, SceneEllipse,
     SceneLine, ScenePolyline, ScenePolygon, ScenePath, SceneText, SceneTextLine,
-    SceneImage, PaintStyle, StrokeStyle, FillStyle,
+    SceneImage, SceneRaw, PaintStyle, StrokeStyle, FillStyle,
     MarkerDefinition, LinearGradientDefinition, RadialGradientDefinition,
     ClipPathDefinition, _SceneElement, LAYER_ORDER,
     Translate, Scale, Rotate, Matrix,
@@ -273,6 +273,21 @@ def _ser_image(elem: SceneImage, parent: etree._Element) -> etree._Element:
     return el
 
 
+
+
+def _ser_raw(elem: SceneRaw, parent: etree._Element) -> etree._Element:
+    g = etree.SubElement(parent, "g")
+    _apply_base(g, elem)
+    if elem.svg:
+        try:
+            frag = etree.fromstring(f"<_frag>{elem.svg}</_frag>")
+            for child in frag:
+                g.append(child)
+        except etree.XMLSyntaxError:
+            pass
+    return g
+
+
 def _ser_group(elem: SceneGroup, parent: etree._Element) -> etree._Element:
     g = etree.SubElement(parent, "g")
     _apply_base(g, elem)
@@ -304,6 +319,8 @@ def _ser_element(elem: object, parent: etree._Element) -> None:
         _ser_text(elem, parent)
     elif isinstance(elem, SceneImage):
         _ser_image(elem, parent)
+    elif isinstance(elem, SceneRaw):
+        _ser_raw(elem, parent)
     else:
         raise TypeError(f"Unknown scene element type: {type(elem)}")
 
