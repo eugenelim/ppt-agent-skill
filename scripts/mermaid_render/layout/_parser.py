@@ -12,6 +12,16 @@ from ._geometry import MarkerKind, MarkerSpec
 
 # ── source preprocessing ──────────────────────────────────────────────────────
 
+def _directive_content(src: str) -> list[str]:
+    """Return lines after the first non-blank, non-comment line (the directive)."""
+    lines = src.splitlines()
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if s and not s.startswith(("%%", "//")):
+            return lines[i + 1:]
+    return []
+
+
 def _strip_frontmatter(src: str) -> str:
     """Remove YAML frontmatter (---...---) and return the remainder."""
     stripped = src.strip()

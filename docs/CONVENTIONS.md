@@ -597,9 +597,17 @@ widen-after-publish gap.
 ### Module size
 
 Scripts in `scripts/` should stay under ~500 lines. Above 800 lines, open a backlog
-item to split into focused sub-modules. `scripts/mermaid_layout/_strategies.py` is a
-tracked exception (~1,250 lines) — it contains all diagram-type dispatch strategies and
-is one focused concern that does not split further without losing locality.
+item to split into focused sub-modules. The following are tracked exceptions (each
+over 500 lines; split from `scripts/mermaid_render/layout/_strategies.py` which was
+5,678 lines before the `strategies-module-split` refactor):
+
+- `scripts/mermaid_render/layout/_strategies.py` (~1,992 lines) — dispatch core,
+  sequence/ER/class layouts, shared helpers, and validation.
+- `scripts/mermaid_render/layout/_pipeline.py` (~1,192 lines) — flowchart compile
+  pipeline: `RenderOptions`, `_compile_flowchart`, and all its support functions.
+- `scripts/mermaid_render/layout/_diagram_types.py` (~2,577 lines) — T3 simple
+  diagram layouts (gantt, timeline, pie, sankey, mindmap, block, packet, kanban,
+  C4, journey, gitgraph, architecture-beta regexes).
 
 ### Private symbols
 
