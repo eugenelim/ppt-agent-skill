@@ -306,6 +306,35 @@ _GROUP_DIRS = {
     "principle_refs": "principles",
 }
 
+# chart_type values (normalized: lowercase, hyphens) -> grouped recipe file stem.
+# Sources: references/charts/{basic,advanced,complex}.md chart_id columns.
+# Allows resource_exists to resolve a chart_type entry in chart_refs to its
+# containing recipe file instead of looking for a per-chart-type file that
+# doesn't exist.
+_CHART_TYPE_TO_FILE: dict[str, str] = {
+    # basic.md
+    "progress-bar": "basic",
+    "comparison-bar": "basic",
+    "ring": "basic",
+    "sparkline": "basic",
+    "waffle": "basic",
+    "kpi": "basic",
+    "metric-row": "basic",
+    "rating": "basic",
+    # advanced.md
+    "radar": "advanced",
+    "timeline": "advanced",
+    "funnel": "advanced",
+    "gauge": "advanced",
+    "grouped-bar": "advanced",
+    "simple-map": "advanced",
+    # complex.md
+    "world-choropleth": "complex",
+    "network-graph": "complex",
+    "sankey-flow": "complex",
+    "heatmap-calendar": "complex",
+}
+
 
 def resource_exists(refs_dir: Path, group: str, value: str) -> bool:
     if not value:
@@ -320,6 +349,14 @@ def resource_exists(refs_dir: Path, group: str, value: str) -> bool:
     subdir = _GROUP_DIRS.get(group)
     if not subdir:
         return False
+    # For chart_refs, chart_type values (e.g. "kpi", "comparison-bar") map to
+    # grouped recipe files (basic/advanced/complex).  Check the grouped file
+    # rather than trying to find a per-chart-type file that doesn't exist.
+    if group == "chart_refs":
+        normalized_type = raw.lower().replace("_", "-")
+        recipe_file = _CHART_TYPE_TO_FILE.get(normalized_type)
+        if recipe_file is not None:
+            return (refs_dir / subdir / f"{recipe_file}.md").exists()
     # Try exact filename first, then with .md extension
     base_dir = refs_dir / subdir
     candidate = base_dir / raw
