@@ -50,6 +50,7 @@ from ._renderer import (
     render_finalized,
     _ACCENT_CYCLE,
 )
+from .requirement import _parse_attr_value
 
 # ── label-based icon inference ────────────────────────────────────────────────
 
@@ -4362,11 +4363,15 @@ def _layout_requirement(src: str, direction: str, width_hint: int) -> str:
             cur_block = {"id": _blk_m.group(2), "type": btype, "attrs": []}
             continue
 
-        # Attribute inside block
+        # Attribute inside block — strip quotes and reject unquoted path values,
+        # matching the native parser's Mermaid 11.15.0 grammar strictness.
         if cur_block is not None:
             _attr_m = re.match(r'^(\w+)\s*:\s*(.+)', line)
             if _attr_m:
-                cur_block["attrs"].append(f'{_attr_m.group(1)}: {_attr_m.group(2).strip()}')
+                _val, _err = _parse_attr_value(_attr_m.group(2))
+                if _err:
+                    raise ValueError(f"requirementDiagram: {_err}")
+                cur_block["attrs"].append(f'{_attr_m.group(1)}: {_val}')
             continue
 
         # Relation outside block
