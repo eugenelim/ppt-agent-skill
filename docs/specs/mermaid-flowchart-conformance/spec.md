@@ -66,7 +66,7 @@ prohibitions are each covered by explicit tests rather than inferred from visual
 - [x] AC2 (flowchart-arrows-defs): All edge styles and marker kinds match source tokens;
   faithful mode adds no legend HTML to the rendered output.
 - [x] AC3 (flowchart-diamond-branch): Branch labels belong to the correct edge IDs; the
-  retry feedback edge uses a local lane (waypoints stay within canvas bounds); decision-node
+  retry feedback edge uses a local lane (interior waypoints within 150 px of src/dst bbox); decision-node
   ports are stable across runs.
 - [x] AC4 (flowchart-diamond-clipping): Every edge endpoint lies within 16 px of the
   diamond node's outer_bounds AABB; geometry verifier reports zero violations.
@@ -104,7 +104,9 @@ compile from source using the production pipeline; no hardcoded coordinates.
   renders HTML with no "legend" substring.
 - **Decision branch labels (flowchart-diamond-branch):** compile fixture; for each
   decision node, assert each outgoing edge carries the correct label by edge ID.
-  Added: `test_retry_feedback_local_lane` verifies feedback waypoints are within canvas.
+  Added: `test_retry_feedback_local_lane` verifies each interior waypoint of the Retry→Check
+  edge has excursion < 150 px from the union of the Retry and Check node bounds; catches
+  perimeter-routed regressions.
 - **Diamond endpoint (flowchart-diamond-clipping):** compile fixture; assert endpoints
   within 16 px of diamond AABB; geometry verifier reports zero violations.
 - **Empty subgraph (flowchart-empty-subgraph):** compile fixture; assert groups present

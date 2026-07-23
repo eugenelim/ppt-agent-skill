@@ -342,7 +342,14 @@ class TestFlowchartArrowsDefs:
         suppresses; faithful has nothing to do).
         """
         src = _load("flowchart-arrows-defs")
-        # inferred_legend=True: a non-faithful dispatch would produce legend HTML
+        # Bracket the suppression: first confirm non-faithful dispatch with
+        # inferred_legend=True actually emits a legend (proves the test is non-vacuous),
+        # then confirm faithful dispatch suppresses it.
+        html_non_faithful = _dispatch(src, None, 800, opts=RenderOptions(faithful_mermaid=False, inferred_legend=True))
+        assert "legend" in html_non_faithful.lower(), (
+            "Non-faithful dispatch with inferred_legend=True should emit legend HTML "
+            "(needed to prove the faithful-mode assertion below is non-vacuous)"
+        )
         opts = RenderOptions(faithful_mermaid=True, inferred_legend=True)
         html = _dispatch(src, None, 800, opts=opts)
         assert "legend" not in html.lower(), (
@@ -801,8 +808,11 @@ class TestFlowchartInnerDirection:
                 if m in layout.node_layouts and not layout.node_layouts[m].is_dummy
             ]
             y_span = max(ys) - min(ys)
-            # In LR layout, nodes should be spread more horizontally than vertically
-            assert x_span > y_span or x_span > 50, (
+            # In LR layout, nodes should be spread more horizontally than vertically.
+            # If both x_span and y_span are 0 (single node after filtering), skip.
+            if y_span == 0 and x_span == 0:
+                continue
+            assert x_span > y_span, (
                 f"Group {gid!r} (LR): x_span={x_span:.0f} not > y_span={y_span:.0f} "
                 f"— nodes may not be arranged horizontally"
             )
