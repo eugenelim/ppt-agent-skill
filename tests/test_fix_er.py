@@ -21,7 +21,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mermaid_render.layout._strategies import (
-    _layout_er,
     _er_entity_h,
     _er_rect_edge_pt,
     _ER_HDR_H,
@@ -29,17 +28,18 @@ from mermaid_render.layout._strategies import (
     _ER_BOT_PAD,
 )
 from mermaid_render.layout._constants import NODE_H, NODE_W
+from mermaid_render.layout.er import er_to_html
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _html(fixture_name: str, width: int = 800) -> str:
     src = (REPO_ROOT / "tests" / "fixtures" / fixture_name).read_text(encoding="utf-8")
-    return _layout_er(src, "TB", width)
+    return er_to_html(src, width_hint=width)
 
 
 def _inline(src: str, width: int = 800) -> str:
-    return _layout_er(src, "TB", width)
+    return er_to_html(src, width_hint=width)
 
 
 # ── entity geometry helpers ────────────────────────────────────────────────────
@@ -174,10 +174,10 @@ class TestCrowsFootDirection:
         assert html.count("<line ") >= 4
 
     def test_crow_foot_not_hardcoded_top_bottom(self):
-        # For a horizontal layout (LR) the direction must not be (0,1)/(0,-1);
-        # the markers should still be present, using the actual vector.
+        # Direction vectors are always computed from actual layout geometry,
+        # not hardcoded (0,1)/(0,-1); crow's foot markers must be present.
         src = "erDiagram\n    A ||--o{ B : has\n"
-        html = _layout_er(src, "LR", 800)
+        html = er_to_html(src, width_hint=800)
         assert "<line " in html
         assert "<circle " in html
 
@@ -277,9 +277,9 @@ class TestFixtures:
     def test_width_hint_respected(self):
         html = _html("er-ecommerce.mmd", width=600)
         import re
-        m = re.search(r'width:(\d+)px', html)
+        m = re.search(r'width:(\d+(?:\.\d+)?)px', html)
         assert m, "No width found in outer container"
-        actual_w = int(m.group(1))
+        actual_w = float(m.group(1))
         assert actual_w <= 650, f"Canvas width {actual_w} too far from hint 600"
 
 
@@ -287,21 +287,22 @@ class TestFixtures:
 
 def _parse_card_rects(html: str) -> list[dict]:
     import re
+    _num = r'(\d+(?:\.\d+)?)'
     rects = []
     for m in re.finditer(
         r'<div[^>]*class="node[^"]*er-entity[^"]*"[^>]*data-node-id="([^"]+)"[^>]*style="([^"]+)"',
         html,
     ):
         style = m.group(2)
-        x_m = re.search(r'left:(\d+)px', style)
-        y_m = re.search(r'top:(\d+)px', style)
-        w_m = re.search(r'width:(\d+)px', style)
-        h_m = re.search(r'height:(\d+)px', style)
+        x_m = re.search(r'left:' + _num + r'px', style)
+        y_m = re.search(r'top:' + _num + r'px', style)
+        w_m = re.search(r'width:' + _num + r'px', style)
+        h_m = re.search(r'height:' + _num + r'px', style)
         if x_m and y_m and w_m and h_m:
             rects.append({
                 'id': m.group(1),
-                'x': int(x_m.group(1)), 'y': int(y_m.group(1)),
-                'w': int(w_m.group(1)), 'h': int(h_m.group(1)),
+                'x': float(x_m.group(1)), 'y': float(y_m.group(1)),
+                'w': float(w_m.group(1)), 'h': float(h_m.group(1)),
             })
     return rects
 

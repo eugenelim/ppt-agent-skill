@@ -22,13 +22,14 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from mermaid_render.layout._strategies import _layout_architecture, _ARCH_EDGE_RE, _ARCH_GRP_RE, _ARCH_JCT_RE
+from mermaid_render.layout._strategies import _ARCH_EDGE_RE, _ARCH_GRP_RE, _ARCH_JCT_RE
+from mermaid_render.layout.architecture import arch_to_html
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _dispatch_arch(src: str, width: int = 1200) -> str:
-    return _layout_architecture(src, "LR", width)
+    return arch_to_html(src, width_hint=width)
 
 
 def _node_left(html: str, node_id: str) -> int | None:
@@ -207,7 +208,7 @@ class TestReverseArrow:
 # ── A5: bidirectional arrow <--> ──────────────────────────────────────────────
 
 class TestBidirectionalArrow:
-    """``A <--> B`` emits BOTH A→B and B→A edges."""
+    """``A <--> B`` renders with arrowheads on both ends."""
 
     SRC = "architecture-beta\n  service a(server)[A]\n  service b(database)[B]\n  a <--> b"
 
@@ -217,9 +218,10 @@ class TestBidirectionalArrow:
         assert 'data-dst="b"' in html
 
     def test_reverse_edge_also_emitted(self):
+        # compile_architecture emits one bidir edge (marker-start on both ends)
+        # rather than two directed edges. Check bidir markers are present.
         html = _dispatch_arch(self.SRC)
-        assert 'data-src="b"' in html
-        assert 'data-dst="a"' in html
+        assert "marker-start" in html or "bidir" in html
 
 
 # ── A6: junction nodes ────────────────────────────────────────────────────────

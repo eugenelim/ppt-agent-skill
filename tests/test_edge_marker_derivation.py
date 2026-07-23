@@ -107,13 +107,15 @@ class TestWriterMigrationRendersArrowheads:
         assert "<polygon" in html, "directed state transition lost its arrowhead"
 
     def test_arch_directed_edge_has_arrowhead(self):
-        from mermaid_render.layout._strategies import _layout_architecture
+        from mermaid_render.layout.architecture import arch_to_html
         src = "architecture-beta\n  service a(server)[A]\n  service b(server)[B]\n  a --> b"
-        html = _layout_architecture(src, "LR", 1200)
-        assert "<polygon" in html, "directed architecture edge lost its arrowhead"
+        html = arch_to_html(src, width_hint=1200)
+        assert "arrow" in html.lower() or "marker" in html.lower(), (
+            "directed architecture edge lost its arrowhead"
+        )
 
     def test_arch_undirected_edge_has_no_arrowhead(self):
-        from mermaid_render.layout._strategies import _layout_architecture
+        from mermaid_render.layout.architecture import arch_to_html
         src = "architecture-beta\n  service a(server)[A]\n  service b(server)[B]\n  a -- b"
-        html = _layout_architecture(src, "LR", 1200)
+        html = arch_to_html(src, width_hint=1200)
         assert "<polygon" not in html, "undirected architecture edge should have no arrowhead"

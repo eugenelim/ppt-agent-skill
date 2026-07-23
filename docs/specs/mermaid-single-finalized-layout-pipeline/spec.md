@@ -2,7 +2,7 @@
 
 Mode: full (structural change, multi-feature, dependent tasks)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 ## Objective
 

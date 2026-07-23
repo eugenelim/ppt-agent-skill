@@ -120,9 +120,9 @@ class TestGlyphTypesMatchToken:
     """Verify that the HTML renderer emits the right SVG elements per token."""
 
     def _render(self, card_src: str, card_dst: str) -> str:
-        from mermaid_render.layout._strategies import _layout_er
+        from mermaid_render.layout.er import er_to_html
         src = f"erDiagram\n    A {card_src}--{card_dst} B : rel\n"
-        return _layout_er(src, "TB", 800)
+        return er_to_html(src, width_hint=800)
 
     def test_one_one_produces_double_bar(self):
         html = self._render("||", "||")
