@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from proof_gate import check_deliverable_gate
+
 
 def _natural_key(p: Path):
     """自然排序 key：slide-2 排在 slide-10 前面。
@@ -299,6 +301,11 @@ def main():
     slides_dir = Path(args.path)
     if not slides_dir.is_dir():
         print(f"Error: {slides_dir} is not a directory", file=sys.stderr)
+        sys.exit(1)
+
+    ok, msg = check_deliverable_gate(slides_dir.parent, deck_required=True)
+    if not ok:
+        print(f"error: deliverable gate not satisfied — {msg}", file=sys.stderr)
         sys.exit(1)
 
     html_files = collect_slides(slides_dir)

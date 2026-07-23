@@ -17,6 +17,8 @@ import re
 import sys
 from pathlib import Path
 
+from proof_gate import check_deliverable_gate
+
 from lxml import etree
 from pptx import Presentation
 from pptx.util import Emu
@@ -1505,6 +1507,14 @@ def main():
     parser.add_argument('--html-dir', default=None,
                         help='HTML source directory (for future notes extraction)')
     args = parser.parse_args()
+
+    svg_path = Path(args.svg).resolve()
+    deck_dir = svg_path.parent if svg_path.is_dir() else svg_path.parent.parent
+    ok, msg = check_deliverable_gate(deck_dir, deck_required=True)
+    if not ok:
+        print(f"error: deliverable gate not satisfied — {msg}", file=sys.stderr)
+        sys.exit(1)
+
     convert(args.svg, args.output)
 
 

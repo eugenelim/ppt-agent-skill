@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -38,6 +39,9 @@ from pathlib import Path
 # marker is workflow scratch, not a schema on the version bus, and coupling it
 # there would break the byte-identity contract on every version bump.
 SCHEMA_VERSION = "1"
+
+# Path to this script's directory (scripts/), used by check_deliverable_gate.
+SCRIPTS_DIR = Path(__file__).resolve().parent
 
 DECISIONS = ("review", "render-direct")
 PROOF_DIR_REL = Path("runtime") / "proof"
@@ -118,6 +122,51 @@ def gate_status(output_dir: Path) -> tuple[bool, str]:
             f"{SCHEMA_VERSION!r} ({gate}); regenerate it:\n{_remediation(output_dir)}"
         )
     return True, f"Step 4.5 gate OK (decision={data['decision']})"
+
+
+def check_deliverable_gate(
+    deck_dir: Path, *, deck_required: bool = False
+) -> tuple[bool, str]:
+    """Check planning_validator + proof gate before producing a deliverable.
+
+    Returns (ok, message). ok=True means the deck may proceed to export.
+
+    When deck_required=True (deck-only scripts like html_packager / svg2pptx),
+    an absent planning/ dir is a hard failure — those scripts have no
+    legitimate non-deck use, so a missing planning/ means Step 4 was skipped.
+
+    When deck_required=False (default), an absent planning/ dir silently skips
+    both checks — for standalone uses like html2svg converting a mermaid diagram
+    without a full PPT deck context.
+    """
+    planning_dir = deck_dir / "planning"
+    if not planning_dir.is_dir():
+        if deck_required:
+            return False, (
+                f"no planning/ directory under {deck_dir}; "
+                "run Step 4 (planning) before producing deliverables"
+            )
+        return True, "skipped (no planning/ dir — non-deck context)"
+
+    if not any(planning_dir.glob("*.json")):
+        return False, (
+            f"no planning JSON in {planning_dir}; "
+            "run Step 4 (planning) before producing deliverables"
+        )
+
+    refs_dir = SCRIPTS_DIR.parent / "references"
+    cmd = [sys.executable, str(SCRIPTS_DIR / "planning_validator.py"), str(planning_dir)]
+    if refs_dir.is_dir():
+        cmd += ["--refs", str(refs_dir)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip() or "(no output)"
+        return False, (
+            "planning validation failed — fix Step 4 JSON before producing deliverables:\n"
+            + details
+        )
+
+    return gate_status(deck_dir)
 
 
 def build_parser() -> argparse.ArgumentParser:
