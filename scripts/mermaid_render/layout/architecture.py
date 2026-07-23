@@ -455,7 +455,7 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
     try:
         from .elk_adapter import layout_with_elk as _layout_with_elk
         _lg = _build_arch_layout_graph(nodes, groups, edges)
-        _fl = _layout_with_elk(_lg)  # type: ignore[arg-type]
+        _fl, _elk_meta = _layout_with_elk(_lg)  # type: ignore[arg-type]
         _expected_nids = {n.id for n in _lg.nodes}  # type: ignore[attr-defined]
         if _expected_nids - set(_fl.node_layouts.keys()):
             raise RuntimeError("ELK returned incomplete node positions")

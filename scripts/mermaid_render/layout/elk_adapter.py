@@ -9,10 +9,13 @@ See docs/adr/001-elk-layout-engine.md for the ADR that governs this dependency.
 """
 from __future__ import annotations
 
+import dataclasses
 import json
+import math
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -20,7 +23,7 @@ import types as _types
 from ._geometry import (
     FinalizedLayout, LayoutGraph, LayoutNode, LayoutGroup, LayoutEdge,
     NodeLayout, GroupLayout, RoutedEdge, PortLayout, PortSide, Point, Rect,
-    EdgeLabelLayout, MarkerKind, TextLayout, _empty_diagnostics,
+    EdgeLabelLayout, MarkerKind, TextLayout, LayoutMetadata, _empty_diagnostics,
 )
 
 _ELK_RUNNER = Path(__file__).parent / "elk_runner.js"
@@ -33,6 +36,38 @@ _GROUP_PAD_Y_BOT = 28   # bottom inner padding (px)
 
 # Mermaid direction → ELK direction string
 _ELK_DIR = {"TB": "DOWN", "TD": "DOWN", "BT": "UP", "LR": "RIGHT", "RL": "LEFT"}
+
+# ELK port side strings → PortSide enum
+_ELK_SIDE_TO_PORT_SIDE: dict[str, PortSide] = {
+    "NORTH": PortSide.TOP,
+    "SOUTH": PortSide.BOTTOM,
+    "EAST":  PortSide.RIGHT,
+    "WEST":  PortSide.LEFT,
+}
+
+# PortSide → outward unit direction
+_SIDE_DIR: dict[PortSide, Point] = {
+    PortSide.RIGHT:  Point(1.0,  0.0),
+    PortSide.LEFT:   Point(-1.0, 0.0),
+    PortSide.BOTTOM: Point(0.0,  1.0),
+    PortSide.TOP:    Point(0.0, -1.0),
+}
+
+
+def _tangent_to_side(dx: float, dy: float) -> PortSide:
+    """Map an outward direction vector to the closest PortSide face."""
+    if abs(dx) >= abs(dy):
+        return PortSide.RIGHT if dx >= 0 else PortSide.LEFT
+    return PortSide.BOTTOM if dy >= 0 else PortSide.TOP
+
+
+def _tangent_unit(p0: Point, p1: Point) -> Point:
+    """Return the unit vector from p0 toward p1; default (0,1) when degenerate."""
+    dx, dy = p1.x - p0.x, p1.y - p0.y
+    mag = math.sqrt(dx * dx + dy * dy)
+    if mag < 1e-9:
+        return Point(0.0, 1.0)
+    return Point(dx / mag, dy / mag)
 
 
 class ElkUnavailable(RuntimeError):
@@ -160,6 +195,8 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
     group_map = {g.id: g for g in graph.groups}
     # Port ID → node ID mapping for edge source/target decoding
     port_to_node = {p.id: n.id for n in graph.nodes for p in n.ports}
+    # Port spec lookup for side/index metadata
+    port_spec_map = {p.id: p for n in graph.nodes for p in n.ports}
 
     node_layouts: dict[str, NodeLayout] = {}
     group_layouts: dict[str, GroupLayout] = {}
@@ -177,6 +214,22 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
                 w = cw or orig.measured_width
                 h = ch or orig.measured_height
                 outer = Rect(x=cx, y=cy, w=w, h=h)
+                # T4: populate PortLayout from ELK port output + PortSpec
+                port_layouts_for_node: list[PortLayout] = []
+                for ep in child.get("ports", []):
+                    pid = ep.get("id", "")
+                    ps = port_spec_map.get(pid)
+                    abs_x = float(ep.get("x", 0)) + cx
+                    abs_y = float(ep.get("y", 0)) + cy
+                    port_pos = Point(abs_x, abs_y)
+                    if ps and ps.fixed_side:
+                        side = _ELK_SIDE_TO_PORT_SIDE.get(ps.side, PortSide.AUTO)
+                    else:
+                        side = PortSide.AUTO
+                    direction = _SIDE_DIR.get(side, Point(0.0, 1.0))
+                    port_layouts_for_node.append(PortLayout(
+                        node_id=cid, side=side, position=port_pos, direction=direction,
+                    ))
                 node_layouts[cid] = NodeLayout(
                     node_id=cid,
                     semantic_shape=orig.shape_id,
@@ -190,7 +243,7 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
                     subtitle_layout=None,
                     member_layouts=(),
                     icon_bounds=None,
-                    ports=(),
+                    ports=tuple(port_layouts_for_node),
                     css_classes=(),
                     extra_css="",
                     is_dummy=False,
@@ -206,11 +259,21 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
                 boundary = Rect(x=cx, y=cy, w=cw, h=ch)
                 member_ids = tuple(n.id for n in graph.nodes if n.parent_id == cid)
                 child_group_ids = tuple(g.id for g in graph.groups if g.parent_id == cid)
+                # T8: build GroupLayout.label_layout from LayoutGroup.label
+                group_label: Optional[TextLayout] = None
+                if g_orig.label:
+                    lw = g_orig.label_width or 80.0
+                    lh = g_orig.label_height or 16.0
+                    group_label = TextLayout(
+                        lines=(), width=lw, height=lh, line_height=lh,
+                        min_content_width=0.0, max_content_width=lw,
+                        resolved_font_path=None, resolved_font_family="sans-serif",
+                    )
                 group_layouts[cid] = GroupLayout(
                     group_id=cid,
                     parent_group_id=g_orig.parent_id,
                     boundary_bounds=boundary,
-                    label_layout=None,
+                    label_layout=group_label,
                     member_ids=member_ids,
                     child_group_ids=child_group_ids,
                     local_direction=g_orig.local_direction or graph.direction,
@@ -220,6 +283,17 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
                     _visit(nested, cx, cy)
 
     _visit(out.get("children", []), 0.0, 0.0)
+
+    # T9: reconstruct NodeLayout.rank from ELK y-coordinate (or x for LR/RL)
+    if node_layouts:
+        use_y = graph.direction.upper() in ("TB", "TD", "BT")
+        coord_key = (lambda nl: nl.outer_bounds.y) if use_y else (lambda nl: nl.outer_bounds.x)
+        unique_coords = sorted(set(coord_key(nl) for nl in node_layouts.values()))
+        coord_to_rank = {c: i + 1 for i, c in enumerate(unique_coords)}
+        node_layouts = {
+            nid: dataclasses.replace(nl, rank=coord_to_rank[coord_key(nl)])
+            for nid, nl in node_layouts.items()
+        }
 
     def _collect_edges(node_dict: dict) -> list:
         result = list(node_dict.get("edges", []))
@@ -233,47 +307,96 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
         eid = elk_edge.get("id", "")
         orig_edge = edge_map.get(eid)
 
+        # T1: collect waypoints and junction_points from all sections
         waypoints: list[Point] = []
+        jpts: list[Point] = []
         for section in elk_edge.get("sections", []):
             sp = section.get("startPoint", {})
             if sp:
-                waypoints.append(Point(float(sp["x"]), float(sp["y"])))
+                new_pt = Point(float(sp["x"]), float(sp["y"]))
+                if not waypoints or waypoints[-1] != new_pt:
+                    waypoints.append(new_pt)
             for bp in section.get("bendPoints", []):
-                waypoints.append(Point(float(bp["x"]), float(bp["y"])))
+                new_pt = Point(float(bp["x"]), float(bp["y"]))
+                if not waypoints or waypoints[-1] != new_pt:
+                    waypoints.append(new_pt)
             ep = section.get("endPoint", {})
             if ep:
-                waypoints.append(Point(float(ep["x"]), float(ep["y"])))
+                new_pt = Point(float(ep["x"]), float(ep["y"]))
+                if not waypoints or waypoints[-1] != new_pt:
+                    waypoints.append(new_pt)
+            for jp in section.get("junctionPoints", []):
+                jpts.append(Point(float(jp["x"]), float(jp["y"])))
 
+        # T3: semantic src/dst IDs from orig_edge (not port IDs from ELK)
         src_ids = list(elk_edge.get("sources", []))
         dst_ids = list(elk_edge.get("targets", []))
         src_ref = src_ids[0] if src_ids else ""
         dst_ref = dst_ids[0] if dst_ids else ""
-        # Resolve: port ID → node ID, then "nodeId:portId" split, then as-is
-        src_id = port_to_node.get(src_ref) or (src_ref.split(":")[0] if ":" in src_ref else src_ref)
-        dst_id = port_to_node.get(dst_ref) or (dst_ref.split(":")[0] if ":" in dst_ref else dst_ref)
+        if orig_edge is not None:
+            src_id = orig_edge.sources[0] if orig_edge.sources else src_ref
+            dst_id = orig_edge.targets[0] if orig_edge.targets else dst_ref
+        else:
+            src_id = port_to_node.get(src_ref) or (src_ref.split(":")[0] if ":" in src_ref else src_ref)
+            dst_id = port_to_node.get(dst_ref) or (dst_ref.split(":")[0] if ":" in dst_ref else dst_ref)
 
+        # T5: tangent-based port direction and side from actual route geometry
+        if len(waypoints) >= 2:
+            fwd0 = _tangent_unit(waypoints[0], waypoints[1])   # leaves src
+            fwdn = _tangent_unit(waypoints[-2], waypoints[-1])  # arrives at dst
+            src_dir = fwd0
+            dst_dir = Point(-fwdn.x, -fwdn.y)  # outward from dst face
+        else:
+            src_dir = Point(0.0, 1.0)
+            dst_dir = Point(0.0, -1.0)
+
+        src_side = _tangent_to_side(src_dir.x, src_dir.y)
+        dst_side = _tangent_to_side(dst_dir.x, dst_dir.y)
         src_pos = waypoints[0] if waypoints else Point(0.0, 0.0)
         dst_pos = waypoints[-1] if waypoints else Point(0.0, 0.0)
+
         src_mk = orig_edge.source_marker if orig_edge else MarkerKind.NONE
         dst_mk = orig_edge.target_marker if orig_edge else MarkerKind.ARROW
+
+        # T7: build EdgeLabelLayout from ELK label geometry
+        label_layout: Optional[EdgeLabelLayout] = None
+        elk_labels = elk_edge.get("labels", [])
+        if elk_labels and orig_edge and orig_edge.label:
+            lbl = elk_labels[0]
+            lx = float(lbl.get("x", 0))
+            ly = float(lbl.get("y", 0))
+            lw = float(lbl.get("width", 0))
+            lh = float(lbl.get("height", 0))
+            anchor = waypoints[len(waypoints) // 2] if waypoints else Point(lx, ly)
+            label_layout = EdgeLabelLayout(
+                text=orig_edge.label,
+                layout=TextLayout(
+                    lines=(), width=lw, height=lh, line_height=14.0,
+                    min_content_width=0.0, max_content_width=lw,
+                    resolved_font_path=None, resolved_font_family="sans-serif",
+                ),
+                bounds=Rect(x=lx, y=ly, w=lw, h=lh),
+                anchor_point=anchor,
+            )
 
         routed_edges.append(RoutedEdge(
             edge_id=eid,
             src_node_id=src_id,
             dst_node_id=dst_id,
-            src_port=PortLayout(node_id=src_id, side=PortSide.BOTTOM,
-                                position=src_pos, direction=Point(0.0, 1.0)),
-            dst_port=PortLayout(node_id=dst_id, side=PortSide.TOP,
-                                position=dst_pos, direction=Point(0.0, -1.0)),
+            src_port=PortLayout(node_id=src_id, side=src_side,
+                                position=src_pos, direction=src_dir),
+            dst_port=PortLayout(node_id=dst_id, side=dst_side,
+                                position=dst_pos, direction=dst_dir),
             waypoints=tuple(waypoints),
-            edge_style="solid",
+            edge_style=orig_edge.line_style if orig_edge else "solid",  # T2
             has_marker_end=(dst_mk != MarkerKind.NONE),
             has_marker_start=(src_mk != MarkerKind.NONE),
-            label_layout=None,
+            label_layout=label_layout,
             src_label_layout=None,
             dst_label_layout=None,
             source_marker=src_mk,
             target_marker=dst_mk,
+            junction_points=tuple(jpts),  # T1 (AC9)
         ))
 
     all_rects = ([nl.outer_bounds for nl in node_layouts.values()]
@@ -321,8 +444,12 @@ def _run_elk(elk_json: dict) -> dict:
         raise ElkUnavailable(f"elk_runner.js returned malformed JSON: {exc}") from exc
 
 
-def layout_with_elk(graph: LayoutGraph, spacing: "dict | None" = None) -> FinalizedLayout:
+def layout_with_elk(
+    graph: LayoutGraph, spacing: "dict | None" = None
+) -> "tuple[FinalizedLayout, LayoutMetadata]":
     """Run ELK layout on graph; raise ElkUnavailable when ELK cannot be used.
+
+    Returns (FinalizedLayout, LayoutMetadata) on success.
 
     Triggers:
     - MERMAID_LAYOUT_ENGINE=python env var → always raises ElkUnavailable
@@ -342,9 +469,26 @@ def layout_with_elk(graph: LayoutGraph, spacing: "dict | None" = None) -> Finali
         raise ElkUnavailable(
             "elkjs not installed; run: npm ci --prefix scripts/mermaid_render/layout"
         )
+    t0 = time.perf_counter()
     elk_json = _to_elk_json(graph, spacing=spacing)
     try:
         out = _run_elk(elk_json)
     except subprocess.TimeoutExpired as exc:
         raise ElkUnavailable(f"elk_runner.js timed out after {_ELK_TIMEOUT}s") from exc
-    return _from_elk_result(out, graph)
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+
+    finalized = _from_elk_result(out, graph)
+    options_applied = dict(elk_json.get("layoutOptions", {}))
+    meta = LayoutMetadata(
+        direction=graph.direction,
+        node_count=len(graph.nodes),
+        group_count=len(graph.groups),
+        edge_count=len(graph.edges),
+        algorithm="ELK-layered",
+        backend="elkjs",
+        backend_version="0.12.0",
+        fallback_reason=None,
+        elapsed_ms=elapsed_ms,
+        options_applied=options_applied,
+    )
+    return finalized, meta
