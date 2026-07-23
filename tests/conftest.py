@@ -41,6 +41,8 @@ Canonical tier commands
 from __future__ import annotations
 
 import multiprocessing
+import os
+import sys
 
 import pytest
 
@@ -66,6 +68,10 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers",
         "isolation: subprocess process-boundary / import-isolation test; opt-in with --run-isolation",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_elk: mark test as requiring elkjs + node",
     )
 
 
@@ -180,6 +186,17 @@ def pytest_collection_modifyitems(config, items):
 
     snapshot_selected: list = []
 
+    # ELK availability — computed once for requires_elk skip logic
+    try:
+        _elk_scripts = os.path.join(os.path.dirname(__file__), "..", "scripts")
+        if _elk_scripts not in sys.path:
+            sys.path.insert(0, _elk_scripts)
+        from mermaid_render.layout.elk_adapter import _find_elkjs, _find_node
+        _elk_ok = _find_elkjs() is not None and _find_node() is not None
+    except Exception:
+        _elk_ok = False
+    skip_elk = pytest.mark.skip(reason="requires elkjs + node")
+
     for item in items:
         marker_names = {m.name for m in item.iter_markers()}
 
@@ -214,6 +231,9 @@ def pytest_collection_modifyitems(config, items):
 
         if "isolation" in marker_names and not run_isolation:
             item.add_marker(skip_isolation)
+
+        if "requires_elk" in marker_names and not _elk_ok:
+            item.add_marker(skip_elk)
 
     # xdist guard: snapshot tests require a single worker
     if snapshot_selected:

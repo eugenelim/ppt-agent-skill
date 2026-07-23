@@ -32,7 +32,7 @@ def _elk_available() -> bool:
         return False
 
 
-requires_elk = pytest.mark.skipif(not _elk_available(), reason="requires elkjs + node")
+requires_elk = pytest.mark.requires_elk
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
