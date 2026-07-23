@@ -95,6 +95,7 @@ class ArchitectureDiagramLayout:
     canvas_bounds: object            # Rect
     direction: str
     zoom: float
+    backend: str = "python-fallback" # "elk-js" | "python-fallback"
 
 
 # ── Text layout helper ─────────────────────────────────────────────────────────
@@ -343,6 +344,310 @@ def _heuristic_arch_placement(nodes: dict, edges: list, groups: dict) -> tuple:
     return canvas_w, canvas_h
 
 
+# ── layout helpers ────────────────────────────────────────────────────────────
+
+def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
+                                 width_hint: int = 0) -> object:
+    """Run heuristic placement + route + finalize; return FinalizedLayout stamped 'python-fallback'.
+
+    Calls _heuristic_arch_placement, _compute_group_bboxes, _route_edges, and
+    arch_to_finalized() in sequence, then stamps 'python-fallback' into
+    diagnostics.warnings.  Does not raise on internal failure; propagates as-is.
+    """
+    import dataclasses as _dc
+    from ._renderer import _compute_group_bboxes
+    from ._routing import _route_edges
+    from ._geometry import LayoutDiagnostics, Rect
+    from ._constants import NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H
+    from ._geometry import Point, PortLayout, PortSide, EdgeLabelLayout, MarkerKind
+
+    canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
+    zoom = 1.0
+    if width_hint and canvas_w > 0 and canvas_w > width_hint:
+        zoom = width_hint / canvas_w
+
+    group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
+    routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)
+
+    node_grp_idx: dict = {}
+    for gi, gid in enumerate(groups):
+        for nid in groups[gid].members:
+            node_grp_idx[nid] = gi
+
+    group_children: dict = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        parent = getattr(grp, "parent_group", None)
+        if parent and parent in group_children:
+            group_children[parent].append(gid)
+
+    services: list = []
+    junctions: list = []
+    for nid, n in sorted(nodes.items()):
+        nw = n.width or NODE_W
+        nh = _node_render_h(n)
+        outer = Rect(x=float(n.x), y=float(n.y), w=float(nw), h=float(nh))
+        if n.is_dummy:
+            junctions.append(ArchJunction(node_id=nid, outer_bounds=outer))
+            continue
+        icon_svg = _load_icon(n.icon) if n.icon else ""
+        has_icon = bool(icon_svg)
+        icon_bounds = (
+            Rect(x=float(n.x + _NODE_PAD_V), y=float(n.y + _NODE_PAD_V),
+                 w=float(_ICON_H), h=float(_ICON_H))
+            if has_icon else None
+        )
+        label_layout = _arch_text_layout(n.label, font_size=15.0, font_weight=700)
+        cx = float(n.x + nw / 2)
+        cy = float(n.y + nh / 2)
+        side_ports = (
+            PortLayout(node_id=nid, side=PortSide.LEFT,
+                       position=Point(float(n.x), cy), direction=Point(-1.0, 0.0)),
+            PortLayout(node_id=nid, side=PortSide.RIGHT,
+                       position=Point(float(n.x + nw), cy), direction=Point(1.0, 0.0)),
+            PortLayout(node_id=nid, side=PortSide.TOP,
+                       position=Point(cx, float(n.y)), direction=Point(0.0, -1.0)),
+            PortLayout(node_id=nid, side=PortSide.BOTTOM,
+                       position=Point(cx, float(n.y + nh)), direction=Point(0.0, 1.0)),
+        )
+        gi_idx = node_grp_idx.get(nid)  # type: ignore[assignment]
+        accent = (
+            _ARCH_ACCENT_CYCLE[gi_idx % len(_ARCH_ACCENT_CYCLE)]
+            if gi_idx is not None else _ARCH_ACCENT_DEFAULT
+        )
+        services.append(ArchServiceTile(
+            node_id=nid, label=n.label, icon_name=n.icon or "", icon_svg=icon_svg,
+            outer_bounds=outer, label_layout=label_layout, icon_bounds=icon_bounds,
+            side_ports=side_ports, group_id=n.group, accent_color=accent,
+        ))
+
+    arch_groups: list = []
+    for gid, grp in groups.items():
+        if gid not in group_bboxes:
+            continue
+        bx1, by1, bx2, by2 = group_bboxes[gid]
+        boundary_bounds = Rect(x=float(bx1), y=float(by1),
+                               w=float(bx2 - bx1), h=float(by2 - by1))
+        lbl = grp.label or ""
+        lbl_layout = _arch_text_layout(lbl, font_size=12.0, font_weight=600) if lbl else None  # type: ignore[assignment]
+        arch_groups.append(ArchGroupBoundary(
+            group_id=gid, parent_group_id=getattr(grp, "parent_group", None),
+            label=lbl, boundary_bounds=boundary_bounds, label_layout=lbl_layout,
+            member_ids=tuple(grp.members), child_group_ids=tuple(group_children.get(gid, [])),
+        ))
+
+    arch_edges: list = []
+    seen_pairs: dict = {}
+    for spec in routes:
+        src = spec.get("src", "")
+        dst = spec.get("dst", "")
+        pair = (src, dst)
+        idx = seen_pairs.get(pair, 0)
+        seen_pairs[pair] = idx + 1
+        edge_id = f"{src}->{dst}" if idx == 0 else f"{src}->{dst}#{idx}"
+        waypoints = _extract_waypoints(spec.get("d", ""))
+        if len(waypoints) < 2:
+            continue
+        src_pos, dst_pos = waypoints[0], waypoints[-1]
+        src_port = PortLayout(node_id=src, side=PortSide.AUTO,
+                              position=src_pos, direction=Point(0.0, 1.0))
+        dst_port = PortLayout(node_id=dst, side=PortSide.AUTO,
+                              position=dst_pos, direction=Point(0.0, -1.0))
+        mid = spec.get("marker_id") or ""
+        has_marker_end = bool(mid) and not mid.endswith("-rev")
+        has_marker_start = bool(spec.get("bidir")) or (bool(mid) and mid.endswith("-rev"))
+        label_text = spec.get("label", "") or ""
+        edge_label = None
+        if label_text:
+            lx, ly = float(spec.get("lx", 0)), float(spec.get("ly", 0))
+            tl = _arch_text_layout(label_text, font_size=12.0, font_weight=400)
+            edge_label = EdgeLabelLayout(
+                text=label_text, layout=tl,
+                bounds=Rect(x=lx, y=ly, w=tl.width, h=tl.height),
+                anchor_point=src_pos,
+            )
+        arch_edges.append(ArchEdge(
+            edge_id=edge_id, src_id=src, dst_id=dst, label=label_text,
+            waypoints=waypoints, src_port=src_port, dst_port=dst_port,
+            has_marker_end=has_marker_end, has_marker_start=has_marker_start,
+            label_layout=edge_label,
+        ))
+
+    canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
+    arch = ArchitectureDiagramLayout(
+        services=tuple(services), junctions=tuple(junctions),
+        groups=tuple(arch_groups), edges=tuple(arch_edges),
+        canvas_bounds=canvas_bounds, direction="LR", zoom=zoom,
+        backend="python-fallback",
+    )
+    fl = arch_to_finalized(arch)
+    # arch_to_finalized already stamps arch.backend; return as-is
+    return fl
+
+
+def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
+                            width_hint: int = 0) -> object:
+    """Enrich an ELK FinalizedLayout with architecture-beta metadata (icons, labels, accent colors).
+
+    Takes the raw FinalizedLayout returned by layout_with_elk() and merges
+    icon_svg, label_layout, accent_color, and side_ports from the original
+    parsed nodes dict.  Merges label_layout and child_group_ids from the
+    original groups dict.  Stamps 'elk-js' into diagnostics.warnings.
+
+    routed_edges, canvas_bounds, and visible_bounds are passed through unchanged
+    from elk_fl — ELK is authoritative for geometry.
+    """
+    import dataclasses as _dc
+    from ._geometry import (
+        FinalizedLayout, LayoutDiagnostics, NodeLayout, GroupLayout, RoutedEdge,
+        Rect, Point, PortLayout, PortSide,
+    )
+    from ._constants import NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H
+    import types as _types
+
+    _fl: FinalizedLayout = elk_fl  # type: ignore[assignment]
+
+    node_grp_idx: dict = {}
+    for gi, gid in enumerate(groups):
+        for nid in getattr(groups[gid], "members", []):
+            node_grp_idx[nid] = gi
+
+    group_children: dict = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        parent = getattr(grp, "parent_group", None)
+        if parent and parent in group_children:
+            group_children[parent].append(gid)
+
+    new_node_layouts: dict = {}
+    for nid, nl in _fl.node_layouts.items():
+        n = nodes.get(nid)
+        if n is None:
+            new_node_layouts[nid] = nl
+            continue
+        icon_svg = _load_icon(n.icon) if (n.icon and not n.is_dummy) else ""
+        has_icon = bool(icon_svg)
+        b = nl.outer_bounds
+        icon_bounds = (
+            Rect(x=b.x + float(_NODE_PAD_V), y=b.y + float(_NODE_PAD_V),
+                 w=float(_ICON_H), h=float(_ICON_H))
+            if has_icon else None
+        )
+        label_layout = (
+            _arch_text_layout(n.label, font_size=15.0, font_weight=700)
+            if not n.is_dummy else None
+        )
+        nw = b.w
+        nh = b.h
+        cx = b.x + nw / 2
+        cy = b.y + nh / 2
+        side_ports = (
+            PortLayout(node_id=nid, side=PortSide.LEFT,
+                       position=Point(b.x, cy), direction=Point(-1.0, 0.0)),
+            PortLayout(node_id=nid, side=PortSide.RIGHT,
+                       position=Point(b.x + nw, cy), direction=Point(1.0, 0.0)),
+            PortLayout(node_id=nid, side=PortSide.TOP,
+                       position=Point(cx, b.y), direction=Point(0.0, -1.0)),
+            PortLayout(node_id=nid, side=PortSide.BOTTOM,
+                       position=Point(cx, b.y + nh), direction=Point(0.0, 1.0)),
+        )
+        # Prefer ELK's port sides from the existing RoutedEdge src/dst ports;
+        # side_ports here are face-centred fallbacks used by the painter.
+        gi_idx = node_grp_idx.get(nid)  # type: ignore[assignment]
+        accent = (
+            _ARCH_ACCENT_CYCLE[gi_idx % len(_ARCH_ACCENT_CYCLE)]
+            if gi_idx is not None else _ARCH_ACCENT_DEFAULT
+        )
+        new_node_layouts[nid] = _dc.replace(
+            nl,
+            title_layout=label_layout,  # type: ignore[arg-type]
+            icon_bounds=icon_bounds,
+            ports=side_ports,  # type: ignore[arg-type]
+            icon_svg=icon_svg,
+            accent_color=accent,
+            parent_group_id=n.group,
+        )
+
+    new_group_layouts: dict = {}
+    for gid, gl in _fl.group_layouts.items():
+        grp = groups.get(gid)
+        if grp is None:
+            new_group_layouts[gid] = gl
+            continue
+        lbl = grp.label or ""
+        lbl_layout = _arch_text_layout(lbl, font_size=12.0, font_weight=600) if lbl else None  # type: ignore[assignment]
+        child_ids = tuple(group_children.get(gid, []))
+        new_group_layouts[gid] = _dc.replace(
+            gl,
+            label_layout=lbl_layout,  # type: ignore[arg-type]
+            child_group_ids=child_ids,  # type: ignore[arg-type]
+        )
+
+    diag = _fl.diagnostics
+    enriched_diag = LayoutDiagnostics(
+        unsupported_options=diag.unsupported_options,
+        route_failures=diag.route_failures,
+        warnings=diag.warnings + ("elk-js",),
+    )
+    return FinalizedLayout(
+        node_layouts=_types.MappingProxyType(new_node_layouts),
+        group_layouts=_types.MappingProxyType(new_group_layouts),
+        routed_edges=_fl.routed_edges,
+        visible_bounds=_fl.visible_bounds,
+        diagram_padding=_fl.diagram_padding,
+        canvas_bounds=_fl.canvas_bounds,
+        direction=_fl.direction,
+        diagnostics=enriched_diag,
+        routing_failures=_fl.routing_failures,
+    )
+
+
+def _elk_routes_to_specs(elk_fl: object, parsed_edges: list) -> list:
+    """Convert ELK routed_edges to the route-spec dicts expected by the edge-builder loop.
+
+    Produces one dict per routed edge with keys: src, dst, d (waypoints path string),
+    marker_id, bidir, label, lx, ly.
+    """
+    from ._geometry import FinalizedLayout, MarkerKind
+    _fl: FinalizedLayout = elk_fl  # type: ignore[assignment]
+
+    # Build label lookup from parsed edges (src, dst) → label
+    label_by_pair: dict = {}
+    for e in parsed_edges:
+        if not getattr(e, "reversed_", False):
+            label_by_pair[(e.src, e.dst)] = e.label or ""
+
+    specs = []
+    for re in _fl.routed_edges:
+        src = re.src_node_id
+        dst = re.dst_node_id
+        # Build SVG-ish path string from waypoints
+        wps = re.waypoints
+        if len(wps) < 2:
+            continue
+        parts = [f"M {wps[0].x:.1f} {wps[0].y:.1f}"]
+        for wp in wps[1:]:
+            parts.append(f"L {wp.x:.1f} {wp.y:.1f}")
+        d = " ".join(parts)
+        # Derive marker flags from RoutedEdge
+        from ._constants import _marker_kind
+        t_kind = _marker_kind(re.target_marker)
+        s_kind = _marker_kind(re.source_marker)
+        has_end = t_kind not in (MarkerKind.NONE,)
+        has_start = s_kind not in (MarkerKind.NONE,)
+        marker_id = "arrow" if has_end else ""
+        bidir = has_start
+        label = label_by_pair.get((src, dst), "")
+        lx = ly = 0.0
+        if re.label_layout is not None:
+            lx = re.label_layout.bounds.x
+            ly = re.label_layout.bounds.y
+        specs.append({
+            "src": src, "dst": dst, "d": d,
+            "marker_id": marker_id, "bidir": bidir,
+            "label": label, "lx": lx, "ly": ly,
+        })
+    return specs
+
+
 # ── compile_architecture ───────────────────────────────────────────────────────
 
 def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagramLayout:
@@ -451,35 +756,53 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
         raise ValueError(f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}).")
 
     # ── Layout ─────────────────────────────────────────────────────────────────
-    canvas_w = canvas_h = 0
+    _elk_fl = None
+    _backend = "python-fallback"
     try:
-        from .elk_adapter import layout_with_elk as _layout_with_elk
+        from .elk_adapter import layout_with_elk as _layout_with_elk, ElkUnavailable
         _lg = _build_arch_layout_graph(nodes, groups, edges)
-        _fl, _elk_meta = _layout_with_elk(_lg)  # type: ignore[arg-type]
+        _raw_fl, _elk_meta = _layout_with_elk(_lg)  # type: ignore[arg-type]
         _expected_nids = {n.id for n in _lg.nodes}  # type: ignore[attr-defined]
-        if _expected_nids - set(_fl.node_layouts.keys()):
-            raise RuntimeError("ELK returned incomplete node positions")
-        for _nid, _nl in _fl.node_layouts.items():
+        _missing = _expected_nids - set(_raw_fl.node_layouts.keys())
+        if _missing:
+            raise ValueError(
+                f"ELK returned incomplete layout: missing nodes {_missing}"
+            )
+        _elk_fl = _raw_fl
+        _backend = "elk-js"
+    except ElkUnavailable:
+        pass  # fall through to fallback
+    except ValueError:
+        raise  # incomplete result — propagate as-is
+    except Exception as _exc:
+        from ..errors import ArchitectureLayoutError
+        raise ArchitectureLayoutError("layout", cause=_exc) from _exc
+
+    if _elk_fl is not None:
+        # ELK path: use ELK geometry — no _compute_group_bboxes / _route_edges
+        for _nid, _nl in _elk_fl.node_layouts.items():
             if _nid in nodes:
                 _n = nodes[_nid]
-                _n.x = int(_nl.outer_bounds.x)
-                _n.y = int(_nl.outer_bounds.y)
-                _n.width = _n.width or int(_nl.outer_bounds.w)
-                _n.height = _n.height or int(_nl.outer_bounds.h)
-        canvas_w = int(_fl.canvas_bounds.w)
-        canvas_h = int(_fl.canvas_bounds.h)
-    except Exception:
-        pass
-
-    if canvas_w == 0 or canvas_h == 0:
+                _n.x = float(_nl.outer_bounds.x)
+                _n.y = float(_nl.outer_bounds.y)
+                _n.width = _n.width or float(_nl.outer_bounds.w)
+                _n.height = _n.height or float(_nl.outer_bounds.h)
+        canvas_w = _elk_fl.canvas_bounds.w
+        canvas_h = _elk_fl.canvas_bounds.h
+        group_bboxes: dict = {}
+        for _gid, _gl in _elk_fl.group_layouts.items():
+            _bb = _gl.boundary_bounds
+            group_bboxes[_gid] = (_bb.x, _bb.y, _bb.x + _bb.w, _bb.y + _bb.h)
+        routes: list = _elk_routes_to_specs(_elk_fl, edges)  # type: ignore[assignment]
+    else:
+        # Fallback path: heuristic placement + Python router
         canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
+        group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
+        routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)  # type: ignore[assignment]
 
     zoom = 1.0
     if width_hint and canvas_w > 0 and canvas_w > width_hint:
         zoom = width_hint / canvas_w
-
-    group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
-    routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)
 
     # ── Build group → index map for accent colors ──────────────────────────────
     node_grp_idx: dict = {}
@@ -641,6 +964,7 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
         canvas_bounds=canvas_bounds,
         direction="LR",
         zoom=zoom,
+        backend=_backend,
     )
 
 
@@ -649,7 +973,7 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
 def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
     """Lower ArchitectureDiagramLayout to a FinalizedLayout for painting."""
     from ._geometry import (
-        FinalizedLayout, NodeLayout, GroupLayout, RoutedEdge, Rect,
+        FinalizedLayout, LayoutDiagnostics, NodeLayout, GroupLayout, RoutedEdge, Rect,
         _empty_diagnostics, MarkerKind,
     )
 
@@ -736,6 +1060,13 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
     )
 
     import types as _types
+    diag = _empty_diagnostics()
+    if arch.backend:
+        diag = LayoutDiagnostics(
+            unsupported_options=diag.unsupported_options,
+            route_failures=diag.route_failures,
+            warnings=diag.warnings + (arch.backend,),
+        )
     return FinalizedLayout(
         node_layouts=_types.MappingProxyType(node_layouts),
         group_layouts=_types.MappingProxyType(group_layouts),
@@ -744,7 +1075,7 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
         diagram_padding=48.0,
         canvas_bounds=arch.canvas_bounds,  # type: ignore[arg-type]
         direction=arch.direction,
-        diagnostics=_empty_diagnostics(),
+        diagnostics=diag,
     )
 
 

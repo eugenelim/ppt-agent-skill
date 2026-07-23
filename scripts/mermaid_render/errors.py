@@ -78,3 +78,14 @@ class UnsupportedDiagramFeature(ValueError):
             f"Diagram feature '{feature}' in type '{diagram_type}' is not supported "
             "by the native SVG renderer."
         )
+
+
+class ArchitectureLayoutError(NativeRenderError):
+    """Unexpected exception during architecture-beta layout.
+
+    Raised when an unexpected (non-ElkUnavailable, non-ValueError) exception
+    occurs in the ELK layout phase for architecture-beta diagrams.
+    """
+
+    def __init__(self, phase: str, *, cause: BaseException | None = None) -> None:
+        super().__init__("architecture-beta", phase, cause=cause)

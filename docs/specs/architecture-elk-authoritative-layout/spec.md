@@ -2,7 +2,7 @@
 
 Mode: full (structural change, unfamiliar territory)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Depends on:** `elk-finalized-layout-roundtrip` — ELK's `FinalizedLayout` round-trip must be lossless (compound boundaries, port sides, edge sections and bend points fully preserved) before this spec can ship. That spec is a prerequisite; this spec assumes the round-trip contract is in place.
 
 ## Objective
