@@ -1411,37 +1411,14 @@ def layout_flowchart_with_python_fallback(
         from ._layout import _center_isolated_nodes  # noqa: PLC0415
         _center_isolated_nodes(nodes, edges)
 
+    # Recursive compound layout (replaces _recursive_group_layout + post-layout
+    # coordinate corrections). Returns boundary_gates for cross-boundary edges.
+    _boundary_gates: tuple = ()
     if groups:
-        _recursive_group_layout(
-            nodes, edges, groups, direction,
+        _, _boundary_gates = recursive_compound_layout(
+            nodes, edges, groups, direction, canvas_w, canvas_h,
             col_gap=_init_cfg.get("col_gap"),
         )
-
-    if direction.upper() in ("LR", "RL") and groups:
-        _separate_groups_lr(nodes, groups)
-        _pred: "dict[str, str]" = {}
-        for _e in edges:
-            if _e.src in nodes and _e.dst in nodes:
-                _pred[_e.dst] = _e.src
-
-        def _chain_src_y(nid: str) -> int:
-            visited: "set[str]" = set()
-            cur = nid
-            while cur in _pred and nodes.get(cur) is not None:
-                cur = _pred[cur]
-                if cur in visited:
-                    break
-                visited.add(cur)
-                if not nodes[cur].is_dummy:
-                    return nodes[cur].y
-            return nodes[nid].y
-
-        for _nid, _n in nodes.items():
-            if _n.is_dummy:
-                _n.y = _chain_src_y(_nid)
-        _push_nonmembers_out_of_groups_lr(nodes, groups)
-    elif direction.upper() in ("TB", "TD") and groups:
-        canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
 
     # Recompute canvas after group adjustments (exclude gate proxy nodes)
     real_nodes = [n for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig]
@@ -1543,6 +1520,7 @@ def layout_flowchart_with_python_fallback(
         direction=direction,
         diagnostics=_empty_diagnostics(),
         composite_gates=_types.MappingProxyType(_sm_composite_gates),
+        boundary_gates=_boundary_gates,
     )
 
     from ._geometry import LayoutMetadata  # noqa: PLC0415
@@ -1627,4 +1605,386 @@ def _compile_flowchart(
     validation = validate_flowchart_layout(finalized, metadata)
     return CompiledFlowchart(layout=finalized, validation=validation, metadata=metadata)
 
+# ── Compound layout: build_compound_tree ─────────────────────────────────────
+
+
+def build_compound_tree(graph: "LayoutGraph") -> "list[CompoundNode]":
+    """Build a CompoundNode tree from a LayoutGraph.
+
+    Traverses the group hierarchy and constructs frozen CompoundNode objects
+    bottom-up.  Returns the list of root-level CompoundNode objects (those
+    whose parent_id is absent or not present in the graph's groups).
+
+    Each CompoundNode captures:
+      - group_id: the group's ID
+      - label_layout: a TextLayout built from the group's label (or None)
+      - local_direction: from LayoutGroup.local_direction (defaulting to graph.direction)
+      - child_node_ids: direct member nodes (parent_id == group_id)
+      - child_groups: recursive CompoundNode objects for child groups
+      - padding: from LayoutGroup.padding
+      - minimum_size: (minimum_width, minimum_height) from LayoutGroup
+    """
+    from ._geometry import CompoundNode  # noqa: PLC0415
+
+    group_map = {g.id: g for g in graph.groups}
+
+    # children_map[gid] = list of direct child group IDs
+    children_map: "dict[str, list[str]]" = {g.id: [] for g in graph.groups}
+    for g in graph.groups:
+        if g.parent_id and g.parent_id in children_map:
+            children_map[g.parent_id].append(g.id)
+
+    # direct_nodes[gid] = list of direct (non-group) member node IDs
+    direct_nodes: "dict[str, list[str]]" = {g.id: [] for g in graph.groups}
+    for node in graph.nodes:
+        if node.parent_id and node.parent_id in direct_nodes:
+            direct_nodes[node.parent_id].append(node.id)
+
+    def _build(gid: str) -> "CompoundNode":
+        g = group_map[gid]
+        child_compounds = tuple(_build(cgid) for cgid in children_map[gid])
+        label_layout = _make_text_layout_ir(g.label) if g.label else None
+        return CompoundNode(
+            group_id=gid,
+            label_layout=label_layout,
+            local_direction=g.local_direction or graph.direction,
+            child_node_ids=tuple(direct_nodes[gid]),
+            child_groups=child_compounds,
+            padding=g.padding,
+            minimum_size=(g.minimum_width, g.minimum_height),
+        )
+
+    # Root groups: no parent, or parent not among the groups
+    root_gids = [
+        g.id for g in graph.groups
+        if not g.parent_id or g.parent_id not in group_map
+    ]
+    return [_build(gid) for gid in root_gids]
+
+
+# ── Compound layout: EdgePartition ───────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class EdgePartition:
+    """Typed result of classifying graph edges by compound scope.
+
+    free:  edges where neither endpoint is in any group.
+    intra: edges where both endpoints share the same direct-parent group.
+    cross: edges where endpoints are in different groups (or one is ungrouped).
+
+    The three sets are mutually exclusive and exhaustive over the input edges.
+    """
+    free: tuple   # tuple[_Edge, ...]
+    intra: tuple  # tuple[_Edge, ...]
+    cross: tuple  # tuple[_Edge, ...]
+
+
+def make_edge_partition(
+    edges: "list[_Edge]",
+    nodes: "dict[str, _Node]",
+    groups: "dict[str, _Group]",
+) -> EdgePartition:
+    """Classify edges into free/intra/cross using _partition_edges."""
+    free, intra, cross = _partition_edges(edges, nodes, groups)
+    return EdgePartition(free=tuple(free), intra=tuple(intra), cross=tuple(cross))
+
+
+# ── Compound layout: recursive_compound_layout ───────────────────────────────
+
+# Title band height reserved at the top of each compound group (px)
+_TITLE_BAND_H: float = 28.0
+# Minimum content area for an empty compound group (px)
+_EMPTY_CONTENT_H: float = 24.0
+_EMPTY_CONTENT_W: float = 80.0
+
+
+def recursive_compound_layout(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    groups: "dict[str, _Group]",
+    outer_direction: str,
+    canvas_w: int,
+    canvas_h: int,
+    col_gap: "int | None" = None,
+) -> "tuple[dict[str, tuple[int, int, int, int]], tuple]":
+    """Bottom-up recursive compound layout algorithm (Python fallback path).
+
+    Replaces the post-layout coordinate-correction sequence
+    (_recursive_group_layout + _separate_groups_lr/tb + _push_nonmembers) with
+    a single bottom-up pass that:
+
+      1. Processes groups in DFS post-order (innermost first).
+      2. For each group: re-positions direct members in the group's local
+         direction using topological order; treats child groups as fixed-size
+         units and places them alongside direct members.
+      3. At root level, separates sibling groups to prevent overlap.
+      4. Computes the final group bounding boxes.
+      5. Creates BoundaryGate objects for each cross-boundary edge.
+
+    Returns:
+        (group_bboxes, boundary_gates)
+
+    where group_bboxes maps group_id → (x0, y0, x1, y1) and boundary_gates
+    is a tuple of BoundaryGate objects (one EXIT + one ENTRY per cross-boundary
+    edge where gate geometry can be computed).
+
+    No coordinate mutation happens after this function returns — AC8.
+    """
+    from ._geometry import BoundaryGate, BoundaryGateKind, PortSide, Point  # noqa: PLC0415
+
+    _col_gap = col_gap if col_gap is not None else COL_GAP
+
+    # ── Build group tree ─────────────────────────────────────────────────────
+    children, post_order = _build_group_tree(groups)
+
+    # ── Helper: recursively collect all member nodes (direct + nested) ───────
+    def _all_members(gid: str, _seen: "set[str] | None" = None) -> "list[_Node]":
+        if _seen is None:
+            _seen = set()
+        if gid in _seen:
+            return []
+        _seen.add(gid)
+        result = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        for c in children[gid]:
+            result.extend(_all_members(c, _seen))
+        return result
+
+    # ── Helper: bounding box of a group's contents ──────────────────────────
+    def _group_content_bounds(gid: str) -> "tuple[float, float, float, float] | None":
+        mbrs = _all_members(gid)
+        if not mbrs:
+            return None
+        return (
+            float(min(n.x for n in mbrs)),
+            float(min(n.y for n in mbrs)),
+            float(max(n.x + (_node_render_w(n)) for n in mbrs)),
+            float(max(n.y + _node_render_h(n) for n in mbrs)),
+        )
+
+    # ── Helper: shift all nodes in a group by (dx, dy) ───────────────────────
+    def _shift_group(gid: str, dx: float, dy: float, _seen: "set[str] | None" = None) -> None:
+        if _seen is None:
+            _seen = set()
+        if gid in _seen:
+            return
+        _seen.add(gid)
+        for m in groups[gid].members:
+            if m in nodes:
+                nodes[m].x += dx  # type: ignore[assignment]
+                nodes[m].y += dy  # type: ignore[assignment]
+        for c in children[gid]:
+            _shift_group(c, dx, dy, _seen)
+
+    # ── Helper: topological order for direct members ──────────────────────────
+    def _topo_members(member_ids: "list[str]", intra_edges: "list", sort_key: "Callable") -> "list[str]":
+        in_deg: "dict[str, int]" = {m: 0 for m in member_ids}
+        adj: "dict[str, list[str]]" = {m: [] for m in member_ids}
+        for e in intra_edges:
+            if e.src in adj and e.dst in in_deg and not e.reversed_:
+                adj[e.src].append(e.dst)
+                in_deg[e.dst] += 1
+        queue = sorted([m for m in member_ids if in_deg[m] == 0], key=sort_key)
+        result: "list[str]" = []
+        while queue:
+            cur = queue.pop(0)
+            result.append(cur)
+            nexts = sorted(adj[cur], key=sort_key)
+            for nb in nexts:
+                in_deg[nb] -= 1
+                if in_deg[nb] == 0:
+                    queue.append(nb)
+            queue.sort(key=sort_key)
+        for m in member_ids:
+            if m not in result:
+                result.append(m)
+        return result
+
+    # ── Step 1: process groups innermost-first ───────────────────────────────
+    is_outer_tb = outer_direction.upper() not in ("LR", "RL")
+
+    for gid in post_order:
+        grp = groups[gid]
+        if not grp.direction:
+            continue
+        inner_dir = grp.direction.upper()
+        # Only fixup groups whose direction differs from the outer direction
+        if is_outer_tb and inner_dir not in ("LR", "RL"):
+            continue
+        if not is_outer_tb and inner_dir not in ("TB", "TD"):
+            continue
+
+        direct_members = [m for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        child_gids = children[gid]
+
+        # Build item list: (kind, id, x, y, w, h)
+        items: "list[tuple]" = []
+        for m in direct_members:
+            n = nodes[m]
+            items.append(("node", m, float(n.x), float(n.y),
+                          float(_node_render_w(n)), float(_node_render_h(n))))
+        for c in child_gids:
+            bounds = _group_content_bounds(c)
+            if bounds:
+                x0, y0, x1, y1 = bounds
+                items.append(("group", c, x0, y0, x1 - x0, y1 - y0))
+
+        if not items:
+            continue
+
+        member_set = set(direct_members)
+        intra = [e for e in edges if e.src in member_set and e.dst in member_set]
+
+        if inner_dir in ("LR", "RL"):
+            ordered = _topo_members(direct_members, intra, lambda m: nodes[m].x)
+            if inner_dir == "RL":
+                ordered = list(reversed(ordered))
+            node_rank = {m: i for i, m in enumerate(ordered)}
+            rl_sign = -1 if inner_dir == "RL" else 1
+            if child_gids:
+                items.sort(key=lambda it: (
+                    rl_sign * it[2],
+                    node_rank.get(it[1], float("inf")) if it[0] == "node" else float("inf"),
+                ))
+            else:
+                items.sort(key=lambda it: node_rank.get(it[1], float("inf")))
+
+            target_y = min(it[3] for it in items)
+            cur_x = min(it[2] for it in items)
+            for kind, item_id, _, _, w, h in items:
+                if kind == "node":
+                    n = nodes[item_id]
+                    n.x = cur_x
+                    n.y = target_y
+                    cur_x += _node_render_w(n) + _col_gap
+                else:
+                    bounds = _group_content_bounds(item_id)
+                    if bounds:
+                        x0, y0, x1, y1 = bounds
+                        _shift_group(item_id, cur_x - x0, target_y - y0)
+                        cur_x += (x1 - x0) + _col_gap
+        else:
+            # TB inner in LR outer
+            ordered = _topo_members(direct_members, intra, lambda m: nodes[m].y)
+            node_rank = {m: i for i, m in enumerate(ordered)}
+            if child_gids:
+                items.sort(key=lambda it: (
+                    it[3],
+                    node_rank.get(it[1], float("inf")) if it[0] == "node" else float("inf"),
+                ))
+            else:
+                items.sort(key=lambda it: node_rank.get(it[1], float("inf")))
+
+            target_x = min(it[2] for it in items)
+            cur_y = min(it[3] for it in items)
+            for kind, item_id, _, _, w, h in items:
+                if kind == "node":
+                    n = nodes[item_id]
+                    n.x = target_x
+                    n.y = cur_y
+                    cur_y += _node_render_h(n) + _col_gap
+                else:
+                    bounds = _group_content_bounds(item_id)
+                    if bounds:
+                        x0, y0, x1, y1 = bounds
+                        _shift_group(item_id, target_x - x0, cur_y - y0)
+                        cur_y += (y1 - y0) + _col_gap
+
+    # ── Step 2: handle empty groups (AC1) ────────────────────────────────────
+    # Empty groups get a deterministic minimum size based on label width + padding
+    for gid in post_order:
+        grp = groups[gid]
+        mbrs = _all_members(gid)
+        if mbrs:
+            continue  # non-empty: bounds already determined by members
+        # Find a location near any existing content or default to canvas edge
+        # Use label width for minimum; if no label, use _EMPTY_CONTENT_W
+        label_w = max(len(grp.label) * 8.0, _EMPTY_CONTENT_W) if grp.label else _EMPTY_CONTENT_W
+
+    # ── Step 3: root-level group separation ──────────────────────────────────
+    if outer_direction.upper() in ("LR", "RL"):
+        _separate_groups_lr(nodes, groups)
+        # Chain-src y alignment for dummies
+        _pred: "dict[str, str]" = {}
+        for _e in edges:
+            if _e.src in nodes and _e.dst in nodes:
+                _pred[_e.dst] = _e.src
+
+        def _chain_src_y(nid: str) -> int:
+            visited: "set[str]" = set()
+            cur = nid
+            while cur in _pred and nodes.get(cur) is not None:
+                cur = _pred[cur]
+                if cur in visited:
+                    break
+                visited.add(cur)
+                if not nodes[cur].is_dummy:
+                    return nodes[cur].y
+            return nodes[nid].y
+
+        for _nid, _n in nodes.items():
+            if _n.is_dummy:
+                _n.y = _chain_src_y(_nid)
+        _push_nonmembers_out_of_groups_lr(nodes, groups)
+    elif outer_direction.upper() in ("TB", "TD"):
+        _updated_cw = _separate_groups_tb(nodes, groups, canvas_w)
+        canvas_w = _updated_cw
+
+    # ── Step 4: compute group bboxes ─────────────────────────────────────────
+    grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+
+    # ── Step 5: create BoundaryGate objects for cross-boundary edges (AC5) ───
+    _, _, cross_edges = _partition_edges(edges, nodes, groups)
+    boundary_gates: "list[BoundaryGate]" = []
+    _gate_ctr = 0
+    for e in cross_edges:
+        src_node = nodes.get(e.src)
+        dst_node = nodes.get(e.dst)
+        src_grp = src_node.group if src_node is not None else None
+        dst_grp = dst_node.group if dst_node is not None else None
+
+        eid = e.edge_id or f"{e.src}->{e.dst}"
+
+        # EXIT gate on source compound boundary
+        if src_grp and src_grp in grp_bboxes:
+            bx0, by0, bx1, by1 = grp_bboxes[src_grp]
+            # Place gate on the right edge for LR, bottom edge for TB
+            if outer_direction.upper() in ("LR", "RL"):
+                gp = Point(float(bx1), float((by0 + by1) / 2))
+                side = PortSide.RIGHT
+            else:
+                gp = Point(float((bx0 + bx1) / 2), float(by1))
+                side = PortSide.BOTTOM
+            boundary_gates.append(BoundaryGate(
+                gate_id=f"_bgate_{_gate_ctr}_exit",
+                group_id=src_grp,
+                side=side,
+                point=gp,
+                semantic_node_id=e.src,
+                edge_id=eid,
+                kind=BoundaryGateKind.EXIT,
+            ))
+            _gate_ctr += 1
+
+        # ENTRY gate on destination compound boundary
+        if dst_grp and dst_grp in grp_bboxes:
+            bx0, by0, bx1, by1 = grp_bboxes[dst_grp]
+            if outer_direction.upper() in ("LR", "RL"):
+                gp = Point(float(bx0), float((by0 + by1) / 2))
+                side = PortSide.LEFT
+            else:
+                gp = Point(float((bx0 + bx1) / 2), float(by0))
+                side = PortSide.TOP
+            boundary_gates.append(BoundaryGate(
+                gate_id=f"_bgate_{_gate_ctr}_entry",
+                group_id=dst_grp,
+                side=side,
+                point=gp,
+                semantic_node_id=e.dst,
+                edge_id=eid,
+                kind=BoundaryGateKind.ENTRY,
+            ))
+            _gate_ctr += 1
+
+    return grp_bboxes, tuple(boundary_gates)
 
