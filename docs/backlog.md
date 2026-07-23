@@ -65,10 +65,6 @@ Closed/shipped work remains in each spec's Changelog and
 
 ## mermaid-render-rearchitecture
 
-### vendor-bundle-checksum-gate
-
-→ `workspace.toml` slug: `vendor-bundle-checksum-gate`
-
 ### differential-parity-test
 
 → `workspace.toml` slug: `differential-parity-test`

@@ -65,8 +65,6 @@ open = [
   {slug = "xdist-snapshot-guard"},
   # Split _strategies.py into _pipeline.py + _diagram_types.py; update CONVENTIONS.md mermaid_render/ line-count exception
   {slug = "strategies-module-split"},
-  # Create tools/check_bundle_hash.py pinning dom-to-svg.bundle.js SHA-256; wire into CI as a check step
-  {slug = "vendor-bundle-checksum-gate"},
 
   # ── Group 2: Investigation + implementation ───────────────────────────────
 
