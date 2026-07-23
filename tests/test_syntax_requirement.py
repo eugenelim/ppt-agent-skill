@@ -210,3 +210,118 @@ class TestRequirementRendered:
         assert html
         assert "test_req" in html
         assert "test_entity" in html
+
+
+# ---------------------------------------------------------------------------
+# TestNativeSceneGeometry — native SVG path (layout_requirement_scene)
+# ---------------------------------------------------------------------------
+
+class TestNativeSceneGeometry:
+    """Geometry invariants for the native SVG scene builder."""
+
+    def _load_fixture(self):
+        from pathlib import Path
+        return (Path(__file__).parent / "fixtures" / "requirement-basic.mmd").read_text()
+
+    def test_fixture_has_four_nodes(self):
+        """requirement-basic scene contains exactly four card nodes."""
+        from mermaid_render.layout.requirement import layout_requirement_scene
+        from mermaid_render.scene import SceneRect
+
+        scene = layout_requirement_scene(self._load_fixture())
+        node_ids = []
+        for _, elements in scene.layers:
+            for elem in elements:
+                if isinstance(elem, SceneRect):
+                    for name, val in getattr(elem, "data_attrs", ()):
+                        if name == "node-id":
+                            node_ids.append(val)
+        assert set(node_ids) == {"test_req", "func_req", "perf_req", "test_entity"}
+
+    def test_fixture_has_three_labeled_relations(self):
+        """requirement-basic scene contains three edge polylines with relation labels."""
+        from mermaid_render.layout.requirement import layout_requirement_scene
+        from mermaid_render.scene import ScenePolyline, SceneText
+
+        scene = layout_requirement_scene(self._load_fixture())
+        edges, labels = [], []
+        for _, elements in scene.layers:
+            for elem in elements:
+                if isinstance(elem, ScenePolyline):
+                    edges.append(elem)
+                if isinstance(elem, SceneText):
+                    for line in elem.lines:
+                        if line.text in {"satisfies", "verifies", "derives"}:
+                            labels.append(line.text)
+        assert len(edges) == 3
+        assert set(labels) == {"satisfies", "verifies", "derives"}
+
+    def test_no_edge_segment_passes_through_card(self):
+        """No edge polyline segment interior crosses any card bounding box."""
+        from mermaid_render.layout.requirement import layout_requirement_scene
+        from mermaid_render.scene import ScenePolyline, SceneRect
+
+        scene = layout_requirement_scene(self._load_fixture())
+
+        card_boxes = []
+        for _, elements in scene.layers:
+            for elem in elements:
+                if isinstance(elem, SceneRect):
+                    for name, _ in getattr(elem, "data_attrs", ()):
+                        if name == "node-id":
+                            card_boxes.append(
+                                (elem.x, elem.y, elem.x + elem.w, elem.y + elem.h)
+                            )
+
+        for _, elements in scene.layers:
+            for elem in elements:
+                if not isinstance(elem, ScenePolyline):
+                    continue
+                attrs = dict(getattr(elem, "data_attrs", ()))
+                src_id = attrs.get("src", "?")
+                dst_id = attrs.get("dst", "?")
+                for i in range(len(elem.points) - 1):
+                    x1, y1 = elem.points[i]
+                    x2, y2 = elem.points[i + 1]
+                    for rx0, ry0, rx1, ry1 in card_boxes:
+                        for t in (0.25, 0.5, 0.75):
+                            px = x1 + t * (x2 - x1)
+                            py = y1 + t * (y2 - y1)
+                            inside = rx0 + 1 < px < rx1 - 1 and ry0 + 1 < py < ry1 - 1
+                            assert not inside, (
+                                f"Edge {src_id}→{dst_id} segment interior "
+                                f"({px:.1f}, {py:.1f}) is inside card "
+                                f"[{rx0:.0f},{ry0:.0f},{rx1:.0f},{ry1:.0f}]"
+                            )
+
+    def test_unquoted_path_docref_raises_valueerror(self):
+        """Native parser raises ValueError for unquoted docref containing path chars."""
+        from mermaid_render.layout.requirement import _parse_requirement_source
+
+        bad_src = (
+            "requirementDiagram\n"
+            "element ent {\n"
+            "  type: simulation\n"
+            "  docref: /bad/path\n"
+            "}\n"
+        )
+        with pytest.raises(ValueError, match="must be quoted"):
+            _parse_requirement_source(bad_src)
+
+    def test_invalid_relation_type_not_parsed(self):
+        """Unknown relation types are silently skipped (not emitted as edges)."""
+        from mermaid_render.layout.requirement import layout_requirement_scene
+        from mermaid_render.scene import ScenePolyline
+
+        src = (
+            "requirementDiagram\n"
+            "requirement req_a {\n  id: 1\n  text: A.\n  risk: Low\n  verifymethod: Test\n}\n"
+            "requirement req_b {\n  id: 2\n  text: B.\n  risk: Low\n  verifymethod: Test\n}\n"
+            "req_a - foobar -> req_b\n"
+        )
+        scene = layout_requirement_scene(src)
+        edges = [
+            e for _, elems in scene.layers for e in elems
+            if isinstance(e, ScenePolyline)
+        ]
+        assert len(edges) == 0, "Unknown relation type must not produce an edge"

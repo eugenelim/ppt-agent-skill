@@ -461,3 +461,29 @@ update paint.py and svg_serializer.py to use only the `MarkerKind` enum values. 
 all callers are confirmed to use the new fields (grep for `.arrow`, `.bidir`, `.arrow_src` outside
 `_constants.py`).
 
+---
+
+### requirement-layout-routing-robustness
+
+**Deferred from `requirement-basic` oracle fixture + layout rewrite:** The edge routing in
+`layout/requirement.py:_route_edge` places the horizontal channel at `mid_y = (exit_y + enter_y)/2`.
+If a sibling node in the same rank is taller than the source node, that midpoint can land inside or
+very close to the sibling's bottom boundary. Safe for the current fixture but would misroute if
+`func_req` gained a fifth attribute. Fix: clamp `mid_y` to the inter-row gap band
+(`max(bottom of upper-rank nodes), min(top of lower-rank nodes)`).
+
+### requirement-html-path-strictness
+
+**Deferred from `requirement-basic` oracle fixture:** The HTML path
+(`layout/_strategies.py:_layout_requirement`) accepts `docref: /unquoted/path` without a diagnostic,
+while Mermaid 11.15.0 grammar rejects it. Fixing requires updating `test_syntax_requirement.py`
+test strings that use unquoted docref values. Keep the two paths consistent when next editing
+`_layout_requirement`.
+
+### requirement-attr-wrapping
+
+**Deferred from `requirement-basic` layout rewrite:** `_wrap_text` in `requirement.py` wraps only
+the `text` attribute. Other long attribute values (e.g. a long `docref` path or `verifymethod`
+string) are not wrapped and can overflow the 220px card width. Extend wrapping or add a width-clamp
+to all attribute display lines.
+
