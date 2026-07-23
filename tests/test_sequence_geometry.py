@@ -689,6 +689,7 @@ _T12_FIXTURES = [
     ("sequence-rect.mmd",                            "pass", "pass",    "pass"),
     ("sequence-multiline-note.mmd",                  "pass", "pass",    "pass"),
     ("sequence-multiline-fragment.mmd",              "pass", "pass",    "pass"),
+    ("sequence-create-destroy.mmd",                  "pass", "pass",    "pass"),
 ]
 
 
@@ -706,3 +707,72 @@ def test_t12_fixture_status(fixture, exp_render, exp_syntax, exp_struct):
     assert vr.structural_geometry == exp_struct, (
         f"{fixture}: structural_geometry={vr.structural_geometry!r} != {exp_struct!r}"
     )
+
+
+# ── Participant lifecycle (create/destroy) ────────────────────────────────────
+
+def _seq_lifecycle(src: str):
+    """Return (html, geom) for a sequenceDiagram source string."""
+    return _layout_lifeline("sequenceDiagram\n" + src, "LR", 0)
+
+
+def test_created_at_row_set_for_created_participant():
+    """AC-1: created_at_row is set on the participant geometry."""
+    _, geom = _seq_lifecycle("Alice->>Bob: Hi\ncreate participant Carol\nAlice->>Carol: Hello")
+    carol = next(p for p in geom.participants if p.participant_id == "Carol")
+    assert carol.created_at_row is not None
+    assert carol.created_at_row >= 1  # appears after at least one message
+
+
+def test_created_participant_lifeline_starts_late():
+    """AC-2: created participant lifeline_top is below diagram ll_top."""
+    _, geom = _seq_lifecycle("Alice->>Bob: Hi\ncreate participant Carol\nAlice->>Carol: Hello")
+    alice = next(p for p in geom.participants if p.participant_id == "Alice")
+    carol = next(p for p in geom.participants if p.participant_id == "Carol")
+    assert carol.lifeline_top > alice.lifeline_top
+
+
+def test_destroyed_at_row_set_for_destroyed_participant():
+    """AC-3: destroyed_at_row is set on the participant geometry."""
+    _, geom = _seq_lifecycle("Alice->>Bob: Hi\ndestroy Bob\nBob-->>Alice: Bye")
+    bob = next(p for p in geom.participants if p.participant_id == "Bob")
+    assert bob.destroyed_at_row is not None
+    assert bob.destroyed_at_row >= 1
+
+
+def test_destroyed_participant_lifeline_ends_early():
+    """AC-3: destroyed participant lifeline_bottom is above ll_bot."""
+    _, geom = _seq_lifecycle("Alice->>Bob: Hi\ndestroy Bob\nBob-->>Alice: Bye\nAlice->>Alice: more")
+    alice = next(p for p in geom.participants if p.participant_id == "Alice")
+    bob = next(p for p in geom.participants if p.participant_id == "Bob")
+    assert bob.lifeline_bottom < alice.lifeline_bottom
+
+
+def test_destroy_x_marker_in_html():
+    """AC-4: X marker lines appear in HTML for destroyed participant."""
+    html, _ = _seq_lifecycle("Alice->>Bob: Hi\ndestroy Bob\nBob-->>Alice: Bye")
+    # Two crossing SVG lines with no stroke-dasharray (solid, not lifeline)
+    x_lines = re.findall(r'<line[^>]+stroke-width="2"[^/]*/>', html)
+    assert len(x_lines) == 2, f"Expected 2 X marker lines, got {len(x_lines)}: {x_lines}"
+
+
+def test_no_lifecycle_diagnostics():
+    """AC-5: no Diagnostic for create_participant or destroy."""
+    _, geom = _seq_lifecycle(
+        "Alice->>Bob: Hi\ncreate participant Carol\nAlice->>Carol: Hello\n"
+        "destroy Bob\nBob-->>Alice: Bye"
+    )
+    features = {d.feature for d in geom.diagnostics}
+    assert "create_participant" not in features
+    assert "destroy" not in features
+
+
+def test_normal_participants_unaffected_by_lifecycle():
+    """AC-8: participants without lifecycle directives keep full lifeline."""
+    _, geom = _seq_lifecycle(
+        "Alice->>Bob: Hi\ncreate participant Carol\nAlice->>Carol: Hello\n"
+        "destroy Bob\nBob-->>Alice: Bye"
+    )
+    alice = next(p for p in geom.participants if p.participant_id == "Alice")
+    assert alice.created_at_row is None
+    assert alice.destroyed_at_row is None

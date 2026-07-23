@@ -858,6 +858,8 @@ class ParticipantGeometry:
     bottom_box: Bounds
     lifeline_top: float
     lifeline_bottom: float
+    created_at_row: Optional[int] = None
+    destroyed_at_row: Optional[int] = None
 
 
 @dataclass(frozen=True, slots=True)

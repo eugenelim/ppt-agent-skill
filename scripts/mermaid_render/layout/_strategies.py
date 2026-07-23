@@ -244,8 +244,10 @@ _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
 _SEQ_ACTIVATE_RE = re.compile(r'^(activate|deactivate)\s+(\S+)', re.I)
 _SEQ_SKIP_RE = re.compile(
-    r'^(autonumber|create\s+participant|create\s+actor|destroy|box|par_over)\b', re.I
+    r'^(autonumber|create\s+actor|box|par_over)\b', re.I
 )
+_SEQ_CREATE_RE = re.compile(r'^create\s+participant\s+(\S+)', re.I)
+_SEQ_DESTROY_RE = re.compile(r'^destroy\s+(\S+)', re.I)
 # Group 1: position ("over", "left of", "right of")
 # Group 2: participant list (comma-separated)
 # Group 3: note text
@@ -293,9 +295,25 @@ def _layout_lifeline(
 
     items: list[dict] = []
     block_depth = 0
+    _created_at: "dict[str, int]" = {}   # pid → row index of creation
+    _destroyed_at: "dict[str, int]" = {} # pid → row index of destruction
+    _parse_row_ctr = 0  # count of row-type items appended so far
+    _parse_row_types = frozenset({"msg", "block", "note", "else", "rect"})
     for lineno, raw in enumerate(content_lines, start=1):
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
+            continue
+        m_create = _SEQ_CREATE_RE.match(line)
+        if m_create:
+            _cpid = m_create.group(1).strip()
+            _ensure_p(_cpid)
+            _created_at[_cpid] = _parse_row_ctr
+            continue
+        m_destroy = _SEQ_DESTROY_RE.match(line)
+        if m_destroy:
+            _dpid = m_destroy.group(1).strip()
+            _ensure_p(_dpid)
+            _destroyed_at[_dpid] = _parse_row_ctr
             continue
         m_skip = _SEQ_SKIP_RE.match(line)
         if m_skip:
@@ -327,6 +345,7 @@ def _layout_lifeline(
             items.append({"type": "note", "pos": _note_pos,
                           "pids": _note_pids, "pid": _note_pids[0],
                           "text": m.group(3).strip()})
+            _parse_row_ctr += 1
             continue
         m = _SEQ_MSG_RE.match(line)
         if m:
@@ -338,6 +357,7 @@ def _layout_lifeline(
             _ensure_p(sp); _ensure_p(dp)
             items.append({"type": "msg", "src": sp, "dst": dp,
                           "label": lbl.strip(), "arrow": arrow})
+            _parse_row_ctr += 1
             if dp_prefix == '+':
                 items.append({"type": "activate", "pid": dp})
             elif dp_prefix == '-':
@@ -347,6 +367,7 @@ def _layout_lifeline(
             me = _SEQ_ELSE_RE.match(line)
             if me:
                 items.append({"type": "else", "kw": me.group(1).lower(), "label": me.group(2).strip()})
+                _parse_row_ctr += 1
                 continue
         m = _SEQ_BLOCK_RE.match(line)
         if m:
@@ -354,6 +375,7 @@ def _layout_lifeline(
             # SEQ-013: rect is a solid fill background, not a dashed labeled fragment
             item_type = "rect" if kw == "rect" else "block"
             items.append({"type": item_type, "kw": m.group(1), "label": m.group(2).strip()})
+            _parse_row_ctr += 1
             block_depth += 1
             continue
         if _SEQ_END_RE.match(line) and block_depth > 0:
@@ -814,29 +836,53 @@ def _layout_lifeline(
         f'white-space:nowrap;'
         f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
     )
+    _x_markers: "list[tuple[float, float]]" = []  # (cx, y) for destroyed participants
     for pid in participants:
         _bw = int(round(_box_hw(pid) * 2))
         lx = int(round(_cx(pid) - _box_hw(pid)))
         _lbl_str = p_label.get(pid, pid)
         lbl = _h(_lbl_str)
+        _p_created_row = _created_at.get(pid)
+        _p_destroyed_row = _destroyed_at.get(pid)
+
+        # Lifecycle: compute adjusted lifeline top/bottom
+        if _p_created_row is not None and _p_created_row < len(_row_top_list):
+            _ll_top_pid = ll_top + _row_top_list[_p_created_row]
+        else:
+            _ll_top_pid = ll_top
+        if _p_destroyed_row is not None and _p_destroyed_row < len(_row_top_list):
+            _destroy_y = ll_top + _row_top_list[_p_destroyed_row] + _row_h_list[_p_destroyed_row] // 2
+            _ll_bot_pid = _destroy_y
+        else:
+            _destroy_y = None
+            _ll_bot_pid = ll_bot
+
+        _top_box_y = _ll_top_pid - BOX_H if _p_created_row is not None and _ll_top_pid > ll_top else PAD_V
         _typed_participants.append(ParticipantGeometry(
             participant_id=pid, label=_lbl_str, center_x=float(_cx(pid)),
-            top_box=Bounds(float(lx), float(PAD_V), float(lx + _bw), float(PAD_V + BOX_H)),
-            bottom_box=Bounds(float(lx), float(ll_bot), float(lx + _bw), float(ll_bot + BOX_H)),
-            lifeline_top=float(ll_top), lifeline_bottom=float(ll_bot),
+            top_box=Bounds(float(lx), float(_top_box_y), float(lx + _bw), float(_top_box_y + BOX_H)),
+            bottom_box=Bounds(float(lx), float(_ll_bot_pid), float(lx + _bw), float(_ll_bot_pid + BOX_H)),
+            lifeline_top=float(_ll_top_pid), lifeline_bottom=float(_ll_bot_pid),
+            created_at_row=_p_created_row,
+            destroyed_at_row=_p_destroyed_row,
         ))
+        # Top box: placed at creation row (mid-diagram) or at diagram top (normal)
         parts.append(
             f'<div class="node node-rect" data-node-id="{_h(pid)}" style="'
-            f'position:absolute;left:{lx}px;top:{PAD_V}px;'
+            f'position:absolute;left:{lx}px;top:{int(round(_top_box_y))}px;'
             f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
             f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
         )
-        parts.append(
-            f'<div class="node node-rect node-lifeline-bottom" data-node-id="{_h(pid)}-bottom" style="'
-            f'position:absolute;left:{lx}px;top:{ll_bot}px;'
-            f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
-            f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
-        )
+        # Bottom box: only for non-destroyed participants
+        if _destroy_y is None:
+            parts.append(
+                f'<div class="node node-rect node-lifeline-bottom" data-node-id="{_h(pid)}-bottom" style="'
+                f'position:absolute;left:{lx}px;top:{ll_bot}px;'
+                f'width:{_bw}px;height:{BOX_H}px;{_seq_box_css}">'
+                f'<span class="node-label" style="{_seq_label_css}">{lbl}</span></div>'
+            )
+        else:
+            _x_markers.append((float(_cx(pid)), _destroy_y))
 
     parts.append(
         f'<svg style="position:absolute;inset:0;width:{_canvas_w_int}px;height:{canvas_h}px;'
@@ -882,11 +928,24 @@ def _layout_lifeline(
             _rp_a += 1
 
     # ── Lifeline dashes ────────────────────────────────────────────────────────
-    for pid in participants:
-        lx = int(round(_cx(pid)))
+    for pg in _typed_participants:
+        lx = int(round(pg.center_x))
+        _lly1 = int(round(pg.lifeline_top))
+        _lly2 = int(round(pg.lifeline_bottom))
         parts.append(
-            f'<line x1="{lx}" y1="{ll_top}" x2="{lx}" y2="{ll_bot}" '
+            f'<line x1="{lx}" y1="{_lly1}" x2="{lx}" y2="{_lly2}" '
             f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 4"/>'
+        )
+    # ── Destroy X markers ────────────────────────────────────────────────────
+    _XA = 8  # half-arm length of X marker
+    for _xcx, _xy in _x_markers:
+        parts.append(
+            f'<line x1="{_xcx - _XA}" y1="{_xy - _XA}" x2="{_xcx + _XA}" y2="{_xy + _XA}" '
+            f'stroke="{_seq_edge}" stroke-width="2"/>'
+        )
+        parts.append(
+            f'<line x1="{_xcx + _XA}" y1="{_xy - _XA}" x2="{_xcx - _XA}" y2="{_xy + _XA}" '
+            f'stroke="{_seq_edge}" stroke-width="2"/>'
         )
 
     # ── SEQ-006: activation bars with exact y baselines ───────────────────────

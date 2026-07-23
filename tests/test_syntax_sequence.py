@@ -73,8 +73,8 @@ class TestSequenceParticipants:
         assert html
         assert "C" in html
 
-    def test_destroy_participant_renders_and_emits_diagnostic(self):
-        """`destroy P` renders without raising and emits a Diagnostic."""
+    def test_destroy_participant_renders_without_diagnostic(self):
+        """`destroy P` renders without raising; no Diagnostic (feature is implemented)."""
         src = _seq(
             "  participant A\n"
             "  participant B\n"
@@ -85,10 +85,10 @@ class TestSequenceParticipants:
         assert html
         assert "A" in html
         vr = validate(src)
-        assert any(d.feature == "destroy" for d in vr.diagnostics)
+        assert not any(d.feature == "destroy" for d in vr.diagnostics)
 
     def test_create_then_destroy_roundtrip(self):
-        """Full create/use/destroy lifecycle renders; create_participant emits Diagnostic."""
+        """Full create/use/destroy lifecycle renders; no Diagnostic (feature is implemented)."""
         src = _seq(
             "  participant Alice\n"
             "  create participant Token\n"
@@ -100,7 +100,8 @@ class TestSequenceParticipants:
         assert html
         assert "Alice" in html
         vr = validate(src)
-        assert any(d.feature == "create_participant" for d in vr.diagnostics)
+        assert not any(d.feature == "create_participant" for d in vr.diagnostics)
+        assert not any(d.feature == "destroy" for d in vr.diagnostics)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
