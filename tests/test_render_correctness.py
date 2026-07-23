@@ -229,20 +229,20 @@ class TestERCardinalityMarkers:
         assert lines == 6, f"||--o{{ should have 6 lines, got {lines}"
 
     def test_many_to_one_crowfoot_and_bars(self):
-        """E }|--|| F: many at src (3 crowfoot lines), one at dst (2 bars)."""
+        """E }|--|| F: ONE..MANY at src (3 crowfoot + 1 mandatory bar), ONE..ONE at dst (2 bars)."""
         src = "erDiagram\n    E }|--|| F : x\n"
         lines, circles = self._crow_parts(src)
         assert circles == 0, f"}}|--|| should have no circles, got {circles}"
-        # 1 edge + 3 crowfoot at E + 2 bars at F = 6
-        assert lines == 6, f"}}|--|| should have 6 lines, got {lines}"
+        # 1 edge + (3 crowfoot + 1 min-bar) at E + 2 bars at F = 7
+        assert lines == 7, f"}}|--|| should have 7 lines, got {lines}"
 
     def test_zero_one_to_many_bar_circle_crowfoot(self):
-        """G |o--|{ H: zero-one at src (1 bar + 1 circle), many at dst (3 crowfoot lines)."""
+        """G |o--|{ H: ZERO..ONE at src (1 bar + 1 circle), ONE..MANY at dst (3 crowfoot + 1 bar)."""
         src = "erDiagram\n    G |o--|{ H : x\n"
         lines, circles = self._crow_parts(src)
-        assert circles == 1, f"|o--{{  should have 1 circle at src, got {circles}"
-        # 1 edge + 1 bar at G + 3 crowfoot at H = 5
-        assert lines == 5, f"|o--|{{  should have 5 lines, got {lines}"
+        assert circles == 1, f"|o--|{{  should have 1 circle at src, got {circles}"
+        # 1 edge + 1 bar at G + (3 crowfoot + 1 min-bar) at H = 6
+        assert lines == 6, f"|o--|{{  should have 6 lines, got {lines}"
 
 # ── AC-1.4: ER relationship labels strip surrounding quotes ─────────────────
 

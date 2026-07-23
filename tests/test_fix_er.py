@@ -283,6 +283,97 @@ class TestFixtures:
         assert actual_w <= 650, f"Canvas width {actual_w} too far from hint 600"
 
 
+# ── Geometric non-overlap assertions ─────────────────────────────────────────
+
+def _parse_card_rects(html: str) -> list[dict]:
+    import re
+    rects = []
+    for m in re.finditer(
+        r'<div[^>]*class="node[^"]*er-entity[^"]*"[^>]*data-node-id="([^"]+)"[^>]*style="([^"]+)"',
+        html,
+    ):
+        style = m.group(2)
+        x_m = re.search(r'left:(\d+)px', style)
+        y_m = re.search(r'top:(\d+)px', style)
+        w_m = re.search(r'width:(\d+)px', style)
+        h_m = re.search(r'height:(\d+)px', style)
+        if x_m and y_m and w_m and h_m:
+            rects.append({
+                'id': m.group(1),
+                'x': int(x_m.group(1)), 'y': int(y_m.group(1)),
+                'w': int(w_m.group(1)), 'h': int(h_m.group(1)),
+            })
+    return rects
+
+
+def _find_overlapping_pair(rects: list[dict]):
+    for i in range(len(rects)):
+        for j in range(i + 1, len(rects)):
+            a, b = rects[i], rects[j]
+            if not (a['x'] + a['w'] <= b['x'] or b['x'] + b['w'] <= a['x'] or
+                    a['y'] + a['h'] <= b['y'] or b['y'] + b['h'] <= a['y']):
+                return (a, b)
+    return None
+
+
+class TestCardNonOverlap:
+    @pytest.mark.parametrize("width", [800, 600, 400])
+    def test_er_cardinality_all_non_overlapping(self, width):
+        """Cards must not overlap at any width_hint, including downscale values."""
+        html = _html("er-cardinality-all.mmd", width=width)
+        rects = _parse_card_rects(html)
+        assert len(rects) == 8, f"Expected 8 cards, found {len(rects)} at width={width}"
+        pair = _find_overlapping_pair(rects)
+        assert pair is None, (
+            f"Cards overlap at width={width}: "
+            f"{pair[0]['id']}@({pair[0]['x']},{pair[0]['y']})"
+            f"+({pair[0]['w']}×{pair[0]['h']}) and "
+            f"{pair[1]['id']}@({pair[1]['x']},{pair[1]['y']})"
+            f"+({pair[1]['w']}×{pair[1]['h']})"
+        )
+
+    def test_er_ecommerce_non_overlapping(self):
+        html = _html("er-ecommerce.mmd", width=1400)
+        rects = _parse_card_rects(html)
+        assert len(rects) == 5, f"Expected 5 cards, found {len(rects)}"
+        pair = _find_overlapping_pair(rects)
+        assert pair is None, (
+            f"Cards overlap: {pair[0]['id']} and {pair[1]['id']}"
+        )
+
+    def test_er_native_scene_non_overlapping(self):
+        """Native SVG path: entity header rects must not overlap x-wise per rank."""
+        from mermaid_render.layout.er import layout_er_scene
+        from mermaid_render.scene import SceneRect, LAYER_NODES
+        from collections import defaultdict
+
+        src = (REPO_ROOT / "tests" / "fixtures" / "er-cardinality-all.mmd").read_text()
+        scene = layout_er_scene(src, width_hint=600)  # downscale from natural ~1064px
+
+        node_layer = scene.get_layer(LAYER_NODES)
+        # Header rects are tagged semantic_role="entity"; width = _CARD_W (200px)
+        headers = [
+            (el.x, el.y, el.w)
+            for el in node_layer
+            if isinstance(el, SceneRect) and el.semantic_role == "entity"
+        ]
+        assert len(headers) == 8, f"Expected 8 entity header rects, got {len(headers)}"
+
+        # Group by y-coordinate (proxy for rank) and check x-axis non-overlap
+        by_y: dict[float, list[tuple[float, float]]] = defaultdict(list)
+        for x, y, w in headers:
+            by_y[y].append((x, w))
+        for y_pos, group in by_y.items():
+            group.sort()
+            for i in range(1, len(group)):
+                prev_x, prev_w = group[i - 1]
+                curr_x, _ = group[i]
+                assert prev_x + prev_w <= curr_x, (
+                    f"Native path: cards overlap at rank y={y_pos}: "
+                    f"[{prev_x},{prev_x+prev_w}) vs [{curr_x},...)"
+                )
+
+
 # ── PK / FK / UK badge rendering ──────────────────────────────────────────────
 
 class TestConstraintBadges:

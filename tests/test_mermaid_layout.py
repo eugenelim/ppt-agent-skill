@@ -2829,31 +2829,37 @@ class TestSequenceAltBlock:
 
 # ── TestERCardinality (AC-9) ──────────────────────────────────────────────────
 
-from mermaid_layout._strategies import _ER_REL_RE, _ER_CARD_SRC_MAP, _ER_CARD_DST_MAP
+from mermaid_layout._strategies import _ER_REL_RE, _to_cardinality_end
+from mermaid_render.layout._constants import CardinalityEnd, Maximum, Minimum
 
 class TestERCardinality:
     """ER relationship cardinality tokens are parsed correctly."""
 
-    def _parse(self, line: str) -> tuple[str | None, str | None]:
+    def _parse(self, line: str) -> tuple[CardinalityEnd | None, CardinalityEnd | None]:
         m = _ER_REL_RE.match(line)
         if not m:
             return None, None
-        return _ER_CARD_SRC_MAP.get(m.group("card_src")), _ER_CARD_DST_MAP.get(m.group("card_dst"))
+        src_tok = m.group("card_src")
+        dst_tok = m.group("card_dst")
+        return (
+            _to_cardinality_end(src_tok) if src_tok else None,
+            _to_cardinality_end(dst_tok) if dst_tok else None,
+        )
 
     def test_one_to_zero_many(self):
         src, dst = self._parse("Customer ||--o{ Order : places")
-        assert src == "one"
-        assert dst == "zero-many"
+        assert src == CardinalityEnd(Minimum.ONE, Maximum.ONE)
+        assert dst == CardinalityEnd(Minimum.ZERO, Maximum.MANY)
 
     def test_many_to_one(self):
         src, dst = self._parse("Order }|--|| Line : contains")
-        assert src == "many"
-        assert dst == "one"
+        assert src == CardinalityEnd(Minimum.ONE, Maximum.MANY)
+        assert dst == CardinalityEnd(Minimum.ONE, Maximum.ONE)
 
     def test_zero_one_to_many(self):
         src, dst = self._parse("A |o--|{ B : rel")  # |o is Mermaid's left-side zero-or-one notation
-        assert src == "zero-one"
-        assert dst == "many"
+        assert src == CardinalityEnd(Minimum.ZERO, Maximum.ONE)
+        assert dst == CardinalityEnd(Minimum.ONE, Maximum.MANY)
 
 
 class TestERCrowsFoot:
@@ -4224,32 +4230,32 @@ class TestERParser:
     def test_one_to_zero_many(self):
         m = _ER_REL_RE.match("Customer ||--o{ Order : places")
         assert m
-        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "one"
-        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "zero-many"
+        assert _to_cardinality_end(m.group("card_src")) == CardinalityEnd(Minimum.ONE, Maximum.ONE)
+        assert _to_cardinality_end(m.group("card_dst")) == CardinalityEnd(Minimum.ZERO, Maximum.MANY)
 
     def test_many_to_one(self):
         m = _ER_REL_RE.match("Order }|--|| Line : contains")
         assert m
-        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "many"
-        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "one"
+        assert _to_cardinality_end(m.group("card_src")) == CardinalityEnd(Minimum.ONE, Maximum.MANY)
+        assert _to_cardinality_end(m.group("card_dst")) == CardinalityEnd(Minimum.ONE, Maximum.ONE)
 
     def test_zero_one_to_many(self):
         m = _ER_REL_RE.match("A |o--|{ B : rel")  # |o is Mermaid's left-side zero-or-one notation
         assert m
-        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "zero-one"
-        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "many"
+        assert _to_cardinality_end(m.group("card_src")) == CardinalityEnd(Minimum.ZERO, Maximum.ONE)
+        assert _to_cardinality_end(m.group("card_dst")) == CardinalityEnd(Minimum.ONE, Maximum.MANY)
 
     def test_one_to_one(self):
         m = _ER_REL_RE.match("A ||--|| B : has")
         assert m
-        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "one"
-        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "one"
+        assert _to_cardinality_end(m.group("card_src")) == CardinalityEnd(Minimum.ONE, Maximum.ONE)
+        assert _to_cardinality_end(m.group("card_dst")) == CardinalityEnd(Minimum.ONE, Maximum.ONE)
 
     def test_zero_many_to_zero_many(self):
         m = _ER_REL_RE.match("A }o--o{ B : links")
         assert m
-        assert _ER_CARD_SRC_MAP.get(m.group("card_src")) == "zero-many"
-        assert _ER_CARD_DST_MAP.get(m.group("card_dst")) == "zero-many"
+        assert _to_cardinality_end(m.group("card_src")) == CardinalityEnd(Minimum.ZERO, Maximum.MANY)
+        assert _to_cardinality_end(m.group("card_dst")) == CardinalityEnd(Minimum.ZERO, Maximum.MANY)
 
     # ── relationship label ────────────────────────────────────────────────────
 

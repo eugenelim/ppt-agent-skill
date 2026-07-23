@@ -4,6 +4,7 @@ import html as _html
 import math
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
@@ -275,6 +276,34 @@ class _Group:
     parent_group: Optional[str] = None  # set when this subgraph is nested inside another
     direction: str = ""                 # inner layout direction override (e.g. "LR")
 
+
+# ── ER cardinality model ──────────────────────────────────────────────────────
+
+class Minimum(Enum):
+    """Minimum cardinality of an ER relationship end."""
+    ZERO = "zero"
+    ONE = "one"
+
+
+class Maximum(Enum):
+    """Maximum cardinality of an ER relationship end."""
+    ONE = "one"
+    MANY = "many"
+
+
+@dataclass(frozen=True)
+class CardinalityEnd:
+    """Structured representation of one end of an ER relationship cardinality.
+
+    Examples (token → CardinalityEnd):
+        ``||``  → CardinalityEnd(ONE, ONE)
+        ``o{``  → CardinalityEnd(ZERO, MANY)
+        ``}|``  → CardinalityEnd(ONE, MANY)
+        ``|o``  → CardinalityEnd(ZERO, ONE)
+        ``|{``  → CardinalityEnd(ONE, MANY)
+    """
+    minimum: Minimum
+    maximum: Maximum
 
 
 # ── text metrics ──────────────────────────────────────────────────────────────
