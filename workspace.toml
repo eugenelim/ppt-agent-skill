@@ -55,12 +55,7 @@ shipped = [
 
 [backlog]
 open = [
-  # ── Group 3: Needs spec / design first ───────────────────────────────────
-
-  # Spec recursive compound layout: group tree, edge partitioning, innermost-first compile, proxy-node expansion, boundary gate routing
-  {slug = "backlog-mermaid-p3-compound-layout", type = "shape"},
-
-  # ── Group 6: Environment-blocked / requires manual QA ────────────────────
+  # ── Environment-blocked / requires manual QA ─────────────────────────────
 
   # Compute real mmdc_oracle comparison vs our SVG geometry — blocked on SequenceGeometry T7 stability and mmdc availability
   {slug = "seq-mmdc-oracle-comparison"},
@@ -70,18 +65,72 @@ open = [
   {slug = "render-gate-live-e2e-qa"},
   # Replace _note_row_h() Pillow font-metrics with Playwright page.evaluate() text measurement at exact note width
   {slug = "seq-variable-height-rows-playwright"},
-  # Batch mmdc per-fixture subprocess calls in test_oracle.py to reduce spawning overhead — needs its own spec
-  {slug = "batch-mmdc", type = "shape"},
-  # Extend reference adapter to extract per-entity bounding boxes and group geometry from real mmdc SVG renders
-  {slug = "mmdc-geometry-capture"},
-  # Extend reference adapter to sample connector paths (edge routing geometry) via Playwright
-  {slug = "browser-geometry-capture"},
-  # Extract Mermaid/mmdc/Node/Playwright/Chromium version provenance by probing the live environment at capture time
-  {slug = "browser-probing"},
-  # Render corpus through mermaid_render.to_svg() and diff against pre-rearchitecture html2svg.py golden SVGs
-  {slug = "differential-parity-test"},
-  # CI: pytest --run-snapshots-quick tests/test_snapshots.py asserting exit 0 (excl. pre-existing sequence-basic failures)
-  {slug = "playwright-gated-snapshot-verification"},
   # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
   {slug = "gpu-benchmark"},
+
+  # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
+  # These slugs remain here only to satisfy (deferred: <slug>) references in shipped
+  # specs (immutable bodies). Implementation is tracked in docs/specs/mmdc-browser-geometry-capture
+  # and docs/specs/mermaid-recursive-compound-layout respectively.
+
+  # Absorbed into ini-002 item 2 (docs/specs/mmdc-browser-geometry-capture)
+  {slug = "mmdc-geometry-capture", source = "absorbed:ini-002/mmdc-browser-geometry-capture"},
+  {slug = "browser-geometry-capture", source = "absorbed:ini-002/mmdc-browser-geometry-capture"},
+  {slug = "browser-probing", source = "absorbed:ini-002/mmdc-browser-geometry-capture"},
+
+  # Absorbed into ini-002 item 5 (docs/specs/mermaid-recursive-compound-layout):
+  # backlog-mermaid-p3-compound-layout (removed from open) + backlog-compound-elk-ac1-ac3 (below)
+  {slug = "backlog-compound-elk-ac1-ac3", source = "absorbed:ini-002/mermaid-recursive-compound-layout"},
+
+  # Absorbed into ini-002 item 13 (docs/specs/mermaid-parity-ci-and-maintainability-cleanup):
+  # differential-parity-test + strategies-module-split (both removed from open) + below
+  {slug = "playwright-gated-snapshot-verification", source = "absorbed:ini-002/mermaid-parity-ci-and-maintainability-cleanup"},
 ]
+
+# ── Initiative: Mermaid Rendering Correctness Follow-on — boston-v1 ──────────
+#
+# 13-item follow-on to san-juan-v1. Dependency order per the reviewed spec:
+#
+#   1 → all (oracle contract is a universal gate)
+#   1 → 2 (browser capture needs the contract)
+#   1 → 3, 4 (text measurement and ELK consumption run in parallel)
+#   4 → 5 (compound layout needs direct ELK consumption)
+#   3 → 6 (shape exactness needs measured text)
+#   1,3,4,5,6 → 7 (flowchart conformance needs all foundations)
+#   1,3,4,5,6,7 → 8 (state conformance also needs flowchart-conformance for shared geometry verifier)
+#   1,3,5 → 9 (architecture metadata needs oracle, text, compound)
+#   1,3 → 10,11 (ER and requirement need oracle + text)
+#   1,3,6 → 12 (class conformance needs oracle, text, shape exactness)
+#   1–12 → 13 (parity CI must be last)
+#
+# Absorbed open backlog items (removed from [backlog].open):
+#   → item 2: mmdc-geometry-capture, browser-geometry-capture, browser-probing, batch-mmdc
+#   → item 5: backlog-mermaid-p3-compound-layout
+#   → item 13: differential-parity-test, playwright-gated-snapshot-verification
+
+["ini-002"]
+name = "Mermaid Rendering Correctness Follow-on"
+milestone = "boston-v1"
+status = "active"
+
+["ini-002".work]
+queue = [
+  # Dependency order: 1→all, 1→2, 1→3,4 (parallel), 4→5, 3→6, 1+3+4+5+6→7,
+  # 1+3+4+5+6,7→8, 1+3+5→9, 1+3→10+11, 1+3+6→12, 1–12→13.
+  # Start with item 1 (no deps), then 2, then 3 and 4 in parallel, etc.
+  {path = "docs/specs/mermaid-oracle-runtime-unification"},
+  {path = "docs/specs/mmdc-browser-geometry-capture", needs = ["work:docs/specs/mermaid-oracle-runtime-unification"]},
+  {path = "docs/specs/mermaid-text-measurement-adoption", needs = ["work:docs/specs/mermaid-oracle-runtime-unification"]},
+  {path = "docs/specs/flowchart-elk-finalized-layout-consumption", needs = ["work:docs/specs/mermaid-oracle-runtime-unification"]},
+  {path = "docs/specs/mermaid-recursive-compound-layout", needs = ["work:docs/specs/flowchart-elk-finalized-layout-consumption"]},
+  {path = "docs/specs/mermaid-shape-boundary-exactness", needs = ["work:docs/specs/mermaid-text-measurement-adoption"]},
+  {path = "docs/specs/mermaid-flowchart-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness"]},
+  {path = "docs/specs/mermaid-state-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness", "work:docs/specs/mermaid-flowchart-conformance"]},
+  {path = "docs/specs/mermaid-architecture-metadata-preservation", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/mermaid-recursive-compound-layout"]},
+  {path = "docs/specs/mermaid-er-compiler-consolidation-and-routing", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption"]},
+  {path = "docs/specs/mermaid-requirement-text-layout-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption"]},
+  {path = "docs/specs/mermaid-class-semantic-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/mermaid-shape-boundary-exactness"]},
+  {path = "docs/specs/mermaid-parity-ci-and-maintainability-cleanup", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mmdc-browser-geometry-capture", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness", "work:docs/specs/mermaid-flowchart-conformance", "work:docs/specs/mermaid-state-conformance", "work:docs/specs/mermaid-architecture-metadata-preservation", "work:docs/specs/mermaid-er-compiler-consolidation-and-routing", "work:docs/specs/mermaid-requirement-text-layout-conformance", "work:docs/specs/mermaid-class-semantic-conformance"]},
+]
+active = []
+shipped = []

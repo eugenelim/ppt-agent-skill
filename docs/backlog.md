@@ -67,7 +67,7 @@ Closed/shipped work remains in each spec's Changelog and
 
 ### differential-parity-test
 
-→ `workspace.toml` slug: `differential-parity-test`
+→ Absorbed into ini-002 item 13: `docs/specs/mermaid-parity-ci-and-maintainability-cleanup`
 
 ---
 
@@ -75,7 +75,7 @@ Closed/shipped work remains in each spec's Changelog and
 
 ### strategies-module-split
 
-→ `workspace.toml` slug: `strategies-module-split`
+→ Absorbed into ini-002 item 13: `docs/specs/mermaid-parity-ci-and-maintainability-cleanup`
 
 ### seq-variable-height-rows-playwright
 
@@ -93,21 +93,21 @@ Closed/shipped work remains in each spec's Changelog and
 
 ### backlog-mermaid-p3-compound-layout
 
-→ `workspace.toml` slug: `backlog-mermaid-p3-compound-layout`
+→ Absorbed into ini-002 item 5: `docs/specs/mermaid-recursive-compound-layout`
 
 ## mermaid-fidelity-hardening
 
 ### mmdc-geometry-capture
 
-→ `workspace.toml` slug: `mmdc-geometry-capture`
+→ Absorbed into ini-002 item 2: `docs/specs/mmdc-browser-geometry-capture`
 
 ### browser-geometry-capture
 
-→ `workspace.toml` slug: `browser-geometry-capture`
+→ Absorbed into ini-002 item 2: `docs/specs/mmdc-browser-geometry-capture`
 
 ### browser-probing
 
-→ `workspace.toml` slug: `browser-probing`
+→ Absorbed into ini-002 item 2: `docs/specs/mmdc-browser-geometry-capture`
 
 ---
 
@@ -115,11 +115,11 @@ Closed/shipped work remains in each spec's Changelog and
 
 ### playwright-gated-snapshot-verification
 
-→ `workspace.toml` slug: `playwright-gated-snapshot-verification`
+→ Absorbed into ini-002 item 13: `docs/specs/mermaid-parity-ci-and-maintainability-cleanup`
 
 ### batch-mmdc
 
-→ `workspace.toml` slug: `batch-mmdc`
+→ Absorbed into ini-002 item 2: `docs/specs/mmdc-browser-geometry-capture`
 
 ### gpu-benchmark
 
