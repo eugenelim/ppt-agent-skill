@@ -477,11 +477,9 @@ accept per-edge column-confinement hints or using per-subgraph routing passes. U
 
 ### state-diagram-cross-scope-clip
 
-**Deferred from `state-compiler-recursive` cross-scope exit:** `_Edge.src_group` tags cross-scope
-exit edges (e.g. `Processing → Done`) with the composite's group ID. The plan called for a waypoint
-clipping step in `_compile_flowchart()` (after `_route_edges()`, before `_build_routed_edges_ir()`)
-that clips the routed path's start point to the composite group's bounding box boundary. The tag is
-written; the clip helper `_clip_cross_scope_exit_waypoints()` is deferred. Unblocked after group
-bboxes are stable before routing (currently `_grp_bboxes` is computed after Sugiyama; verify ordering
-then add the clip step).
+**Resolved** (spec `docs/specs/state-diagram-cross-scope-clip/`). `_Edge.src_group` tags cross-scope
+exit edges (e.g. `Processing → Done`) with the composite's group ID. `_compile_flowchart()` now calls
+`_clip_cross_scope_exit_waypoints()` after `_route_edges()` and before `_build_routed_edges_ir()`,
+clipping the routed path's start point to the composite group's bounding-box boundary. `_grp_bboxes`
+is computed before routing in both the ELK and Python paths, so the clip runs against stable bboxes.
 

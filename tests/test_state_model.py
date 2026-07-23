@@ -619,3 +619,91 @@ class TestCrossScopeGraph:
         src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
         html = to_html(src)
         assert "Processing" in html
+
+
+# ── cross-scope exit waypoint clipping ────────────────────────────────────────
+
+from mermaid_render.layout._strategies import (
+    _clip_cross_scope_exit_waypoints,
+    _compile_flowchart,
+)
+
+
+class TestCrossScopeExitClip:
+    """_clip_cross_scope_exit_waypoints() clips composite-exit routes to the
+    source group's bounding-box boundary."""
+
+    BBOX = [100.0, 100.0, 200.0, 200.0]  # [x0, y0, x1, y1]
+
+    def _routed(self, waypoints):
+        return [{"edge_id": "e1", "waypoints": list(waypoints)}]
+
+    def test_clips_inside_prefix_to_boundary(self):
+        # start inside (150,150); exits through bottom edge (y=200) to (150,250)
+        routed = self._routed([(150, 150), (150, 250), (300, 250)])
+        _clip_cross_scope_exit_waypoints(routed, {"e1": "g1"}, {"g1": self.BBOX})
+        assert routed[0]["waypoints"] == [(150.0, 200.0), (150, 250), (300, 250)]
+
+    def test_drops_multiple_inside_waypoints(self):
+        # two waypoints inside the box before the exit crossing
+        routed = self._routed([(120, 120), (180, 180), (180, 260), (400, 260)])
+        _clip_cross_scope_exit_waypoints(routed, {"e1": "g1"}, {"g1": self.BBOX})
+        wps = routed[0]["waypoints"]
+        assert wps[0] == (180.0, 200.0)  # crossing of 180,180 -> 180,260 with y=200
+        assert wps[1:] == [(180, 260), (400, 260)]
+
+    def test_noop_when_edge_not_tagged(self):
+        routed = self._routed([(150, 150), (150, 250)])
+        _clip_cross_scope_exit_waypoints(routed, {"other": "g1"}, {"g1": self.BBOX})
+        assert routed[0]["waypoints"] == [(150, 150), (150, 250)]
+
+    def test_noop_when_bbox_missing(self):
+        routed = self._routed([(150, 150), (150, 250)])
+        _clip_cross_scope_exit_waypoints(routed, {"e1": "gX"}, {"g1": self.BBOX})
+        assert routed[0]["waypoints"] == [(150, 150), (150, 250)]
+
+    def test_noop_when_first_waypoint_already_outside(self):
+        routed = self._routed([(50, 150), (150, 150)])
+        _clip_cross_scope_exit_waypoints(routed, {"e1": "g1"}, {"g1": self.BBOX})
+        assert routed[0]["waypoints"] == [(50, 150), (150, 150)]
+
+    def test_noop_when_whole_route_inside(self):
+        routed = self._routed([(120, 120), (180, 180)])
+        _clip_cross_scope_exit_waypoints(routed, {"e1": "g1"}, {"g1": self.BBOX})
+        assert routed[0]["waypoints"] == [(120, 120), (180, 180)]
+
+    def test_noop_when_fewer_than_two_waypoints(self):
+        routed = self._routed([(150, 150)])
+        _clip_cross_scope_exit_waypoints(routed, {"e1": "g1"}, {"g1": self.BBOX})
+        assert routed[0]["waypoints"] == [(150, 150)]
+
+    def test_nested_fixture_processing_exit_starts_at_boundary(self):
+        """Integration: Processing -> Done route no longer starts inside the
+        Processing group box."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        grp = layout.group_layouts["_g_Processing"]
+        b = grp.boundary_bounds
+        x0, y0, x1, y1 = b.x, b.y, b.x + b.w, b.y + b.h
+        edge = next(
+            e for e in layout.routed_edges
+            if e.src_node_id == "Processing_sm_end_" and e.dst_node_id == "Done"
+        )
+        start = edge.waypoints[0]
+        strictly_inside = (x0 < start.x < x1) and (y0 < start.y < y1)
+        assert not strictly_inside, (
+            f"start {start} is inside Processing box [{x0},{y0},{x1},{y1}]"
+        )
+        # Must lie *on* a box edge (clipped to boundary), not pushed far outside.
+        eps = 0.5
+        on_edge = (
+            (abs(start.x - x0) < eps or abs(start.x - x1) < eps)
+            and (y0 - eps) <= start.y <= (y1 + eps)
+        ) or (
+            (abs(start.y - y0) < eps or abs(start.y - y1) < eps)
+            and (x0 - eps) <= start.x <= (x1 + eps)
+        )
+        assert on_edge, (
+            f"start {start} is not on Processing box edge [{x0},{y0},{x1},{y1}]"
+        )
