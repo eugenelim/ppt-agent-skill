@@ -462,3 +462,26 @@ the `text` attribute. Other long attribute values (e.g. a long `docref` path or 
 string) are not wrapped and can overflow the 220px card width. Extend wrapping or add a width-clamp
 to all attribute display lines.
 
+---
+
+### state-diagram-local-cycle-routing
+
+**Deferred from `state-compiler-recursive` req 9:** Cycle-back transitions (e.g. `Authenticating → Idle`,
+`Processing → Active`, `Failed → Idle`) should be routed around the smallest relevant state set rather
+than through the global rightmost lanes. The Python Sugiyama A\* router handles them as back-edges
+but does not constrain the path to local subgraph columns. Fix requires extending `_routing.py` to
+accept per-edge column-confinement hints or using per-subgraph routing passes. Unblocked after the
+`_routing.py` refactor decouples back-edge detection from global lane assignment.
+
+---
+
+### state-diagram-cross-scope-clip
+
+**Deferred from `state-compiler-recursive` cross-scope exit:** `_Edge.src_group` tags cross-scope
+exit edges (e.g. `Processing → Done`) with the composite's group ID. The plan called for a waypoint
+clipping step in `_compile_flowchart()` (after `_route_edges()`, before `_build_routed_edges_ir()`)
+that clips the routed path's start point to the composite group's bounding box boundary. The tag is
+written; the clip helper `_clip_cross_scope_exit_waypoints()` is deferred. Unblocked after group
+bboxes are stable before routing (currently `_grp_bboxes` is computed after Sugiyama; verify ordering
+then add the clip step).
+

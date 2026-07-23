@@ -266,6 +266,7 @@ class _Edge:
     src_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
     dst_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
     edge_id: str = ""             # stable parse-time ID: "src->dst" (or "src->dst#N" for duplicates)
+    src_group: Optional[str] = None  # group ID whose boundary clips the source endpoint (cross-scope exit)
 
 
 @dataclass
