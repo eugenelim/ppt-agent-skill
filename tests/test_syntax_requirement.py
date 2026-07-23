@@ -75,7 +75,7 @@ requirement test_req {
 
 element test_entity {
   type: simulation
-  docref: /refs/doc.docx
+  docref: "/refs/doc.docx"
 }
 
 test_entity - satisfies -> test_req
@@ -107,7 +107,7 @@ performanceRequirement perf_req {
 
 element test_entity {
   type: simulation
-  docref: /refs/doc.docx
+  docref: "/refs/doc.docx"
 }
 
 test_entity - satisfies -> test_req
@@ -307,6 +307,114 @@ class TestNativeSceneGeometry:
         )
         with pytest.raises(ValueError, match="must be quoted"):
             _parse_requirement_source(bad_src)
+
+    def test_tall_sibling_does_not_cause_edge_crossing(self):
+        """A diagonal edge routed past a taller sibling stays clear of its card.
+
+        ``src_node`` (rank 0, short) fans out to two rank-1 targets, so its
+        edges leave diagonally.  ``tall_sib`` shares rank 0 but is much taller,
+        so the naive ``mid_y = (exit_y + enter_y)/2`` channel would land inside
+        ``tall_sib``'s body.  The band clamp must push the channel below it.
+        """
+        from mermaid_render.layout.requirement import layout_requirement_scene
+        from mermaid_render.scene import ScenePolyline, SceneRect
+
+        src = (
+            "requirementDiagram\n"
+            "requirement src_node {\n  id: 1\n}\n"
+            "requirement tall_sib {\n"
+            "  id: 2\n"
+            "  text: The system shall process every incoming request and "
+            "persist all state changes to durable storage for later audit.\n"
+            "  risk: High\n"
+            "  verifymethod: Test\n"
+            "}\n"
+            "requirement tgt {\n  id: 3\n}\n"
+            "requirement tgt2 {\n  id: 4\n}\n"
+            "src_node - satisfies -> tgt\n"
+            "src_node - verifies -> tgt2\n"
+        )
+        scene = layout_requirement_scene(src)
+
+        # Build full card boxes (header + body): the ``node-id`` data attr sits
+        # only on the 28px header rect, so reconstruct the union with the body
+        # rect (``-node-body-<name>``) to test the whole card, not just its top.
+        tops: dict[str, tuple[float, float, float]] = {}   # name -> (x, y, w)
+        bottoms: dict[str, float] = {}                     # name -> body bottom
+        for _, elements in scene.layers:
+            for elem in elements:
+                if not isinstance(elem, SceneRect):
+                    continue
+                eid = elem.element_id
+                if "-node-hdr-" in eid:
+                    tops[eid.split("-node-hdr-", 1)[1]] = (elem.x, elem.y, elem.w)
+                elif "-node-body-" in eid:
+                    bottoms[eid.split("-node-body-", 1)[1]] = elem.y + elem.h
+
+        card_boxes: dict[str, tuple[float, float, float, float]] = {
+            name: (x, y, x + w, bottoms[name])
+            for name, (x, y, w) in tops.items()
+        }
+
+        # Precondition: tall_sib must be taller than src_node so the naive
+        # midpoint would fall inside it — otherwise the test proves nothing.
+        src_h = card_boxes["src_node"][3] - card_boxes["src_node"][1]
+        sib_h = card_boxes["tall_sib"][3] - card_boxes["tall_sib"][1]
+        assert sib_h > src_h + 32, "fixture must have a clearly taller sibling"
+
+        for _, elements in scene.layers:
+            for elem in elements:
+                if not isinstance(elem, ScenePolyline):
+                    continue
+                attrs = dict(getattr(elem, "data_attrs", ()))
+                src_id = attrs.get("src", "?")
+                dst_id = attrs.get("dst", "?")
+                for i in range(len(elem.points) - 1):
+                    x1, y1 = elem.points[i]
+                    x2, y2 = elem.points[i + 1]
+                    for nid, (rx0, ry0, rx1, ry1) in card_boxes.items():
+                        for t in (0.25, 0.5, 0.75):
+                            px = x1 + t * (x2 - x1)
+                            py = y1 + t * (y2 - y1)
+                            inside = rx0 + 1 < px < rx1 - 1 and ry0 + 1 < py < ry1 - 1
+                            assert not inside, (
+                                f"Edge {src_id}→{dst_id} segment interior "
+                                f"({px:.1f}, {py:.1f}) crosses card {nid}"
+                            )
+
+    def test_long_docref_wraps_and_stays_in_card(self):
+        """A long docref path wraps across multiple lines without overflowing."""
+        from mermaid_render.layout.requirement import (
+            layout_requirement_scene,
+            _TEXT_WRAP_CHARS,
+        )
+        from mermaid_render.scene import SceneText
+
+        src = (
+            "requirementDiagram\n"
+            "element ent {\n"
+            "  type: simulation\n"
+            '  docref: "/very/long/path/to/some/deeply/nested/'
+            'specification/document.docx"\n'
+            "}\n"
+        )
+        scene = layout_requirement_scene(src)
+
+        docref_lines: list[str] = []
+        for _, elements in scene.layers:
+            for elem in elements:
+                if isinstance(elem, SceneText) and "-attr-ent-docref-" in elem.element_id:
+                    for line in elem.lines:
+                        docref_lines.append(line.text)
+
+        # The long path must span more than one line …
+        assert len(docref_lines) > 1, "long docref should wrap across lines"
+        # … and no rendered line may exceed the wrap budget (+2 for continuation
+        # indent), so nothing spills past the 220px card width.
+        for text in docref_lines:
+            assert len(text) <= _TEXT_WRAP_CHARS + 2, (
+                f"wrapped docref line {text!r} exceeds card width budget"
+            )
 
     def test_invalid_relation_type_not_parsed(self):
         """Unknown relation types are silently skipped (not emitted as edges)."""
