@@ -28,7 +28,6 @@ from .errors import (
 from .layout._parser import _detect_directive, _strip_frontmatter
 from .layout._strategies import _GRAPH_DIRECTIVES
 from .scene import SvgScene
-from .svg_serializer import scene_to_svg_str
 
 
 # ── Render request (immutable, parsed once) ──────────────────────────────────
@@ -228,6 +227,17 @@ def _class_topology_scene(src: str, direction: str, width_hint: int) -> SvgScene
         canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
         canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
 
+    # Self-loop finalization: offset layout so left-face/top-face loops stay >= CANVAS_PAD.
+    if any(e.src == e.dst for e in edges):
+        from .layout._routing import _finalize_self_loop_offsets
+        _sl_dx, _sl_dy = _finalize_self_loop_offsets(nodes, edges, direction)
+        if _sl_dx or _sl_dy:
+            for _n in nodes.values():
+                _n.x += _sl_dx
+                _n.y += _sl_dy
+            canvas_w += _sl_dx
+            canvas_h += _sl_dy
+
     zoom = 1.0
     if width_hint and canvas_w > 0:
         zoom = min(width_hint / canvas_w, 1.0)
@@ -261,7 +271,12 @@ def _er_scene(src: str, direction: str, width_hint: int) -> SvgScene:
 
 
 def _class_scene(src: str, direction: str, width_hint: int) -> SvgScene:
-    return _class_topology_scene(src, direction, width_hint)
+    from .layout._strategies import _compile_classdiagram
+    from .layout._renderer import _extract_diagram_title
+    from .paint import finalized_layout_to_scene
+    compiled = _compile_classdiagram(src, width_hint, direction)
+    title = _extract_diagram_title(src)
+    return finalized_layout_to_scene(compiled.layout, diagram_type="classdiagram", title=title)
 
 
 def _gantt_scene(src: str, direction: str, width_hint: int) -> SvgScene:
@@ -490,6 +505,7 @@ def dispatch_native(
         # has a complete routing table for the 12 newly-implemented types.
         scene = _dispatch_scene(clean, d, direction, width_hint, height_hint)
 
+    from .svg_serializer import scene_to_svg_str
     return scene_to_svg_str(scene)
 
 
@@ -616,6 +632,7 @@ def render_svg_result(
 
     # Serialize
     try:
+        from .svg_serializer import scene_to_svg_str
         svg_str = scene_to_svg_str(scene)
     except Exception as e:
         raise NativeRenderError(canonical, "serialize", cause=e) from e

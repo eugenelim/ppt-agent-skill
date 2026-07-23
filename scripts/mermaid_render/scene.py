@@ -114,6 +114,47 @@ class AccessibilityMetadata:
     aria_label: str = ""
 
 
+# ── Typed SVG transforms ─────────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class Translate:
+    """SVG translate(dx, dy) transform."""
+    dx: float = 0.0
+    dy: float = 0.0
+
+
+@dataclass(frozen=True)
+class Scale:
+    """SVG scale(sx, sy) transform, optionally around a centre point."""
+    sx: float = 1.0
+    sy: float = 1.0
+    cx: float = 0.0
+    cy: float = 0.0
+
+
+@dataclass(frozen=True)
+class Rotate:
+    """SVG rotate(angle, cx, cy) transform; angle in degrees."""
+    angle: float = 0.0
+    cx: float = 0.0
+    cy: float = 0.0
+
+
+@dataclass(frozen=True)
+class Matrix:
+    """SVG matrix(a b c d e f) transform."""
+    a: float = 1.0
+    b: float = 0.0
+    c: float = 0.0
+    d: float = 1.0
+    e: float = 0.0
+    f: float = 0.0
+
+
+# Union of all typed transform variants.
+ElementTransform = Translate | Scale | Rotate | Matrix
+
+
 # ── Scene element base (shared fields) ───────────────────────────────────────
 
 @dataclass(frozen=True)
@@ -122,7 +163,7 @@ class _SceneElement:
     css_classes: Tuple[str, ...] = ()
     semantic_role: str = ""
     data_attrs: Tuple[Tuple[str, str], ...] = ()   # (name, value) pairs
-    transform: str = ""                             # SVG transform string
+    transform: "ElementTransform | None" = None    # typed SVG transform
     clip_ref: str = ""                              # clipPath id reference
     paint: PaintStyle = field(default_factory=PaintStyle)
 

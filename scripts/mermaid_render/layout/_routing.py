@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from ._constants import (
     _Node, _Edge, _marker_kind,
     NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
-    BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD,
+    BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD, CANVAS_PAD,
     GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
     _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE, _BAR_W,
@@ -591,6 +591,57 @@ def _label_chip_bbox(lx: int, ly: int, text: str) -> tuple:
     return (lx, ly - _LABEL_CHIP_H, lx + _est_label_w(text), ly)
 
 
+def _finalize_self_loop_offsets(
+    nodes: dict,
+    edges: list,
+    direction: str,
+    canvas_pad: int = CANVAS_PAD,
+) -> tuple:
+    """Return (dx, dy) to shift all nodes before routing self-loops.
+
+    Self-loop geometry for the left face (TB) or top face (LR) subtracts
+    ``extent`` from the node's position.  When that result falls below
+    ``canvas_pad`` the SVG path would have negative coordinates.  This pass
+    computes the minimum shift needed so that every such loop lands at or
+    beyond ``canvas_pad``, then applies it uniformly — preserving relative
+    node spacing while eliminating the need for per-loop coordinate clamping.
+
+    Callers must apply the returned (dx, dy) to every node's x/y and
+    recompute canvas_w/canvas_h before calling _route_edges().
+    """
+    is_lr = direction.upper() in ("LR", "RL")
+    self_loop_lanes: dict = {}
+    min_loop_x = canvas_pad  # worst-case leftward loop coordinate (TB left-face)
+    min_loop_y = canvas_pad  # worst-case upward loop coordinate (LR top-face)
+
+    for e in edges:
+        if e.src != e.dst:
+            continue
+        s = nodes.get(e.src)
+        if s is None or getattr(s, "is_dummy", False):
+            continue
+        lane_idx = self_loop_lanes.get(e.src, 0)
+        self_loop_lanes[e.src] = lane_idx + 1
+
+        nw = _node_render_w(s)
+        nh = _node_render_h(s)
+        label_w = _est_label_w(e.label) if e.label else 0
+        lane_num = lane_idx // 2
+        extent = (max(BASE_LOOP_EXTENT, label_w + 2 * LABEL_PAD, int(0.35 * max(nw, nh)))
+                  + lane_num * LOOP_LANE_GAP)
+
+        if is_lr:
+            if lane_idx % 2 == 0:        # top-face loop
+                min_loop_y = min(min_loop_y, s.y - extent)
+        else:
+            if lane_idx % 2 != 0:        # left-face loop
+                min_loop_x = min(min_loop_x, s.x - extent)
+
+    dx = max(0, canvas_pad - min_loop_x)
+    dy = max(0, canvas_pad - min_loop_y)
+    return dx, dy
+
+
 def _overlap_area(a: tuple, b: tuple, margin: int = 8) -> float:
     """Intersection area of two bboxes each expanded outward by `margin` px.
 
@@ -881,20 +932,20 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 x_out = int(s.x + nw * 0.33)
                 x_ret = int(s.x + nw * 0.67)
                 if lane_idx % 2 == 0:
-                    # top face — clamp so loop stays within canvas
+                    # top face — finalization pass guarantees loop_y >= CANVAS_PAD
                     y_face = s.y
-                    loop_y = max(0, y_face - extent)
+                    loop_y = y_face - extent
                     _sl_pts = [(x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face)]
                     path = _smooth_orthogonal_path(_sl_pts)
                     ah = _arrowhead(x_ret, y_face, 0, 1, **ah_kw) if e.arrow else None
                     mid_x = (x_out + x_ret) // 2
                     cands = [
-                        (mid_x - 20, max(0, loop_y - _LABEL_CHIP_H - 4)),
+                        (mid_x - 20, loop_y - _LABEL_CHIP_H - 4),
                         (x_out - 4, loop_y),
                         (x_ret + 4, loop_y),
                     ]
                     llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
-                                if e.label else (mid_x - 20, max(0, loop_y - _LABEL_CHIP_H - 4)))
+                                if e.label else (mid_x - 20, loop_y - _LABEL_CHIP_H - 4))
                 else:
                     # bottom face
                     y_face = s.y + nh
@@ -930,9 +981,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     llx, lly = (_lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
                                 if e.label else (loop_x + 4, mid_y))
                 else:
-                    # left face
+                    # left face — finalization pass guarantees loop_x >= CANVAS_PAD
                     lx_face = s.x
-                    loop_x = max(0, lx_face - extent)  # clamp to canvas left edge
+                    loop_x = lx_face - extent
                     _sl_pts = [(lx_face, y_out), (loop_x, y_out), (loop_x, y_ret), (lx_face, y_ret)]
                     path = _smooth_orthogonal_path(_sl_pts)
                     ah = _arrowhead(lx_face, y_ret, 1, 0, **ah_kw) if e.arrow else None

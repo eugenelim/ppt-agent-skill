@@ -38,7 +38,7 @@ from ._constants import (
 )
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
 from ._layout import _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates, _compact_group_columns, _group_coherent_cols
-from ._routing import _route_edges, _arrowhead, _node_render_w
+from ._routing import _route_edges, _arrowhead, _node_render_w, _finalize_self_loop_offsets
 from ._c4 import _render_c4_fragment, C4Item, C4Relationship, C4Boundary
 from ._renderer import (
     _render_graph_fragment,
@@ -1796,6 +1796,151 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
                 rows = methods
             nodes[cid].label = f"{cid}|" + "\n".join(rows)
     return _graph_from_content_nodes(nodes, edges, {}, width_hint)
+
+
+def _compile_classdiagram(
+    src: str,
+    width_hint: int = 0,
+    direction: str = "TB",
+    height_hint: int = 0,
+) -> "CompiledFlowchart":
+    """Parse classDiagram and return a CompiledFlowchart with NodeLayout.member_layouts populated.
+
+    Replaces the mutable _class_topology_scene() path for both to_html() and to_svg().
+    """
+    from ._geometry import (
+        CompiledFlowchart, FinalizedLayout, LayoutMetadata, Rect,
+        validate_finalized_layout, _empty_diagnostics,
+    )
+    from dataclasses import replace as _dc_replace
+
+    content_lines = _directive_content(src)
+    nodes: dict[str, _Node] = {}
+    edges: list[_Edge] = []
+    class_members: dict[str, list[str]] = {}
+    current_class: "Optional[str]" = None
+
+    for raw in content_lines:
+        line = raw.strip()
+        if not line or line.startswith(("%%", "//")):
+            continue
+        if line == "}":
+            current_class = None
+            continue
+        m = re.match(r'^class\s+(\w+)', line)
+        if m:
+            cid = m.group(1)
+            nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
+            class_members.setdefault(cid, [])
+            current_class = cid if "{" in line else None
+            continue
+        if current_class:
+            if line not in ("+", "-", "#", "~"):
+                class_members.setdefault(current_class, []).append(line)
+            continue
+        m = _CLASS_REL_RE.match(line)
+        if m:
+            c1, mul_src, op, mul_dst, c2, lbl = (
+                m.group(1), m.group(2) or "", m.group(3),
+                m.group(4) or "", m.group(5), m.group(6) or "",
+            )
+            for cid in (c1, c2):
+                nodes.setdefault(cid, _Node(id=cid, label=cid, shape="rect"))
+                class_members.setdefault(cid, [])
+            src_spec, tgt_spec, line_style = _class_rel_markers(op)
+            edges.append(_Edge(
+                src=c1, dst=c2, label=lbl.strip(),
+                style=line_style,
+                source_marker=src_spec, target_marker=tgt_spec,
+                src_label=mul_src, dst_label=mul_dst,
+            ))
+            continue
+        m2 = re.match(r'^(\w+)\s*:', line)
+        if m2:
+            nodes.setdefault(m2.group(1), _Node(id=m2.group(1), label=m2.group(1), shape="rect"))
+            class_members.setdefault(m2.group(1), [])
+
+    if not nodes:
+        raise ValueError("No classes found in classDiagram.")
+    if len(nodes) > NODE_CAP:
+        raise ValueError(f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}).")
+
+    # Encode members into labels for height computation (pipe-separated multi-row label).
+    for cid, members in class_members.items():
+        if cid in nodes and members:
+            attrs = [mm for mm in members if "(" not in mm]
+            methods = [mm for mm in members if "(" in mm]
+            rows = attrs if not methods else (
+                attrs + ["---"] + methods if attrs else methods
+            )
+            nodes[cid].label = f"{cid}|" + "\n".join(rows)
+
+    # Layout pipeline (Python Sugiyama; no ELK for classDiagram)
+    _break_cycles(nodes, edges)
+    _assign_ranks(nodes, edges)
+    _minimize_crossings(nodes, edges)
+    canvas_w, canvas_h = _assign_coordinates(nodes, direction)
+
+    real_nodes = [n for n in nodes.values() if not n.is_dummy]
+    if real_nodes:
+        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+        canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
+
+    if any(e.src == e.dst for e in edges):
+        _sl_dx, _sl_dy = _finalize_self_loop_offsets(nodes, edges, direction)
+        if _sl_dx or _sl_dy:
+            for _n in nodes.values():
+                _n.x += _sl_dx
+                _n.y += _sl_dy
+            canvas_w += _sl_dx
+            canvas_h += _sl_dy
+
+    route_batch = _route_edges(nodes, edges, canvas_w, direction, {})
+
+    # Build base NodeLayout IR, then populate member_layouts for each class node.
+    node_layouts = _build_node_layouts_ir(nodes)
+    _member_tls: dict[str, tuple] = {}
+    for cid, members in class_members.items():
+        if not members:
+            _member_tls[cid] = ()
+            continue
+        attrs = [mm for mm in members if "(" not in mm]
+        methods = [mm for mm in members if "(" in mm]
+        rows = attrs if not methods else (
+            attrs + ["---"] + methods if attrs else methods
+        )
+        _member_tls[cid] = tuple(_make_text_layout_ir(row) for row in rows)
+    node_layouts = {
+        nid: _dc_replace(nl, member_layouts=_member_tls[nid])
+        if nid in _member_tls else nl
+        for nid, nl in node_layouts.items()
+    }
+
+    routed_edges_ir = _build_routed_edges_ir(route_batch.routed)
+    canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
+
+    finalized = FinalizedLayout(
+        node_layouts=node_layouts,
+        group_layouts={},
+        routed_edges=routed_edges_ir,
+        routing_failures=route_batch.failures,
+        visible_bounds=canvas_bounds,
+        diagram_padding=float(CANVAS_PAD),
+        canvas_bounds=canvas_bounds,
+        direction=direction,
+        diagnostics=_empty_diagnostics(),
+    )
+
+    metadata = LayoutMetadata(
+        direction=direction,
+        node_count=len(real_nodes),
+        group_count=0,
+        edge_count=len(edges),
+        algorithm="LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner",
+    )
+
+    validation = validate_finalized_layout(finalized, metadata=metadata)
+    return CompiledFlowchart(layout=finalized, validation=validation, metadata=metadata)
 
 
 # ── T3: gantt ─────────────────────────────────────────────────────────────────
@@ -4883,12 +5028,18 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
 
         _raw_src_mk = spec.get("source_marker")
         _raw_dst_mk = spec.get("target_marker")
-        _source_marker = (MarkerKind(_raw_src_mk) if isinstance(_raw_src_mk, str)
-                          else (_raw_src_mk if isinstance(_raw_src_mk, MarkerKind)
-                                else (MarkerKind.ARROW if has_marker_start else MarkerKind.NONE)))
-        _target_marker = (MarkerKind(_raw_dst_mk) if isinstance(_raw_dst_mk, str)
-                          else (_raw_dst_mk if isinstance(_raw_dst_mk, MarkerKind)
-                                else (MarkerKind.ARROW if has_marker_end else MarkerKind.NONE)))
+
+        def _coerce_mk(raw, fallback: "MarkerKind") -> "MarkerKind":
+            if isinstance(raw, str):
+                return MarkerKind(raw)
+            if isinstance(raw, MarkerKind):
+                return raw
+            if raw is not None and hasattr(raw, "kind"):  # MarkerSpec → extract kind
+                return raw.kind
+            return fallback
+
+        _source_marker = _coerce_mk(_raw_src_mk, MarkerKind.ARROW if has_marker_start else MarkerKind.NONE)
+        _target_marker = _coerce_mk(_raw_dst_mk, MarkerKind.ARROW if has_marker_end else MarkerKind.NONE)
 
         label_text = spec.get("label", "") or ""
         if label_text:
@@ -4903,6 +5054,30 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
         else:
             label_layout = None
 
+        # Multiplicity labels (class diagram "1", "0..*", etc.)
+        _src_lbl_text = spec.get("src_label") or ""
+        _dst_lbl_text = spec.get("dst_label") or ""
+        if _src_lbl_text:
+            _sl_tl = _make_text_layout_ir(_src_lbl_text)
+            _src_lbl_layout = EdgeLabelLayout(
+                text=_src_lbl_text,
+                layout=_sl_tl,
+                bounds=Rect(x=src_pos.x + 4, y=src_pos.y - 14, w=_sl_tl.width, h=_sl_tl.height),
+                anchor_point=src_pos,
+            )
+        else:
+            _src_lbl_layout = None
+        if _dst_lbl_text:
+            _dl_tl = _make_text_layout_ir(_dst_lbl_text)
+            _dst_lbl_layout = EdgeLabelLayout(
+                text=_dst_lbl_text,
+                layout=_dl_tl,
+                bounds=Rect(x=dst_pos.x + 4, y=dst_pos.y - 14, w=_dl_tl.width, h=_dl_tl.height),
+                anchor_point=dst_pos,
+            )
+        else:
+            _dst_lbl_layout = None
+
         results.append(RoutedEdge(
             edge_id=edge_id,
             src_node_id=src,
@@ -4914,8 +5089,8 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
             has_marker_end=has_marker_end,
             has_marker_start=has_marker_start,
             label_layout=label_layout,
-            src_label_layout=None,
-            dst_label_layout=None,
+            src_label_layout=_src_lbl_layout,
+            dst_label_layout=_dst_lbl_layout,
             source_marker=_source_marker,
             target_marker=_target_marker,
         ))
@@ -5528,6 +5703,20 @@ def _compile_flowchart(
             if _max_bot > canvas_h - CANVAS_PAD:
                 canvas_h = int(_max_bot) + CANVAS_PAD
 
+        # Self-loop finalization: offset all nodes so left-face/top-face loops
+        # stay ≥ CANVAS_PAD (eliminates the old provisional coordinate clamps).
+        _cp = int(_init_cfg.get("diagram_padding", CANVAS_PAD))
+        if any(e.src == e.dst for e in edges):
+            _sl_dx, _sl_dy = _finalize_self_loop_offsets(nodes, edges, direction, canvas_pad=_cp)
+            if _sl_dx or _sl_dy:
+                for _n in nodes.values():
+                    _n.x += _sl_dx
+                    _n.y += _sl_dy
+                canvas_w += _sl_dx
+                canvas_h += _sl_dy
+                if _grp_bboxes:
+                    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+
         # Route edges
         route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
 
@@ -5675,7 +5864,21 @@ def _dispatch(
     if d == "erdiagram":
         return _layout_er(clean, direction, width_hint)
     if d == "classdiagram":
-        return _layout_class(clean, direction, width_hint)
+        compiled = _compile_classdiagram(clean, width_hint, direction, effective_height)
+        _cls_layout = compiled.layout
+        _cls_w = int(_cls_layout.canvas_bounds.w)
+        _cls_h = int(_cls_layout.canvas_bounds.h)
+        _cls_zoom = 1.0
+        if width_hint and _cls_w > 0:
+            _cls_zoom = min(width_hint / _cls_w, 1.0)
+        _cls_fragment = render_finalized(_cls_layout)
+        if abs(_cls_zoom - 1.0) > 0.005:
+            _cls_fragment = (
+                f'<div class="diagram-zoom-wrapper"'
+                f' style="display:contents; zoom:{_cls_zoom:.4f};">'
+                f'{_cls_fragment}</div>'
+            )
+        return _cls_fragment
     if d == "gantt":
         return _layout_gantt(clean, direction, width_hint)
     if d == "timeline":

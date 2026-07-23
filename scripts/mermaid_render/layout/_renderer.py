@@ -1648,18 +1648,46 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         else:
             _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent};'
 
-        # Tech sub-label HTML
+        # Tech sub-label HTML — support multi-row members and "---" dividers.
         tech_span = ""
         if tech_label:
-            tech_span = (
-                f'<span class="node-tech" style="'
-                f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
-                f'color:{fg_var}; opacity:0.6; '
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
-                f'line-height:1.3; margin-top:7px; padding-top:7px; '
-                f'border-top:1px solid {border_var}; text-align:left; width:100%;">'
-                f'{_h(tech_label)}</span>'
-            )
+            _trows = [r for r in tech_label.split("\n") if r.strip()]
+            if len(_trows) > 1:
+                _row_parts: list[str] = []
+                for _tr in _trows:
+                    if _tr.strip() == "---":
+                        _row_parts.append(
+                            f'<div style="height:1px; background:{border_var};'
+                            f' margin:3px -12px 3px -12px;"></div>'
+                        )
+                    else:
+                        _row_parts.append(
+                            f'<span class="node-member" style="display:block; '
+                            f'font-size:var(--node-fs-tech,11px); font-weight:400; '
+                            f'color:{fg_var}; opacity:0.75; '
+                            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                            f'line-height:1.5; padding:0; white-space:nowrap; '
+                            f'overflow:hidden; text-overflow:ellipsis;">{_h(_tr)}</span>'
+                        )
+                tech_span = (
+                    f'<div class="node-tech" style="'
+                    f'display:block; font-size:var(--node-fs-tech,11px); font-weight:400; '
+                    f'color:{fg_var}; '
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                    f'line-height:1.5; margin-top:7px; padding-top:7px; '
+                    f'border-top:1px solid {border_var}; text-align:left; width:100%;">'
+                    f'{"".join(_row_parts)}</div>'
+                )
+            else:
+                tech_span = (
+                    f'<span class="node-tech" style="'
+                    f'display:block; font-size:var(--node-fs-tech,12px); font-weight:400; '
+                    f'color:{fg_var}; opacity:0.6; '
+                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif)); '
+                    f'line-height:1.3; margin-top:7px; padding-top:7px; '
+                    f'border-top:1px solid {border_var}; text-align:left; width:100%;">'
+                    f'{_h(tech_label)}</span>'
+                )
 
         # Inner label / icon layout
         if nl.icon_svg:
@@ -1844,10 +1872,10 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                     f'pointer-events:none;">{inner}</div>'
                 )
             parts.append(
-                f'<div data-node-id="{_h(nid)}"'
+                f'<div class="node{extra_cls}"'
+                f' data-node-id="{_h(nid)}"'
                 f' data-kind="node" data-label="{_fid_label}" data-shape="{shape}"'
                 f' data-order="{nl.rank}"{_fid_parent}'
-                f' class="node{extra_cls}"'
                 f' style="position:absolute;'
                 f' left:{int(b.x)}px; top:{int(b.y)}px;'
                 f' width:{nw}px; height:{nh}px;'
@@ -1868,14 +1896,21 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         f' overflow:visible; pointer-events:none;">'
     )
 
-    # Determine needed marker IDs
+    # Determine needed marker IDs — including class-diagram UML markers.
+    from ._geometry import MarkerKind as _MK
+    from ._routing import _CLS_KIND_TO_MARKER_ID as _CLS_MK
     _style_to_marker = {"thick": "arrow-thick", "dotted": "arrow-open"}
+    _cls_kinds = frozenset(_CLS_MK.keys())
     _needed_markers: set[str] = set()
     for re_obj in layout.routed_edges:
         if re_obj.has_marker_end or re_obj.has_marker_start:
-            mid = _style_to_marker.get(re_obj.edge_style, "arrow-normal")
-            _needed_markers.add(mid)
-        if re_obj.has_marker_start:
+            if re_obj.source_marker in _cls_kinds:
+                _needed_markers.add(_CLS_MK[re_obj.source_marker] + "-rev")
+            elif re_obj.target_marker in _cls_kinds:
+                _needed_markers.add(_CLS_MK[re_obj.target_marker])
+            else:
+                _needed_markers.add(_style_to_marker.get(re_obj.edge_style, "arrow-normal"))
+        if re_obj.has_marker_start and re_obj.source_marker not in _cls_kinds:
             _needed_markers.add("arrow-bidir-start")
 
     defs_parts = ["<defs>"]
@@ -1907,6 +1942,41 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             '<path d="M 0,-4 L 9,0 L 0,4" fill="none"'
             ' stroke="var(--accent-4,var(--amber,#E8924A))" stroke-width="1.5"/></marker>'
         )
+    _cls_edge_color = "var(--edge,rgba(100,116,139,0.7))"
+    for _base_id, _base_def, _rev_def in [
+        ("cls-inherit",
+         f'<marker id="cls-inherit" viewBox="0 -6 12 12" refX="12" refY="0"'
+         f' markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">'
+         f'<polygon points="0,-6 12,0 0,6" fill="none" stroke="{_cls_edge_color}" stroke-width="1.5"/></marker>',
+         f'<marker id="cls-inherit-rev" viewBox="0 -6 12 12" refX="12" refY="0"'
+         f' markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto-start-reverse">'
+         f'<polygon points="0,-6 12,0 0,6" fill="none" stroke="{_cls_edge_color}" stroke-width="1.5"/></marker>'),
+        ("cls-composition",
+         f'<marker id="cls-composition" viewBox="-10 -5 20 10" refX="10" refY="0"'
+         f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
+         f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="{_cls_edge_color}"/></marker>',
+         f'<marker id="cls-composition-rev" viewBox="-10 -5 20 10" refX="10" refY="0"'
+         f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse">'
+         f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="{_cls_edge_color}"/></marker>'),
+        ("cls-aggregation",
+         f'<marker id="cls-aggregation" viewBox="-10 -5 20 10" refX="10" refY="0"'
+         f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
+         f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="none" stroke="{_cls_edge_color}" stroke-width="1.5"/></marker>',
+         f'<marker id="cls-aggregation-rev" viewBox="-10 -5 20 10" refX="10" refY="0"'
+         f' markerWidth="20" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse">'
+         f'<polygon points="0,0 -10,-4 -20,0 -10,4" fill="none" stroke="{_cls_edge_color}" stroke-width="1.5"/></marker>'),
+        ("cls-dep",
+         f'<marker id="cls-dep" viewBox="0 -4 9 8" refX="9" refY="0"'
+         f' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
+         f'<path d="M 0,-4 L 9,0 L 0,4" fill="none" stroke="{_cls_edge_color}" stroke-width="1.5"/></marker>',
+         f'<marker id="cls-dep-rev" viewBox="0 -4 9 8" refX="9" refY="0"'
+         f' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse">'
+         f'<path d="M 0,-4 L 9,0 L 0,4" fill="none" stroke="{_cls_edge_color}" stroke-width="1.5"/></marker>'),
+    ]:
+        if _base_id in _needed_markers:
+            defs_parts.append(_base_def)
+        if (_base_id + "-rev") in _needed_markers:
+            defs_parts.append(_rev_def)
     defs_parts.append("</defs>")
     parts.append("".join(defs_parts))
 
@@ -1918,9 +1988,19 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         for p in pts[1:]:
             d_parts.append(f"L {p.x:.1f} {p.y:.1f}")
         d = " ".join(d_parts)
-        _mid = _style_to_marker.get(re_obj.edge_style, "arrow-normal")
+        # Class diagram UML markers take priority over generic style-based markers.
+        if re_obj.source_marker in _cls_kinds:
+            _mid_start = _CLS_MK[re_obj.source_marker] + "-rev"
+            _mid = _style_to_marker.get(re_obj.edge_style, "arrow-normal")
+        elif re_obj.target_marker in _cls_kinds:
+            _mid = _CLS_MK[re_obj.target_marker]
+            _mid_start = "arrow-bidir-start"
+        else:
+            _mid = _style_to_marker.get(re_obj.edge_style, "arrow-normal")
+            _mid_start = "arrow-bidir-start"
         marker_end = f' marker-end="url(#{_mid})"' if re_obj.has_marker_end else ""
-        marker_start = ' marker-start="url(#arrow-bidir-start)"' if re_obj.has_marker_start else ""
+        marker_start = (f' marker-start="url(#{_mid_start})"'
+                        if re_obj.has_marker_start else "")
         if re_obj.edge_style == "thick":
             stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
             stroke_w = "2"
@@ -1960,6 +2040,27 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f' width:{int(lb.w)}px; font-size:11px;'
                 f' text-align:center; pointer-events:none;">'
                 f'{_h(re_obj.label_layout.text)}</div>'
+            )
+
+    # Multiplicity labels (class diagram "1", "0..*", etc.)
+    _mult_style = (
+        'position:absolute; font-size:10px; font-weight:600;'
+        ' pointer-events:none; white-space:nowrap;'
+    )
+    for re_obj in layout.routed_edges:
+        if re_obj.src_label_layout and re_obj.src_label_layout.text:
+            sb = re_obj.src_label_layout.bounds
+            parts.append(
+                f'<span class="mult-label"'
+                f' style="{_mult_style} left:{int(sb.x)}px; top:{int(sb.y)}px;">'
+                f'{_h(re_obj.src_label_layout.text)}</span>'
+            )
+        if re_obj.dst_label_layout and re_obj.dst_label_layout.text:
+            db = re_obj.dst_label_layout.bounds
+            parts.append(
+                f'<span class="mult-label"'
+                f' style="{_mult_style} left:{int(db.x)}px; top:{int(db.y)}px;">'
+                f'{_h(re_obj.dst_label_layout.text)}</span>'
             )
 
     parts.append("</div>")
