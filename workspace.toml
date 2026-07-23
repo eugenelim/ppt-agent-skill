@@ -17,6 +17,51 @@
 # Add items as: {slug = "my-deferred-item"}
 # Run `workspace-status` to see all open backlog items.
 
+# ── Initiative: Mermaid Rendering Correctness — san-juan-v1 ──────────────────
+#
+# Ordered per the recommended backlog sequence:
+#   1. gallery baseline first (all later comparison work references it)
+#   2. oracle hardening second (non-vacuous comparator gates later fixture work)
+#   3. ELK round trip third (foundation for single-pipeline, arch, flowchart)
+#   4-11. type-specific work, in dependency and category order
+#
+# Dependency key (work:<path> notation):
+#   elk-finalized-layout-roundtrip blocks: single-pipeline, architecture, flowchart
+#   mermaid-single-finalized-layout-pipeline blocks: er layout, requirement layout
+
+["ini-001"]
+name = "Mermaid Rendering Correctness"
+milestone = "san-juan-v1"
+status = "active"
+
+["ini-001".work]
+queue = [
+  # 1 — Gallery baseline: provenance-locked reference artifact for all comparison work
+  "docs/specs/mermaid-current-head-comparison-baseline",
+  # 2 — Non-vacuous oracle: comparator must prove checks ran before reporting pass
+  "docs/specs/mermaid-non-vacuous-oracle",
+  # 3 — Lossless ELK round trip: prerequisite for items 4, 5, 8, 10
+  "docs/specs/elk-finalized-layout-roundtrip",
+  # 4 — Single FinalizedLayout pipeline for ER, requirement, architecture
+  {path = "docs/specs/mermaid-single-finalized-layout-pipeline", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
+  # 5 — Architecture full-ELK consumption: ELK authoritative for placement and routing
+  {path = "docs/specs/architecture-elk-authoritative-layout", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
+  # 6 — ShapeGeometry painters: one implementation per shape for HTML and SVG
+  "docs/specs/shape-geometry-authoritative-painters",
+  # 7 — Class marker clearance: correct clearance, orientation, and label placement
+  "docs/specs/class-diagram-marker-clearance",
+  # 8 — Flowchart routing regressions: ELK sections + fallback correctness for 6 fixtures
+  {path = "docs/specs/flowchart-elk-routing-regression-pack", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
+  # 9 — State local cycles and semantic endpoints
+  "docs/specs/state-diagram-local-cycle-routing",
+  # 10a — ER pipeline consolidation: measured dynamic width + single FinalizedLayout
+  {path = "docs/specs/er-finalized-layout-and-dynamic-width", needs = ["work:docs/specs/elk-finalized-layout-roundtrip", "work:docs/specs/mermaid-single-finalized-layout-pipeline"]},
+  # 10b — Requirement pipeline consolidation: compile_requirement() → FinalizedLayout
+  {path = "docs/specs/requirement-finalized-layout-sizing", needs = ["work:docs/specs/mermaid-single-finalized-layout-pipeline"]},
+]
+active = []
+shipped = []
+
 [backlog]
 open = [
   # ── Group 1: Easy quick wins ─────────────────────────────────────────────
