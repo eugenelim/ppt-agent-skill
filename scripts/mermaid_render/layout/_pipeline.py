@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 import types as _types
+import warnings
 from dataclasses import dataclass
 from html import escape as _h
 from typing import TYPE_CHECKING, Callable, Optional
@@ -584,8 +585,8 @@ def _expand_boundary_gates(
 
     For each cross-boundary edge ``e`` (classified by ``_partition_edges``):
 
-    1. Creates a gate node ``_Node(id=f"_gate_{e.edge_id}", is_dummy=True, ...)``
-       and adds it to ``nodes``.
+    1. Creates a gate node ``_Node(id=f"_gate_{e.edge_id}", is_dummy=False,
+       extra_css="opacity:0;pointer-events:none;", ...)`` and adds it to ``nodes``.
     2. Replaces ``e`` with two edges: ``src→gate`` (no label, no arrowhead) and
        ``gate→dst`` (carries ``label``, ``target_marker``, and stable ``edge_id``).
     3. Records ``gate_id → original_edge`` in ``gate_to_original``.
@@ -615,11 +616,12 @@ def _expand_boundary_gates(
             id=gate_id,
             label="",
             shape="rect",
-            is_dummy=True,
+            is_dummy=False,
             x=0,
             y=0,
             width=0,
             height=0,
+            extra_css="opacity:0;pointer-events:none;",
         )
         nodes[gate_id] = gate_node
         gate_to_original[gate_id] = e
@@ -684,6 +686,11 @@ def _restore_gate_edges(
                 to_remove.add(first_idx)
             if second_idx is not None:
                 to_remove.add(second_idx)
+            warnings.warn(
+                f"_restore_gate_edges: could not find both halves for gate {gate_id!r}; "
+                "dropping edge",
+                stacklevel=2,
+            )
             continue
 
         first = route_dicts[first_idx]
@@ -1087,8 +1094,8 @@ def _compile_flowchart(
     # ── Gate injection for inner-direction cross-boundary edges ──────────────────
     # Only inject when groups exist, this is a flowchart (not statediagram), and at
     # least one group declares a direction that differs from the outer layout direction.
-    # Gate nodes are is_dummy=True so the renderer skips them; _restore_gate_edges
-    # removes them from nodes and merges the split route-dicts before IR construction.
+    # Gate nodes are invisible (extra_css="opacity:0;pointer-events:none;") and are
+    # removed from nodes by _restore_gate_edges before IR construction.
     _gate_to_orig: "dict[str, _Edge]" = {}
     if groups and _top_directive not in _state_directives:
         _has_inner_dir_pre = any(
@@ -1189,10 +1196,12 @@ def _compile_flowchart(
         _grp_bboxes = {**_py_grp_bboxes, **(_elk_grp_bboxes or {})}
         # Canvas from union of ELK-positioned nodes and group boundaries.
         _all_x1: "list[float]" = [
-            float(n.x + (n.width or NODE_W)) for n in nodes.values() if not n.is_dummy
+            float(n.x + (n.width or NODE_W)) for n in nodes.values()
+            if not n.is_dummy and n.id not in _gate_to_orig
         ]
         _all_y1: "list[float]" = [
-            float(n.y + _node_render_h(n)) for n in nodes.values() if not n.is_dummy
+            float(n.y + _node_render_h(n)) for n in nodes.values()
+            if not n.is_dummy and n.id not in _gate_to_orig
         ]
         for _b in _grp_bboxes.values():
             _all_x1.append(float(_b[2]))
@@ -1261,9 +1270,9 @@ def _compile_flowchart(
         if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
             from collections import Counter
             max_rank = max((n.rank for n in nodes.values()), default=0)
-            rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
+            rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig)
             max_cols = max(rank_counts.values(), default=1)
-            real_ns = [n for n in nodes.values() if not n.is_dummy]
+            real_ns = [n for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig]
             avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
             lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
             lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
@@ -1325,8 +1334,8 @@ def _compile_flowchart(
         elif direction.upper() in ("TB", "TD") and groups:
             canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
 
-        # Recompute canvas after group adjustments
-        real_nodes = [n for n in nodes.values() if not n.is_dummy]
+        # Recompute canvas after group adjustments (exclude gate proxy nodes)
+        real_nodes = [n for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig]
         if real_nodes:
             canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
             canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
@@ -1380,9 +1389,8 @@ def _compile_flowchart(
                                    scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None)
 
     # ── Gate restoration: merge split route-dicts before IR construction ────────
-    # _restore_gate_edges also removes gate nodes from the `nodes` dict so they
-    # are not included in node_layouts (gate nodes are is_dummy=True and invisible,
-    # but removing them keeps the IR clean).
+    # _restore_gate_edges removes gate nodes from the `nodes` dict so they
+    # are not included in node_layouts (keeps the IR clean).
     if _gate_to_orig:
         _restored_routes: "list[dict]" = _restore_gate_edges(
             list(route_batch.routed), _gate_to_orig, nodes

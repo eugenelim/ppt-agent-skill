@@ -663,7 +663,8 @@ class TestExpandBoundaryGates:
         gate_id = next(iter(gate_to_orig))
         assert gate_id.startswith("_gate_"), f"gate_id should start with '_gate_': {gate_id}"
         assert gate_id in nodes, "Gate node should be in nodes"
-        assert nodes[gate_id].is_dummy, "Gate node should be is_dummy=True"
+        assert not nodes[gate_id].is_dummy, "Gate node should have is_dummy=False (invisible via extra_css)"
+        assert "opacity:0" in nodes[gate_id].extra_css, "Gate node should be invisible via extra_css"
 
 
 class TestRestoreGateEdges:
@@ -685,7 +686,8 @@ class TestRestoreGateEdges:
             "B": _make_node("B", x=200, y=0),
         }
         gate_node = _make_node(gate_id, x=100, y=0)
-        gate_node.is_dummy = True
+        gate_node.is_dummy = False
+        gate_node.extra_css = "opacity:0;pointer-events:none;"
         nodes[gate_id] = gate_node
 
         # Simulate two half route-dicts produced by _route_edges
@@ -734,3 +736,25 @@ class TestRestoreGateEdges:
         )
         # Gate node should be removed from nodes
         assert gate_id not in nodes, "Gate node should be removed from nodes after restoration"
+
+
+class TestCrossScopeFixtureEdges:
+    """AC-6: cross-scope fixture must render all 4 edges."""
+
+    def test_cross_scope_fixture_all_edges_rendered(self):
+        """All 4 edges (A→B, B→C, C→D, D→E) must be present in the compiled layout."""
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "flowchart-cross-scope-edge.mmd"
+        src = fixture.read_text()
+        result = _compile_flowchart(src, width_hint=0, options=None)
+
+        edge_pairs = {(e.src_node_id, e.dst_node_id) for e in result.layout.routed_edges}
+        assert ("A", "B") in edge_pairs, f"A→B missing; edges: {edge_pairs}"
+        assert ("B", "C") in edge_pairs, f"B→C missing; edges: {edge_pairs}"
+        assert ("C", "D") in edge_pairs, f"C→D missing; edges: {edge_pairs}"
+        assert ("D", "E") in edge_pairs, f"D→E missing; edges: {edge_pairs}"
