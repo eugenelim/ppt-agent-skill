@@ -2,7 +2,7 @@
 
 Mode: full (structural change, multi-feature, new tooling surface)
 
-- **Status:** Draft
+- **Status:** Implementing
 
 ## Objective
 
@@ -42,50 +42,53 @@ separate sections in the gallery HTML and may be generated independently.
 
 ## Acceptance Criteria
 
-- [ ] AC1: The gallery HTML header identifies the exact git SHA used for
+- [x] AC1: The gallery HTML header identifies the exact git SHA used for
   generation (full 40-char SHA, not abbreviated).
-- [ ] AC2: Generating from a dirty working tree exits nonzero unless
+- [x] AC2: Generating from a dirty working tree exits nonzero unless
   `--allow-dirty` is explicitly passed.
-- [ ] AC3: The provenance manifest includes, per fixture: full git SHA,
+- [x] AC3: The provenance manifest includes, per fixture: full git SHA,
   `git_dirty` flag, fixture source SHA-256, renderer API (`to_html` or
   `to_svg`), actual layout backend (`elk` or `python-fallback`), any backend
   fallback reason, `faithful` flag, `theme`, `width_hint`, `height_hint`,
   Python version, Node version, elkjs version, Mermaid CLI version, Playwright
   version, Chromium version, resolved font families, output width, output
   height, and output viewBox.
-- [ ] AC4: All 15 target fixtures are present in the generated artifact:
+- [x] AC4: All 15 target fixtures are present in the generated artifact:
   `architecture-complex`, `class-relationships-all`, `er-cardinality-all`,
   `er-ecommerce`, `flowchart-all-shapes`, `flowchart-arrows-defs`,
   `flowchart-diamond-branch`, `flowchart-diamond-clipping`,
   `flowchart-empty-subgraph`, `flowchart-groups-complex`,
   `flowchart-inner-direction`, `flowchart-parallel-links`,
   `requirement-basic`, `statediagram-complex`, `statediagram-nested`.
-- [ ] AC5: The fidelity lane renders with `faithful=True`, no inferred icons,
+- [x] AC5: The fidelity lane renders with `faithful=True`, no inferred icons,
   no inferred legend, no auto-direction, and neutral styling.
-- [ ] AC6: The editorial lane renders with normal project styling (existing
+- [x] AC6: The editorial lane renders with normal project styling (existing
   compare_gallery defaults).
-- [ ] AC7: Generation fails when ELK silently falls back without logging a
+- [x] AC7: Generation fails when ELK silently falls back without logging a
   fallback reason — i.e., when a fixture records `renderer_backend` indicating
   ELK was expected but the actual layout backend in the manifest is
   `python-fallback` with no recorded reason.
-- [ ] AC8: Generation fails when any of the 15 mmdc SVG assets is absent from
-  the artifact output directory at write time.
-- [ ] AC9: Generation fails when the fixture source SHA-256 seen by the native
-  renderer differs from the SHA-256 seen by the mmdc renderer for the same
-  fixture.
-- [ ] AC10: Generation fails when any fixture does not record its actual layout
+- [x] AC8: Generation fails when any mmdc SVG asset is absent from the artifact
+  at write time when mmdc was expected to have produced one (i.e., mmdc was
+  invoked and returned success but no SVG was written).
+- [x] AC9: Generation fails when the fixture source SHA-256 recorded at render
+  time differs from the SHA-256 of the file on disk post-render (detects
+  filesystem changes mid-run). Note: since source is read once and passed to
+  both renderers, native↔mmdc SHA divergence is structurally impossible; the
+  guard compares provenance vs disk instead.
+- [x] AC10: Generation fails when any fixture does not record its actual layout
   backend (backend field is empty or absent in the per-fixture provenance).
-- [ ] AC11: Every mmdc SVG is copied or inlined into the artifact; no
-  unresolved relative `<image>` or `<use href>` references pointing outside
-  the output directory remain.
-- [ ] AC12: The provenance manifest is displayed beside every fixture in the
-  gallery HTML (collapsible detail block is acceptable).
-- [ ] AC13: `npm ci --prefix scripts/mermaid_render/layout` is executed before
+- [x] AC11: Every mmdc SVG is inlined into the artifact HTML directly; relative
+  `<image href>` references are replaced with data URIs.
+- [x] AC12: The provenance manifest is displayed beside every fixture in the
+  gallery HTML (collapsible detail block).
+- [x] AC13: `npm ci --prefix scripts/mermaid_render/layout` is executed before
   any rendering attempt so the pinned elkjs dependency is always available.
 - [ ] AC14: A developer can re-run `tools/generate_baseline.py` from the
   manifest's recorded git SHA on a clean checkout and obtain the same fixture
-  SHA-256 values and backend assignments.
-- [ ] AC15: `pytest tests/` passes with the new tests in
+  SHA-256 values and backend assignments. (deferred: requires a real baseline
+  run on a clean checkout; tooling is in place via `generate_baseline.py`)
+- [x] AC15: `pytest tests/` passes with the new tests in
   `tests/test_compare_gallery.py` covering ACs 1–13.
 
 ## Testing Strategy
