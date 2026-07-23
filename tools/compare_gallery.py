@@ -24,9 +24,11 @@ import html as _html_mod
 import json
 import os
 import platform
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import quote
@@ -213,10 +215,10 @@ nav a:hover { background: #e8e5e0; }
     min-width: 0;
 }
 .mmdc-frame {
-    width: 100%;
     border: none;
     display: block;
-    min-height: 80px;
+    margin: 0 auto;
+    max-width: 100%;
 }
 .pane-header {
     font-size: 11px;
@@ -233,16 +235,19 @@ nav a:hover { background: #e8e5e0; }
 .render-box {
     border: 1px solid #ddd;
     border-radius: 8px;
-    overflow: auto;
+    overflow: hidden;
     background: #fff;
     min-height: 120px;
     padding: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 .render-frame {
-    width: 100%;
     border: none;
     display: block;
-    min-height: 80px;
+    margin: 0 auto;
+    max-width: 100%;
 }
 .pane-ours .render-box { border-color: #b8d8b8; }
 .pane-mmdc .render-box { border-color: #b8c4e0; }
@@ -345,22 +350,73 @@ def _svg_aspect(svg_path: Path) -> tuple[float, float] | None:
     return None
 
 
-def _run_mmdc(src: str, out_svg: Path) -> tuple[bool, str]:
-    """Run mmdc and return (success, stderr)."""
+def _svg_is_valid(path: Path) -> bool:
+    """True if path is a non-empty, well-formed SVG document."""
+    try:
+        if not path.exists() or path.stat().st_size == 0:
+            return False
+        root = ET.parse(path).getroot()
+        return root.tag.split("}")[-1] == "svg"
+    except Exception:
+        return False
+
+
+def _terminate_group(proc: "subprocess.Popen") -> None:
+    """Kill the process's whole group so mmdc's chromium children don't orphan."""
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        try:
+            proc.kill()
+        except Exception:
+            pass
+
+
+def _run_mmdc(src: str, out_svg: Path, deadline_s: float = 60.0) -> tuple[bool, str]:
+    """Run mmdc and return (success, note).
+
+    Under some Node/puppeteer versions mermaid-cli renders the SVG correctly
+    but then hangs (or exits non-zero) while shutting down the headless
+    browser. Treat a non-empty, well-formed SVG as success regardless of exit
+    status: poll for the file, and as soon as it is valid, kill mmdc's whole
+    process group and move on (this also prevents orphaned chromium pileup that
+    otherwise starves later renders).
+    """
     with tempfile.NamedTemporaryFile(suffix=".mmd", mode="w", delete=False) as f:
         f.write(src)
         tmp = Path(f.name)
+    if out_svg.exists():
+        out_svg.unlink()
+
+    proc = subprocess.Popen(
+        ["mmdc", "-i", str(tmp), "-o", str(out_svg), "--quiet"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        start_new_session=True,
+    )
+    note = ""
+    deadline = time.monotonic() + deadline_s
     try:
-        r = subprocess.run(
-            ["mmdc", "-i", str(tmp), "-o", str(out_svg), "--quiet"],
-            capture_output=True, text=True, timeout=30
-        )
-        ok = r.returncode == 0 and out_svg.exists()
-        return ok, r.stderr.strip()
-    except Exception as e:
-        return False, str(e)
+        while True:
+            if proc.poll() is not None:
+                _, err = proc.communicate()
+                note = (err or "").strip()
+                break
+            if _svg_is_valid(out_svg):
+                _terminate_group(proc)
+                note = "rendered; mmdc did not exit cleanly (killed after render)"
+                break
+            if time.monotonic() > deadline:
+                _terminate_group(proc)
+                note = f"mmdc timed out after {deadline_s:.0f}s"
+                break
+            time.sleep(0.25)
     finally:
         tmp.unlink(missing_ok=True)
+        _terminate_group(proc)
+
+    if _svg_is_valid(out_svg):
+        return True, note
+    return False, note or "mmdc produced no valid SVG"
 
 
 def _render_ours(src: str, width_hint: int = 0) -> tuple[str | None, str]:
@@ -620,13 +676,13 @@ def _build_gallery_into(
                 if mmdc_ok:
                     mmdc_url = f"mmdc/{quote(mmdc_svg_path.name)}"
                     aspect = _svg_aspect(mmdc_svg_path)
-                    ar_style = (
-                        f' style="aspect-ratio: {aspect[0]} / {aspect[1]};"'
+                    ar_data = (
+                        f' data-aw="{aspect[0]}" data-ah="{aspect[1]}"'
                         if aspect else ""
                     )
                     mmdc_content = (
                         '<div class="render-box">'
-                        f'<iframe class="mmdc-frame" src="{mmdc_url}"{ar_style}'
+                        f'<iframe class="mmdc-frame" src="{mmdc_url}"{ar_data}'
                         f' title="mmdc rendering of {_html_mod.escape(name, quote=True)}">'
                         '</iframe>'
                         '</div>'
@@ -667,23 +723,49 @@ def _build_gallery_into(
 """)
 
         f.write("""  <script>
-    function fitRendererFrame(frame) {
+    // Both panes fit into the same box: available column width x MAX_H,
+    // preserving aspect ratio and centered, so ours and mmdc render at
+    // comparable sizes and no pane runs away vertically.
+    const MAX_H = 600;
+    function boxInnerWidth(frame) {
+      const box = frame.parentElement;
+      const cs = getComputedStyle(box);
+      return box.clientWidth
+        - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    }
+    function fitOursFrame(frame) {
       const doc = frame.contentDocument;
       if (!doc) return;
       const stage = doc.querySelector(".diagram");
       if (!stage) return;
+      doc.body.style.margin = "0";
       doc.body.style.padding = "0";
       doc.body.style.overflow = "hidden";
       stage.style.zoom = "1";
-      const intrinsicWidth = stage.offsetWidth;
-      const scale = Math.min(1, frame.clientWidth / intrinsicWidth);
+      const iw = stage.offsetWidth, ih = stage.offsetHeight;
+      if (!iw || !ih) return;
+      const scale = Math.min(boxInnerWidth(frame) / iw, MAX_H / ih);
       stage.style.zoom = String(scale);
-      frame.style.height = `${Math.ceil(stage.offsetHeight * scale)}px`;
+      frame.style.width = `${Math.ceil(iw * scale)}px`;
+      frame.style.height = `${Math.ceil(ih * scale)}px`;
+    }
+    function fitMmdcFrame(frame) {
+      const aw = parseFloat(frame.dataset.aw), ah = parseFloat(frame.dataset.ah);
+      if (!aw || !ah) return;
+      const scale = Math.min(boxInnerWidth(frame) / aw, MAX_H / ah);
+      frame.style.width = `${Math.ceil(aw * scale)}px`;
+      frame.style.height = `${Math.ceil(ah * scale)}px`;
     }
     function attachFrameObservers() {
       document.querySelectorAll("iframe.render-frame").forEach(frame => {
-        frame.addEventListener("load", () => fitRendererFrame(frame));
-        new ResizeObserver(() => fitRendererFrame(frame)).observe(frame.parentElement);
+        frame.addEventListener("load", () => fitOursFrame(frame));
+        new ResizeObserver(() => fitOursFrame(frame)).observe(frame.parentElement);
+      });
+      document.querySelectorAll("iframe.mmdc-frame").forEach(frame => {
+        const fit = () => fitMmdcFrame(frame);
+        fit();
+        frame.addEventListener("load", fit);
+        new ResizeObserver(fit).observe(frame.parentElement);
       });
     }
     document.addEventListener("DOMContentLoaded", attachFrameObservers);
