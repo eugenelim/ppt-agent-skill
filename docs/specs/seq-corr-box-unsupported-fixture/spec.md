@@ -2,7 +2,7 @@ Mode: full (structural change — new rendering pass for box grouping; unfamilia
 
 # seq-corr-box-unsupported-fixture
 
-**Status:** Active
+**Status:** Draft
 
 ## Objective
 

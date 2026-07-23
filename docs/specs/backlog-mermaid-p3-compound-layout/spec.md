@@ -2,7 +2,7 @@ Mode: full (structural change — new compound layout pipeline; touches _pipelin
 
 # backlog-mermaid-p3-compound-layout
 
-**Status:** Active
+**Status:** Draft
 
 ## Objective
 
