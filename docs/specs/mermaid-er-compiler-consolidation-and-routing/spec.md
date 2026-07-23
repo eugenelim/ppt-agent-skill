@@ -2,7 +2,7 @@
 
 Mode: full (structural — deletes legacy compiler; ELK routing integration; multi-file)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 Dependencies: mermaid-oracle-runtime-unification, mermaid-text-measurement-adoption
 
@@ -54,20 +54,20 @@ every relationship has a unique `edge_id` and explicit cardinality on both ends.
 
 ## Acceptance Criteria
 
-- [ ] AC1: One active ER compiler remains; `_compile_er_legacy` is deleted.
-- [ ] AC2: No entity card width is based on a raw character-count coefficient; all widths
+- [x] AC1: One active ER compiler remains; `_compile_er_legacy` is deleted.
+- [x] AC2: No entity card width is based on a raw character-count coefficient; all widths
   derive from `TextMeasurer` measurements.
-- [ ] AC3: All visible ER text has real measured `TextLayout` objects (no stub or
+- [x] AC3: All visible ER text has real measured `TextLayout` objects (no stub or
   zero-area layouts).
-- [ ] AC4: Every relationship has a stable `edge_id` unique within the diagram.
-- [ ] AC5: Both cardinality ends of each relationship match the parsed source semantics
+- [x] AC4: Every relationship has a stable `edge_id` unique within the diagram.
+- [x] AC5: Both cardinality ends of each relationship match the parsed source semantics
   for all four test patterns (`||--||`, `||--o{`, `}|--||`, `|o--|{`).
-- [ ] AC6: Cardinality glyphs rotate with their route tangent; the glyph orientation
+- [x] AC6: Cardinality glyphs rotate with their route tangent; the glyph orientation
   matches the endpoint direction.
-- [ ] AC7: Relationship labels do not overlap cardinality endpoint glyphs.
-- [ ] AC8: Relationships do not enter unrelated entity card interiors.
-- [ ] AC9: HTML and SVG consume identical finalized geometry from `compile_er_layout`.
-- [ ] AC10: `pytest tests/` continues to pass with zero regressions.
+- [x] AC7: Relationship labels do not overlap cardinality endpoint glyphs.
+- [x] AC8: Relationships do not enter unrelated entity card interiors.
+- [x] AC9: HTML and SVG consume identical finalized geometry from `compile_er_layout`.
+- [x] AC10: `pytest tests/` continues to pass with zero regressions.
 
 ## Testing Strategy
 

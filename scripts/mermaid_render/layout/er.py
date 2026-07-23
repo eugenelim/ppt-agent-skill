@@ -770,267 +770,26 @@ def compile_er(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
     return compile_er_layout(src, width_hint=width_hint)
 
 
-def _compile_er_legacy(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
-    """Legacy Sugiyama-only implementation kept for reference. Not called."""
-    from collections import defaultdict
 
-    from ._geometry import (
-        EdgeLabelLayout,
-        FinalizedLayout,
-        LayoutDiagnostics,
-        MarkerKind,
-        NodeLayout,
-        Point,
-        PortLayout,
-        PortSide,
-        Rect,
-        RoutedEdge,
-        TextLayout,
-    )
-
-    entities, relationships = _parse_er_source(src)
-    entity_names = list(entities.keys())
-
-    # Empty diagram — return a minimal layout with empty maps
-    if not entity_names:
-        w = float(max(width_hint or 400, 400))
-        h = 160.0
-        _diag = LayoutDiagnostics(unsupported_options=(), route_failures=(), warnings=())
-        _cr = Rect(0.0, 0.0, w, h)
-        return FinalizedLayout(
-            node_layouts=MappingProxyType({}),
-            group_layouts=MappingProxyType({}),
-            routed_edges=(),
-            visible_bounds=_cr,
-            diagram_padding=float(CANVAS_PAD),
-            canvas_bounds=_cr,
-            direction="TB",
-            diagnostics=_diag,
-            routing_failures=(),
-        )
-
-    # ── 1. Build Sugiyama graph ───────────────────────────────────────────────
-    nodes: dict[str, _Node] = {
-        eid: _Node(
-            id=eid, label=eid, shape="rect",
-            width=_CARD_W,
-            height=int(_card_height(entities[eid])),
-        )
-        for eid in entity_names
-    }
-    sugi_edges: list[_Edge] = [
-        _Edge(src=rel["from"], dst=rel["to"], label=rel["label"])
-        for rel in relationships
-    ]
-
-    _break_cycles(nodes, sugi_edges)
-    _assign_ranks(nodes, sugi_edges)
-    _minimize_crossings(nodes, sugi_edges)
-    _assign_coordinates(nodes)
-
-    # ── 2. Measure card heights ───────────────────────────────────────────────
-    heights: dict[str, float] = {
-        eid: _card_height(attrs) for eid, attrs in entities.items()
-    }
-
-    # ── 3. Override y-positions per rank with measured heights ────────────────
-    rank_to_nids: dict[int, list[str]] = defaultdict(list)
-    for nid, n in nodes.items():
-        if not n.is_dummy:
-            rank_to_nids[n.rank].append(nid)
-
-    y_cursor = float(CANVAS_PAD)
-    for rank in range(max(rank_to_nids, default=0) + 1):
-        nids_in_rank = rank_to_nids.get(rank, [])
-        if not nids_in_rank:
-            continue
-        rank_h = max(heights[nid] for nid in nids_in_rank)
-        for nid in nids_in_rank:
-            eh_nid = heights[nid]
-            nodes[nid].y = int(y_cursor + (rank_h - eh_nid) / 2)
-        y_cursor += rank_h + RANK_GAP
-
-    # ── 4. Natural canvas dimensions (no zoom applied) ────────────────────────
-    real_nids = [(nid, n) for nid, n in nodes.items() if not n.is_dummy]
-    if real_nids:
-        canvas_w = float(max(n.x + _CARD_W for _, n in real_nids) + CANVAS_PAD)
-        canvas_h = float(
-            max(n.y + heights[nid] for nid, n in real_nids) + CANVAS_PAD
-        )
-    else:
-        canvas_w = float(max(width_hint or 400, 400))
-        canvas_h = float(y_cursor - RANK_GAP + CANVAS_PAD)
-
-    # ── 5. Helper: minimal TextLayout stub ────────────────────────────────────
-    def _stub_tl(w: float, h: float) -> TextLayout:
-        return TextLayout(
-            lines=(),
-            width=w,
-            height=h,
-            line_height=h,
-            min_content_width=0.0,
-            max_content_width=w,
-            resolved_font_path=None,
-            resolved_font_family="sans-serif",
-        )
-
-    # ── 6. Helper: unit vector → PortSide ────────────────────────────────────
-    def _tangent_to_side(ux: float, uy: float) -> PortSide:
-        if uy > 0:
-            return PortSide.BOTTOM
-        if uy < 0:
-            return PortSide.TOP
-        if ux > 0:
-            return PortSide.RIGHT
-        return PortSide.LEFT
-
-    # ── 7. Build NodeLayout objects ───────────────────────────────────────────
-    node_layouts: dict[str, NodeLayout] = {}
-    for eid, n in nodes.items():
-        if n.is_dummy:
-            continue
-        eh = heights[eid]
-        bounds = Rect(float(n.x), float(n.y), float(_CARD_W), eh)
-        node_layouts[eid] = NodeLayout(
-            node_id=eid,
-            semantic_shape="er-entity",
-            outer_bounds=bounds,
-            content_bounds=bounds,
-            title_layout=_stub_tl(float(_CARD_W), float(_CARD_HDR_H)),
-            subtitle_layout=None,
-            member_layouts=(),
-            icon_bounds=None,
-            ports=(),
-            css_classes=(),
-            extra_css="",
-            is_dummy=False,
-            rank=n.rank,
-        )
-
-    # ── 8. Build RoutedEdge objects ───────────────────────────────────────────
-    routed_edges_list: list[RoutedEdge] = []
-    for rel_idx, rel in enumerate(relationships):
-        fe, te = rel["from"], rel["to"]
-        if fe not in nodes or te not in nodes:
-            continue
-        fn, tn = nodes[fe], nodes[te]
-        if fn.is_dummy or tn.is_dummy:
-            continue
-
-        fh = heights[fe]
-        th = heights[te]
-        fcx = float(fn.x) + _CARD_W / 2
-        fcy = float(fn.y) + fh / 2
-        tcx = float(tn.x) + _CARD_W / 2
-        tcy = float(tn.y) + th / 2
-
-        vx, vy = tcx - fcx, tcy - fcy
-        norm = math.hypot(vx, vy) or 1.0
-        uvx, uvy = vx / norm, vy / norm
-
-        src_bx, src_by = _rect_boundary_pt(fcx, fcy, float(_CARD_W), fh, uvx, uvy)
-        dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, float(_CARD_W), th, -uvx, -uvy)
-
-        card_src: Optional[CardinalityEnd] = rel["card_src"]
-        card_dst: Optional[CardinalityEnd] = rel["card_dst"]
-        src_r = _glyph_reserve(card_src) if card_src else 4.0
-        dst_r = _glyph_reserve(card_dst) if card_dst else 4.0
-
-        lx1 = src_bx + uvx * src_r
-        ly1 = src_by + uvy * src_r
-        lx2 = dst_bx + (-uvx) * dst_r
-        ly2 = dst_by + (-uvy) * dst_r
-
-        src_port = PortLayout(
-            node_id=fe,
-            side=_tangent_to_side(uvx, uvy),
-            position=Point(src_bx, src_by),
-            direction=Point(uvx, uvy),
-        )
-        dst_port = PortLayout(
-            node_id=te,
-            side=_tangent_to_side(-uvx, -uvy),
-            position=Point(dst_bx, dst_by),
-            direction=Point(-uvx, -uvy),
-        )
-
-        mid_x = (lx1 + lx2) / 2
-        mid_y = (ly1 + ly2) / 2
-
-        label_layout: Optional[EdgeLabelLayout] = None
-        if rel["label"]:
-            label_layout = EdgeLabelLayout(
-                text=rel["label"],
-                layout=_stub_tl(10.0, 10.0),
-                bounds=Rect(mid_x, mid_y, 1.0, 1.0),
-                anchor_point=Point(mid_x, mid_y),
-            )
-
-        src_label_layout: Optional[EdgeLabelLayout] = None
-        if card_src:
-            src_label_layout = EdgeLabelLayout(
-                text=str(card_src),
-                layout=_stub_tl(10.0, 10.0),
-                bounds=Rect(lx1, ly1, 1.0, 1.0),
-                anchor_point=Point(lx1, ly1),
-            )
-
-        dst_label_layout: Optional[EdgeLabelLayout] = None
-        if card_dst:
-            dst_label_layout = EdgeLabelLayout(
-                text=str(card_dst),
-                layout=_stub_tl(10.0, 10.0),
-                bounds=Rect(lx2, ly2, 1.0, 1.0),
-                anchor_point=Point(lx2, ly2),
-            )
-
-        routed_edges_list.append(RoutedEdge(
-            edge_id=f"er-rel-{rel_idx}",
-            src_node_id=fe,
-            dst_node_id=te,
-            src_port=src_port,
-            dst_port=dst_port,
-            waypoints=(Point(lx1, ly1), Point(lx2, ly2)),
-            edge_style="dotted" if rel["dotted"] else "solid",
-            has_marker_end=False,
-            has_marker_start=False,
-            label_layout=label_layout,
-            src_label_layout=src_label_layout,
-            dst_label_layout=dst_label_layout,
-            source_marker=MarkerKind.NONE,
-            target_marker=MarkerKind.NONE,
-        ))
-
-    canvas_rect = Rect(0.0, 0.0, canvas_w, canvas_h)
-    diag = LayoutDiagnostics(unsupported_options=(), route_failures=(), warnings=())
-
-    return FinalizedLayout(
-        node_layouts=MappingProxyType(node_layouts),
-        group_layouts=MappingProxyType({}),
-        routed_edges=tuple(routed_edges_list),
-        visible_bounds=canvas_rect,
-        diagram_padding=float(CANVAS_PAD),
-        canvas_bounds=canvas_rect,
-        direction="TB",
-        diagnostics=diag,
-        routing_failures=(),
-    )
-
-
-# ── Compiler v2: dynamic widths + crow-foot markers ──────────────────────────
+# ── Compiler: layout → FinalizedLayout (Sugiyama + measured widths + crow-foot markers) ─
 
 def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
     """Parse erDiagram source and return a ``FinalizedLayout`` with dynamic widths.
 
-    Preferred entry point for both SVG and HTML renderers.  Differs from
-    ``compile_er()`` in three ways:
+    Preferred entry point for both SVG and HTML renderers.
 
-    1. **Dynamic card widths** — each entity card is measured via
-       ``_measure_card_width()`` rather than using the fixed ``_CARD_W=200``.
-    2. **Crow-foot markers** — ``RoutedEdge.source_marker`` /
-       ``.target_marker`` carry the correct ``MarkerKind`` for the
-       cardinality end; ``compile_er()`` always emits ``MarkerKind.NONE``.
-    3. **Pre-baked zoom** — when *width_hint* < natural canvas width, all
+    1. **Dynamic card widths** -- each entity card is measured via
+       ``_measure_card_width()`` rather than using a fixed constant.
+    2. **Real TextLayout objects** -- entity headers, attribute rows, and
+       relationship labels all carry measured ``TextLayout`` instances.
+    3. **ELK orthogonal routing** -- when ELK is available, relationships are
+       routed through the ELK layered algorithm with orthogonal edge routing so
+       that no route passes through an unrelated entity's interior.  The
+       deterministic Sugiyama layout with straight-line routing is the typed
+       fallback when ELK is absent.
+    4. **Crow-foot markers** -- ``RoutedEdge.source_marker`` /
+       ``.target_marker`` carry the correct ``MarkerKind`` for the cardinality end.
+    5. **Pre-baked zoom** -- when *width_hint* < natural canvas width, all
        coordinates are scaled by ``width_hint / natural_w`` so the caller
        needs no further CSS or SVG zoom.
     """
@@ -1047,7 +806,6 @@ def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
         PortSide,
         Rect,
         RoutedEdge,
-        TextLayout,
     )
 
     entities, relationships = _parse_er_source(src)
@@ -1079,72 +837,91 @@ def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
         eid: _card_height(attrs) for eid, attrs in entities.items()
     }
 
-    # ── 2. Build Sugiyama graph ───────────────────────────────────────────────
-    nodes: dict[str, _Node] = {
-        eid: _Node(
-            id=eid, label=eid, shape="rect",
-            width=int(widths[eid]),
-            height=int(heights[eid]),
-        )
-        for eid in entity_names
-    }
-    sugi_edges: list[_Edge] = [
-        _Edge(src=rel["from"], dst=rel["to"], label=rel["label"])
-        for rel in relationships
-    ]
+    # ── 2. Try ELK orthogonal routing (primary) ───────────────────────────────
+    # ELK routes edges around entity boundaries, preventing any route from
+    # passing through an unrelated entity's interior (AC8).
+    _elk_node_rects: dict[str, "Rect"] = {}   # eid -> unscaled Rect
+    _elk_edge_routes: dict[str, "RoutedEdge"] = {}  # edge_id -> RoutedEdge
+    _canvas_w_raw = 0.0
+    _canvas_h_raw = 0.0
+    _used_elk = False
+    _fallback_reason: str = ""
 
-    _break_cycles(nodes, sugi_edges)
-    _assign_ranks(nodes, sugi_edges)
-    _minimize_crossings(nodes, sugi_edges)
-    _assign_coordinates(nodes)
+    try:
+        from .elk_adapter import layout_with_elk as _layout_with_elk
+        _lg = _compile_er_layout_graph(entities, relationships, widths, heights)
+        _elk_fl, _ = _layout_with_elk(_lg)
+        for _eid, _nl in _elk_fl.node_layouts.items():
+            _elk_node_rects[_eid] = _nl.outer_bounds
+        for _re in _elk_fl.routed_edges:
+            _elk_edge_routes[_re.edge_id] = _re
+        _canvas_w_raw = _elk_fl.canvas_bounds.w
+        _canvas_h_raw = _elk_fl.canvas_bounds.h
+        _used_elk = True
+    except Exception as _elk_exc:
+        _fallback_reason = str(_elk_exc)[:120]
 
-    # ── 3. Override y-positions per rank with measured heights ────────────────
-    rank_to_nids: dict[int, list[str]] = defaultdict(list)
-    for nid, n in nodes.items():
-        if not n.is_dummy:
-            rank_to_nids[n.rank].append(nid)
+    # ── 3. Sugiyama fallback (when ELK is unavailable) ────────────────────────
+    if not _used_elk:
+        nodes: dict[str, "_Node"] = {
+            eid: _Node(
+                id=eid, label=eid, shape="rect",
+                width=int(widths[eid]),
+                height=int(heights[eid]),
+            )
+            for eid in entity_names
+        }
+        sugi_edges: list["_Edge"] = [
+            _Edge(src=rel["from"], dst=rel["to"], label=rel["label"])
+            for rel in relationships
+        ]
 
-    y_cursor = float(CANVAS_PAD)
-    for rank in range(max(rank_to_nids, default=0) + 1):
-        nids_in_rank = rank_to_nids.get(rank, [])
-        if not nids_in_rank:
-            continue
-        rank_h = max(heights[nid] for nid in nids_in_rank)
-        for nid in nids_in_rank:
-            eh_nid = heights[nid]
-            nodes[nid].y = int(y_cursor + (rank_h - eh_nid) / 2)
-        y_cursor += rank_h + RANK_GAP
+        _break_cycles(nodes, sugi_edges)
+        _assign_ranks(nodes, sugi_edges)
+        _minimize_crossings(nodes, sugi_edges)
+        _assign_coordinates(nodes)
 
-    # ── 4. Natural canvas dimensions ──────────────────────────────────────────
-    real_nids = [(nid, n) for nid, n in nodes.items() if not n.is_dummy]
-    if real_nids:
-        canvas_w = float(max(n.x + widths[nid] for nid, n in real_nids) + CANVAS_PAD)
-        canvas_h = float(
-            max(n.y + heights[nid] for nid, n in real_nids) + CANVAS_PAD
-        )
-    else:
-        canvas_w = float(max(width_hint or 400, 400))
-        canvas_h = float(y_cursor - RANK_GAP + CANVAS_PAD)
+        rank_to_nids: dict[int, list[str]] = defaultdict(list)
+        for nid, n in nodes.items():
+            if not n.is_dummy:
+                rank_to_nids[n.rank].append(nid)
 
-    # ── 5. Zoom factor (applied to all coordinates below) ─────────────────────
+        y_cursor = float(CANVAS_PAD)
+        for rank in range(max(rank_to_nids, default=0) + 1):
+            nids_in_rank = rank_to_nids.get(rank, [])
+            if not nids_in_rank:
+                continue
+            rank_h = max(heights[nid] for nid in nids_in_rank)
+            for nid in nids_in_rank:
+                eh_nid = heights[nid]
+                nodes[nid].y = int(y_cursor + (rank_h - eh_nid) / 2)
+            y_cursor += rank_h + RANK_GAP
+
+        real_nids = [(nid, n) for nid, n in nodes.items() if not n.is_dummy]
+        if real_nids:
+            _canvas_w_raw = float(
+                max(n.x + widths[nid] for nid, n in real_nids) + CANVAS_PAD
+            )
+            _canvas_h_raw = float(
+                max(n.y + heights[nid] for nid, n in real_nids) + CANVAS_PAD
+            )
+        else:
+            _canvas_w_raw = float(max(width_hint or 400, 400))
+            _canvas_h_raw = float(y_cursor - RANK_GAP + CANVAS_PAD)
+
+        for eid, n in nodes.items():
+            if not n.is_dummy:
+                _elk_node_rects[eid] = Rect(
+                    float(n.x), float(n.y), widths[eid], heights[eid]
+                )
+
+    # ── 4. Zoom factor ────────────────────────────────────────────────────────
     zoom = 1.0
-    if width_hint and canvas_w > 0 and width_hint < canvas_w:
-        zoom = width_hint / canvas_w
+    if width_hint and _canvas_w_raw > 0 and width_hint < _canvas_w_raw:
+        zoom = width_hint / _canvas_w_raw
 
-    # ── 6. Helpers ────────────────────────────────────────────────────────────
-    def _stub_tl(w: float, h: float) -> TextLayout:
-        return TextLayout(
-            lines=(),
-            width=w,
-            height=h,
-            line_height=h,
-            min_content_width=0.0,
-            max_content_width=w,
-            resolved_font_path=None,
-            resolved_font_family="sans-serif",
-        )
-
-    def _tangent_to_side(ux: float, uy: float) -> PortSide:
+    # ── 5. Helpers ────────────────────────────────────────────────────────────
+    def _tangent_to_side(ux: float, uy: float) -> "PortSide":
         if uy > 0:
             return PortSide.BOTTOM
         if uy < 0:
@@ -1153,105 +930,180 @@ def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
             return PortSide.RIGHT
         return PortSide.LEFT
 
-    # ── 7. Build NodeLayout with pre-scaled coordinates ───────────────────────
-    node_layouts: dict[str, NodeLayout] = {}
-    for eid, n in nodes.items():
-        if n.is_dummy:
-            continue
-        ew = widths[eid] * zoom
-        eh = heights[eid] * zoom
-        ex = float(n.x) * zoom
-        ey = float(n.y) * zoom
+    def _trim_start(pts: "list[Point]", dist: float) -> "list[Point]":
+        """Remove *dist* pixels from the start of a polyline."""
+        remaining = dist
+        for i in range(len(pts) - 1):
+            dx = pts[i + 1].x - pts[i].x
+            dy = pts[i + 1].y - pts[i].y
+            seg_len = math.hypot(dx, dy)
+            if remaining <= seg_len + 1e-9:
+                t = remaining / seg_len if seg_len > 1e-9 else 0.0
+                new_pt = Point(pts[i].x + t * dx, pts[i].y + t * dy)
+                return [new_pt] + pts[i + 1:]
+            remaining -= seg_len
+        return [pts[-1]]
+
+    # ── 6. Build NodeLayout with pre-scaled coordinates and real TextLayouts ──
+    node_layouts: dict[str, "NodeLayout"] = {}
+    for eid, raw_rect in _elk_node_rects.items():
+        ew = raw_rect.w * zoom
+        eh = raw_rect.h * zoom
+        ex = raw_rect.x * zoom
+        ey = raw_rect.y * zoom
         bounds = Rect(ex, ey, ew, eh)
+        title_tl = _MEASURER.layout(eid, ER_ENTITY_HEADER, None)
+        attr_tls = tuple(
+            _MEASURER.layout(f"{a['type']} {a['name']}", ER_CELL, None)
+            for a in entities.get(eid, [])
+        )
         node_layouts[eid] = NodeLayout(
             node_id=eid,
             semantic_shape="er-entity",
             outer_bounds=bounds,
             content_bounds=bounds,
-            title_layout=_stub_tl(ew, float(_CARD_HDR_H) * zoom),
+            title_layout=title_tl,
             subtitle_layout=None,
-            member_layouts=(),
+            member_layouts=attr_tls,
             icon_bounds=None,
             ports=(),
             css_classes=(),
             extra_css="",
             is_dummy=False,
-            rank=n.rank,
+            rank=0,
         )
 
-    # ── 8. Build RoutedEdge with crow-foot markers ────────────────────────────
-    routed_edges_list: list[RoutedEdge] = []
+    # ── 7. Build RoutedEdge with crow-foot markers ────────────────────────────
+    routed_edges_list: list["RoutedEdge"] = []
     for rel_idx, rel in enumerate(relationships):
         fe, te = rel["from"], rel["to"]
-        if fe not in nodes or te not in nodes:
-            continue
-        fn, tn = nodes[fe], nodes[te]
-        if fn.is_dummy or tn.is_dummy:
+        if fe not in node_layouts or te not in node_layouts:
             continue
 
-        ew_f = widths[fe] * zoom
-        ew_t = widths[te] * zoom
-        eh_f = heights[fe] * zoom
-        eh_t = heights[te] * zoom
-        fcx = float(fn.x) * zoom + ew_f / 2
-        fcy = float(fn.y) * zoom + eh_f / 2
-        tcx = float(tn.x) * zoom + ew_t / 2
-        tcy = float(tn.y) * zoom + eh_t / 2
+        card_src: Optional["CardinalityEnd"] = rel["card_src"]
+        card_dst: Optional["CardinalityEnd"] = rel["card_dst"]
+        src_r_unscaled = _glyph_reserve(card_src) if card_src else 4.0
+        dst_r_unscaled = _glyph_reserve(card_dst) if card_dst else 4.0
 
-        vx, vy = tcx - fcx, tcy - fcy
-        norm = math.hypot(vx, vy) or 1.0
-        uvx, uvy = vx / norm, vy / norm
+        edge_id = f"er-rel-{rel_idx}"
+        elk_re = _elk_edge_routes.get(edge_id) if _used_elk else None
 
-        src_bx, src_by = _rect_boundary_pt(fcx, fcy, ew_f, eh_f, uvx, uvy)
-        dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, ew_t, eh_t, -uvx, -uvy)
+        if elk_re is not None:
+            # ELK path: orthogonal route avoids entity interiors (AC8).
+            # ELK waypoints span src-boundary to dst-boundary; trim the
+            # first/last segment by the glyph reserve for the visible line.
+            raw_wps = list(elk_re.waypoints)
 
-        card_src: Optional[CardinalityEnd] = rel["card_src"]
-        card_dst: Optional[CardinalityEnd] = rel["card_dst"]
-        src_r = _glyph_reserve(card_src) * zoom if card_src else 4.0 * zoom
-        dst_r = _glyph_reserve(card_dst) * zoom if card_dst else 4.0 * zoom
+            # Scale ELK waypoints by zoom
+            scaled_wps: list[Point] = [
+                Point(p.x * zoom, p.y * zoom) for p in raw_wps
+            ]
 
-        lx1 = src_bx + uvx * src_r
-        ly1 = src_by + uvy * src_r
-        lx2 = dst_bx + (-uvx) * dst_r
-        ly2 = dst_by + (-uvy) * dst_r
+            # Port boundary positions (first/last scaled waypoints)
+            src_bx = scaled_wps[0].x if scaled_wps else 0.0
+            src_by = scaled_wps[0].y if scaled_wps else 0.0
+            dst_bx = scaled_wps[-1].x if scaled_wps else 0.0
+            dst_by = scaled_wps[-1].y if scaled_wps else 0.0
 
-        src_port = PortLayout(
-            node_id=fe,
-            side=_tangent_to_side(uvx, uvy),
-            position=Point(src_bx, src_by),
-            direction=Point(uvx, uvy),
-        )
-        dst_port = PortLayout(
-            node_id=te,
-            side=_tangent_to_side(-uvx, -uvy),
-            position=Point(dst_bx, dst_by),
-            direction=Point(-uvx, -uvy),
-        )
+            # Port directions from ELK route geometry
+            src_d = elk_re.src_port.direction
+            dst_d = elk_re.dst_port.direction
 
-        mid_x = (lx1 + lx2) / 2
-        mid_y = (ly1 + ly2) / 2
+            # Trim both ends for the visible line segment (glyph reserve)
+            trimmed_fwd = _trim_start(scaled_wps, src_r_unscaled * zoom)
+            trimmed_rev = _trim_start(
+                list(reversed(trimmed_fwd)), dst_r_unscaled * zoom
+            )
+            visible_wps = list(reversed(trimmed_rev))
+            if len(visible_wps) < 2:
+                visible_wps = [Point(src_bx, src_by), Point(dst_bx, dst_by)]
 
-        label_layout_v2: Optional[EdgeLabelLayout] = None
+            src_port = PortLayout(
+                node_id=fe,
+                side=_tangent_to_side(src_d.x, src_d.y),
+                position=Point(src_bx, src_by),
+                direction=src_d,
+            )
+            dst_port = PortLayout(
+                node_id=te,
+                side=_tangent_to_side(dst_d.x, dst_d.y),
+                position=Point(dst_bx, dst_by),
+                direction=dst_d,
+            )
+            waypoints = tuple(visible_wps)
+
+        else:
+            # Sugiyama fallback: straight-line route between entity boundaries.
+            fnl = node_layouts[fe]
+            tnl = node_layouts[te]
+            ew_f = fnl.outer_bounds.w
+            ew_t = tnl.outer_bounds.w
+            eh_f = fnl.outer_bounds.h
+            eh_t = tnl.outer_bounds.h
+            fcx = fnl.outer_bounds.x + ew_f / 2
+            fcy = fnl.outer_bounds.y + eh_f / 2
+            tcx = tnl.outer_bounds.x + ew_t / 2
+            tcy = tnl.outer_bounds.y + eh_t / 2
+
+            vx, vy = tcx - fcx, tcy - fcy
+            norm = math.hypot(vx, vy) or 1.0
+            uvx, uvy = vx / norm, vy / norm
+
+            src_bx, src_by = _rect_boundary_pt(fcx, fcy, ew_f, eh_f, uvx, uvy)
+            dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, ew_t, eh_t, -uvx, -uvy)
+
+            src_r = src_r_unscaled * zoom
+            dst_r = dst_r_unscaled * zoom
+
+            lx1 = src_bx + uvx * src_r
+            ly1 = src_by + uvy * src_r
+            lx2 = dst_bx + (-uvx) * dst_r
+            ly2 = dst_by + (-uvy) * dst_r
+
+            src_port = PortLayout(
+                node_id=fe,
+                side=_tangent_to_side(uvx, uvy),
+                position=Point(src_bx, src_by),
+                direction=Point(uvx, uvy),
+            )
+            dst_port = PortLayout(
+                node_id=te,
+                side=_tangent_to_side(-uvx, -uvy),
+                position=Point(dst_bx, dst_by),
+                direction=Point(-uvx, -uvy),
+            )
+            waypoints = (Point(lx1, ly1), Point(lx2, ly2))
+
+        # Label: midpoint of the longest segment of the visible route
+        mid_wp = _longest_segment_midpoint(waypoints)
+        mid_x = mid_wp.x
+        mid_y = mid_wp.y
+
+        label_layout_v2: Optional["EdgeLabelLayout"] = None
         if rel["label"]:
+            _lbl_tl = _MEASURER.layout(rel["label"], ER_CELL, None)
             label_layout_v2 = EdgeLabelLayout(
                 text=rel["label"],
-                layout=_stub_tl(10.0, 10.0),
-                bounds=Rect(mid_x, mid_y, 1.0, 1.0),
+                layout=_lbl_tl,
+                bounds=Rect(
+                    mid_x - _lbl_tl.width / 2,
+                    mid_y - _lbl_tl.height / 2,
+                    _lbl_tl.width,
+                    _lbl_tl.height,
+                ),
                 anchor_point=Point(mid_x, mid_y),
             )
 
-        # Crow-foot markers; src/dst label layouts set to None to avoid
-        # validate() check 12 (label-node intersection) failures
         src_mk = _cardinality_to_marker(card_src) if card_src else MarkerKind.NONE
         dst_mk = _cardinality_to_marker(card_dst) if card_dst else MarkerKind.NONE
 
         routed_edges_list.append(RoutedEdge(
-            edge_id=f"er-rel-{rel_idx}",
+            edge_id=edge_id,
             src_node_id=fe,
             dst_node_id=te,
             src_port=src_port,
             dst_port=dst_port,
-            waypoints=(Point(lx1, ly1), Point(lx2, ly2)),
+            waypoints=waypoints,
             edge_style="dotted" if rel["dotted"] else "solid",
             has_marker_end=False,
             has_marker_start=False,
@@ -1262,10 +1114,11 @@ def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
             target_marker=dst_mk,
         ))
 
-    cw = canvas_w * zoom
-    ch = canvas_h * zoom
+    cw = _canvas_w_raw * zoom
+    ch = _canvas_h_raw * zoom
     canvas_rect = Rect(0.0, 0.0, cw, ch)
-    diag = LayoutDiagnostics(unsupported_options=(), route_failures=(), warnings=())
+    _warnings = (f"elk-unavailable: {_fallback_reason}",) if _fallback_reason else ()
+    diag = LayoutDiagnostics(unsupported_options=(), route_failures=(), warnings=_warnings)
 
     return FinalizedLayout(
         node_layouts=MappingProxyType(node_layouts),
@@ -1278,7 +1131,6 @@ def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
         diagnostics=diag,
         routing_failures=(),
     )
-
 
 # ── HTML renderer ─────────────────────────────────────────────────────────────
 
