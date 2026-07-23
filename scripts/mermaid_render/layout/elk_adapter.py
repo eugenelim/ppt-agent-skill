@@ -25,6 +25,11 @@ from ._geometry import (
 _ELK_RUNNER = Path(__file__).parent / "elk_runner.js"
 _ELK_TIMEOUT = 30  # seconds
 
+# Group padding constants (mirrors _constants.py — kept here to avoid a circular import)
+_GROUP_PAD_Y_TOP = 36   # title strip reserved height (px)
+_GROUP_PAD_X = 28       # horizontal inner padding (px)
+_GROUP_PAD_Y_BOT = 28   # bottom inner padding (px)
+
 
 class ElkUnavailable(RuntimeError):
     """Raised when ELK layout cannot run (Node absent, elkjs missing, env opt-out, or subprocess failure)."""
@@ -42,24 +47,37 @@ def _find_elkjs() -> Optional[str]:
 def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
     """Serialize LayoutGraph to an ELK JSON input dict.
 
-    When graph.groups is non-empty, emits ELK container nodes for each group
-    and sets elk.hierarchyHandling=INCLUDE_CHILDREN so ELK enforces group
-    separation natively (Item 2).
+    When graph.groups is non-empty and nodes carry parent_id, groups become ELK
+    compound parent nodes with their child nodes nested inside. Port constraints
+    (FIXED_SIDE) are added when PortSpec objects are present. All edges are
+    placed at root level so ELK handles cross-compound routing.
     """
-    group_ids = {g.id for g in graph.groups}
+    elk_direction = {
+        "TB": "DOWN", "BT": "UP", "LR": "RIGHT", "RL": "LEFT",
+    }.get(graph.direction, "DOWN")
+    _sp = spacing or {}
+    node_node = str(_sp.get("col_gap", 40))
+    node_layers = str(_sp.get("rank_gap", 60))
+    shared_layout_opts: dict = {
+        "elk.algorithm": "layered",
+        "elk.direction": elk_direction,
+        "elk.edgeRouting": "ORTHOGONAL",
+        "elk.layered.unnecessaryBendpoints": "false",
+        "elk.layered.nodePlacementStrategy": "BRANDES_KOEPF",
+        "elk.layered.spacing.nodeNodeBetweenLayers": node_layers,
+        "elk.spacing.nodeNode": node_node,
+    }
 
-    # ── Organise nodes by parent group ──────────────────────────────────────
-    group_direct_nodes: dict[str, list] = {g.id: [] for g in graph.groups}
-    root_nodes: list = []
-
+    # Bucket nodes by parent_id: "" → root level
+    children_by_parent: dict[str, list] = {}
     for node in graph.nodes:
-        child: dict = {
+        elk_node: dict = {
             "id": node.id,
             "width": node.measured_width,
             "height": node.measured_height,
         }
         if node.ports:
-            child["ports"] = [
+            elk_node["ports"] = [
                 {
                     "id": p.id,
                     "properties": {
@@ -69,149 +87,133 @@ def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
                 }
                 for p in node.ports
             ]
-        if node.parent_id and node.parent_id in group_ids:
-            group_direct_nodes[node.parent_id].append(child)
-        else:
-            root_nodes.append(child)
+            elk_node["properties"] = {"portConstraints": "FIXED_SIDE"}
+        children_by_parent.setdefault(node.parent_id or "", []).append(elk_node)
 
-    # ── Organise child groups by parent group ────────────────────────────────
-    group_child_groups: dict[str, list] = {}
+    # Build compound group ELK nodes
     for g in graph.groups:
-        if g.parent_id and g.parent_id in group_ids:
-            group_child_groups.setdefault(g.parent_id, []).append(g.id)
+        pad_top = _GROUP_PAD_Y_TOP
+        if g.label_height > 0:
+            pad_top = max(pad_top, int(g.label_height) + 8)
+        g_node: dict = {
+            "id": g.id,
+            "children": children_by_parent.setdefault(g.id, []),
+            "layoutOptions": dict(shared_layout_opts, **{
+                "elk.padding": (
+                    f"[top={pad_top},right={_GROUP_PAD_X},"
+                    f"bottom={_GROUP_PAD_Y_BOT},left={_GROUP_PAD_X}]"
+                ),
+            }),
+        }
+        if g.minimum_width > 0:
+            g_node["width"] = g.minimum_width
+        if g.minimum_height > 0:
+            g_node["height"] = g.minimum_height
+        children_by_parent.setdefault(g.parent_id or "", []).append(g_node)
 
-    # ── Build nested ELK container nodes recursively ────────────────────────
-    def _build_group_container(gid: str) -> dict:
-        children: list = list(group_direct_nodes.get(gid, []))
-        for child_gid in group_child_groups.get(gid, []):
-            children.append(_build_group_container(child_gid))
-        container: dict = {"id": gid}
-        if children:
-            container["children"] = children
-        return container
-
-    # Root-level items: plain nodes + root group containers
-    root_group_ids = {g.id for g in graph.groups if not g.parent_id}
-    children: list = list(root_nodes)
-    for g in graph.groups:
-        if g.id in root_group_ids:
-            children.append(_build_group_container(g.id))
-
+    # Edges at root level; port IDs are referenced directly (globally unique)
     edges = []
     for edge in graph.edges:
         elk_edge: dict = {
             "id": edge.id,
-            "sources": list(edge.sources),
-            "targets": list(edge.targets),
+            "sources": [edge.source_port] if edge.source_port else list(edge.sources),
+            "targets": [edge.target_port] if edge.target_port else list(edge.targets),
         }
-        if edge.source_port:
-            elk_edge["sources"] = [f"{edge.sources[0]}:{edge.source_port}"]
-        if edge.target_port:
-            elk_edge["targets"] = [f"{edge.targets[0]}:{edge.target_port}"]
         edges.append(elk_edge)
 
-    elk_direction = {
-        "TB": "DOWN", "BT": "UP", "LR": "RIGHT", "RL": "LEFT",
-    }.get(graph.direction, "DOWN")
-
-    _sp = spacing or {}
-    node_node = str(_sp.get("col_gap", 40))
-    node_layers = str(_sp.get("rank_gap", 60))
-
-    layout_options: dict = {
-        "elk.algorithm": "layered",
-        "elk.direction": elk_direction,
-        "elk.edgeRouting": "ORTHOGONAL",
-        # Item 3(a): improved obstacle-avoidance routing
-        "elk.layered.unnecessaryBendpoints": "false",
-        "elk.layered.nodePlacementStrategy": "BRANDES_KOEPF",
-        "elk.layered.spacing.nodeNodeBetweenLayers": node_layers,
-        "elk.spacing.nodeNode": node_node,
-    }
-    # Item 2: enable hierarchy handling when groups are present so ELK enforces
-    # group-member locality natively.
+    root_layout_opts = dict(shared_layout_opts)
     if graph.groups:
-        layout_options["elk.hierarchyHandling"] = "INCLUDE_CHILDREN"
+        root_layout_opts["elk.hierarchyHandling"] = "INCLUDE_CHILDREN"
 
     return {
         "id": "root",
-        "layoutOptions": layout_options,
-        "children": children,
+        "layoutOptions": root_layout_opts,
+        "children": children_by_parent.get("", []),
         "edges": edges,
     }
 
 
-def _collect_positioned_nodes(
-    children: list,
-    offset_x: float,
-    offset_y: float,
-    node_map: dict,
-    node_layouts: dict,
-) -> None:
-    """Recursively collect absolute-coordinate node positions from ELK output.
-
-    ELK returns child positions relative to their parent container; this
-    accumulates offsets so all NodeLayout objects use canvas-absolute coords.
-    """
-    for child in children:
-        cid = child["id"]
-        cx = offset_x + float(child.get("x", 0))
-        cy = offset_y + float(child.get("y", 0))
-        cw = float(child.get("width", 0))
-        ch = float(child.get("height", 0))
-
-        if cid in node_map:
-            orig = node_map[cid]
-            w = cw if cw > 0 else orig.measured_width
-            h = ch if ch > 0 else orig.measured_height
-            outer = Rect(x=cx, y=cy, w=w, h=h)
-            node_layouts[cid] = NodeLayout(
-                node_id=cid,
-                semantic_shape=orig.shape_id,
-                outer_bounds=outer,
-                content_bounds=outer,
-                title_layout=TextLayout(
-                    lines=(), width=w, height=h,
-                    line_height=14.0, min_content_width=0.0, max_content_width=w,
-                    resolved_font_path=None, resolved_font_family="sans-serif",
-                ),
-                subtitle_layout=None,
-                member_layouts=(),
-                icon_bounds=None,
-                ports=(),
-                css_classes=(),
-                extra_css="",
-                is_dummy=False,
-                rank=0,
-                is_external=False,
-                icon_svg="",
-                accent_color="",
-                parent_group_id=orig.parent_id,
-            )
-
-        # Recurse into group containers and nested groups (with accumulated offset).
-        if "children" in child:
-            _collect_positioned_nodes(
-                child["children"], cx, cy, node_map, node_layouts
-            )
-
-
 def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
-    """Build FinalizedLayout from the positioned ELK output dict."""
+    """Build FinalizedLayout from the positioned ELK output dict.
+
+    Handles both flat and compound graph layouts. For compound layouts, group
+    nodes appear as children and their service children are nested inside them.
+    Positions are accumulated from parent offsets to produce absolute coordinates.
+    """
     node_map = {n.id: n for n in graph.nodes}
+    group_map = {g.id: g for g in graph.groups}
+    # Port ID → node ID mapping for edge source/target decoding
+    port_to_node = {p.id: n.id for n in graph.nodes for p in n.ports}
 
     node_layouts: dict[str, NodeLayout] = {}
-    _collect_positioned_nodes(
-        out.get("children", []),
-        offset_x=0.0,
-        offset_y=0.0,
-        node_map=node_map,
-        node_layouts=node_layouts,
-    )
+    group_layouts: dict[str, GroupLayout] = {}
+
+    def _visit(children: list, offset_x: float, offset_y: float) -> None:
+        for child in children:
+            cid = child["id"]
+            cx = float(child.get("x", 0)) + offset_x
+            cy = float(child.get("y", 0)) + offset_y
+            cw = float(child.get("width", 0))
+            ch = float(child.get("height", 0))
+
+            orig = node_map.get(cid)
+            if orig is not None:
+                w = cw or orig.measured_width
+                h = ch or orig.measured_height
+                outer = Rect(x=cx, y=cy, w=w, h=h)
+                node_layouts[cid] = NodeLayout(
+                    node_id=cid,
+                    semantic_shape=orig.shape_id,
+                    outer_bounds=outer,
+                    content_bounds=outer,
+                    title_layout=TextLayout(
+                        lines=(), width=w, height=h,
+                        line_height=14.0, min_content_width=0.0, max_content_width=w,
+                        resolved_font_path=None, resolved_font_family="sans-serif",
+                    ),
+                    subtitle_layout=None,
+                    member_layouts=(),
+                    icon_bounds=None,
+                    ports=(),
+                    css_classes=(),
+                    extra_css="",
+                    is_dummy=False,
+                    rank=0,
+                    is_external=False,
+                    icon_svg="",
+                    accent_color="",
+                    parent_group_id=orig.parent_id,
+                )
+
+            g_orig = group_map.get(cid)
+            if g_orig is not None:
+                boundary = Rect(x=cx, y=cy, w=cw, h=ch)
+                member_ids = tuple(n.id for n in graph.nodes if n.parent_id == cid)
+                child_group_ids = tuple(g.id for g in graph.groups if g.parent_id == cid)
+                group_layouts[cid] = GroupLayout(
+                    group_id=cid,
+                    parent_group_id=g_orig.parent_id,
+                    boundary_bounds=boundary,
+                    label_layout=None,
+                    member_ids=member_ids,
+                    child_group_ids=child_group_ids,
+                    local_direction=g_orig.local_direction or graph.direction,
+                )
+                nested = child.get("children", [])
+                if nested:
+                    _visit(nested, cx, cy)
+
+    _visit(out.get("children", []), 0.0, 0.0)
+
+    def _collect_edges(node_dict: dict) -> list:
+        result = list(node_dict.get("edges", []))
+        for child in node_dict.get("children", []):
+            result.extend(_collect_edges(child))
+        return result
 
     edge_map = {e.id: e for e in graph.edges}
     routed_edges: list[RoutedEdge] = []
-    for elk_edge in out.get("edges", []):
+    for elk_edge in _collect_edges(out):
         eid = elk_edge.get("id", "")
         orig_edge = edge_map.get(eid)
 
@@ -228,33 +230,25 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
 
         src_ids = list(elk_edge.get("sources", []))
         dst_ids = list(elk_edge.get("targets", []))
-        src_id = src_ids[0].split(":")[0] if src_ids else ""
-        dst_id = dst_ids[0].split(":")[0] if dst_ids else ""
+        src_ref = src_ids[0] if src_ids else ""
+        dst_ref = dst_ids[0] if dst_ids else ""
+        # Resolve: port ID → node ID, then "nodeId:portId" split, then as-is
+        src_id = port_to_node.get(src_ref) or (src_ref.split(":")[0] if ":" in src_ref else src_ref)
+        dst_id = port_to_node.get(dst_ref) or (dst_ref.split(":")[0] if ":" in dst_ref else dst_ref)
 
         src_pos = waypoints[0] if waypoints else Point(0.0, 0.0)
         dst_pos = waypoints[-1] if waypoints else Point(0.0, 0.0)
-
-        src_port = PortLayout(
-            node_id=src_id, side=PortSide.BOTTOM,
-            position=src_pos, direction=Point(0.0, 1.0),
-        )
-        dst_port = PortLayout(
-            node_id=dst_id, side=PortSide.TOP,
-            position=dst_pos, direction=Point(0.0, -1.0),
-        )
-
-        src_mk = MarkerKind.NONE
-        dst_mk = MarkerKind.ARROW
-        if orig_edge is not None:
-            src_mk = orig_edge.source_marker
-            dst_mk = orig_edge.target_marker
+        src_mk = orig_edge.source_marker if orig_edge else MarkerKind.NONE
+        dst_mk = orig_edge.target_marker if orig_edge else MarkerKind.ARROW
 
         routed_edges.append(RoutedEdge(
             edge_id=eid,
             src_node_id=src_id,
             dst_node_id=dst_id,
-            src_port=src_port,
-            dst_port=dst_port,
+            src_port=PortLayout(node_id=src_id, side=PortSide.BOTTOM,
+                                position=src_pos, direction=Point(0.0, 1.0)),
+            dst_port=PortLayout(node_id=dst_id, side=PortSide.TOP,
+                                position=dst_pos, direction=Point(0.0, -1.0)),
             waypoints=tuple(waypoints),
             edge_style="solid",
             has_marker_end=(dst_mk != MarkerKind.NONE),
@@ -266,18 +260,19 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
             target_marker=dst_mk,
         ))
 
-    if node_layouts:
-        all_rects = [nl.outer_bounds for nl in node_layouts.values()]
-        node_union = Rect.union_all(all_rects)
-        visible = node_union.inflate(48)
+    all_rects = ([nl.outer_bounds for nl in node_layouts.values()]
+                 + [gl.boundary_bounds for gl in group_layouts.values()])
+    if all_rects:
+        visible = Rect.union_all(all_rects).inflate(48)
+        canvas = visible.inflate(48)
     else:
-        node_union = Rect(0.0, 0.0, float(out.get("width", 500)), float(out.get("height", 300)))
-        visible = node_union.inflate(48)
-    canvas = node_union.inflate(96)
+        fallback = Rect(0.0, 0.0, float(out.get("width", 500)), float(out.get("height", 300)))
+        visible = fallback.inflate(48)
+        canvas = fallback.inflate(96)
 
     return FinalizedLayout(
         node_layouts=node_layouts,
-        group_layouts={},
+        group_layouts=group_layouts,
         routed_edges=tuple(routed_edges),
         visible_bounds=visible,
         diagram_padding=48.0,
