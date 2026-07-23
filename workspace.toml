@@ -68,7 +68,16 @@ open = [
   # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
   {slug = "gpu-benchmark"},
 
-  # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
+  # ── flowchart-conformance deferred sub-checks ────────────────────────────────
+  # AC1: verify edge labels fit within node content_bounds (usable interior).
+  # Requires content_bounds export from the pipeline — deferred until that lands.
+  {slug = "flowchart-label-fits-interior"},
+  # AC4: assert edge endpoints lie on the diamond segment within 0.5 px (not AABB).
+  # Covered for non-diamond shapes by mermaid-shape-boundary-exactness; diamond
+  # needs the same on-segment check wired into the conformance tests.
+  {slug = "flowchart-diamond-endpoint-on-segment"},
+
+    # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
   # These slugs remain here only to satisfy (deferred: <slug>) references in shipped
   # specs (immutable bodies). Implementation is tracked in docs/specs/mmdc-browser-geometry-capture
   # and docs/specs/mermaid-recursive-compound-layout respectively.
@@ -119,11 +128,9 @@ status = "active"
 ["ini-002".work]
 queue = [
 
-    {path = "docs/specs/mermaid-flowchart-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness"]},
     {path = "docs/specs/mermaid-state-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness", "work:docs/specs/mermaid-flowchart-conformance"]},
-    {path = "docs/specs/mermaid-architecture-metadata-preservation", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/mermaid-recursive-compound-layout"]},
 
     {path = "docs/specs/mermaid-parity-ci-and-maintainability-cleanup", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mmdc-browser-geometry-capture", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness", "work:docs/specs/mermaid-flowchart-conformance", "work:docs/specs/mermaid-state-conformance", "work:docs/specs/mermaid-architecture-metadata-preservation", "work:docs/specs/mermaid-er-compiler-consolidation-and-routing", "work:docs/specs/mermaid-requirement-text-layout-conformance", "work:docs/specs/mermaid-class-semantic-conformance"]},
 ]
 active = []
-shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-browser-geometry-capture", "docs/specs/mermaid-text-measurement-adoption", "docs/specs/flowchart-elk-finalized-layout-consumption", "docs/specs/mermaid-recursive-compound-layout", "docs/specs/mermaid-requirement-text-layout-conformance", "docs/specs/mermaid-shape-boundary-exactness", "docs/specs/mermaid-er-compiler-consolidation-and-routing", "docs/specs/mermaid-class-semantic-conformance"]
+shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-browser-geometry-capture", "docs/specs/mermaid-text-measurement-adoption", "docs/specs/flowchart-elk-finalized-layout-consumption", "docs/specs/mermaid-recursive-compound-layout", "docs/specs/mermaid-requirement-text-layout-conformance", "docs/specs/mermaid-shape-boundary-exactness", "docs/specs/mermaid-er-compiler-consolidation-and-routing", "docs/specs/mermaid-class-semantic-conformance", "docs/specs/mermaid-flowchart-conformance", "docs/specs/mermaid-architecture-metadata-preservation"]
