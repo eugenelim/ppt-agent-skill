@@ -1266,8 +1266,8 @@ def run_smoke() -> SmokeResult:
                 resolve.stdout,
                 [
                     "# 顶部英雄式版式",
-                    "# KPI 指标卡（数字+趋势箭头+标签）",
-                    "# 指标行（数字+标签+进度条 组合）",
+                    "## 6. KPI 指标卡 (kpi_card)",
+                    "## 7. 指标行 (metric_row)",
                     "# 视觉层级与 CRAP 原则",
                     "# 构图与留白",
                     "# Director Command Runtime Rules",
@@ -1295,7 +1295,7 @@ def run_smoke() -> SmokeResult:
             assert_contains(
                 "resource-loader-resolve-snapshot",
                 fx["html_resolve"].read_text(encoding="utf-8"),
-                ["# 顶部英雄式版式", "# KPI 指标卡（数字+趋势箭头+标签）"],
+                ["# 顶部英雄式版式", "## 6. KPI 指标卡 (kpi_card)"],
                 result,
             )
 

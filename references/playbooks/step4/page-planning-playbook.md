@@ -110,7 +110,7 @@ page_template  : cover toc section section-marker reference end
 
 **可选 `resource_ref`**：如需为某张卡定向绑定组件，写 `"resource_ref": {"block": "<stem>", "chart": "<stem>", "principle": "<stem>"}`（缺省可省略）；解析不到的 stem 会被丢弃并告警，不会报 ERROR。
 
-> **payload 文件名铁律**：写 payload 时**文件名不要以 `planning` 开头**（下游按 `planning*.json` 通配收集本目录，payload 匹配了会被当成一页混入、污染全册校验）；prompt 里给的 `{{PAGE_NUM}}.payload.json` 就是安全命名，装配成功后该中间文件也会被删除。
+> **payload 文件名铁律**：写 payload 时**文件名不要以 `planning` 开头**（下游按 `planning*.json` 通配收集本目录，payload 匹配了会被当成一页混入、污染全册校验）；prompt 里给的 `{PAGE_NUM}.payload.json` 就是安全命名，装配成功后该中间文件也会被删除。
 
 > **何时手写回退**：只有当某页结构确实超出上面 payload 契约能表达的范围时，才落回手写完整 JSON（见下方 Skeleton 与 Phase 4 schema），并照旧跑 `planning_validator.py` 校验。绝大多数页用装配器即可。
 
