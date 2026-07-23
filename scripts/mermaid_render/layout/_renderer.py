@@ -427,11 +427,12 @@ def _render_graph_fragment(
             elif n.shape == "diamond":
                 _border_css = ""
                 _dw = n.width if n.width > 0 else _DIAMOND_SIZE
-                _hw = _dw // 2
+                _dx_half = _dw // 2
+                _dy_half = node_h // 2
                 _shape_border_svg = (
                     f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
                     f'width="{_dw}" height="{node_h}">'
-                    f'<polygon points="{_hw},1 {_dw-1},{_hw} {_hw},{node_h-1} 1,{_hw}" '
+                    f'<polygon points="{_dx_half},1 {_dw-1},{_dy_half} {_dx_half},{node_h-1} 1,{_dy_half}" '
                     f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
                 )
             elif n.shape == "hexagon":
@@ -463,6 +464,17 @@ def _render_graph_fragment(
             elif n.shape == "stadium":
                 # Full accent-color border all around (pill shape via border-radius)
                 _border_css = f'border:1.5px solid {accent_color};'
+            elif n.shape == "flag":
+                _border_css = ""
+                _fw = n.width or NODE_W
+                _fh = node_h
+                _fp = int(_fw * 0.88)
+                _shape_border_svg = (
+                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                    f'width="{_fw}" height="{_fh}">'
+                    f'<polygon points="1,1 {_fp},1 {_fw-1},{_fh//2} {_fp},{_fh-1} 1,{_fh-1}" '
+                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
+                )
             else:
                 _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent_color};'
 
@@ -498,8 +510,8 @@ def _render_graph_fragment(
                     f'text-align:left;">'
                     f'{inner}'
                     f'<svg style="position:absolute;inset:0;width:{_nw}px;height:{node_h}px;pointer-events:none;overflow:visible;">'
-                    f'<line x1="8" y1="0" x2="8" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'<line x1="{_nw - 8}" y1="0" x2="{_nw - 8}" y2="{node_h}" stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'<line x1="8" y1="2" x2="8" y2="{node_h - 2}" stroke="{accent_color}" stroke-width="1.5"/>'
+                    f'<line x1="{_nw - 8}" y1="2" x2="{_nw - 8}" y2="{node_h - 2}" stroke="{accent_color}" stroke-width="1.5"/>'
                     f'</svg>'
                     f'</div>'
                 )
@@ -1631,6 +1643,8 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             _border_css = ""  # bar shape draws its own inner rect; no outer border
         elif shape == "stadium":
             _border_css = f'border:1.5px solid {accent};'
+        elif shape == "flag":
+            _border_css = ""  # flag border goes on SVG polygon overlay, not outer div
         else:
             _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent};'
 
@@ -1675,11 +1689,12 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         # Shape-specific SVG/HTML overlays
         shape_overlay = ""
         if shape == "diamond":
-            _hw = nw // 2
+            _dx_half = nw // 2
+            _dy_half = nh // 2
             shape_overlay = (
                 f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
                 f'width="{nw}" height="{nh}">'
-                f'<polygon points="{_hw},1 {nw-1},{_hw} {_hw},{nh-1} 1,{_hw}" '
+                f'<polygon points="{_dx_half},1 {nw-1},{_dy_half} {_dx_half},{nh-1} 1,{_dy_half}" '
                 f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
             )
         elif shape == "hexagon":
@@ -1698,6 +1713,14 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
                 f'width="{nw}" height="{nh}">'
                 f'<polygon points="{_pts}" fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        elif shape == "flag":
+            _fp = int(nw * 0.88)
+            shape_overlay = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
+                f'width="{nw}" height="{nh}">'
+                f'<polygon points="1,1 {_fp},1 {nw-1},{nh//2} {_fp},{nh-1} 1,{nh-1}" '
+                f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
             )
 
         # Fidelity data attributes for this node; strip HTML tags so
@@ -1735,8 +1758,8 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center;">'
                 f'{inner}'
                 f'<svg style="position:absolute;inset:0;width:{nw}px;height:{nh}px;pointer-events:none;overflow:visible;">'
-                f'<line x1="8" y1="0" x2="8" y2="{nh}" stroke="{accent}" stroke-width="1.5"/>'
-                f'<line x1="{nw - 8}" y1="0" x2="{nw - 8}" y2="{nh}" stroke="{accent}" stroke-width="1.5"/>'
+                f'<line x1="8" y1="2" x2="8" y2="{nh - 2}" stroke="{accent}" stroke-width="1.5"/>'
+                f'<line x1="{nw - 8}" y1="2" x2="{nw - 8}" y2="{nh - 2}" stroke="{accent}" stroke-width="1.5"/>'
                 f'</svg></div>'
             )
         elif shape == "cylinder":
