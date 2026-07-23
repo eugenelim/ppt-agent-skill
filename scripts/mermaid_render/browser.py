@@ -31,6 +31,7 @@ with instructions. Run: playwright install chromium
 
 from __future__ import annotations
 
+import os as _os
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator
@@ -61,7 +62,12 @@ def _within_deck_root(path: "Path | str", deck_root: "Path | str") -> bool:
         return False
 
 
-_LAUNCH_ARGS = ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"]
+_IN_CONTAINER = _os.environ.get("RENDER_IN_CONTAINER", "").strip() == "1"
+_LAUNCH_ARGS = (
+    ["--disable-gpu", "--font-render-hinting=none"]
+    if _IN_CONTAINER
+    else ["--no-sandbox", "--disable-gpu", "--font-render-hinting=none"]
+)
 
 _FONTS_IMGS_READY = """async () => {
     await document.fonts.ready;
