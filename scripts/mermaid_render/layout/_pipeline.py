@@ -894,6 +894,7 @@ def _compile_flowchart(
     _elk_routed: "list | None" = None
     _elk_grp_bboxes: "dict | None" = None
     _use_elk = False
+    _has_inner_dir = False
     try:
         if _has_terminal_circles:
             raise Exception("terminal-circle fallback to Python")
@@ -914,17 +915,30 @@ def _compile_flowchart(
             if _nid_elk in nodes:
                 nodes[_nid_elk].x = int(_nl_elk.outer_bounds.x)
                 nodes[_nid_elk].y = int(_nl_elk.outer_bounds.y)
-        # Capture ELK compound-node bounds directly — these are authoritative for
-        # group positions and do not need post-hoc heuristic fixup.
-        _elk_grp_bboxes = {
-            gid: [
-                gl.boundary_bounds.x,
-                gl.boundary_bounds.y,
-                gl.boundary_bounds.x + gl.boundary_bounds.w,
-                gl.boundary_bounds.y + gl.boundary_bounds.h,
-            ]
-            for gid, gl in _elk_result.group_layouts.items()
-        }
+        # Fix inner-direction groups after ELK: ELK with INCLUDE_CHILDREN uses
+        # outer direction for all nodes; re-apply per-group inner direction post-hoc.
+        _has_inner_dir = any(
+            g.local_direction and g.local_direction.upper() != direction.upper()
+            for g in _layout_graph.groups
+        )
+        if _has_inner_dir and groups:
+            _recursive_group_layout(nodes, edges, groups, direction,
+                                    col_gap=_init_cfg.get("col_gap"))
+            # Clear ELK bboxes — _py_grp_bboxes (padded, recursive) is computed
+            # from the new node positions downstream and takes precedence.
+            _elk_grp_bboxes = None
+        else:
+            # Capture ELK compound-node bounds directly — authoritative when
+            # all groups share the outer direction.
+            _elk_grp_bboxes = {
+                gid: [
+                    gl.boundary_bounds.x,
+                    gl.boundary_bounds.y,
+                    gl.boundary_bounds.x + gl.boundary_bounds.w,
+                    gl.boundary_bounds.y + gl.boundary_bounds.h,
+                ]
+                for gid, gl in _elk_result.group_layouts.items()
+            }
         _elk_routed = [
             {
                 "id": _re.edge_id,
@@ -934,7 +948,7 @@ def _compile_flowchart(
             for _re in _elk_result.routed_edges
         ]
         _use_elk = True
-        _elk_metadata_algo = "ELK-layered"
+        _elk_metadata_algo = "ELK-layered+python-routed" if _has_inner_dir else "ELK-layered"
     except Exception:  # includes ElkUnavailable
         pass  # fall through to Python Sugiyama pipeline
 
@@ -964,56 +978,62 @@ def _compile_flowchart(
             _all_y1.append(float(_b[3]))
         canvas_w = (int(max(_all_x1)) + _elk_pad) if _all_x1 else _elk_pad * 2
         canvas_h = (int(max(_all_y1)) + _elk_pad) if _all_y1 else _elk_pad * 2
-        # Build RoutedEdge dicts from ELK waypoints.
-        _elk_route_dicts = []
-        for _er in (_elk_routed or []):
-            _e_obj = _er.get("edge")
-            # Prefer matched edge's src/dst to avoid misparse of "A->B#1" id suffixes.
-            if _e_obj is not None:
-                _src_node_id = _e_obj.src
-                _dst_node_id = _e_obj.dst
-            elif "->" in _er["id"]:
-                _parts = _er["id"].split("->", 1)
-                _src_node_id = _parts[0]
-                _dst_node_id = _parts[1].split("#")[0]  # strip duplicate-edge suffix
-            else:
-                _src_node_id = ""
-                _dst_node_id = ""
-            _mk_id = None
-            if _e_obj is not None and _e_obj.arrow:
-                _mk_id = "arrow-normal"
-            # Label centered on geometric midpoint of waypoints.
-            # Avoids origin-overlap validation failures; uses top-left anchor convention.
-            _wps = _er["waypoints"]
-            if _wps:
-                from ._routing import _est_label_w as _elk_est_lw
-                def _wp_x(w): return w[0] if isinstance(w, (tuple, list)) else getattr(w, "x", 0)
-                def _wp_y(w): return w[1] if isinstance(w, (tuple, list)) else getattr(w, "y", 0)
-                _cx = sum(_wp_x(w) for w in _wps) / len(_wps)
-                _cy = sum(_wp_y(w) for w in _wps) / len(_wps)
-                _lbl_txt = _e_obj.label if _e_obj else ""
-                _est_lh = 18  # single-line edge label height
-                _lx = _cx - _elk_est_lw(_lbl_txt) / 2
-                _ly = _cy - _est_lh / 2
-            else:
-                _lx, _ly = 0, 0
-            _elk_route_dicts.append({
-                "d": "", "waypoints": _er["waypoints"], "ah": None,
-                "label": _e_obj.label if _e_obj else "",
-                "style": _e_obj.style if _e_obj else "solid",
-                "lx": _lx, "ly": _ly, "rot": 0,
-                "marker_id": _mk_id,
-                "src": _src_node_id, "dst": _dst_node_id,
-                "extra_css": _e_obj.extra_css if _e_obj else "",
-                "src_label": _e_obj.src_label if _e_obj else "",
-                "dst_label": _e_obj.dst_label if _e_obj else "",
-                "bidir": _e_obj.bidir if _e_obj else False,
-                "source_marker": (_e_obj.source_marker.kind if hasattr(_e_obj.source_marker, "kind") else _e_obj.source_marker) if _e_obj else None,
-                "target_marker": (_e_obj.target_marker.kind if hasattr(_e_obj.target_marker, "kind") else _e_obj.target_marker) if _e_obj else None,
-                "edge_id": _er["id"],
-            })
-        from ._routing import RouteBatch as _RouteBatch
-        route_batch = _RouteBatch(routed=tuple(_elk_route_dicts), failures=())
+        if _has_inner_dir:
+            # Nodes were repositioned by _recursive_group_layout;
+            # ELK waypoints are stale. Re-route with Python A*.
+            route_batch = _route_edges(nodes, edges, canvas_w, direction,
+                                       group_bboxes=_grp_bboxes)
+        else:
+            # Build RoutedEdge dicts from ELK waypoints.
+            _elk_route_dicts = []
+            for _er in (_elk_routed or []):
+                _e_obj = _er.get("edge")
+                # Prefer matched edge's src/dst to avoid misparse of "A->B#1" id suffixes.
+                if _e_obj is not None:
+                    _src_node_id = _e_obj.src
+                    _dst_node_id = _e_obj.dst
+                elif "->" in _er["id"]:
+                    _parts = _er["id"].split("->", 1)
+                    _src_node_id = _parts[0]
+                    _dst_node_id = _parts[1].split("#")[0]  # strip duplicate-edge suffix
+                else:
+                    _src_node_id = ""
+                    _dst_node_id = ""
+                _mk_id = None
+                if _e_obj is not None and _e_obj.arrow:
+                    _mk_id = "arrow-normal"
+                # Label centered on geometric midpoint of waypoints.
+                # Avoids origin-overlap validation failures; uses top-left anchor convention.
+                _wps = _er["waypoints"]
+                if _wps:
+                    from ._routing import _est_label_w as _elk_est_lw
+                    def _wp_x(w): return w[0] if isinstance(w, (tuple, list)) else getattr(w, "x", 0)
+                    def _wp_y(w): return w[1] if isinstance(w, (tuple, list)) else getattr(w, "y", 0)
+                    _cx = sum(_wp_x(w) for w in _wps) / len(_wps)
+                    _cy = sum(_wp_y(w) for w in _wps) / len(_wps)
+                    _lbl_txt = _e_obj.label if _e_obj else ""
+                    _est_lh = 18  # single-line edge label height
+                    _lx = _cx - _elk_est_lw(_lbl_txt) / 2
+                    _ly = _cy - _est_lh / 2
+                else:
+                    _lx, _ly = 0, 0
+                _elk_route_dicts.append({
+                    "d": "", "waypoints": _er["waypoints"], "ah": None,
+                    "label": _e_obj.label if _e_obj else "",
+                    "style": _e_obj.style if _e_obj else "solid",
+                    "lx": _lx, "ly": _ly, "rot": 0,
+                    "marker_id": _mk_id,
+                    "src": _src_node_id, "dst": _dst_node_id,
+                    "extra_css": _e_obj.extra_css if _e_obj else "",
+                    "src_label": _e_obj.src_label if _e_obj else "",
+                    "dst_label": _e_obj.dst_label if _e_obj else "",
+                    "bidir": _e_obj.bidir if _e_obj else False,
+                    "source_marker": (_e_obj.source_marker.kind if hasattr(_e_obj.source_marker, "kind") else _e_obj.source_marker) if _e_obj else None,
+                    "target_marker": (_e_obj.target_marker.kind if hasattr(_e_obj.target_marker, "kind") else _e_obj.target_marker) if _e_obj else None,
+                    "edge_id": _er["id"],
+                })
+            from ._routing import RouteBatch as _RouteBatch
+            route_batch = _RouteBatch(routed=tuple(_elk_route_dicts), failures=())
     else:
         # Python Sugiyama + A* path.
         # Auto-select direction (TB vs LR) when both size hints are given
