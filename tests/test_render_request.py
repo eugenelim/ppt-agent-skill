@@ -123,3 +123,48 @@ def test_faithful_flows_through_dispatch():
             to_svg("flowchart LR\n  A-->B", faithful=True)
 
     assert captured.get("faithful") is True
+
+
+# ── to_html() wired through RenderRequest ────────────────────────────────────
+
+def test_to_html_uses_parse_render_request():
+    """to_html() must route through parse_render_request, not _strip_frontmatter directly."""
+    from scripts.mermaid_render import native_svg as _native
+    from scripts.mermaid_render import to_html
+
+    captured = {}
+    orig = _native.parse_render_request
+
+    def spy(src, **kwargs):
+        req = orig(src, **kwargs)
+        captured["called"] = True
+        captured["faithful"] = req.faithful
+        captured["width_hint"] = req.width_hint
+        captured["height_hint"] = req.height_hint
+        return req
+
+    with patch.object(_native, "parse_render_request", side_effect=spy):
+        to_html("flowchart LR\n  A-->B", faithful=True, width_hint=800, height_hint=600)
+
+    assert captured.get("called") is True
+    assert captured.get("faithful") is True
+    assert captured.get("width_hint") == 800
+    assert captured.get("height_hint") == 600
+
+
+def test_to_svg_accepts_height_hint():
+    """to_svg() must accept and forward height_hint without raising."""
+    from scripts.mermaid_render import to_svg
+
+    with patch.dict(os.environ, {"MERMAID_RENDER_SVG_BACKEND": "native"}):
+        svg = to_svg("flowchart LR\n  A-->B", height_hint=400)
+
+    assert "<svg" in svg
+
+
+def test_to_html_height_hint_accepted():
+    """to_html() must accept height_hint without raising."""
+    from scripts.mermaid_render import to_html
+
+    html = to_html("flowchart LR\n  A-->B", height_hint=300)
+    assert "<div" in html

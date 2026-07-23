@@ -25,6 +25,7 @@ from .scene import (
     SceneImage, PaintStyle, StrokeStyle, FillStyle,
     MarkerDefinition, LinearGradientDefinition, RadialGradientDefinition,
     ClipPathDefinition, _SceneElement, LAYER_ORDER,
+    Translate, Scale, Rotate, Matrix,
 )
 
 SVG_NS = "http://www.w3.org/2000/svg"
@@ -108,6 +109,25 @@ def _apply_paint(el: etree._Element, paint: PaintStyle) -> None:
         el.set("opacity", _fmt(paint.opacity))
 
 
+def _transform_str(t: object) -> str:
+    """Serialise a typed ElementTransform to an SVG transform attribute string."""
+    if isinstance(t, Translate):
+        return f"translate({_fmt(t.dx)},{_fmt(t.dy)})"
+    if isinstance(t, Scale):
+        s = f"scale({_fmt(t.sx)},{_fmt(t.sy)})"
+        if t.cx or t.cy:
+            s = f"translate({_fmt(t.cx)},{_fmt(t.cy)}) {s} translate({_fmt(-t.cx)},{_fmt(-t.cy)})"
+        return s
+    if isinstance(t, Rotate):
+        if t.cx or t.cy:
+            return f"rotate({_fmt(t.angle)},{_fmt(t.cx)},{_fmt(t.cy)})"
+        return f"rotate({_fmt(t.angle)})"
+    if isinstance(t, Matrix):
+        return (f"matrix({_fmt(t.a)},{_fmt(t.b)},{_fmt(t.c)},"
+                f"{_fmt(t.d)},{_fmt(t.e)},{_fmt(t.f)})")
+    return ""
+
+
 def _apply_base(el: etree._Element, elem: _SceneElement) -> None:
     if elem.element_id:
         el.set("id", elem.element_id)
@@ -117,8 +137,10 @@ def _apply_base(el: etree._Element, elem: _SceneElement) -> None:
         el.set("role", elem.semantic_role)
     for name, value in sorted(elem.data_attrs):
         el.set(f"data-{name}", value)
-    if elem.transform:
-        el.set("transform", elem.transform)
+    if elem.transform is not None:
+        ts = _transform_str(elem.transform)
+        if ts:
+            el.set("transform", ts)
     if elem.clip_ref:
         el.set("clip-path", f"url(#{elem.clip_ref})")
     _apply_paint(el, elem.paint)

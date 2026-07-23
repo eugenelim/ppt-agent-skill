@@ -1,10 +1,12 @@
 """Regression tests for flowchart renderer fixes.
 
-Three bugs fixed:
+Four fixes:
   1. Mermaid v11 @{ shape: ... } attribute syntax not parsed.
   2. <--> bidirectional edges not producing marker-start arrowhead.
   3. Cylinder ([(text)]) rendered as plain rounded-rect instead of drum SVG.
+  4. Self-loop finalization pass — no negative SVG path coordinates.
 """
+import re
 import pytest
 
 from scripts.mermaid_render.layout._parser import _parse_spec, _parse_graph_source
@@ -122,3 +124,87 @@ def test_cylinder_html_structure():
     html = _render(src)
     assert "node-cylinder" in html, "node-cylinder CSS class missing"
     assert "<svg" in html, "<svg> overlay missing from cylinder"
+
+
+# ---------------------------------------------------------------------------
+# Fix 4: Self-loop finalization pass — no negative SVG path coordinates
+# ---------------------------------------------------------------------------
+
+def _neg_path_coords(svg: str) -> list:
+    """Return list of negative numbers found in SVG <path d=...> attributes."""
+    neg = []
+    for d_attr in re.findall(r'd="([^"]+)"', svg):
+        for tok in re.split(r"[MLCQAZz,\s]+", d_attr):
+            try:
+                v = float(tok)
+                if v < -0.5:          # -0.5 tolerance for float rounding
+                    neg.append(v)
+            except ValueError:
+                pass
+    return neg
+
+
+def test_self_loop_tb_left_face_no_negative_coords():
+    """TB flowchart with two self-loops on the same node (left-face lane_idx=1).
+
+    With CANVAS_PAD=48 and lane_num=1 → extent = 32+20 = 52 > 48, so without
+    the finalization pass the left-face loop would produce a negative x coordinate.
+    The finalization pass must shift all nodes right so loop_x >= CANVAS_PAD.
+    """
+    src = (
+        "flowchart TD\n"
+        "    A[\"Wide label node that forces large node width\"] --> A\n"
+        "    A --> A\n"   # second self-loop → lane_idx=1 → left face
+    )
+    html = _render(src)
+    neg = _neg_path_coords(html)
+    assert not neg, f"Negative SVG path coordinates after finalization: {neg}"
+
+
+def test_self_loop_lr_top_face_no_negative_coords():
+    """LR flowchart with a self-loop on the top face.
+
+    In LR mode top-face is lane_idx=0.  With a wide label, extent can exceed
+    CANVAS_PAD.  The finalization pass must prevent loop_y from going negative.
+    """
+    src = (
+        "flowchart LR\n"
+        "    A[\"A very wide label that increases extent beyond canvas pad\"] --> A\n"
+        "    A --> A\n"   # second self-loop → top-face used twice, forcing lane_num>0
+    )
+    html = _render(src)
+    neg = _neg_path_coords(html)
+    assert not neg, f"Negative SVG path coordinates after finalization: {neg}"
+
+
+def test_self_loop_finalization_offset_helper():
+    """Unit-test _finalize_self_loop_offsets returns positive offsets when needed."""
+    from scripts.mermaid_render.layout._constants import _Node, _Edge, CANVAS_PAD, BASE_LOOP_EXTENT, LOOP_LANE_GAP
+    from scripts.mermaid_render.layout._routing import _finalize_self_loop_offsets
+
+    # Simulate a node at x=CANVAS_PAD (minimum after _assign_coordinates) with
+    # one left-face self-loop (lane_idx=1, lane_num=0 but odd → left face).
+    # extent = BASE_LOOP_EXTENT = 32; with lane_num=0 for the second loop, extent=32.
+    # For lane_idx=1 (odd → left face), extent=32+0=32 < CANVAS_PAD=48.
+    # So no offset should be needed for this case.
+    n = _Node(id="A", label="A", shape="rect")
+    n.x = CANVAS_PAD
+    n.y = CANVAS_PAD
+    n.width = 80
+    e0 = _Edge(src="A", dst="A", label="")
+    e1 = _Edge(src="A", dst="A", label="")
+
+    dx, dy = _finalize_self_loop_offsets({"A": n}, [e0, e1], "TB", canvas_pad=CANVAS_PAD)
+    # extent for lane_idx=1 (left face, lane_num=0) = BASE_LOOP_EXTENT = 32
+    # loop_x = CANVAS_PAD - 32 = 16 >= 0 but < CANVAS_PAD
+    # dx = CANVAS_PAD - (CANVAS_PAD - 32) = 32
+    assert dx >= 0, "dx must be non-negative"
+    assert dy == 0, "TB self-loops only shift x (left face)"
+
+    # With a large lane_num making extent > CANVAS_PAD, dx must be positive.
+    e2 = _Edge(src="A", dst="A", label="")
+    e3 = _Edge(src="A", dst="A", label="")
+    dx2, dy2 = _finalize_self_loop_offsets({"A": n}, [e0, e1, e2, e3], "TB", canvas_pad=CANVAS_PAD)
+    # lane_idx=3 → lane_num=1 → extent=BASE_LOOP_EXTENT+LOOP_LANE_GAP=52 > CANVAS_PAD=48
+    # loop_x = CANVAS_PAD - 52 = -4 → dx2 = CANVAS_PAD - (-4) = 52
+    assert dx2 >= CANVAS_PAD, f"dx2={dx2} should offset enough for lane_num=1 extent"

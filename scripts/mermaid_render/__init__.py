@@ -163,21 +163,34 @@ def validate(src: str) -> ValidationResult:
     return _dc_replace(result, renderer_backend=backend)
 
 
-def to_html(src: str, *, theme: Theme = None, width_hint: int = 0, faithful: bool = False) -> str:
+def to_html(
+    src: str,
+    *,
+    theme: Theme = None,
+    width_hint: int = 0,
+    height_hint: int = 0,
+    faithful: bool = False,
+) -> str:
     """Render a Mermaid source string to a standalone HTML document.
 
     Playwright is NOT imported. theme is forwarded to themes.render_page.
     width_hint: if nonzero, scales the output to fit within this pixel width.
+    height_hint: if nonzero, constrains the output height in pixels.
     faithful: when True, preserves declared direction, suppresses icon/legend inference,
         and does not auto-flip direction for aspect ratio.
     """
-    from .layout._parser import _strip_frontmatter
+    from .native_svg import parse_render_request
     from .layout._strategies import _dispatch, RenderOptions
     from .themes import render_page
 
-    clean = _strip_frontmatter(src)
-    opts = RenderOptions(faithful_mermaid=faithful) if faithful else None
-    fragment = _dispatch(clean, None, width_hint, opts=opts)
+    request = parse_render_request(
+        src, faithful=faithful, width_hint=width_hint, height_hint=height_hint,
+    )
+    opts = RenderOptions(faithful_mermaid=request.faithful)
+    fragment = _dispatch(
+        request.clean_source, request.direction, request.width_hint,
+        height_hint=request.height_hint, opts=opts,
+    )
     return render_page(fragment, theme)
 
 
@@ -186,6 +199,7 @@ def to_svg(
     *,
     theme: Theme = None,
     width_hint: int = 0,
+    height_hint: int = 0,
     faithful: bool = False,
     fallback: "str | None" = None,
     strict: bool = True,
@@ -225,6 +239,7 @@ def to_svg(
                 theme=theme,
                 faithful=faithful,
                 width_hint=width_hint,
+                height_hint=height_hint,
             )
             if strict:
                 if result.semantic_adapter == "partial":
@@ -254,7 +269,7 @@ def to_svg(
 
     # Legacy DOM path (Playwright)
     resolved = theme if theme is not None else "adaptive-light"
-    html = to_html(src, theme=resolved, width_hint=width_hint, faithful=faithful)
+    html = to_html(src, theme=resolved, width_hint=width_hint, height_hint=height_hint, faithful=faithful)
     from .svg import _to_svg_from_html_string
     return _to_svg_from_html_string(html)
 
@@ -265,6 +280,7 @@ def to_png(
     theme: Theme = None,
     scale: float = 1.0,
     width_hint: int = 0,
+    height_hint: int = 0,
     faithful: bool = False,
     strict: bool = True,
     experimental: bool = False,
@@ -277,14 +293,15 @@ def to_png(
     strict and experimental are forwarded to to_svg() — see to_svg() docs.
     """
     try:
-        svg_str = to_svg(src, theme=theme, width_hint=width_hint, faithful=faithful,
-                         strict=strict, experimental=experimental)
+        svg_str = to_svg(src, theme=theme, width_hint=width_hint, height_hint=height_hint,
+                         faithful=faithful, strict=strict, experimental=experimental)
         from .png import _to_png_from_svg_string
         return _to_png_from_svg_string(svg_str, scale=scale)
     except NativeRenderError as _e:
         if _e.phase == "not-implemented":
             resolved = theme if theme is not None else "adaptive-light"
-            html = to_html(src, theme=resolved, width_hint=width_hint, faithful=faithful)
+            html = to_html(src, theme=resolved, width_hint=width_hint, height_hint=height_hint,
+                           faithful=faithful)
             from .png import _to_png_from_html_string
             return _to_png_from_html_string(html, scale=scale)
         raise

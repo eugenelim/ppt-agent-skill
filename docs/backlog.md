@@ -205,17 +205,6 @@ requires Playwright + Chromium in CI (add to `render-scripts` job or a new
 Deferred items from the sequenceDiagram geometry fix spec
 (`docs/specs/seq-geometry-fix/spec.md`).
 
-### self-loop-finalization-pass
-
-**Deferred from `renderer-hardening-2026-07` AC-P0.3:** Remove the provisional
-`max(0, lx_face - extent)` / `max(0, y_face - extent)` clamping in
-`_routing.py` self-loop geometry and replace it with a post-layout finalization
-pass that normalizes all provisional negative coordinates to canvas-positive
-before rendering. Until the finalization pass exists, removing the clamping
-produces negative SVG path coordinates that overflow the canvas left edge.
-Unblocked by adding a finalization pass after `_assign_coordinates` that
-offsets the entire layout so all coordinates are ≥ `CANVAS_PAD`.
-
 ### strategies-module-split
 
 **Deferred from `flowchart-pipeline-finish` Task 5:** `scripts/mermaid_render/layout/_strategies.py`
@@ -258,28 +247,6 @@ proxy-node expansion, boundary gate routing. Remove default reliance on `_apply_
 `_separate_groups_lr/tb`, `_push_nonmembers_out_of_groups_lr`. Required invariants: descendants inside
 ancestors, sibling groups non-overlapping, local direction edges predominantly horizontal/vertical,
 cross-boundary edges through gates only, deterministic output.
-
-### backlog-mermaid-p3-scene-bounds
-
-**Deferred from `mermaid-p3` Stage 5 (partially shipped):** Visible-geometry ownership is done
-(`scene_bounds.py`: `element_visible_bounds`, `scene_visible_bounds`, `validate_scene`).
-Remaining: replace raw transform strings (`Element.transform: str`) with typed
-`Translate/Scale/Rotate/Matrix` classes.
-
-### backlog-mermaid-p3-infra
-
-**Deferred from `mermaid-p3` Stage 12 (partially shipped):** Theme token infrastructure
-(`resolve_tokens()`), `to_png()` rasterizing native SVG, and `validate()` routing through
-`RenderRequest` are done. Remaining: wire `to_html()` and `to_svg()`/`to_png()` through
-`RenderRequest` — they currently call `_dispatch(...)` / `render_svg_result(...)` directly
-rather than through the request object. Also faithful-mode propagation and output-sizing polish.
-
-### backlog-mermaid-p3-class-compiler
-
-**Deferred from `mermaid-p3` Task 7:** Implement `_compile_classdiagram()` that parses `class X { members }`
-syntax and returns a `FinalizedLayout` with `NodeLayout.member_layouts` populated. Required to
-complete Stage 3 FinalizedLayout authority for classDiagram. Until this exists, classDiagram
-continues using `_class_topology_scene()` with mutable models.
 
 ## mermaid-fidelity-hardening
 

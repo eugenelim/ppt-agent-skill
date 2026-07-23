@@ -1,8 +1,10 @@
-"""Semantic tests for class-diagram-marker-semantics.
+"""Semantic tests for class-diagram-marker-semantics and _compile_classdiagram.
 
 Verifies that each UML relationship operator in class-relationships-all.mmd
 maps to the correct MarkerSpec (kind, end, line_style) and that the rendered
 HTML uses the right SVG marker attributes.
+
+Also tests _compile_classdiagram() and its NodeLayout.member_layouts output.
 """
 from __future__ import annotations
 
@@ -416,3 +418,109 @@ class TestDirectionPreservation:
         assert e.dst == "Professor"
         assert e.target_marker.kind == MarkerKind.HOLLOW_TRIANGLE
         assert e.target_marker.end == "TARGET"
+
+
+# ── _compile_classdiagram unit tests ─────────────────────────────────────────
+
+class TestCompileClassdiagram:
+    """Unit tests for _compile_classdiagram() returning FinalizedLayout."""
+
+    def _compile(self, src: str, **kwargs):
+        from mermaid_render.layout._strategies import _compile_classdiagram
+        return _compile_classdiagram(src, **kwargs)
+
+    def test_returns_compiled_flowchart(self):
+        from mermaid_render.layout._geometry import FinalizedLayout
+        src = "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog"
+        result = self._compile(src)
+        assert hasattr(result, "layout")
+        assert isinstance(result.layout, FinalizedLayout)
+
+    def test_member_layouts_populated(self):
+        src = (
+            "classDiagram\n"
+            "  class Animal {\n"
+            "    +String name\n"
+            "    +makeSound() void\n"
+            "  }"
+        )
+        result = self._compile(src)
+        nl = result.layout.node_layouts.get("Animal")
+        assert nl is not None
+        # attrs + "---" divider + methods = 3 rows
+        assert len(nl.member_layouts) == 3
+
+    def test_member_layouts_attrs_only(self):
+        src = (
+            "classDiagram\n"
+            "  class Config {\n"
+            "    +String host\n"
+            "    +int port\n"
+            "  }"
+        )
+        result = self._compile(src)
+        nl = result.layout.node_layouts["Config"]
+        # No methods → no divider
+        assert len(nl.member_layouts) == 2
+        texts = [tl.lines[0].runs[0].text for tl in nl.member_layouts if tl.lines and tl.lines[0].runs]
+        assert any("host" in t for t in texts)
+
+    def test_member_layouts_methods_only(self):
+        src = (
+            "classDiagram\n"
+            "  class Service {\n"
+            "    +connect()\n"
+            "    +disconnect()\n"
+            "  }"
+        )
+        result = self._compile(src)
+        nl = result.layout.node_layouts["Service"]
+        # No attrs → no divider
+        assert len(nl.member_layouts) == 2
+
+    def test_class_without_members_has_empty_member_layouts(self):
+        src = "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog"
+        result = self._compile(src)
+        for nid in ("Animal", "Dog"):
+            nl = result.layout.node_layouts[nid]
+            assert nl.member_layouts == ()
+
+    def test_canvas_bounds_positive(self):
+        src = "classDiagram\n  class A\n  class B\n  A --> B"
+        result = self._compile(src)
+        cb = result.layout.canvas_bounds
+        assert cb.w > 0 and cb.h > 0
+
+    def test_routed_edges_present(self):
+        src = "classDiagram\n  class A\n  class B\n  A --> B"
+        result = self._compile(src)
+        assert len(result.layout.routed_edges) == 1
+
+    def test_empty_source_raises(self):
+        import pytest
+        with pytest.raises(ValueError, match="No classes"):
+            self._compile("classDiagram\n")
+
+    def test_end_to_end_to_html(self):
+        from mermaid_render import to_html
+        src = (
+            "classDiagram\n"
+            "  class Animal {\n"
+            "    +String name\n"
+            "    +makeSound() void\n"
+            "  }\n"
+            "  class Dog\n"
+            "  Animal <|-- Dog"
+        )
+        html = to_html(src)
+        assert "mermaid-layout finalized" in html
+        assert "Animal" in html
+
+    def test_end_to_end_to_svg(self):
+        import os
+        from unittest.mock import patch
+        from mermaid_render import to_svg
+        src = "classDiagram\n  class A\n  class B\n  A --> B"
+        with patch.dict(os.environ, {"MERMAID_RENDER_SVG_BACKEND": "native"}):
+            svg = to_svg(src, experimental=True)
+        assert "<svg" in svg

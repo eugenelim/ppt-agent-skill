@@ -20,6 +20,7 @@ from .scene import (
     SceneRoundedRect,
     SceneText,
     SvgScene,
+    Translate,
 )
 from .layout._geometry import Point, Rect
 
@@ -32,18 +33,21 @@ _TRANSLATE_RE = re.compile(
 _TRANSLATE_1_RE = re.compile(r"^\s*translate\(\s*([+-]?\d*\.?\d+)\s*\)\s*$")
 
 
-def _parse_translate(transform_str: str) -> Tuple[float, float]:
-    """Extract (dx, dy) from a 'translate(dx, dy)' transform string.
+def _parse_translate(transform: object) -> Tuple[float, float]:
+    """Extract (dx, dy) from a transform.
 
-    Returns (0.0, 0.0) for empty strings and unrecognised transforms.
-    Only translate() is parsed; rotate/scale/matrix are treated as identity.
+    Accepts a typed ``Translate`` instance (preferred) or a legacy SVG transform
+    string ``'translate(dx, dy)'``.  Returns ``(0.0, 0.0)`` for every other
+    transform type (Rotate, Scale, Matrix, empty string, None).
     """
-    if not transform_str:
+    if isinstance(transform, Translate):
+        return (transform.dx, transform.dy)
+    if not isinstance(transform, str) or not transform:
         return (0.0, 0.0)
-    m = _TRANSLATE_RE.match(transform_str)
+    m = _TRANSLATE_RE.match(transform)
     if m:
         return (float(m.group(1)), float(m.group(2)))
-    m2 = _TRANSLATE_1_RE.match(transform_str)
+    m2 = _TRANSLATE_1_RE.match(transform)
     if m2:
         return (float(m2.group(1)), 0.0)
     return (0.0, 0.0)

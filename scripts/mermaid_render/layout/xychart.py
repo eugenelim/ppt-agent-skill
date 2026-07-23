@@ -19,6 +19,7 @@ from ..scene import (
     LAYER_OVERLAYS,
     LAYER_ORDER,
     PaintStyle,
+    Rotate,
     SceneCircle,
     SceneLine,
     ScenePath,
@@ -310,7 +311,7 @@ def layout_xychart_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                 fill_color=_AXIS_TEXT,
             ),),
             text_anchor="middle",
-            transform=f"rotate(-90, 8, {chart_top + chart_h / 2})",
+            transform=Rotate(angle=-90.0, cx=8.0, cy=float(chart_top + chart_h / 2)),
         ))
 
     layers = tuple([
