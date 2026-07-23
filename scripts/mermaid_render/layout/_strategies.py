@@ -5174,7 +5174,22 @@ def _compile_flowchart(
             break
     content_lines = lines[directive_index + 1:]
 
-    nodes, edges, groups = _parse_graph_source(content_lines)
+    _state_directives = frozenset({"statediagram-v2", "statediagram"})
+    _top_directive = lines[directive_index].strip().split()[0].lower() if lines else ""
+    if _top_directive in _state_directives:
+        from .statediagram import compile_state_machine as _compile_sm, state_model_to_graph as _sm_to_graph
+        _sm_model = _compile_sm(content_lines)
+        nodes, edges, groups = _sm_to_graph(_sm_model)
+        # Assign stable edge IDs to any not already set by state_model_to_graph
+        _eid_counts: dict[str, int] = {}
+        for _e in edges:
+            if not _e.edge_id:
+                _base = f"{_e.src}->{_e.dst}"
+                _n = _eid_counts.get(_base, 0)
+                _eid_counts[_base] = _n + 1
+                _e.edge_id = _base if _n == 0 else f"{_base}#{_n}"
+    else:
+        nodes, edges, groups = _parse_graph_source(content_lines)
     parsed_edge_count = len(edges)  # count before _break_cycles adds dummy edges
     if not _opts.faithful_mermaid and _opts.infer_icons:
         _infer_label_icons(nodes)

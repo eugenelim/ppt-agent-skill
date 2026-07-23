@@ -5,7 +5,7 @@ Covers:
   1. Terminal-circle (start/end state) horizontal centering in TB mode.
   2. Transition arrow labels appear near midpoint.
   3. Composite state group box rendered with label.
-  4. Start state renders ● symbol; end state renders ◎ symbol.
+  4. Start state renders as CSS filled disc (no ● glyph in label span); end state renders ◎.
   5. direction-directive inside body does not create a spurious node.
   6. All three fixture files render without errors.
 
@@ -142,15 +142,15 @@ class TestCircleCenteringTB:
         """Inner start/end circles inside composite state are also centred."""
         src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
         html = _dispatch_ok(src)
-        inner_start = _node_left(html, "_g0_sm_start_")
+        inner_start = _node_left(html, "Processing_sm_start_")
         validating = _node_left(html, "Validating")
         validating_width = _node_width(html, "Validating")
-        assert inner_start is not None, "_g0_sm_start_ not found"
+        assert inner_start is not None, "Processing_sm_start_ not found"
         assert validating is not None, "Validating not found"
         assert validating_width is not None, "Validating width not found"
         expected_offset = (validating_width - _TERMINAL_NODE_SIZE) // 2
         assert inner_start == validating + expected_offset, (
-            f"Inner _g0_sm_start_ left={inner_start} should be Validating left ({validating}) "
+            f"Inner Processing_sm_start_ left={inner_start} should be Validating left ({validating}) "
             f"+ (validating_width {validating_width} - circle {_TERMINAL_NODE_SIZE}) // 2 = "
             f"{validating + expected_offset}"
         )
@@ -245,12 +245,12 @@ class TestCompositeStateGroup:
 # ── TestStartEndSymbols ───────────────────────────────────────────────────────
 
 class TestStartEndSymbols:
-    """Start state renders ● (filled circle) and end state renders as doublecircle."""
+    """Start state renders as CSS filled disc; end state renders as doublecircle with filled inner disc."""
 
     def test_start_symbol_in_html(self):
-        """[*] as source renders the filled-circle ● start marker."""
+        """[*] as source sets data-label="●" (CSS disc — no ● text in node-label span)."""
         html = _dispatch_ok("stateDiagram-v2\n  [*] --> Idle")
-        assert "●" in html, "Start state ● missing"
+        assert "●" in html, "Start state data-label ● missing"
 
     def test_end_node_is_doublecircle_in_html(self):
         """[*] as target renders as node-doublecircle (UML final-state double ring)."""
@@ -374,3 +374,23 @@ class TestFixtureSmoke:
         assert "diagram mermaid-layout" in html
         assert "●" in html
         assert "node-doublecircle" in html
+
+    def test_initial_disc_not_in_node_label_span(self):
+        """AC9: ● character must not appear inside a node-label span (CSS disc renders it)."""
+        html = _dispatch_ok("stateDiagram-v2\n  [*] --> Idle")
+        node_label_texts = re.findall(r'class="node-label"[^>]*>([^<]*)', html)
+        assert not any("●" in t for t in node_label_texts), (
+            f"Initial state ● leaked into node-label span: {node_label_texts}"
+        )
+
+    def test_final_state_inner_disc_uses_background(self):
+        """AC10: doublecircle inner div uses background (filled disc) not border-only ring."""
+        html = _dispatch_ok("stateDiagram-v2\n  Done --> [*]")
+        # The outer doublecircle div is followed by an inner <div> that must have background
+        inner_divs = re.findall(
+            r'node-doublecircle.*?(<div style="[^"]*")', html, re.DOTALL
+        )
+        assert inner_divs, "No doublecircle inner div found"
+        assert any("background:" in d for d in inner_divs), (
+            f"Final state inner div missing background fill: {inner_divs}"
+        )

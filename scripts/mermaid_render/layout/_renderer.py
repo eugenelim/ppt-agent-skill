@@ -1730,7 +1730,18 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         _fid_parent = f' data-parent-id="{_h(nl.parent_group_id)}"' if nl.parent_group_id else ""
 
         # Special full-node renderings
-        if shape == "doublecircle":
+        if nid.endswith("_sm_start_") and shape == "circle":
+            # UML initial pseudo-state: solid filled disc, no label text
+            parts.append(
+                f'<div class="node node-circle state-initial{extra_cls}" data-node-id="{_h(nid)}"'
+                f' data-kind="node" data-label="●" data-shape="circle"'
+                f' data-order="{nl.rank}"{_fid_parent} style="'
+                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
+                f'width:{nh}px; height:{nh}px; '
+                f'border-radius:50%; background:{accent}; box-sizing:border-box;">'
+                f'</div>'
+            )
+        elif shape == "doublecircle":
             parts.append(
                 f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}"'
                 f' data-kind="node" data-label="{_fid_label}" data-shape="doublecircle"'
@@ -1742,7 +1753,7 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'background:{_bg}; box-shadow:{_shadow}; '
                 f'display:flex; align-items:center; justify-content:center;">'
                 f'<div style="position:absolute; inset:5px; border-radius:50%; '
-                f'border:2px solid {accent}; pointer-events:none;"></div>'
+                f'background:{accent}; pointer-events:none;"></div>'
                 f'{inner}</div>'
             )
         elif shape == "subroutine":

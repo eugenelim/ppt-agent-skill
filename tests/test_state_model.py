@@ -243,9 +243,10 @@ class TestCompileStateMachine:
 
     def test_concurrent_separator_ignored(self):
         m = compile_state_machine(["state S {", "  A --> B", "  --", "  C --> D", "}"])
-        # Should not raise; -- is ignored
-        assert any(t.src_id == "A" for t in m.transitions)
-        assert any(t.src_id == "C" for t in m.transitions)
+        # Should not raise; -- is ignored; transitions live in cs.transitions (composite scope)
+        cs = next(s for s in m.states if isinstance(s, CompositeState) and s.id == "S")
+        assert any(t.src_id == "A" for t in cs.transitions)
+        assert any(t.src_id == "C" for t in cs.transitions)
 
     def test_direction_directive_ignored(self):
         m = compile_state_machine(["direction LR", "A --> B"])
@@ -510,3 +511,111 @@ class TestBarShapeSvgPath:
         svg = dispatch_native(_CHOICE_SRC)
         assert "<svg" in svg
         assert "node-diamond" in svg, "diamond shape CSS class missing from SVG"
+
+
+# ── Task 1: compile_state_machine() recursive children ────────────────────────
+
+class TestCompositeChildren:
+    """compile_state_machine() must populate CompositeState.children recursively."""
+
+    def test_composite_children_populated(self):
+        lines = ["state Processing {", "[*] --> Validating", "Validating --> Executing", "}"]
+        m = compile_state_machine(lines)
+        cs = next(s for s in m.states if isinstance(s, CompositeState) and s.id == "Processing")
+        assert len(cs.children) > 0
+
+    def test_inner_start_in_children(self):
+        lines = ["state Processing {", "[*] --> Validating", "}"]
+        m = compile_state_machine(lines)
+        cs = next(s for s in m.states if isinstance(s, CompositeState))
+        ids = {s.id for s in cs.children if hasattr(s, "id")}
+        assert "Processing_sm_start_" in ids
+
+    def test_inner_transitions_in_composite(self):
+        lines = ["state Processing {", "[*] --> Validating", "Validating --> Executing", "}"]
+        m = compile_state_machine(lines)
+        cs = next(s for s in m.states if isinstance(s, CompositeState))
+        assert any(t.src_id == "Validating" for t in cs.transitions)
+
+    def test_cross_scope_transition_in_top_level(self):
+        lines = ["state Processing {", "[*] --> X", "}", "Processing --> Done"]
+        m = compile_state_machine(lines)
+        assert any(t.src_id == "Processing" and t.dst_id == "Done" for t in m.transitions)
+
+    def test_composite_no_inner_star(self):
+        """Composite with no [*] inside: does not crash; children are emitted."""
+        lines = ["state Processing {", "A --> B", "}"]
+        m = compile_state_machine(lines)
+        cs = next(s for s in m.states if isinstance(s, CompositeState))
+        child_ids = {s.id for s in cs.children if hasattr(s, "id")}
+        assert "A" in child_ids and "B" in child_ids
+
+    def test_two_level_nesting(self):
+        """Nested composite (Processing > Inner > X) compiles without crash."""
+        lines = [
+            "state Processing {",
+            "  state Inner {",
+            "    [*] --> X",
+            "  }",
+            "  [*] --> Inner",
+            "}",
+        ]
+        m = compile_state_machine(lines)
+        cs = next(s for s in m.states if isinstance(s, CompositeState) and s.id == "Processing")
+        inner_ids = {s.id for s in cs.children if hasattr(s, "id")}
+        assert "Inner" in inner_ids
+        inner = next(s for s in cs.children if isinstance(s, CompositeState) and s.id == "Inner")
+        grandchild_ids = {s.id for s in inner.children if hasattr(s, "id")}
+        assert "X" in grandchild_ids
+
+
+# ── Task 2: state_model_to_graph() cross-scope handling ───────────────────────
+
+class TestCrossScopeGraph:
+    """state_model_to_graph() routes cross-scope transitions correctly."""
+
+    def test_composite_group_has_children_as_members(self):
+        m = compile_state_machine([
+            "state Processing {", "[*] --> Validating", "Validating --> Executing",
+            "Executing --> [*]", "}",
+        ])
+        nodes, edges, groups = state_model_to_graph(m)
+        g = next(g for g in groups.values() if g.label == "Processing")
+        assert "Processing_sm_start_" in g.members
+        assert "Validating" in g.members
+
+    def test_cross_scope_exit_edge_has_src_group(self):
+        m = compile_state_machine([
+            "state Processing {", "[*] --> X", "X --> [*]", "}",
+            "Processing --> Done",
+        ])
+        nodes, edges, groups = state_model_to_graph(m)
+        exit_edge = next(e for e in edges if e.dst == "Done")
+        assert exit_edge.src_group is not None
+
+    def test_cross_scope_entry_targets_inner_start(self):
+        m = compile_state_machine([
+            "Idle --> Processing",
+            "state Processing {", "[*] --> X", "}",
+        ])
+        nodes, edges, groups = state_model_to_graph(m)
+        entry_edge = next(e for e in edges if e.src == "Idle")
+        assert entry_edge.dst == "Processing_sm_start_"
+
+    def test_complex_fixture_no_crash(self):
+        """statediagram-complex.mmd renders without crash."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-complex.mmd").read()
+        html = to_html(src)
+        assert "diagram mermaid-layout" in html
+
+    def test_nested_fixture_no_crash(self):
+        """statediagram-nested.mmd renders without crash."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        html = to_html(src)
+        assert "diagram mermaid-layout" in html
+
+    def test_nested_fixture_processing_label(self):
+        """statediagram-nested.mmd HTML contains the 'Processing' group label."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        html = to_html(src)
+        assert "Processing" in html
