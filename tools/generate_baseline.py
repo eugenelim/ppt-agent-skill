@@ -70,6 +70,8 @@ def main() -> None:
                     help="Allow generation from a dirty working tree")
     ap.add_argument("--mode", choices=["editorial", "fidelity", "both"], default="both",
                     help="Rendering lane(s) to include (default: both)")
+    ap.add_argument("--height-hint", dest="height_hint", type=int, default=0,
+                    help="Renderer height hint in px (default: 0 = auto); recorded in per-fixture provenance")
     ap.add_argument("--output-dir", dest="output_dir", default=None,
                     help="Write gallery to this directory (default: ppt-output/compare/)")
     args = ap.parse_args()
@@ -128,6 +130,7 @@ def main() -> None:
         mmd_files,
         out_dir,
         width_hint=0,
+        height_hint=args.height_hint,
         strict=False,
         allow_dirty=args.allow_dirty,
         mode=args.mode,

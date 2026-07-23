@@ -450,18 +450,18 @@ def _run_mmdc(src: str, out_svg: Path, deadline_s: float = 60.0) -> tuple[bool, 
     return False, note or "mmdc produced no valid SVG"
 
 
-def _render_ours(src: str, width_hint: int = 0) -> tuple[str | None, str]:
+def _render_ours(src: str, width_hint: int = 0, height_hint: int = 0) -> tuple[str | None, str]:
     """Return (full_html, error_msg). full_html is None on error."""
     try:
-        return mermaid_render.to_html(src, width_hint=width_hint), ""
+        return mermaid_render.to_html(src, width_hint=width_hint, height_hint=height_hint), ""
     except Exception as e:
         return None, str(e)
 
 
-def _render_fidelity(src: str, width_hint: int = 0) -> tuple[str | None, str]:
+def _render_fidelity(src: str, width_hint: int = 0, height_hint: int = 0) -> tuple[str | None, str]:
     """Return (full_html, error_msg) rendered with faithful=True and neutral theme."""
     try:
-        return mermaid_render.to_html(src, faithful=True, theme="neutral", width_hint=width_hint), ""
+        return mermaid_render.to_html(src, faithful=True, theme="neutral", width_hint=width_hint, height_hint=height_hint), ""
     except Exception as e:
         return None, str(e)
 
@@ -637,6 +637,7 @@ def _build_gallery(
     mmd_files: list[Path],
     out_dir: Path,
     width_hint: int = 0,
+    height_hint: int = 0,
     strict: bool = False,
     allow_dirty: bool = False,
     mode: str = "both",
@@ -660,7 +661,7 @@ def _build_gallery(
     out_dir.parent.mkdir(parents=True, exist_ok=True)
     tmp_dir = Path(tempfile.mkdtemp(dir=out_dir.parent, prefix="gallery_tmp_"))
     try:
-        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint, strict=strict, mode=mode)
+        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint, height_hint=height_hint, strict=strict, mode=mode)
     except Exception:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
@@ -671,6 +672,7 @@ def _build_gallery_into(
     tmp_dir: Path,
     dest_dir: Path,
     width_hint: int,
+    height_hint: int = 0,
     strict: bool = False,
     mode: str = "both",
 ) -> "tuple[Path, bool, list[dict]]":
@@ -729,7 +731,7 @@ def _build_gallery_into(
                 # Fidelity-only: skip editorial render.
                 ours_html, ours_err = None, ""
             else:
-                ours_html, ours_err = _render_ours(src, width_hint=width_hint)
+                ours_html, ours_err = _render_ours(src, width_hint=width_hint, height_hint=height_hint)
         finally:
             if _elk_mod is not None:
                 _elk_mod.layout_with_elk = _orig_elk  # type: ignore[assignment]
@@ -758,7 +760,7 @@ def _build_gallery_into(
         fidelity_err = ""
         fidelity_faithful = False
         if mode in ("fidelity", "both"):
-            fidelity_html, fidelity_err = _render_fidelity(src, width_hint=width_hint)
+            fidelity_html, fidelity_err = _render_fidelity(src, width_hint=width_hint, height_hint=height_hint)
             fidelity_faithful = True
             if fidelity_html:
                 (tmp_dir / "ours" / f"{name}_fidelity.html").write_text(fidelity_html, encoding="utf-8")
@@ -804,7 +806,7 @@ def _build_gallery_into(
             "faithful": _prov_faithful,
             "theme": _prov_theme,
             "width_hint": width_hint,
-            "height_hint": 0,
+            "height_hint": height_hint,
             "output_width": output_width,
             "output_height": output_height,
             "output_viewbox": output_viewbox,
@@ -1075,6 +1077,8 @@ def main() -> None:
                     help="Write only metadata.json to --output-dir; skip gallery HTML")
     ap.add_argument("--width-hint", dest="width_hint", type=int, default=0,
                     help="Renderer width hint in px (default: 0 = auto); does not alter gallery CSS")
+    ap.add_argument("--height-hint", dest="height_hint", type=int, default=0,
+                    help="Renderer height hint in px (default: 0 = auto); recorded in per-fixture provenance")
     ap.add_argument("--strict", action="store_true",
                     help="Exit non-zero if any fixture has render/structural_geometry fail or error-severity diagnostic")
     ap.add_argument("--allow-dirty", dest="allow_dirty", action="store_true",
@@ -1139,6 +1143,7 @@ def main() -> None:
     index_path, has_failures, fixture_results = _build_gallery(
         mmd_files, out_dir,
         width_hint=args.width_hint,
+        height_hint=args.height_hint,
         strict=args.strict,
         allow_dirty=args.allow_dirty,
         mode=args.mode,
