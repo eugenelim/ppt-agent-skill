@@ -13,7 +13,7 @@ composite-children recursion is implemented.
 
 Painter shapes per pseudo-state type:
   InitialPseudoState → circle (●)
-  FinalPseudoState   → circle (◎)
+  FinalPseudoState   → doublecircle (outer ring + inner filled disc)
   Choice             → diamond
   Fork / Join        → bar (horizontal bar)
   History            → circle (H / H*)
@@ -377,7 +377,7 @@ def state_model_to_graph(
 
     Painter shapes per pseudo-state kind:
       InitialPseudoState → circle, label '●'
-      FinalPseudoState   → circle, label '◎'
+      FinalPseudoState   → doublecircle, label ''
       Choice             → diamond
       Fork               → bar, css_class 'state-fork'
       Join               → bar, css_class 'state-join'
@@ -407,7 +407,7 @@ def state_model_to_graph(
         elif isinstance(state, InitialPseudoState):
             _add(state.id, "●", "circle", "", parent_gid)
         elif isinstance(state, FinalPseudoState):
-            _add(state.id, "◎", "circle", "", parent_gid)
+            _add(state.id, "", "doublecircle", "", parent_gid)
         elif isinstance(state, Choice):
             _add(state.id, state.label or state.id, "diamond", "state-choice", parent_gid)
         elif isinstance(state, Fork):
@@ -426,7 +426,7 @@ def state_model_to_graph(
             if state.entry_gate:
                 _add(state.entry_gate.id, "●", "circle", "", gid)
             if state.exit_gate:
-                _add(state.exit_gate.id, "◎", "circle", "", gid)
+                _add(state.exit_gate.id, "", "doublecircle", "", gid)
             for child in state.children:
                 _emit(child, gid)
 

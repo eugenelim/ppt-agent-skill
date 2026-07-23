@@ -258,6 +258,12 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
     stack: list[str] = []  # subgraph id stack
     _pending_link_styles: list[tuple[int, str]] = []
     _composite_gids: set[str] = set()  # group IDs that are state diagram composite states
+    _note_counter: int = 0
+    _note_lines: list[str] = []
+    _note_target: str = ""  # stateDiagram note: target state ID accumulating block
+
+    _STATE_NOTE_INLINE = re.compile(r'^note\s+(?:right|left)\s+of\s+(\w+)\s*:\s*(.+)', re.I)
+    _STATE_NOTE_OPEN = re.compile(r'^note\s+(?:right|left)\s+of\s+(\w+)\s*$', re.I)
 
     def _ensure(nid: str, label: str, shape: str, css_class: str = "") -> None:
         if nid not in nodes:
@@ -305,6 +311,38 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             continue
         if line.startswith("class ") and not line.startswith("classDiagram"):
             continue
+        # stateDiagram-v2 notes: accumulate block or emit inline
+        if _note_target:
+            # Inside a note block — accumulate until "end note"
+            if line.lower().strip() == "end note":
+                _note_text = " ".join(_note_lines).strip()
+                if _note_text:
+                    _ensure(_note_target, _note_target, "rect", "")  # forward-ref guard
+                    _nid = f"_note_{_note_counter}"
+                    _note_counter += 1
+                    _ensure(_nid, _note_text, "rect", "state-note")
+                    edges.append(_Edge(src=_note_target, dst=_nid, label="", style="dotted", arrow=False))
+                _note_target = ""
+                _note_lines = []
+            else:
+                _note_lines.append(line)
+            continue
+        _note_inline = _STATE_NOTE_INLINE.match(line)
+        if _note_inline:
+            _ni_target, _ni_text = _note_inline.group(1), _note_inline.group(2).strip()
+            _nid = f"_note_{_note_counter}"
+            _note_counter += 1
+            _ensure(_nid, _ni_text, "rect", "state-note")
+            # Ensure target node exists (may be forward-referenced)
+            _ensure(_ni_target, _ni_target, "rect", "")
+            edges.append(_Edge(src=_ni_target, dst=_nid, label="", style="dotted", arrow=False))
+            continue
+        _note_open = _STATE_NOTE_OPEN.match(line)
+        if _note_open:
+            _note_target = _note_open.group(1)
+            _note_lines = []
+            continue
+
         # stateDiagram-v2 / flowchart subgraph: inline direction directive
         _dir_m = re.match(r'direction\s+(LR|RL|TB|TD)\s*$', line, re.I)
         if _dir_m:
@@ -396,6 +434,15 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
         # Try to match as edge chain; a line can chain: A --> B --> C
         _parse_line(line, edges, _ensure)
 
+    # Flush any unterminated note block (missing "end note" swallows trailing diagram)
+    if _note_target and _note_lines:
+        _note_text = " ".join(_note_lines).strip()
+        if _note_text:
+            _ensure(_note_target, _note_target, "rect", "")
+            _nid = f"_note_{_note_counter}"
+            _ensure(_nid, _note_text, "rect", "state-note")
+            edges.append(_Edge(src=_note_target, dst=_nid, label="", style="dotted", arrow=False))
+
     # Apply deferred linkStyle overrides (linkStyle appears after edges in source)
     for _lidx, _lcss in _pending_link_styles:
         if _lidx < len(edges):
@@ -407,8 +454,8 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             nodes[_sm_id].shape = "circle"
             nodes[_sm_id].label = "●"
         elif _sm_id.endswith("_sm_end_"):
-            nodes[_sm_id].shape = "circle"
-            nodes[_sm_id].label = "◎"
+            nodes[_sm_id].shape = "doublecircle"
+            nodes[_sm_id].label = ""
 
     # Post-process: composite state names are group labels, not standalone atomic nodes.
     # Transition parsing re-creates them as nodes; remove them and rewire edges to

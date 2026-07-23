@@ -409,12 +409,19 @@ def _is_terminal_circle(n: "_Node") -> bool:
     return n.shape == "circle" and len(n.label.strip()) <= 2
 
 
+def _is_terminal_doublecircle(n: "_Node") -> bool:
+    """True for UML final-state doublecircle nodes (global or scoped _sm_end_ suffix)."""
+    return n.shape == "doublecircle" and n.id.endswith("_sm_end_")
+
+
 def _node_size_circle(n: "_Node") -> int:
     """Dynamic diameter for a regular circle / doublecircle node.
 
     Measures ALL label lines (not just the first) so multiline circles size correctly.
     Doublecircle adds DOUBLE_CIRCLE_RING px per side of ring clearance.
     """
+    if _is_terminal_doublecircle(n):
+        return _TERMINAL_NODE_SIZE
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
     raw = n.label.split("|")[0].strip()
@@ -487,6 +494,8 @@ def _node_render_h(n: "_Node") -> int:
     Icon-left layout: icon sits alongside title text, not below.
     header_h = max(icon_h, title_h + sub_h) — icon only adds height when taller than text.
     """
+    if _is_terminal_doublecircle(n):
+        return _TERMINAL_NODE_SIZE
     if _is_terminal_circle(n):
         return _TERMINAL_NODE_SIZE
     if n.shape in ("circle", "doublecircle"):

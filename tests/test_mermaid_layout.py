@@ -1007,10 +1007,10 @@ class TestEdgeOperators:
         assert edges[0].src == "_sm_start_" and edges[0].dst == "Idle"
 
     def test_statediff_end_node_parsed(self):
-        """State --> [*] creates a _sm_end_ circle node."""
+        """State --> [*] creates a _sm_end_ doublecircle node (UML final state)."""
         nodes, edges, _ = _parse_graph_source(["Done --> [*]"])
         assert "_sm_end_" in nodes, "_sm_end_ node not created from [*] dst"
-        assert nodes["_sm_end_"].shape == "circle"
+        assert nodes["_sm_end_"].shape == "doublecircle"
         assert len(edges) == 1
         assert edges[0].src == "Done" and edges[0].dst == "_sm_end_"
 
@@ -4656,11 +4656,11 @@ class TestStateDiagramParser:
         assert "_sm_start_" in nodes
         assert nodes["_sm_start_"].shape == "circle"
 
-    def test_final_state_circle(self):
-        """[*] at destination creates an _sm_end_ circle node."""
+    def test_final_state_doublecircle(self):
+        """[*] at destination creates an _sm_end_ doublecircle node (UML final state)."""
         nodes, edges, _ = _parse_graph_source(["Done --> [*]"])
         assert "_sm_end_" in nodes
-        assert nodes["_sm_end_"].shape == "circle"
+        assert nodes["_sm_end_"].shape == "doublecircle"
 
     def test_transition_label(self):
         """'State --> Other : label' extracts label as edge label."""

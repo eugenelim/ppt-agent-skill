@@ -294,17 +294,17 @@ class TestStateModelToGraph:
         nodes, _, _ = self._graph_from(["[*] --> Idle"])
         assert nodes["_sm_start_"].shape == "circle"
 
-    def test_final_pseudo_is_circle(self):
+    def test_final_pseudo_is_doublecircle(self):
         nodes, _, _ = self._graph_from(["Done --> [*]"])
-        assert nodes["_sm_end_"].shape == "circle"
+        assert nodes["_sm_end_"].shape == "doublecircle"
 
     def test_initial_pseudo_label_filled_circle(self):
         nodes, _, _ = self._graph_from(["[*] --> Idle"])
         assert nodes["_sm_start_"].label == "●"
 
-    def test_final_pseudo_label_double_circle(self):
+    def test_final_pseudo_label_empty(self):
         nodes, _, _ = self._graph_from(["Done --> [*]"])
-        assert nodes["_sm_end_"].label == "◎"
+        assert nodes["_sm_end_"].label == ""
 
     def test_fork_is_bar(self):
         nodes, _, _ = self._graph_from(["state F <<fork>>", "[*] --> F"])
