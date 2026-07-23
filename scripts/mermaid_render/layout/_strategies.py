@@ -44,6 +44,7 @@ from .requirement import _parse_attr_value  # noqa: F401 — imported for downst
 # ── imports from split modules ───────────────────────────────────────────────
 from ._pipeline import (
     RenderOptions,
+    FlowchartSemantics,
     _infer_label_icons,
     _compile_flowchart,
     _render_legend_from_layout,
@@ -51,6 +52,12 @@ from ._pipeline import (
     _build_node_layouts_ir,
     _build_routed_edges_ir,
     _clip_cross_scope_exit_waypoints,
+    parse_flowchart_semantics,
+    build_flowchart_layout_graph,
+    layout_flowchart_with_elk,
+    enrich_flowchart_finalized_layout,
+    layout_flowchart_with_python_fallback,
+    validate_flowchart_layout,
 )
 from ._diagram_types import (
     _layout_gantt,
