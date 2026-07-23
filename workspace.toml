@@ -55,7 +55,7 @@ shipped = [
 
 [backlog]
 open = [
-  # ── Environment-blocked / requires manual QA ─────────────────────────────
+  # ── Group 6: Environment-blocked / requires manual QA ────────────────────
 
   # Compute real mmdc_oracle comparison vs our SVG geometry — blocked on SequenceGeometry T7 stability and mmdc availability
   {slug = "seq-mmdc-oracle-comparison"},
