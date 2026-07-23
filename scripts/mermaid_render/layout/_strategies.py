@@ -4746,6 +4746,81 @@ def _infer_port_side(pts: "tuple | list", at_start: bool) -> "PortSide":
     return PortSide.BOTTOM if dy > 0 else PortSide.TOP
 
 
+def _bbox_segment_exit(ix, iy, ox, oy, bbox):
+    """Point where segment (inside)->(outside) crosses an axis-aligned box edge.
+
+    ``(ix, iy)`` lies inside ``bbox`` = ``[x0, y0, x1, y1]`` and ``(ox, oy)`` outside,
+    so the segment crosses the boundary exactly once. Returns that crossing (the
+    smallest positive parameter ``t`` along the segment). Falls back to the inside
+    endpoint when no crossing is found in ``(0, 1]`` — a degenerate (zero-length)
+    segment, or one whose inside endpoint already sits on the box edge — so the
+    clipped start never lands outside the box.
+    """
+    x0, y0, x1, y1 = bbox
+    dx, dy = ox - ix, oy - iy
+    ts = []
+    if dx:
+        for xb in (x0, x1):
+            t = (xb - ix) / dx
+            if 0 < t <= 1 and (y0 - 1e-6) <= iy + t * dy <= (y1 + 1e-6):
+                ts.append(t)
+    if dy:
+        for yb in (y0, y1):
+            t = (yb - iy) / dy
+            if 0 < t <= 1 and (x0 - 1e-6) <= ix + t * dx <= (x1 + 1e-6):
+                ts.append(t)
+    if not ts:
+        return (ix, iy)
+    t = min(ts)
+    return (ix + t * dx, iy + t * dy)
+
+
+def _clip_cross_scope_exit_waypoints(routed, src_group_map, grp_bboxes) -> None:
+    """Clip state-diagram composite-exit routes to their source group boundary.
+
+    A transition that leaves a composite state (e.g. ``Processing --> Done``) is
+    routed from the composite's internal scoped-final-state node, which sits inside
+    the group box; the edge is tagged with ``_Edge.src_group`` (the group whose
+    boundary should clip the source endpoint). For each routed dict whose ``edge_id``
+    maps to a source group, this drops the leading run of waypoints that fall inside
+    the group box and replaces it with the single point where the polyline first
+    crosses the box boundary, mutating the dict in place so the rendered path
+    originates from the composite edge.
+    """
+    if not src_group_map or not grp_bboxes:
+        return
+
+    def _xy(p):
+        return (p[0], p[1]) if isinstance(p, (tuple, list)) else (p.x, p.y)
+
+    def _inside(px, py, bbox):
+        return bbox[0] <= px <= bbox[2] and bbox[1] <= py <= bbox[3]
+
+    for spec in routed:
+        gid = src_group_map.get(spec.get("edge_id", ""))
+        if gid is None:
+            continue
+        bbox = grp_bboxes.get(gid)
+        if not bbox:
+            continue
+        wps = spec.get("waypoints") or []
+        if len(wps) < 2:
+            continue
+        first_out = next(
+            (i for i, p in enumerate(wps) if not _inside(*_xy(p), bbox)),
+            None,
+        )
+        # None -> whole route inside the box; 0 -> already starts outside. Skip both.
+        if not first_out:
+            continue
+        ix, iy = _xy(wps[first_out - 1])   # last point inside
+        ox, oy = _xy(wps[first_out])       # first point outside
+        boundary = _bbox_segment_exit(ix, iy, ox, oy, bbox)
+        # Emit uniform (x, y) tuples so downstream unpacking never sees a mix of
+        # the prepended tuple and Point-style tail elements.
+        spec["waypoints"] = [boundary, *(_xy(p) for p in wps[first_out:])]
+
+
 def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, ...]":
     """Convert _route_edges() result dicts to typed RoutedEdge IR objects."""
     from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect, MarkerKind
@@ -5451,6 +5526,18 @@ def _compile_flowchart(
     # Build typed IR
     node_layouts = _build_node_layouts_ir(nodes, groups)
     group_layouts = _build_group_layouts_ir(groups, _grp_bboxes)
+    # Clip cross-scope exit routes (state-diagram composite exits) so the path
+    # originates from the source group's boundary rather than from the internal
+    # scoped-final-state node inside the box. src_group is set only by
+    # state_model_to_graph(); the map is empty (and this is a no-op) otherwise.
+    _src_group_map = {
+        e.edge_id: e.src_group
+        for e in edges
+        if getattr(e, "src_group", None) and e.edge_id
+    }
+    if _src_group_map:
+        _clip_cross_scope_exit_waypoints(route_batch.routed, _src_group_map, _grp_bboxes)
+
     routed_edges_ir = _build_routed_edges_ir(route_batch.routed)
 
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
