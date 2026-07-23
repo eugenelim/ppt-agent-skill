@@ -53,18 +53,10 @@ shipped = [
 
 [backlog]
 open = [
-  # ── Group 1: Easy quick wins ─────────────────────────────────────────────
+  # ── Group 1: Environment-blocked quick wins ───────────────────────────────
 
-  # Add height_hint column to gallery/metadata.json per-fixture provenance rows so CI can detect height-scaling regressions
-  {slug = "seq-corr-height-hint-gallery-metadata"},
   # npm ci --prefix scripts/mermaid_render/layout; then pytest tests/test_compound_layout.py -m requires_elk
   {slug = "backlog-compound-elk-ac1-ac3"},
-  # Export VALID_PAGE_TYPES from planning_validator; import into contract_validator / visual_qa / smoke_skill (3-site collapse)
-  {slug = "page-type-enum-consolidation"},
-  # Add pytest-xdist to dev requirements; write subprocess test asserting rc != 0 and "not xdist-safe" in stderr
-  {slug = "xdist-snapshot-guard"},
-  # Split _strategies.py into _pipeline.py + _diagram_types.py; update CONVENTIONS.md mermaid_render/ line-count exception
-  {slug = "strategies-module-split"},
 
   # ── Group 2: Investigation + implementation ───────────────────────────────
 
@@ -72,8 +64,6 @@ open = [
   {slug = "seq-corr-mmdc-data-et-selectors"},
   # Regenerate smoke_skill.py fixtures against current charts/ and styles/ file set; fix cli-cheatsheet:275 runtime-style ref
   {slug = "smoke-skill-pre-existing-fixture-drift"},
-  # Teach planning_validator.resource_exists to resolve chart_type against grouped recipe files; drop chart_free() helper
-  {slug = "diagram-consistency-system-chart-refs"},
   # Create scripts/assemble_diagram_slide.py [--fragment] [--style] [--title] [--annotation] [--output]; auto-read fragment dims
   {slug = "fragment-to-slide-assembler"},
   # Investigate mmdc layout rule for single-participant fragment headers wider than natural canvas; implement override
