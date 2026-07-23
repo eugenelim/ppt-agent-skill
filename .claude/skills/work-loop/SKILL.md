@@ -1,6 +1,6 @@
 ---
 name: work-loop
-description: Use this skill whenever you're implementing a non-trivial change -- a feature, a multi-file bug fix, a refactor, a migration, a framework or dependency upgrade, a schema or API change, performance work, an infrastructure or build-system edit, or anything spec-driven. It enforces the project's plan -> execute -> self-review -> fix loop with mechanical gates (lint, typecheck, tests) and adversarial review. Default to this skill for any task larger than a one-line edit.
+description: Use this skill whenever you're implementing a non-trivial change -- a feature, a multi-file bug fix, a refactor, a migration, a framework or dependency upgrade, a schema or API change, performance work, an infrastructure or build-system edit, or anything spec-driven. Also triggered by argless resume phrases -- "resume", "continue", "keep going", "pick up where I left off", "let's get going" (bare phrases only; "resume the X project" or "resume the X investigation" routes to desk-research-project-status). It enforces the project's plan -> execute -> self-review -> fix loop with mechanical gates (lint, typecheck, tests) and adversarial review. Default to this skill for any task larger than a one-line edit.
 ---
 
 # Skill: work-loop
@@ -50,36 +50,7 @@ PLAN  ──►  EXECUTE  ──►  GATES  ──►  REVIEW  ──►  DECIDE
 
 ## The self-coverage gate
 
-The discipline: between human gates, **resolve everything a referent can resolve
-and surface only the irreducible** — value origination, irreversible risk, or value
-conflict. The self-coverage gate is a phase the loop runs, not a skill you may skip;
-where a harness offers structural enforcement, use it but never depend on it.
-
-Most of its steps are passes the loop already runs; two checks and one refusal item
-are net-new. In order:
-
-1. **Pre-mortem hook** — *existing (PLAN):* the assumption trio + declined-pattern
-   register.
-2. **Conditional domain-grounding** — *net-new (PLAN):* only when the build rests on
-   an ungrounded load-bearing domain claim, ground it before EXECUTE; otherwise it
-   degrades to "the spec already grounds this." Distinct from the EXECUTE
-   contract-grounding gate, which grounds API/library contracts, not domain claims.
-3. **Resolve-vs-surface disposition record** — *net-new (PLAN, closed at DECIDE):*
-   mark every open item either resolved-with-referent (cite the referent) or
-   surfaced-with-reason (value origination, irreversible risk, value conflict, or a
-   referent that genuinely failed). The
-   [resolve-vs-surface reference](references/self-coverage/resolve-vs-surface.md)
-   calibrates the call.
-4. **Fresh-context-adversarial review** — *existing (REVIEW):* reviewers selected
-   from the work-type-keyed roster.
-5. **Resolve-vs-surface routing** — *existing (DECIDE):* `Surface` + apply/defer.
-6. **Done-checklist refusal** — *net-new (DECIDE):* don't declare done until the
-   disposition record exists and every fresh-context finding is resolved.
-
-The two net-new checks are governed by the light/full mode the loop already runs at
-spec time — small in both, no second knob. Non-skippability rests on the named phase
-plus the step-6 refusal item. The full seven-module design-convergence battery is
-`discovery-loop`'s, never bolted onto this build loop.
+The discipline: between human gates, resolve everything a referent can resolve and surface only the irreducible. This gate is a phase the loop runs at PLAN, REVIEW, and DECIDE — not a skill you may skip. Three steps are **net-new** obligations (the rest overlap passes the loop already runs): **(1) conditional domain-grounding** at PLAN — only when the build rests on an ungrounded domain claim, distinct from the EXECUTE contract-grounding gate; **(2) resolve-vs-surface disposition record**, opened at PLAN and closed at DECIDE, calibrated against [`references/self-coverage/resolve-vs-surface.md`](references/self-coverage/resolve-vs-surface.md); and **(3) done-checklist refusal** at DECIDE — don't declare done until the record exists and every REVIEW finding is resolved. Full six-step protocol and light/full mode applicability: [`references/self-coverage/protocol.md`](references/self-coverage/protocol.md) — load when you need the complete sequence.
 
 ## Modes: light and full
 
@@ -151,6 +122,54 @@ iterated to `Clean`, the `quality-engineer` floor at the end-of-session
 checklist, and the iteration cap. **Everything below this section is full
 mode unless it says otherwise**; light mode reuses those steps verbatim
 except for the four trims named above.
+
+### Step 0. Orientation — read workspace context
+
+Before PLAN begins, orient to the current initiative and work queue:
+
+1. Look for `workspace.toml` in the working directory.
+   - **If present:** read it and surface the following in a clearly labelled
+     orientation block at the top of your response:
+     - **Initiative:** the `name` value from `["ini-NNN"]`
+       (e.g. `"Platform Core"`).
+     - **Milestone:** the `milestone` value from `["ini-NNN"]`
+       (e.g. `"M1 · Workspace Foundation"`).
+     - **Active spec (argless only — skip when a spec path is given):**
+       Collect every path in `["ini-NNN".work].active` across all active
+       initiatives. Exactly one → begin on that spec without asking. Zero
+       → surface "No active spec found — run `workspace-status` to see
+       what's ready to start." More than one (single initiative or across
+       initiatives) → list all and ask the user to pick.
+     - **Stale-queue check.** For each active initiative, for each entry in
+       `["ini-NNN".work].queue` and `["ini-NNN".work].active`: resolve the
+       path (bare string → as-is; inline object → `path` field; `slug` is
+       shaping-queue only), strip the `spec/` prefix, and read
+       `docs/specs/<slug>/spec.md`. If `**Status:**` is `Shipped` (ignoring
+       trailing `<!-- -->` comments), emit this warning and proceed — non-blocking:
+       > Warning: workspace.toml drift: `<path>` is in `<queue|active>` but
+       > spec.md shows Status: Shipped — move it to shipped in workspace.toml.
+       A path in both lists: warn once, name both. No spec.md or other Status: skip.
+   - **If absent:** skip this step entirely. PLAN begins immediately with no
+     error, no diagnostic, and no behavioral change.
+
+> When multiple `["ini-NNN"]` sections exist, read all sections whose
+> `status = "active"` and surface each one.
+
+**Shaping-item guard.** Derive slug (strip `docs/specs/` prefix + trailing `/`);
+check all active initiatives' `[shaping_queue].active`, `.backlog`, and
+`[backlog].open` typed entries for a slug match. On match, stop before PLAN.
+Non-signal: "This is a `[shape]` item (`type = <subtype>`); use `<skill>` —
+`work-loop` is for build items only." (shape→`frame-intent`;
+research→`desk-research-project-start`; strategy→`frame-situation`/`frame-intent`;
+design→`experience-status`.) Signal: "Monitoring signal — `work-loop` is for
+build items only."
+
+If `workspace.toml` was absent or an explicit spec path was passed,
+proceed to step 1 (PLAN) immediately. Otherwise a path must be resolved:
+if exactly one active item, strip the `spec/` prefix, then read
+`docs/specs/<slug>/spec.md` and `plan.md` as step 1 of PLAN. In the
+zero and multi-item branches, stop after surfacing the message or list
+and do not proceed until the user picks.
 
 ### 1. PLAN — think before acting
 
@@ -245,16 +264,6 @@ For anything beyond trivial, *think before you write code*. Concretely:
   mechanism exists" is the kind of assumption that goes unsurfaced precisely
   because it doesn't feel like one.
 
-  For **infra/deploy** the mechanism is rarely one artifact; the preflight
-  enumerates a **multi-artifact set, each its own task-zero** — a
-  **verify-status** script, a **teardown** script, **test-data / mock-user
-  seeding**, a **provider-appropriate policy-as-code / CSPM scanner**
-  (per-provider-depth source, **mechanism-level not tool-level**, feeding both
-  the static preflight and the mandatory security pass), and a **durable
-  credential session** (establish once, reuse). Detail — and that none ship as
-  executable tooling — in
-  [`references/infra-verification.md`](references/infra-verification.md).
-
   Spikes and throwaway exploration are out of scope.
 - **Design tests up front, before any code.** The contract lives in
   `spec.md` (Acceptance Criteria + Testing Strategy) and is written when
@@ -270,63 +279,20 @@ For anything beyond trivial, *think before you write code*. Concretely:
   A stub that won't compile is the mechanical signal an AC is too vague,
   caught here instead of mid-EXECUTE. Goal-based and manual-QA tasks record
   `no stub (mode)`; light mode skips this entirely.
-- **Pre-EXECUTE adversarial review.** Select a subagent matching
-  `adversarial-reviewer` and ask it to review the spec + plan in
-  spec/plan-review mode. Iterate to clean before EXECUTE begins when **either**
-  trigger fires (fallback if no such subagent is installed: proceed but note the
-  missing review in the final summary):
+- **Pre-EXECUTE gates — select by work shape; multiple can fire:**
 
-  1. **Spec amendment** — PLAN produced or modified a spec (`new-spec`, or you
-     sharpened an existing `spec.md` / `plan.md`).
-  2. **Structural change** — any plan task introduces structural surface area;
-     the trigger fires if **any** matches: a **new module boundary** (a new
-     directory under `packages/` or `apps/`), a **new dependency** added to
-     package code, a **new abstraction layer** (a new interface / factory /
-     registry / locator mediating two concrete things), or a **new top-level
-     directory**. The trigger is the **plan's task shape**, not a spec edit — it
-     fires even when no spec is amended, and **re-fires on a mid-EXECUTE re-plan**
-     that introduces a condition the original plan lacked.
+  | Work shape | Gate | Reviewer |
+  |-----------|------|---------|
+  | Spec amended or structural change¹ | Spec/plan adversarial review | `adversarial-reviewer` |
+  | Security boundary² | Secure-design review | `security-reviewer` |
+  | User-facing surface³ | Design-intent pass | `creative-direction` / `design-review` |
+  | HTML/CSS/JS primary output | Frontend pre-flight (mandatory) | load `frontend-engineering` inline |
 
-  How the reviewer measures a structural change (the spec's **Boundaries**
-  section and its fallback chain), the re-plan re-fire mechanics, the
-  `loop-cohort approve-plan` / `check --phase plan` gate, and the **Profile-A
-  opt-out** are progressive-disclosure depth in
-  [`references/pre-execute-review.md`](references/pre-execute-review.md).
-- **Pre-EXECUTE secure-design review (security-boundary trigger).** Security
-  review **shifts left** — when the **security-boundary risk trigger** is present
-  (auth, secrets, user input, deserialization, or file/network I/O), also select
-  a subagent matching `security-reviewer` and dispatch it in **spec-stage
-  secure-design mode** against the spec, asking whether each control is specified
-  as an acceptance criterion at the right depth (confinement, not just traversal;
-  scheme allowlist, not "validate the URL"; broker-mediated secrets, not ad-hoc
-  reads). Inline **only** the boundary-matching modules (net-new wiring) per the
-  [`security-checklists` Module index](../security-checklists/SKILL.md#module-index).
-  **On infra-flavored work this pass is mandatory, not discretionary** — it keys
-  on the same classifier that drives security-module loading (the
-  destructive/irreversible trigger + the Module index's IaC / deploy-config
-  entry). The full firing conditions, the infra force-load set, and the
-  diff-stage / scanner-pairing interaction are progressive-disclosure depth in
-  [`references/pre-execute-review.md`](references/pre-execute-review.md) and the
-  REVIEW `security-reviewer` bullet. Same Profile-A opt-out and `approve-plan`
-  gate; fallback if no `security-reviewer` is installed: proceed and note it.
-- **Pre-EXECUTE design-intent pass (user-facing surface trigger).** When the
-  change produces a user-facing surface — a new page, a redesigned screen, a
-  component, a pack card, a docs page — establish design intent **before writing
-  code**. Run `aesthetic-direction` (if no grounded aesthetic reference exists
-  yet) and/or `design-critique` (if there is an existing surface to evaluate)
-  and record the design intent in the spec. This is the design analogue of
-  "write the test first": design intent before implementation prevents the
-  common failure mode of technically correct surfaces with no design sense. Applies
-  in both light and full mode as a recommendation; the mandatory fresh-context
-  gate (`experience-reviewer`) runs in REVIEW for full-mode work.
-  **Frontend surface exception — mandatory, not recommended.** When the task's
-  primary output is HTML, CSS, or JS (a new page, component, slide deck,
-  dashboard, or standalone web artifact), this pass is mandatory in both modes:
-  load the `frontend-engineering` skill inline before writing code. It carries
-  the design pre-flight requirements (named aesthetic reference, seed token
-  block, state matrix), the craft rules, and the GATES verification commands
-  for that surface. The judgment call — whether the output is "primary"
-  HTML/CSS/JS or incidental — is the implementer's; when in doubt, load it.
+  ¹ Structural: new module boundary, new dependency, new abstraction layer, new top-level directory. Re-fires on mid-EXECUTE re-plan.
+  ² Security: auth, secrets, user input, deserialization, file/network I/O. Infra-flavored work: mandatory. Dispatch in **spec-stage secure-design mode**; inline boundary-matching modules (net-new wiring only) per the [`security-checklists` Module index](../security-checklists/SKILL.md#module-index).
+  ³ Run `creative-direction` if no grounded aesthetic reference exists yet; `design-review` if an existing surface is being changed. `experience-reviewer` runs in full-mode REVIEW. HTML/CSS/JS: "primary" means the output IS the artifact, not incidental markup — when in doubt, load `frontend-engineering`.
+
+  Iterate each fired review to `Clean` before EXECUTE. Reviewer absent → proceed, note in summary. Full depth (firing conditions, infra force-load, re-plan re-fire, `approve-plan` gate, Profile-A opt-out): [`references/pre-execute-review.md`](references/pre-execute-review.md).
 - **Initialize the loop's state file.** Run this skill's bundled
   `scripts/loop-cohort.py init docs/specs/<feature>`; the tool copies
   the bundled `assets/state.json` template into place, sets `feature`
@@ -538,12 +504,14 @@ Run, in order, and only proceed if each passes:
 These are the project's **objective** completion criteria. If a gate fails,
 go to FIX. Don't move past a failing gate by editing the gate.
 
+**Pre-existing failure triage.** When a gate fails on a file not in the diff, it is pre-existing — the file-not-in-diff check is confirmation enough, no stash required. When the failing file IS in the diff but the failure looks unrelated to your change, confirm with `git show HEAD:<file>` or `git stash -u && <gate> && git stash pop`. If pre-existing: grep `[backlog].open` for the test or file name first — if no entry exists, add `{slug = "pre-existing-…", source = "pre-flight/<iso-date>"}` with a cold-start-sufficient comment, then treat the failure as a known-skip (continue, don't go to FIX). If the diff made the failure worse (more variants failing, new error messages), it is in-scope: go to FIX. Full entry schema, the three-condition known-skip heuristic, and the "made it worse" test: [`references/pre-flight-failures.md`](references/pre-flight-failures.md) (load on demand).
+
 > **Mechanical doc-drift check — `scripts/lint-spec-status.py`.** This skill
 > ships a stdlib Python lint at `scripts/lint-spec-status.py` (sibling to
 > `loop-cohort.py`) that checks spec *metadata* invariants against the contract
 > pinned in `CONVENTIONS.md` § 4: (i) status vocabulary, (ii) ACs
 > checked-or-deferred at the ship transition, (iii) dangling doc/code references
-> (warn-only), (iv) deferral anchors resolve in `docs/backlog.md`. Where you have
+> (warn-only), (iv) deferral anchors resolve in `workspace.toml [backlog].open`. Where you have
 > Python, **run it at the finish-time checklist** (DECIDE, below) —
 > `python <skill>/scripts/lint-spec-status.py` — as the mechanical companion to
 > the four drift invariants the `adversarial-reviewer` checks by judgment; it
@@ -682,14 +650,14 @@ note in the summary, not a blocker.
   [`references/infra-verification.md`](references/infra-verification.md).
 - Match `experience-reviewer` — for diffs that change what a reader or adopter
   sees (a new page, a redesigned screen, a pack card, a docs page) **in full-mode
-  work**. This is a design/experience lens, distinct from the three core
-  code-review lenses. Pass the **rendered output** (a described screen state, a
-  screenshot, or a path to the built artifact) **plus the grounded aesthetic
-  reference and constraints** (persona, outcome, platform surface) — not the
-  code diff; experience-reviewer reviews design artifacts, not code diffs, and
-  its confirm-before-reviewing gate requires the grounded reference. Fallback if
-  no `experience-reviewer` is installed (experience pack absent): proceed and
-  note it — absence of the experience pack is a named skip, not a silent pass.
+  work**. Pass the **rendered output** (a described screen state, a screenshot, or
+  a path to the built artifact) **plus the grounded aesthetic reference and
+  constraints** (persona, outcome, platform surface) — not the code diff; its
+  confirm-before-reviewing gate requires the grounded reference. **For web surfaces
+  (HTML/CSS/JS), "rendered output" means the built site** — run the build and describe
+  key pages from the output, not the code diff. Fallback if
+  no `experience-reviewer` is installed (experience-design pack absent): proceed and
+  note it — absence of the experience-design pack is a named skip, not a silent pass.
 
 **Dispatch reviewers in parallel when you invoke more than one** per
 the [Parallel dispatch discipline](#parallel-dispatch-discipline)
@@ -730,18 +698,29 @@ mode below, then evaluate the terminal-state bullet last.
   Otherwise `defer` — one line in `Deferred:`. Every Nit resolves
   into one of the two; the `Deferred:` line *is* the acknowledgement
   that the loop saw the Nit and chose not to fix.
-- **Deferred items** → record each in the durable register,
-  `docs/backlog.md`, under a heading, so they don't rot. The spec criterion
-  that defers carries an inline `(deferred: <anchor>)` marker pointing at that
-  heading (`CONVENTIONS.md` § 4 Spec metadata contract). The PR description
-  keeps only a one-line **pointer** to the register entry — append it as a
-  standalone `Deferred:` section below the standard template content alongside
-  the `Bundled fixes:` section from EXECUTE; do not modify the template itself.
-  The register, not the PR comment, is the durable record: it's
-  version-controlled and greppable, and the `(deferred:) ↔ backlog.md`
-  resolution is mechanically checked (catalogue lint) or reviewer-checked
-  (adopters). Mirroring an item to an issue tracker is an option where one
-  exists, never assumed.
+- **Deferred items** → before recording, ask: *"Is this deferral justified?
+  Could this be delivered in this PR without crossing the plan's scope or
+  introducing unreviewed risk?"* Only defer if the answer is genuinely no.
+  Then record each deferred item in `workspace.toml [backlog].open` as an
+  inline object `{slug = "...", source = "spec/<name> ACn"}` with a cold-
+  start-sufficient TOML comment (problem, fix, file/skill, unblock condition).
+  The spec criterion that defers carries an inline `(deferred: <slug>)` marker
+  matching the slug (`CONVENTIONS.md` § 4 Spec metadata contract). The PR
+  description keeps only a one-line **pointer** to the entry — append it as a
+  standalone `Deferred:` section alongside `Bundled fixes:`; do not modify the
+  template itself. The register, not the PR comment, is the durable record:
+  version-controlled, greppable, and the `(deferred:) ↔ [backlog].open`
+  resolution is mechanically checked (`lint-spec-status.py` invariant iv) or
+  reviewer-checked (adopters). Mirroring an item to an issue tracker is an
+  option where one exists, never assumed.
+  **After recording in `[backlog].open`**, prompt: *"Does this item look like
+  an RFC candidate (a cross-cutting proposal or design question) or a roadmap
+  intent (a future feature)? If so, also add a row to
+  `docs/product/findings/rfc-candidates.md` or
+  `docs/product/findings/roadmap-intents.md`."* Both registers are optional —
+  skip the prompt if neither file exists. The backlog entry is the primary
+  durable record; the findings register is an extra surface for governance
+  visibility.
 - **Gates green and review clean** → ready to ship. Walk this end-of-session
   checklist; refuse to declare done until every line is true. (**In light
   mode**, two lines relax per the [Modes](#modes-light-and-full) section: the
@@ -780,11 +759,23 @@ mode below, then evaluate the terminal-state bullet last.
   - **Doc-drift invariants hold** (the four the `adversarial-reviewer`'s
     "Spec drift" check names, against `CONVENTIONS.md` § 4): the touched spec's
     status reflects the change; every Acceptance Criterion is `[x]` or carries
-    `(deferred: <anchor>)`; each deferral resolves to a `docs/backlog.md`
-    heading; intra-repo references the change touches resolve. Where you have
+    `(deferred: <slug>)`; each deferral resolves in `workspace.toml
+    [backlog].open`; intra-repo references the change touches resolve. Where you have
     Python, run `scripts/lint-spec-status.py` (this skill's sibling to
     `loop-cohort.py`) to check these mechanically — it's the agent-invoked
     companion to the judgment check; no-ops without Python.
+  - **If `workspace.toml` is present**, search each active initiative's
+    `["<slug>".work].active` then `["<slug>".work].queue` for the current
+    spec's path (stop at the first match; entries are bare strings or inline
+    objects with a `path` field — `slug` is shaping-queue only). If found,
+    move that path to `["<slug>".work].shipped` as a bare string (dropping
+    `needs` and other fields), using a comment-preserving edit (`tomlkit` or
+    targeted insertion; never `tomllib`+`tomli_w`). **Commit before `git push`
+    / `gh pr create` — must be in the PR branch, not a follow-up after merge.**
+    Not found, or absent: skip — no error.
+  - **Reminder:** update `docs/product/roadmap.md` to reflect the shipped
+    spec (one line; the roadmap is the human-readable companion to the queue).
+    If `workspace.toml` is absent, skip this reminder.
   - Conventional commit format used; no force-push to shared branches.
   - Learnings captured per the next section (AGENTS.md, skill, or doc).
   - PR opened — or merged directly, if that's your workflow — with the
@@ -864,7 +855,7 @@ Three levers shed that noise (ordered by savings), each with a no-subagent floor
   read targeted line ranges, not whole files; never re-read a resident file.
 - **Compact at task boundaries** in a multi-loop spec, with a "preserve plan,
   open findings, decisions" hint — safe because `spec.md`, `plan.md`,
-  `state.json`, and `docs/backlog.md` are the externalized memory. `/compact` in
+  `state.json`, and `workspace.toml [backlog]` are the externalized memory. `/compact` in
   Claude Code; elsewhere your agent's own facility or the fresh-session mode in
   [Unattended loops](#unattended-afk-loops). *Floor:* re-read plan + open findings
   from disk and let the old transcript age out.
@@ -885,32 +876,21 @@ keep the rationale, edge cases, and findings the reader needs.
 
 ## Unattended (AFK) loops
 
-The work-loop above is an *in-session* loop: one conversation, state in
-working memory plus the repo. Some agents also offer an **unattended
-mode** for long-running work — overnight, weekend, AFK: a fresh instance
-per iteration, with state living entirely in files (a stable task prompt,
-progress notes, git history, AGENTS.md updates) and no human in the seat.
-Use your agent's own facility for this; don't hand-roll a loop around the
-CLI.
+The work-loop above is an *in-session* loop: one conversation, state in working
+memory plus the repo. Some agents offer an **unattended mode** — a fresh instance
+per iteration with state living in files (task prompt, progress notes, git history,
+AGENTS.md updates), no human in the seat. Use your agent's facility for this;
+don't hand-roll a loop around the CLI.
 
-Reach for it only when **all** of these hold:
+Reach for it only when **all** of these hold: the completion criterion is *fully
+mechanical* (tests pass, checklist ticked, benchmark hit); the task slices into
+single-context-window items; verification is reliable (flaky tests → slot machine);
+and you've already run the in-session loop at least once on something similar.
 
-- The completion criterion is *fully mechanical* — tests pass, a spec
-  checklist is fully ticked, a benchmark hits a threshold.
-- The task slices into items each small enough for a single context
-  window.
-- Verification is reliable — flaky tests turn an unattended loop into a
-  slot machine.
-- You've already run the in-session loop above on a similar task at
-  least once. An unattended loop amplifies whatever your conventions
-  are; if those aren't tight, it just produces more bad code faster.
-
-It's the wrong tool when "done" is fuzzy or aesthetic, when the task
-needs human judgment mid-flight (architectural choices, ambiguous
-requirements), or when it touches a sensitive surface (auth, secrets,
-data deletion). Set hard caps (iteration, spend) before you start and
-review every commit after — unattended doesn't mean *unconsidered*, it
-means *pre-considered*.
+It's the wrong tool when "done" is fuzzy, when the task needs human judgment
+mid-flight, or when it touches a sensitive surface (auth, secrets, data deletion).
+Set hard caps (iteration, spend) before you start and review every commit after —
+unattended doesn't mean *unconsidered*, it means *pre-considered*.
 
 ## Anti-patterns to refuse
 
@@ -932,18 +912,14 @@ means *pre-considered*.
   picks its verification mode (TDD / goal-based / manual QA) during PLAN;
   for TDD-mode tasks, the test exists before the production code does.
 - **Editing the test until it passes.** This makes the gate green by lying.
-  If a test is wrong, fix the test in a separate commit with a justification.
-- **Deferring a test because the code fails it.** The inverse of editing
-  the test — same lie, opposite direction. If a red test fails because the
-  code under test is wrong, fix the code; plausible-sounding rationales
-  ("flaky", "out of scope for this PR", "covered elsewhere") are how
-  regressions ship. (Beyoncé Rule: if you liked it, you should have put
-  a test on it.) If the test is genuinely wrong, fix it in a separate
-  commit with the reason; if the test is right and the code can't pass it
-  this session, the task isn't done — surface it, don't bury it.
-- **Declaring victory because gates pass.** Gates are necessary, not
-  sufficient. Review catches what gates can't (missing edge cases, scope
-  creep, spec drift).
+  If a test is wrong, fix it in a separate commit with a justification.
+- **Deferring a test because the code fails it.** Same lie, opposite direction.
+  Fix the code; plausible rationales ("flaky", "out of scope", "covered elsewhere")
+  are how regressions ship. If the test is genuinely wrong, fix it in a separate
+  commit with the reason; if the test is right and the code can't pass it this
+  session, the task isn't done — surface it, don't bury it.
+- **Declaring victory because gates pass.** Gates are necessary, not sufficient.
+  Review catches what gates can't (missing edge cases, scope creep, spec drift).
 - **Declaring spec-complete from per-task gates.** When a spec is
   decomposed into N loops, per-task gates verify N contracts — not the
   integrated journey. Before the final loop's DECIDE, run
@@ -952,5 +928,5 @@ means *pre-considered*.
 - **Running an unattended loop on a fresh task instead of the in-session
   loop.** Unattended loops compound bad foundations. Do at least one
   in-session pass first to validate the approach.
-- **Looping without capturing learnings.** Every loop that ends without
-  updating *some* doc, skill, or note is a loop whose lessons are lost.
+- **Looping without capturing learnings.** Every loop that ends without updating
+  *some* doc, skill, or note is a loop whose lessons are lost.
