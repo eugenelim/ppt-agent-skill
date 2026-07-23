@@ -452,17 +452,17 @@ _reg("mindmap", NativeParityLevel.PARTIAL,
      supported=("radial-layout",),
      unsupported=("tidy-tree-layout",))
 _reg("architecture-beta", NativeParityLevel.PARTIAL,
-     supported=("services", "groups", "edges"),
-     unsupported=("semantic-icons", "side-ports", "bidir-single-path"))
+     supported=("services", "groups", "edges", "semantic-icons", "side-ports", "bidir-single-path"),
+     unsupported=())
 _reg("c4context", NativeParityLevel.PARTIAL,
-     supported=("elements", "boundaries", "relations"),
-     unsupported=("distinct-shapes", "birel-single-path"))
+     supported=("elements", "boundaries", "relations", "distinct-shapes", "birel-single-path"),
+     unsupported=())
 _reg("c4container", NativeParityLevel.PARTIAL,
-     supported=("elements", "boundaries", "relations"),
-     unsupported=("distinct-shapes", "birel-single-path"))
+     supported=("elements", "boundaries", "relations", "distinct-shapes", "birel-single-path"),
+     unsupported=())
 _reg("c4component", NativeParityLevel.PARTIAL,
-     supported=("elements", "boundaries", "relations"),
-     unsupported=("distinct-shapes", "birel-single-path"))
+     supported=("elements", "boundaries", "relations", "distinct-shapes", "birel-single-path"),
+     unsupported=())
 
 # Newly-implemented types (Stage 6) — PARTIAL parity
 _reg("sequencediagram", NativeParityLevel.PARTIAL,

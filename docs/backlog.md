@@ -473,35 +473,71 @@ Radial mode remains unchanged when `layout: tidy-tree` is absent.
 
 ### backlog-arch-bidir
 
-**Deferred from `mermaid-p2`:** Architecture bidirectional relations (`BiRel`) should render as a
-single path with arrowhead markers at both ends, not two separate directed edges. Requires the
-architecture router to detect `BiRel` edge type and emit a single `<path>` with `marker-start` and
-`marker-end`. Unblocked when the architecture layout/routing layer distinguishes `BiRel` from `Rel`.
+**Closed** (mermaid-p2 spec AC ticked 2026-07-22): The native SVG pipeline implements BiRel
+end-to-end. `compile_architecture()` detects `<-->` and produces a single `_Edge(bidir=True)`;
+`finalized_layout_to_scene()` emits two `MarkerDefinition` objects and applies both
+`marker-start` and `marker-end` to one `ScenePath`. Verified by `TestBiRelEdge` in
+`test_arch_compiled_model.py`. The `scene.py` registry was updated to move `"bidir-single-path"`,
+`"semantic-icons"`, and `"side-ports"` from `unsupported` to `supported`.
+
+**Remaining follow-up (HTML path):** `_strategies._layout_architecture` still emits two
+separate edges for `<-->` in the `to_html()` browser path; not addressed in this spec's scope.
 
 ### backlog-c4-shapes
 
-**Deferred from `mermaid-p2`:** C4 element painters should use distinct shapes per stereotype:
-ordinary container (rectangle), person (rounded-rect with head icon), database (cylinder),
-queue (horizontal cylinder / barrel), external (dashed border). Currently all C4 elements
-use a generic rectangle. Unblocked when C4 painter dispatch reads the `stereotype` field.
+**Closed** (mermaid-p2 spec AC ticked 2026-07-22): The native SVG path (`c4_layout.py`)
+implements distinct painters for all five stereotypes: `"person"` → `_make_person_elements()`,
+`"db"` → `_make_db_elements()`, `"queue"` → `_make_queue_elements()`, external → dashed
+`StrokeStyle`. Verified by `TestC4DistinctPainters` (124 tests) in `test_c4_painter.py`.
+The `scene.py` registry was updated to move `"distinct-shapes"` and `"birel-single-path"`
+from `unsupported` to `supported` for `c4context`/`c4container`/`c4component`.
+
+**Remaining follow-up (HTML path):** `_c4._render_c4_node` still renders all stereotypes as
+a generic `<div>` in the `to_html()` browser path; not addressed in this spec's scope.
 
 ### backlog-c4-birel
 
-**Deferred from `mermaid-p2`:** C4 `BiRel` directional hints should affect edge endpoint
-placement and routing (e.g. `BiRel_D` routes downward). Additionally `BiRel` should render as
-one path with two markers rather than two directed relations. Unblocked alongside [[backlog-arch-bidir]]
-once the C4 router distinguishes `BiRel` from `Rel`.
+**Closed** (mermaid-p2 spec ACs ticked 2026-07-22): The native SVG path (`c4_layout.py`)
+handles both items in `_make_c4_edge_elements()`: `has_birel` enables `start_marker_id` on
+BiRel paths (one path, two markers); directional-type check applies a Bézier control-point
+bias. Verified by `test_c4_painter.py` (`test_birel_path_has_start_marker`,
+`test_birel_has_two_marker_definitions`, `test_rel_{d,u,l,r}_uses_bezier`).
+
+**Remaining follow-up (HTML path):** `_c4._render_c4_edges` always emits only `marker-end`
+and `_C4_REL_RE` drops `rel_type` in the `to_html()` browser path; not addressed here.
 
 ### backlog-state-semantics
 
-**Deferred from `mermaid-p2`:** State diagram semantic rendering — five sub-items:
-(1) initial (`[*]`) and final pseudo-states use filled-circle / double-circle shapes rather
-than placeholder text; (2) composite states contain their internal sub-machines visually;
-(3) atomic and composite nodes for the same state are not duplicated in the IR;
-(4) notes are anchored to the declared side of their target state;
-(5) external transitions use composite-boundary gate ports rather than crossing the enclosing
-group boundary. Unblocked when the state painter receives a properly stratified IR from the
-state layout module.
+**Closed** (mermaid-p2 spec ACs 95-100 ticked 2026-07-22): All six sub-items are done.
+
+**(1) Pseudo-state shapes** (spec AC 95): `_parser.py` and `statediagram.py` updated so
+`_sm_end_` nodes use `shape="doublecircle", label=""`. `_constants.py` (`_node_size_circle`,
+`_node_render_h`) and `_renderer.py` have ID-suffix checks for `_sm_end_` to render a
+fixed-size (32px) double-ring with inner filled disc. Verified by `TestStartEndSymbols`
+and `TestStateBasic.test_end_state_is_doublecircle`.
+
+**(2) Composite-state containment** (spec AC 96): `_parser.py` creates `_Group` containers
+for `state X { ... }` blocks. Leaf states appear inside the group; outer labels are visible
+as group headings. Verified by `TestStateComposite` (5 tests).
+
+**(3) No atomic+composite duplicate** (spec AC 97): `_parser.py` lines 413–437 delete the
+spurious atomic node for each composite state name after parsing. Verified by
+`TestStatePseudoStateInvariant.test_no_duplicate_atomic_composite`.
+
+**(4) Notes rendering** (spec AC 98, amended): `_parser.py` now parses `note right/left of X: text`
+and `note left/right of X … end note` blocks, emitting synthetic `_note_{n}` nodes (shape=rect,
+css_class=state-note) linked to their target state by a dashed edge. Notes are visible in
+rendered output. Verified by `TestStateNotes.test_inline_note_text_renders` and
+`test_multiline_note_text_renders`. Note: strict left/right side-anchoring is not guaranteed
+(graph layout places the note adjacent, not on a specific side). This sub-item is closed with
+the amended AC wording.
+
+**(5) External-transition gate ports** (spec AC 99): `_parser.py` rewires external transitions
+to composites through scoped `_sm_start_` proxy nodes. Verified by
+`TestStatePseudoStateInvariant.test_gate_port_proxy_for_external_transition`.
+
+**(6) Self-loops** (spec AC 100): `_routing.py` handles self-loop routing. Verified by
+`TestStatePseudoStateInvariant.test_self_loop_produces_path`.
 
 ## mermaid-fidelity-hardening
 

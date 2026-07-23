@@ -10,7 +10,7 @@ from ._constants import (
     _NODE_H_TECH, ICON_COL_WIDTH,
     _TERMINAL_NODE_SIZE, _CIRCLE_NODE_SIZE, _DIAMOND_SIZE, _HEXAGON_SIZE,
     _BAR_W, _BAR_H,
-    _is_terminal_circle,
+    _is_terminal_circle, _is_terminal_doublecircle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
 )
 from ._routing import _route_edges, _node_render_w
@@ -390,8 +390,21 @@ def _render_graph_fragment(
                         _css_k = _PROP_MAP.get(_k, _k)
                         _safe_props.append(f"{_css_k}:{_v}")
         _extra_css = (" " + "; ".join(_safe_props) + ";") if _safe_props else ""
-        if _is_terminal_circle(n):
-            # UML initial/final state: small fixed-size circle, no padding, centered symbol
+        if _is_terminal_doublecircle(n):
+            # UML final state: fixed-size outer ring + inner filled disc
+            parts.append(
+                f'<div class="node node-doublecircle{extra_cls}" {_node_data_attrs(nid, n)} style="'
+                f'position:absolute; left:{n.x}px; top:{n.y}px; '
+                f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
+                f'border-radius:50%; box-sizing:border-box; '
+                f'border:2px solid {accent_color}; '
+                f'background:{_depth_wash},linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
+                f'display:flex; align-items:center; justify-content:center;">'
+                f'<div style="position:absolute; inset:6px; border-radius:50%; '
+                f'background:{accent_color}; pointer-events:none;"></div></div>'
+            )
+        elif _is_terminal_circle(n):
+            # UML initial state: small fixed-size circle, no padding, centered symbol
             parts.append(
                 f'<div class="node node-circle{extra_cls}" {_node_data_attrs(nid, n)} style="'
                 f'position:absolute; left:{n.x}px; top:{n.y}px; '

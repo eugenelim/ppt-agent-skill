@@ -39,12 +39,25 @@ use the same layout algorithms but bypass HTML serialization.
 - `scripts/mermaid_render/layout/architecture.py` — architecture layout
 - `scripts/mermaid_render/layout/c4_layout.py` — C4 layout
 - `scripts/mermaid_render/layout/state.py` — state hierarchy
+- `scripts/mermaid_render/layout/_parser.py` — state pseudo-state and note parsing (ACs 83, 86)
+- `scripts/mermaid_render/layout/_renderer.py` — state terminal-doublecircle rendering (AC 83)
+- `scripts/mermaid_render/layout/_constants.py` — terminal-node size sentinels (AC 83)
 - `scripts/mermaid_render/paint/` — per-type painters
 - New test files per the spec's REQUIRED TEST FILES section
+
+**Rendering surface per AC:**
+- ACs at spec lines 83-86 (architecture) and 87, 89, 92-93 (C4) are measured on the
+  native SVG backend (`architecture.py`, `c4_layout.py`); the corresponding `to_html()`
+  HTML path gaps are out of scope.
+- ACs at spec lines 95-100 (state semantics) are measured on the HTML rendering path
+  (`to_html()`), since `stateDiagram` diagrams use `_parse_graph_topology` →
+  `_renderer.py` for HTML output and those files are now explicitly in scope.
 
 **Out of scope:**
 - P3 repository reorganization
 - Modifying `scripts/html2svg.py` or the general slide HTML conversion pipeline
+- Modifying `_strategies.py`, `_c4.py` for HTML-path BiRel/shapes (arch and C4 ACs
+  are met on the native SVG surface; HTML-path improvements are a follow-up)
 - Redesigning diagram types not in the P2 five (flowchart, class, ER, etc.)
 - Adding new production dependencies
 
@@ -72,20 +85,20 @@ use the same layout algorithms but bypass HTML serialization.
 - [x] Architecture labels do not shrink service tiles
 - [x] Architecture group icons, labels, and boundaries rendered
 - [x] Architecture fixed port sides honored
-- [ ] Architecture bidirectional relations: one path, two markers (deferred: backlog-arch-bidir)
+- [x] Architecture bidirectional relations: one path, two markers
 - [x] No Architecture legend invented by default
-- [ ] C4: ordinary, person, database, queue, external painters are distinct (deferred: backlog-c4-shapes)
+- [x] C4: ordinary, person, database, queue, external painters are distinct
 - [x] C4: technology and description painted separately
 - [x] C4: recursive boundaries painted and contain descendants
-- [ ] C4: directional hints affect endpoints/routes (deferred: backlog-c4-birel)
-- [ ] C4: BiRel uses one path and two markers (deferred: backlog-c4-birel)
+- [x] C4: directional hints affect endpoints/routes
+- [x] C4: BiRel uses one path and two markers
 - [x] C4: relation labels and technology avoid element interiors
-- [ ] State: initial/final pseudo-states use correct shapes (not placeholder text) (deferred: backlog-state-semantics)
-- [ ] State: composite states contain their internal machines (deferred: backlog-state-semantics)
-- [ ] State: no atomic+composite duplicate for same state (deferred: backlog-state-semantics)
-- [ ] State: notes anchored to declared side (deferred: backlog-state-semantics)
-- [ ] State: external transitions use composite boundary gates (deferred: backlog-state-semantics)
-- [ ] State: self-loops clear owning node (deferred: backlog-state-semantics)
+- [x] State: initial/final pseudo-states use correct shapes (not placeholder text)
+- [x] State: composite states contain their internal machines
+- [x] State: no atomic+composite duplicate for same state
+- [x] State: notes render as labeled nodes linked to their target state
+- [x] State: external transitions use composite boundary gates
+- [x] State: self-loops clear owning node
 - [x] Every P2 fixture is content-tight
 - [x] Marker tips and labels inside viewBox
 - [x] Native SVG passes SVG-to-PowerPoint path

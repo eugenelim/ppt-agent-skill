@@ -245,17 +245,17 @@ class TestCompositeStateGroup:
 # ── TestStartEndSymbols ───────────────────────────────────────────────────────
 
 class TestStartEndSymbols:
-    """Start state renders ● (bullet) and end state renders ◎ (double circle)."""
+    """Start state renders ● (filled circle) and end state renders as doublecircle."""
 
     def test_start_symbol_in_html(self):
         """[*] as source renders the filled-circle ● start marker."""
         html = _dispatch_ok("stateDiagram-v2\n  [*] --> Idle")
         assert "●" in html, "Start state ● missing"
 
-    def test_end_symbol_in_html(self):
-        """[*] as target renders the double-circle ◎ end marker."""
+    def test_end_node_is_doublecircle_in_html(self):
+        """[*] as target renders as node-doublecircle (UML final-state double ring)."""
         html = _dispatch_ok("stateDiagram-v2\n  Done --> [*]")
-        assert "◎" in html, "End state ◎ missing"
+        assert "node-doublecircle" in html, "End state node-doublecircle class missing"
 
     def test_start_node_is_circle_shape(self):
         """_sm_start_ node has shape circle."""
@@ -263,24 +263,24 @@ class TestStartEndSymbols:
         assert "_sm_start_" in nodes
         assert nodes["_sm_start_"].shape == "circle"
 
-    def test_end_node_is_circle_shape(self):
-        """_sm_end_ node has shape circle."""
+    def test_end_node_is_doublecircle_shape(self):
+        """_sm_end_ node has shape doublecircle (UML final-state correct shape)."""
         nodes, _, _ = _parse_graph_source(["Done --> [*]"])
         assert "_sm_end_" in nodes
-        assert nodes["_sm_end_"].shape == "circle"
+        assert nodes["_sm_end_"].shape == "doublecircle"
 
     def test_start_node_bullet_label(self):
         """_sm_start_ node label is the ● character."""
         nodes, _, _ = _parse_graph_source(["[*] --> Idle"])
         assert nodes["_sm_start_"].label == "●"
 
-    def test_end_node_doublecircle_label(self):
-        """_sm_end_ node label is the ◎ character."""
+    def test_end_node_empty_label(self):
+        """_sm_end_ node label is empty (shape provides the visual, no text needed)."""
         nodes, _, _ = _parse_graph_source(["Done --> [*]"])
-        assert nodes["_sm_end_"].label == "◎"
+        assert nodes["_sm_end_"].label == ""
 
-    def test_inner_start_end_circles(self):
-        """Inner [*] inside composite state also get ● / ◎ labels."""
+    def test_inner_start_end_shapes(self):
+        """Inner [*] inside composite state: start gets circle, end gets doublecircle."""
         lines = [
             "state Processing {",
             "  [*] --> X",
@@ -293,7 +293,7 @@ class TestStartEndSymbols:
         assert inner_starts, "No inner start node found"
         assert inner_ends, "No inner end node found"
         assert all(n.label == "●" for n in inner_starts)
-        assert all(n.label == "◎" for n in inner_ends)
+        assert all(n.shape == "doublecircle" for n in inner_ends)
 
 
 # ── TestDirectionDirective ────────────────────────────────────────────────────
@@ -373,4 +373,4 @@ class TestFixtureSmoke:
         html = _dispatch_ok("stateDiagram\n  [*] --> Idle\n  Idle --> [*]")
         assert "diagram mermaid-layout" in html
         assert "●" in html
-        assert "◎" in html
+        assert "node-doublecircle" in html
