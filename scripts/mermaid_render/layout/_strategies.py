@@ -5196,12 +5196,6 @@ def _compile_flowchart(
     # so that text layout, icons, and other visual properties are computed
     # identically to the Python path. ELK only provides x/y/w/h and waypoints.
     # On ElkUnavailable: fall through to Python Sugiyama + A* below.
-    # Limitation: fall back to Python when any group has an inner direction
-    # constraint (hierarchical ELK direction support deferred to a later pass).
-    _has_inner_direction = any(
-        g.direction and g.direction.upper() not in ("", direction.upper())
-        for g in groups.values()
-    )
     # Limitation: state diagrams use terminal circles ([*]) that require
     # column-centering post-processing the Python path applies but ELK does not.
     _has_terminal_circles = any(
@@ -5214,8 +5208,6 @@ def _compile_flowchart(
     _elk_grp_bboxes: "dict | None" = None
     _use_elk = False
     try:
-        if _has_inner_direction:
-            raise Exception("inner-direction fallback to Python")
         if _has_terminal_circles:
             raise Exception("terminal-circle fallback to Python")
         if _has_self_loops:
@@ -5235,6 +5227,17 @@ def _compile_flowchart(
             if _nid_elk in nodes:
                 nodes[_nid_elk].x = int(_nl_elk.outer_bounds.x)
                 nodes[_nid_elk].y = int(_nl_elk.outer_bounds.y)
+        # Capture ELK compound-node bounds directly — these are authoritative for
+        # group positions and do not need post-hoc heuristic fixup.
+        _elk_grp_bboxes = {
+            gid: [
+                gl.boundary_bounds.x,
+                gl.boundary_bounds.y,
+                gl.boundary_bounds.x + gl.boundary_bounds.w,
+                gl.boundary_bounds.y + gl.boundary_bounds.h,
+            ]
+            for gid, gl in _elk_result.group_layouts.items()
+        }
         _elk_routed = [
             {
                 "id": _re.edge_id,
@@ -5245,7 +5248,7 @@ def _compile_flowchart(
         ]
         _use_elk = True
         _elk_metadata_algo = "ELK-layered"
-    except Exception:  # includes ElkUnavailable and the inner-direction guard
+    except Exception:  # includes ElkUnavailable
         pass  # fall through to Python Sugiyama pipeline
 
     # Always run topology passes: needed for widths/heights (via _assign_coordinates)
@@ -5257,56 +5260,23 @@ def _compile_flowchart(
     if _use_elk:
         # ELK positions already applied to _Node.x/_Node.y above.
         # n.rank is set by _assign_ranks (always runs now), so depth-tint works.
-        # Compute canvas from ELK-positioned node bounds.
-        _elk_pad = _init_cfg.get("diagram_padding", CANVAS_PAD)
-        real_nodes = [n for n in nodes.values() if not n.is_dummy]
-        if real_nodes:
-            canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + _elk_pad
-            canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + _elk_pad
-        else:
-            canvas_w, canvas_h = _elk_pad * 2, _elk_pad * 2
-        _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-        if _grp_bboxes:
-            _max_right = max(b[2] for b in _grp_bboxes.values())
-            _max_bot = max(b[3] for b in _grp_bboxes.values())
-            if _max_right > canvas_w - _elk_pad:
-                canvas_w = int(_max_right) + _elk_pad
-                _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-            if _max_bot > canvas_h - _elk_pad:
-                canvas_h = int(_max_bot) + _elk_pad
-            # ELK-path member containment guarantee: re-expand any group bbox
-            # shrunk past its members by overlap resolution (step 3 of
-            # _compute_group_bboxes). Overlap between sibling groups is
-            # accepted; containment violation is not.
-            # Includes recursive members so parent groups with no direct nodes
-            # (all children in sub-groups) are also expanded to cover children.
-            from ._renderer import GROUP_PAD_X as _GX, GROUP_PAD_Y_TOP as _GYT, GROUP_PAD_Y_BOT as _GYB  # noqa: PLC0415
-            def _recursive_group_members(gid: str) -> "list":
-                _result = [nodes[m] for m in groups[gid].members
-                           if m in nodes and not nodes[m].is_dummy]
-                for _cg, _cgrp in groups.items():
-                    if _cgrp.parent_group == gid:
-                        _result.extend(_recursive_group_members(_cg))
-                return _result
-            for _gid in groups:
-                if _gid not in _grp_bboxes:
-                    continue
-                _mbrs = _recursive_group_members(_gid)
-                if not _mbrs:
-                    continue
-                _b = _grp_bboxes[_gid]
-                _need_x0 = min(m.x for m in _mbrs) - _GX
-                _need_x1 = max(m.x + (_node_render_w(m) or NODE_W) for m in _mbrs) + _GX
-                _need_y0 = min(m.y for m in _mbrs) - _GYT
-                _need_y1 = max(m.y + _node_render_h(m) for m in _mbrs) + _GYB
-                if _b[0] > _need_x0:
-                    _b[0] = _need_x0
-                if _b[2] < _need_x1:
-                    _b[2] = _need_x1
-                if _b[1] > _need_y0:
-                    _b[1] = _need_y0
-                if _b[3] < _need_y1:
-                    _b[3] = _need_y1
+        # Use ELK compound-node bounds directly as group bboxes. Fall back to
+        # Python-computed bounds only for any group ELK did not return (rare).
+        _elk_pad = int(_init_cfg.get("diagram_padding", CANVAS_PAD))
+        _py_grp_bboxes = _compute_group_bboxes(nodes, groups, 99999, 99999) if groups else {}
+        _grp_bboxes = {**_py_grp_bboxes, **(_elk_grp_bboxes or {})}
+        # Canvas from union of ELK-positioned nodes and group boundaries.
+        _all_x1: "list[float]" = [
+            float(n.x + (n.width or NODE_W)) for n in nodes.values() if not n.is_dummy
+        ]
+        _all_y1: "list[float]" = [
+            float(n.y + _node_render_h(n)) for n in nodes.values() if not n.is_dummy
+        ]
+        for _b in _grp_bboxes.values():
+            _all_x1.append(float(_b[2]))
+            _all_y1.append(float(_b[3]))
+        canvas_w = (int(max(_all_x1)) + _elk_pad) if _all_x1 else _elk_pad * 2
+        canvas_h = (int(max(_all_y1)) + _elk_pad) if _all_y1 else _elk_pad * 2
         # Build RoutedEdge dicts from ELK waypoints.
         _elk_route_dicts = []
         for _er in (_elk_routed or []):
