@@ -237,6 +237,46 @@ def _astar_route(
     return None
 
 
+def _ensure_orthogonal(pts: list) -> list:
+    """Insert bends so every segment is axis-aligned after endpoint substitution.
+
+    A* snaps start/end to the nearest grid column/row; substituting the exact
+    clipped port can make the first or last segment diagonal when the clipped
+    coordinate sits in a different grid cell than the grid point used for routing.
+
+    Bend orientation:
+    - 2-point diagonal → Z-path (vertical → horizontal → vertical) via the
+      midpoint; this preserves a downward-entering arrowhead at the destination.
+    - Multi-point, source-side diagonal (not the last segment) → vertical-first;
+      the connector departs the source face going down/up before sweeping across.
+    - Multi-point, target-side diagonal (last segment) → horizontal-first;
+      the terminal segment stays vertical so the arrowhead points into the face.
+    """
+    if len(pts) < 2:
+        return pts
+    result = [pts[0]]
+    n = len(pts)
+    for i in range(1, n):
+        px, py = result[-1]
+        cx, cy = pts[i]
+        if px != cx and py != cy:
+            is_last = (i == n - 1)
+            if is_last and len(result) == 1:
+                # Two-point diagonal: produce a Z-path so both departure and
+                # arrival are axis-aligned with the correct arrowhead direction.
+                mid_y = (py + cy) // 2
+                result.append((px, mid_y))
+                result.append((cx, mid_y))
+            elif is_last:
+                # Target-side bend: arrive vertically (horizontal first).
+                result.append((cx, py))
+            else:
+                # Source-side / intermediate bend: depart vertically (vertical first).
+                result.append((px, cy))
+        result.append((cx, cy))
+    return result
+
+
 def _simplify_waypoints(pts: list) -> list:
     """Remove collinear intermediate waypoints."""
     if len(pts) < 3:
@@ -996,7 +1036,11 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                            "source_marker": getattr(e, "source_marker", None),
                            "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             else:
-                lane_x = right_lane_x + 12 * be_lane
+                # Local lane: stay close to the two nodes' right edges instead of
+                # routing all the way to the global right canvas margin.
+                # Clamped to right_lane_x so the path never escapes the canvas.
+                _local_right = max(s.x + _node_render_w(s), d.x + _node_render_w(d))
+                lane_x = min(_local_right + 12 * (be_lane + 1), right_lane_x)
                 sx = s.x + _node_render_w(s)
                 sy = s.y + _node_render_h(s) // 2
                 dx_ = d.x + _node_render_w(d)
@@ -1253,6 +1297,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if len(_pts) >= 2:
                 _pts[0] = (int(x1), int(y1))
                 _pts[-1] = (int(x2), int(y2))
+                _pts = _ensure_orthogonal(_pts)
         _accumulate_occupied(_pts)
         path = _smooth_orthogonal_path(_pts)
 

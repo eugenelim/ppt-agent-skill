@@ -482,6 +482,44 @@ def _compact_group_columns(
             break
 
 
+# ── fan-in barycenter centering ───────────────────────────────────────────────
+
+def _center_isolated_nodes(nodes: "dict", edges: "list") -> None:
+    """Center single-node TB ranks at the predecessor barycenter in pixel space.
+
+    When exactly one non-dummy node occupies a rank and it has two or more real
+    predecessors, the column-grid assignment always places it at column 0, which
+    biases it toward the leftmost predecessor.  Reposition it so its centre aligns
+    with the x-barycenter of its predecessors (fan-in case: e.g. B & C & D → E).
+
+    Collects all (node, new_x) pairs first, then applies them — so the result is
+    independent of dict iteration order when multiple eligible nodes exist.
+    """
+    updates: "list[tuple]" = []
+    for nid, n in nodes.items():
+        if n.is_dummy:
+            continue
+        same_rank = [nn for nn in nodes.values() if nn.rank == n.rank and not nn.is_dummy]
+        if len(same_rank) != 1:
+            continue
+        preds: list = []
+        seen: set = set()
+        for e in edges:
+            dst = e.orig_dst if e.orig_dst else e.dst
+            src = e.orig_src if e.orig_src else e.src
+            if dst == nid and not e.reversed_ and src in nodes and not nodes[src].is_dummy and src not in seen:
+                seen.add(src)
+                preds.append(src)
+        if len(preds) < 2:
+            continue
+        # Use n.width (set by _assign_coordinates) as effective rendered width.
+        bary_x = sum(nodes[p].x + (nodes[p].width or NODE_W) // 2 for p in preds) / len(preds)
+        nw = n.width or NODE_W
+        updates.append((n, max(0, int(round(bary_x)) - nw // 2)))
+    for n, new_x in updates:
+        n.x = new_x
+
+
 # ── inner-direction recursive position fixup ─────────────────────────────────
 
 def _apply_inner_direction_positions(
