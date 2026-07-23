@@ -62,11 +62,6 @@ open = [
   # Spec recursive compound layout: group tree, edge partitioning, innermost-first compile, proxy-node expansion, boundary gate routing
   {slug = "backlog-mermaid-p3-compound-layout", type = "shape"},
 
-  # ── Group 4: Security / infra ─────────────────────────────────────────────
-
-  # Wrap Puppeteer render in a minimal container with seccomp/AppArmor; remove --no-sandbox inside it (AST06/ASI02)
-  {slug = "no-sandbox-container-isolation"},
-
   # ── Group 6: Environment-blocked / requires manual QA ────────────────────
 
   # Compute real mmdc_oracle comparison vs our SVG geometry — blocked on SequenceGeometry T7 stability and mmdc availability
