@@ -20,7 +20,12 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Protocol
 
-from PIL import ImageFont
+try:
+    from PIL import ImageFont as _ImageFont
+    _PILLOW_AVAILABLE = True
+except ImportError:
+    _ImageFont = None  # type: ignore[assignment]
+    _PILLOW_AVAILABLE = False
 
 from ._geometry import (
     TextStyle, TextRun, TextLine, TextLayout,
@@ -118,10 +123,10 @@ def _find_bold_path(family: str, regular_path: Optional[str]) -> Optional[str]:
 # ── Font object cache ──────────────────────────────────────────────────────────
 
 @lru_cache(maxsize=256)
-def _get_font(path: Optional[str], size: int, bold: bool) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _get_font(path: Optional[str], size: int, bold: bool):  # -> _ImageFont.FreeTypeFont | _ImageFont.ImageFont
     """Return a cached Pillow font object."""
     if path is None:
-        return ImageFont.load_default()
+        return _ImageFont.load_default()
     try:
         if bold:
             # Try to load bold variant from same directory
@@ -134,13 +139,13 @@ def _get_font(path: Optional[str], size: int, bold: bool) -> ImageFont.FreeTypeF
             family = _family_from_path(path)
             bold_path = _find_bold_path(family, None)
             if bold_path and bold_path != path and Path(bold_path).exists():
-                return ImageFont.truetype(bold_path, size)
+                return _ImageFont.truetype(bold_path, size)
             for bc in bold_candidates:
                 if bc.exists():
-                    return ImageFont.truetype(str(bc), size)
-        return ImageFont.truetype(path, size)
+                    return _ImageFont.truetype(str(bc), size)
+        return _ImageFont.truetype(path, size)
     except Exception:
-        return ImageFont.load_default()
+        return _ImageFont.load_default()
 
 
 # ── Markdown-like format parser ────────────────────────────────────────────────
@@ -239,7 +244,7 @@ class PillowTextMeasurer:
     def font_path(self) -> Optional[str]:
         return self._font_path
 
-    def _font(self, style: TextStyle) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    def _font(self, style: TextStyle):
         size = max(1, round(style.font_size))
         bold = style.font_weight >= 600
         return _get_font(self._font_path, size, bold)
@@ -617,9 +622,27 @@ def get_default_measurer() -> PillowTextMeasurer | HeuristicTextMeasurer:
     """Return the process-wide default measurer (PillowTextMeasurer when fonts available)."""
     global _DEFAULT_MEASURER
     if _DEFAULT_MEASURER is None:
-        path, _ = resolve_font()
-        if path is not None:
-            _DEFAULT_MEASURER = PillowTextMeasurer(path)
+        if _PILLOW_AVAILABLE:
+            path, _ = resolve_font()
+            if path is not None:
+                _DEFAULT_MEASURER = PillowTextMeasurer(path)
+            else:
+                _DEFAULT_MEASURER = HeuristicTextMeasurer()
         else:
             _DEFAULT_MEASURER = HeuristicTextMeasurer()
     return _DEFAULT_MEASURER
+
+
+# ── Named TextStyle constants ──────────────────────────────────────────────────
+# Canonical per-category styles used by all in-scope layout calculations.
+# font_size values match the corresponding renderer CSS literals.
+
+NODE_LABEL = TextStyle(font_size=13.0, font_weight=700)
+GROUP_LABEL = TextStyle(font_size=11.0, font_weight=600)
+EDGE_LABEL = TextStyle(font_size=10.0, font_weight=600)
+ARCH_SERVICE_LABEL = TextStyle(font_size=15.0, font_weight=700)
+CLASS_NAME = TextStyle(font_size=13.0, font_weight=700)
+ER_ENTITY_HEADER = TextStyle(font_size=13.0, font_weight=700)
+ER_CELL = TextStyle(font_size=11.0, font_weight=400)
+REQUIREMENT_FIELD = TextStyle(font_size=10.0, font_weight=400)
+STATE_LABEL = TextStyle(font_size=13.0, font_weight=400)

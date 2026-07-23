@@ -131,11 +131,9 @@ class TestCompileRequirement:
     # ── AC4: long text grows card height ──────────────────────────────────────
 
     def test_long_text_card_height(self):
-        """A node with a text value exceeding _TEXT_WRAP_CHARS produces a taller
-        NodeLayout than a node with a one-line text. (AC4)"""
-        from mermaid_render.layout.requirement import _TEXT_WRAP_CHARS
-
-        long_text = "A" * (_TEXT_WRAP_CHARS + 10) + " extra words to trigger wrapping"
+        """A node with a long text value produces a taller NodeLayout
+        than a node with a one-line text. (AC4 - pixel-based wrapping)"""
+        long_text = "word " * 30  # 150 characters - clearly exceeds 204 px card text area
         src_long = (
             "requirementDiagram\n"
             "requirement long_req {\n"
