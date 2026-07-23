@@ -173,6 +173,29 @@ def _mm_er(svg: str):
     return nodes, frozenset(), frozenset()
 
 
+# requirementDiagram: stable data-id attributes on edge paths carry "{from}-{to}-{n}".
+# Edge labels omitted: mmdc wraps them in <<label>> which doesn't match our plain text.
+_MM_REQ_EDGE_RE = re.compile(r'\bdata-id="(\w+)-(\w+)-\d+"')
+
+
+def _mm_requirement(svg: str):
+    raw = _MM_REQ_EDGE_RE.findall(svg)
+    edges = frozenset((m[0], m[1]) for m in raw)
+    node_set = {n for pair in edges for n in pair}
+    # Also capture isolated nodes from mermaid's <g class="node..." id="...-name"> elements
+    for g_tag in re.findall(r"<g\b[^>]+>", svg):
+        if 'class="node' not in g_tag:
+            continue
+        id_m = re.search(r'\bid="([^"]*)"', g_tag)
+        if id_m:
+            nid = id_m.group(1)
+            if "-" in nid:
+                candidate = nid.rsplit("-", 1)[1]
+                if re.match(r"^\w+$", candidate):
+                    node_set.add(candidate)
+    return frozenset(node_set), edges, frozenset()
+
+
 # fixture-prefix → reference-side extractor.  Types absent here are not in the
 # differential suite: either mermaid produces no stable topology ids for them, or
 # no extractor has been written yet (add one and it automatically joins the suite).
@@ -180,6 +203,7 @@ _DIFFERENTIAL: dict[str, object] = {
     "flowchart":    _mm_flowchart,
     "architecture": _mm_architecture,
     "er":           _mm_er,
+    "requirement":  _mm_requirement,
 }
 
 _DIFF_FIXTURES = [
