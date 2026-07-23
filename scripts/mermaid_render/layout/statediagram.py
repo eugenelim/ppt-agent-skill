@@ -464,6 +464,28 @@ def state_model_to_graph(
     from ._constants import _Node, _Edge, _Group  # avoid circular at module level
     from ._geometry import MarkerKind, MarkerSpec
 
+    # AC4: Uniqueness assertion — scoped pseudo-state IDs must not collide
+    def _collect_pseudo_ids(states: tuple) -> list[str]:
+        """Recursively collect all pseudo-state IDs (InitialPseudoState, FinalPseudoState)."""
+        result: list[str] = []
+        for s in states:
+            if isinstance(s, (InitialPseudoState, FinalPseudoState)):
+                result.append(s.id)
+            elif isinstance(s, CompositeState):
+                result.extend(_collect_pseudo_ids(s.children))
+        return result
+
+    _all_pseudo_ids = _collect_pseudo_ids(model.states)
+    _seen_pseudo: set[str] = set()
+    for _pid in _all_pseudo_ids:
+        if _pid in _seen_pseudo:
+            raise ValueError(
+                f"Duplicate pseudo-state ID in state machine: {_pid!r}. "
+                "Composite state IDs must be unique so scoped _sm_start_/_sm_end_ "
+                "nodes do not collide."
+            )
+        _seen_pseudo.add(_pid)
+
     nodes: dict[str, _Node] = {}
     edges: list[_Edge] = []
     groups: dict[str, _Group] = {}
@@ -519,8 +541,14 @@ def state_model_to_graph(
                     nodes[src] = _Node(id=src, label=src, shape="rect")
                 if dst not in nodes:
                     nodes[dst] = _Node(id=dst, label=dst, shape="rect")
-                edges.append(_Edge(src=src, dst=dst, label=tr.label,
-                                   target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")))
+                _int_e = _Edge(src=src, dst=dst, label=tr.label,
+                               target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET"))
+                # AC2/AC8: mark internal composite transitions with scope info
+                _int_e.semantic_src = src      # type: ignore[attr-defined]
+                _int_e.semantic_dst = dst      # type: ignore[attr-defined]
+                _int_e.source_scope = state.id  # type: ignore[attr-defined]
+                _int_e.target_scope = state.id  # type: ignore[attr-defined]
+                edges.append(_int_e)
 
     for s in model.states:
         _emit(s, None)
@@ -529,7 +557,9 @@ def state_model_to_graph(
     _id_counts: dict[str, int] = {}
 
     def _make_edge(src: str, dst: str, label: str,
-                   src_group: Optional[str] = None) -> None:
+                   src_group: Optional[str] = None,
+                   semantic_src: str = "",
+                   source_scope: str = "") -> None:
         # Ensure both endpoints exist as nodes
         if src not in nodes:
             nodes[src] = _Node(id=src, label=src, shape="rect")
@@ -543,6 +573,10 @@ def state_model_to_graph(
                   target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET"), edge_id=eid)
         if src_group is not None:
             e.src_group = src_group  # type: ignore[attr-defined]
+        if semantic_src:
+            e.semantic_src = semantic_src  # type: ignore[attr-defined]
+        if source_scope:
+            e.source_scope = source_scope  # type: ignore[attr-defined]
         edges.append(e)
 
     for tr in model.transitions:
@@ -551,6 +585,8 @@ def state_model_to_graph(
         # Determine effective src: composite exit → route via internal final state
         effective_src = src
         sg: Optional[str] = None
+        _sem_src: str = ""      # semantic source (composite name) for scope-aware edges
+        _src_scope: str = ""    # composite state ID containing the source
         if src in _composite_ids:
             cs_obj = next((s for s in model.states
                           if isinstance(s, CompositeState) and s.id == src), None)
@@ -566,6 +602,9 @@ def state_model_to_graph(
                         effective_src = fb
                 if gid:
                     sg = gid
+                # AC2: populate semantic source info for cross-scope exit
+                _sem_src = src       # "Processing"
+                _src_scope = src     # "Processing"
 
         # Determine effective dst: composite entry → route via internal initial state
         effective_dst = dst
@@ -581,7 +620,8 @@ def state_model_to_graph(
                     if fb2:
                         effective_dst = fb2
 
-        _make_edge(effective_src, effective_dst, tr.label, src_group=sg)
+        _make_edge(effective_src, effective_dst, tr.label, src_group=sg,
+                   semantic_src=_sem_src, source_scope=_src_scope)
 
     # Emit notes as rect nodes with dotted edges (mirrors _parse_graph_source note logic)
     _note_counter = 0

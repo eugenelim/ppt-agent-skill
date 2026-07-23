@@ -278,6 +278,10 @@ class _Edge:
     dst_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
     edge_id: str = ""             # stable parse-time ID: "src->dst" (or "src->dst#N" for duplicates)
     src_group: Optional[str] = None  # group ID whose boundary clips the source endpoint (cross-scope exit)
+    semantic_src: str = ""    # original semantic source (composite state name if exit-proxied)
+    semantic_dst: str = ""    # original semantic destination
+    source_scope: str = ""    # composite state ID containing source
+    target_scope: str = ""    # composite state ID containing destination
 
     @property
     def arrow(self) -> bool:

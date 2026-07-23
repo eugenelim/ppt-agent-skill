@@ -707,3 +707,112 @@ class TestCrossScopeExitClip:
         assert on_edge, (
             f"start {start} is not on Processing box edge [{x0},{y0},{x1},{y1}]"
         )
+
+
+# ── AC4: Pseudo-state ID collision detection ───────────────────────────────────
+
+class TestPseudoStateIdUniqueness:
+    """state_model_to_graph() raises ValueError on pseudo-state ID collision (AC4)."""
+
+    def test_no_collision_in_normal_composite(self):
+        """Normal composite state: no collision; Processing_sm_start_ is unique."""
+        lines = ["state Processing {", "  [*] --> X", "}", "Processing --> Done"]
+        m = compile_state_machine(lines)
+        nodes, _, _ = state_model_to_graph(m)  # must not raise
+        assert "Processing_sm_start_" in nodes
+        assert "_sm_start_" not in nodes  # no outer [*]
+
+    def test_outer_and_inner_start_distinct(self):
+        """Outer _sm_start_ and inner Processing_sm_start_ are distinct IDs."""
+        lines = [
+            "[*] --> Idle",
+            "state Processing {", "  [*] --> X", "}",
+            "Idle --> Processing",
+        ]
+        m = compile_state_machine(lines)
+        nodes, _, _ = state_model_to_graph(m)
+        assert "_sm_start_" in nodes
+        assert "Processing_sm_start_" in nodes
+        # They must refer to different node objects
+        assert nodes["_sm_start_"] is not nodes["Processing_sm_start_"]
+
+    def test_collision_raises_value_error(self):
+        """Manually-constructed model with duplicate pseudo-state IDs raises ValueError.
+
+        Without scoping, both the outer [*] and the inner [*] would produce
+        _sm_start_ — scoping prevents this. This test directly constructs the
+        collision scenario (bypassing compile_state_machine which deduplicates)
+        to verify the state_model_to_graph() assertion fires.
+        """
+        # Directly construct the duplicate: a top-level InitialPseudoState with the
+        # same ID as the one inside a CompositeState's children.
+        dup_id = "Processing_sm_start_"
+        top_start = InitialPseudoState(id=dup_id, scope="")        # global scope
+        inner_start = InitialPseudoState(id=dup_id, scope="Processing")  # same ID!
+        cs = CompositeState(
+            id="Processing",
+            label="Processing",
+            children=(inner_start, AtomicState(id="X", label="X")),
+        )
+        model = StateMachineModel(
+            states=(top_start, cs),
+            transitions=(),
+        )
+        with pytest.raises(ValueError, match="Duplicate pseudo-state ID"):
+            state_model_to_graph(model)
+
+
+# ── AC12: composite_gates accessible from FinalizedLayout ─────────────────────
+
+class TestCompositGatesOracleAdapter:
+    """composite_gates is accessible from FinalizedLayout for oracle verification (AC12)."""
+
+    def test_composite_gates_type(self):
+        """composite_gates is a MappingProxyType."""
+        from types import MappingProxyType
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        assert isinstance(compiled.layout.composite_gates, MappingProxyType), (
+            "composite_gates must be a MappingProxyType"
+        )
+
+    def test_composite_gates_immutable(self):
+        """composite_gates cannot be mutated (frozen IR)."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        with pytest.raises(TypeError):
+            compiled.layout.composite_gates["NewKey"] = ("a", "b")  # type: ignore[index]
+
+    def test_composite_gates_processing_tuple(self):
+        """composite_gates["Processing"] is a (entry_id, exit_id) tuple."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        gates = compiled.layout.composite_gates["Processing"]
+        assert isinstance(gates, tuple) and len(gates) == 2
+        entry_id, exit_id = gates
+        assert isinstance(entry_id, str) and isinstance(exit_id, str)
+
+    def test_composite_gates_gate_ids_in_node_layouts(self):
+        """The gate node IDs referenced in composite_gates must appear in node_layouts."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        for cs_id, (entry_id, exit_id) in layout.composite_gates.items():
+            assert entry_id in layout.node_layouts, (
+                f"composite_gates[{cs_id!r}].entry_id={entry_id!r} not in node_layouts"
+            )
+            assert exit_id in layout.node_layouts, (
+                f"composite_gates[{cs_id!r}].exit_id={exit_id!r} not in node_layouts"
+            )
+
+    def test_composite_gates_empty_for_no_composites(self):
+        """FinalizedLayout.composite_gates is empty for non-composite diagrams."""
+        flat_src = "stateDiagram-v2\n  [*] --> Idle\n  Idle --> [*]"
+        compiled = _compile_flowchart(flat_src, 0, None)
+        assert len(compiled.layout.composite_gates) == 0
+
+    def test_composite_gates_empty_for_flowchart(self):
+        """FinalizedLayout.composite_gates is empty for non-state-diagram types."""
+        fc_src = "flowchart TD\n  A --> B"
+        compiled = _compile_flowchart(fc_src, 0, None)
+        assert len(compiled.layout.composite_gates) == 0

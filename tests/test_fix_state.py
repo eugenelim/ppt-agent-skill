@@ -29,6 +29,7 @@ from mermaid_render.layout import (
     CANVAS_PAD,
 )
 from mermaid_render.layout._constants import _TERMINAL_NODE_SIZE
+from mermaid_render.layout._strategies import _compile_flowchart
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -393,4 +394,140 @@ class TestFixtureSmoke:
         assert inner_divs, "No doublecircle inner div found"
         assert any("background:" in d for d in inner_divs), (
             f"Final state inner div missing background fill: {inner_divs}"
+        )
+
+
+# ── TestSemanticEndpointFields ────────────────────────────────────────────────
+
+class TestSemanticEndpointFields:
+    """Integration: RoutedEdge semantic/routing/scope fields are populated correctly
+    for state-diagram cross-scope exit edges (AC2) and composite_gates (AC3)."""
+
+    def test_processing_done_semantic_source_id(self):
+        """AC2: Processing --> Done edge has semantic_source_id == "Processing"."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        edge = next(
+            (e for e in layout.routed_edges
+             if e.src_node_id == "Processing_sm_end_" and e.dst_node_id == "Done"),
+            None,
+        )
+        assert edge is not None, "Processing -> Done edge not found"
+        assert edge.semantic_source_id == "Processing", (
+            f"Expected semantic_source_id='Processing', got {edge.semantic_source_id!r}"
+        )
+
+    def test_processing_done_routing_source_id(self):
+        """AC2: Processing --> Done edge has routing_source_id == "Processing_sm_end_"."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        edge = next(
+            (e for e in layout.routed_edges
+             if e.src_node_id == "Processing_sm_end_" and e.dst_node_id == "Done"),
+            None,
+        )
+        assert edge is not None, "Processing -> Done edge not found"
+        assert edge.routing_source_id == "Processing_sm_end_", (
+            f"Expected routing_source_id='Processing_sm_end_', got {edge.routing_source_id!r}"
+        )
+
+    def test_processing_done_source_scope(self):
+        """AC2: Processing --> Done edge has source_scope == "Processing"."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        edge = next(
+            (e for e in layout.routed_edges
+             if e.src_node_id == "Processing_sm_end_" and e.dst_node_id == "Done"),
+            None,
+        )
+        assert edge is not None, "Processing -> Done edge not found"
+        assert edge.source_scope == "Processing", (
+            f"Expected source_scope='Processing', got {edge.source_scope!r}"
+        )
+
+    def test_complex_authenticating_idle_proximity(self):
+        """AC5: Authenticating --> Idle back-edge waypoints satisfy proximity constraint.
+
+        No waypoint lies further than 2*NODE_W from the pair's bounding box right edge.
+        """
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-complex.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        # Find Authenticating -> Idle edge
+        edge = next(
+            (e for e in layout.routed_edges
+             if e.src_node_id == "Authenticating" and e.dst_node_id == "Idle"),
+            None,
+        )
+        assert edge is not None, "Authenticating -> Idle edge not found"
+        # Compute pair bbox right edge
+        auth_nl = layout.node_layouts.get("Authenticating")
+        idle_nl = layout.node_layouts.get("Idle")
+        assert auth_nl and idle_nl
+        pair_right = max(
+            auth_nl.outer_bounds.x + auth_nl.outer_bounds.w,
+            idle_nl.outer_bounds.x + idle_nl.outer_bounds.w,
+        )
+        # All waypoints must be within 2*NODE_W of pair_right
+        for wp in edge.waypoints:
+            assert wp.x <= pair_right + 2 * NODE_W, (
+                f"Waypoint {wp} exceeds pair_right ({pair_right}) + 2*NODE_W "
+                f"in Authenticating -> Idle route"
+            )
+
+    def test_composite_gates_non_empty_for_nested_fixture(self):
+        """AC3: composite_gates is non-empty for statediagram-nested.mmd."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        assert len(layout.composite_gates) > 0, (
+            "composite_gates should be non-empty for a diagram with composite states"
+        )
+
+    def test_composite_gates_contains_processing(self):
+        """AC3: composite_gates contains "Processing" key for nested fixture."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        layout = compiled.layout
+        assert "Processing" in layout.composite_gates, (
+            f"composite_gates keys: {list(layout.composite_gates.keys())}"
+        )
+
+    def test_composite_gates_processing_entry_exit(self):
+        """AC3: Processing gates tuple is (entry_gate_id, exit_gate_id)."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        gates = compiled.layout.composite_gates.get("Processing")
+        assert gates is not None
+        entry_id, exit_id = gates
+        assert "sm_start" in entry_id, f"entry gate {entry_id!r} doesn't look like a start pseudo-state"
+        assert "sm_end" in exit_id, f"exit gate {exit_id!r} doesn't look like an end pseudo-state"
+
+    def test_validate_finalized_layout_no_errors_nested(self):
+        """AC11 + AC13: validate_finalized_layout() returns no errors for nested fixture."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-nested.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        result = compiled.validation
+        assert result.errors == (), (
+            f"validate_finalized_layout errors for nested fixture: {result.errors}"
+        )
+
+    def test_validate_finalized_layout_no_errors_complex(self):
+        """AC11 + AC13: validate_finalized_layout() returns no errors for complex fixture."""
+        src = open(REPO_ROOT / "tests" / "fixtures" / "statediagram-complex.mmd").read()
+        compiled = _compile_flowchart(src, 0, None)
+        result = compiled.validation
+        assert result.errors == (), (
+            f"validate_finalized_layout errors for complex fixture: {result.errors}"
+        )
+
+    def test_composite_gates_empty_for_flat_diagram(self):
+        """AC3: composite_gates is empty for a flat (no composites) state diagram."""
+        flat_src = "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Active\n  Active --> [*]"
+        compiled = _compile_flowchart(flat_src, 0, None)
+        assert len(compiled.layout.composite_gates) == 0, (
+            "composite_gates should be empty for a flat state diagram"
         )
