@@ -12,6 +12,7 @@ from ._constants import (
     _BAR_W, _BAR_H,
     _is_terminal_circle, _is_terminal_doublecircle,
     _load_icon, _wrap_label, _split_sub_label, _node_render_h,
+    MIN_EMPTY_GROUP_W, MIN_EMPTY_GROUP_BODY_H,
 )
 from ._routing import _route_edges, _node_render_w
 
@@ -1310,11 +1311,13 @@ def _compute_group_bboxes(
         all_mbr_ids = _recursive_members(gid)
         mbrs = [nodes[m] for m in all_mbr_ids if m in nodes and not nodes[m].is_dummy]
         if not mbrs:
-            # Empty group: give it a minimal placeholder bbox so it renders as
-            # a small labeled box.  Position at canvas origin; overlap resolution
-            # below will push it clear of other groups when possible.
-            _emp_w = float(NODE_W + 2 * GROUP_PAD_X)
-            _emp_h = float(GROUP_PAD_Y_TOP + GROUP_PAD_Y_BOT)
+            # Empty group: enforce minimum visible dimensions (AC13).
+            # Width: at least label_w + 2*GROUP_PAD_X, clamped to MIN_EMPTY_GROUP_W.
+            # Height: at least GROUP_PAD_Y_TOP + MIN_EMPTY_GROUP_BODY_H.
+            _grp_label = groups[gid].label or ""
+            _label_w = max(len(_grp_label) * 8, NODE_W)  # rough em-width estimate
+            _emp_w = float(max(_label_w + 2 * GROUP_PAD_X, MIN_EMPTY_GROUP_W))
+            _emp_h = float(max(GROUP_PAD_Y_TOP + MIN_EMPTY_GROUP_BODY_H, GROUP_PAD_Y_TOP + GROUP_PAD_Y_BOT))
             bboxes[gid] = [0.0, 0.0, _emp_w, _emp_h]
             continue
         x0 = float(min(n.x for n in mbrs) - GROUP_PAD_X)

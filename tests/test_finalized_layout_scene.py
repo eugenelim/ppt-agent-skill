@@ -570,6 +570,10 @@ def test_routed_edge_field_coverage_reflective():
     # - has_marker_end: legacy bool derived from target_marker; paint.py now uses target_marker directly
     # - has_marker_start: legacy bool derived from source_marker; paint.py now uses source_marker directly
     # - junction_points: ELK branch-point dots; rendering deferred (backlog)
+    # - route_length: compactness metric (AC16); layout metadata, not rendered
+    # - bend_count: compactness metric (AC16); layout metadata, not rendered
+    # - canvas_area: compactness metric (AC16); layout metadata, not rendered
+    # - max_endpoint_distance: compactness metric (AC16); layout metadata, not rendered
     _DECLARED_NON_CONSUMED: set[str] = {
         "src_port",
         "dst_port",
@@ -580,6 +584,10 @@ def test_routed_edge_field_coverage_reflective():
         "has_marker_end",
         "has_marker_start",
         "junction_points",
+        "route_length",
+        "bend_count",
+        "canvas_area",
+        "max_endpoint_distance",
     }
 
     from scripts.mermaid_render.layout._geometry import MarkerKind as _MarkerKindT

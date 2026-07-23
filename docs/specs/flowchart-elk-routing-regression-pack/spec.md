@@ -2,7 +2,7 @@
 
 Mode: full (structural change, multi-feature, dependent tasks)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Depends on:** `elk-finalized-layout-roundtrip` (ELK edge sections must be consumed via the shared `FinalizedLayout` path before AC7 can close)
 
 ## Objective
