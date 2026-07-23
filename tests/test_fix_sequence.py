@@ -940,6 +940,7 @@ class TestUnsupportedSyntaxDiagnostics:
         assert vr.syntax_coverage == "fail"
 
     def test_box_emits_diagnostic_and_renders(self):
+        """box directive is now parsed: no 'box' diagnostic, group background rendered."""
         src = (
             "sequenceDiagram\n"
             "    box Frontend\n"
@@ -948,10 +949,140 @@ class TestUnsupportedSyntaxDiagnostics:
             "    Alice->>Bob: hi\n"
         )
         vr = _dispatch_validate(src)
-        assert any(d.feature == "box" for d in vr.diagnostics)
-        assert vr.syntax_coverage == "partial"
+        assert not any(d.feature == "box" for d in vr.diagnostics), (
+            "box directive is now supported; should not emit a 'box' Diagnostic"
+        )
         html = _dispatch(src, None, 800)
         assert "Alice" in html
+        assert 'data-box-group="true"' in html, "Box background div should be rendered"
+
+
+# ── Box group backgrounds ────────────────────────────────────────────────────
+
+class TestBoxGroups:
+    """Box directive renders colored background divs behind participant groups."""
+
+    def test_box_background_rect_rendered(self):
+        """Box directive renders a full-height background div in HTML output."""
+        src = (
+            "sequenceDiagram\n"
+            "  box Blue Group A\n"
+            "    participant Alice\n"
+            "    participant Bob\n"
+            "  end\n"
+            "  Alice->>Bob: Hello\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert 'data-box-group="true"' in html, "Box background div should be rendered"
+        # AC-3: box div itself carries the full canvas height (not just the container)
+        _canvas_h = _canvas_height(html)
+        import re as _re
+        assert _re.search(
+            rf'height:{_canvas_h}px[^>]*data-box-group="true"|data-box-group="true"[^>]*height:{_canvas_h}px',
+            html
+        ), f"Box background div must carry height:{_canvas_h}px"
+        # Box div appears before participant divs (lowest z-order)
+        box_pos = html.index('data-box-group="true"')
+        first_node_pos = html.index('class="node node-rect"')
+        assert box_pos < first_node_pos, "Box background div must precede participant divs"
+
+    def test_box_label_rendered(self):
+        """Box label appears at top-4px, centered over the box width."""
+        src = (
+            "sequenceDiagram\n"
+            "  box Blue Group A\n"
+            "    participant Alice\n"
+            "    participant Bob\n"
+            "  end\n"
+            "  Alice->>Bob: Hello\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert "Group A" in html, "Box label should appear in HTML"
+        # AC-4: label span is top:4px and centered
+        assert ">Group A</span>" in html, "Label must appear as span text content"
+        assert "top:4px" in html, "Label span must be positioned at top:4px"
+        assert "text-align:center" in html, "Label span must be centered"
+
+    def test_no_box_in_non_box_diagram(self):
+        """No box elements when no box directive is present."""
+        src = (
+            "sequenceDiagram\n"
+            "  participant Alice\n"
+            "  participant Bob\n"
+            "  Alice->>Bob: Hello\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert 'data-box-group="true"' not in html
+
+    def test_multiple_boxes_rendered(self):
+        """Multiple disjoint boxes each render their own background."""
+        src = (
+            "sequenceDiagram\n"
+            "  box Blue A\n    participant Alice\n  end\n"
+            "  box Green B\n    participant Bob\n  end\n"
+            "  Alice->>Bob: Hello\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert html.count('data-box-group="true"') == 2
+
+    def test_title_only_box_uses_label_not_color(self):
+        """box with no color token treats the entire text as the label."""
+        src = (
+            "sequenceDiagram\n"
+            "  box Frontend\n"
+            "    participant Alice\n"
+            "  end\n"
+            "  Alice->>Alice: ping\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert 'data-box-group="true"' in html, "Box background div should be rendered"
+        # The label should appear as span text content, not as a CSS color value
+        assert ">Frontend</span>" in html, "Title-only box label should appear as span content"
+        assert "background:Frontend" not in html, "Label should not be misused as a CSS background color"
+        assert "rgba(200,200,200,0.3)" in html, "Default background color should be used for title-only box"
+
+    def test_named_color_appears_in_background(self):
+        """A specified named color reaches the box div background property."""
+        src = (
+            "sequenceDiagram\n"
+            "  box Blue Group A\n"
+            "    participant Alice\n"
+            "  end\n"
+            "  Alice->>Alice: ping\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert "background:Blue" in html, "Named color 'Blue' must appear in box background"
+
+    def test_functional_color_appears_in_background(self):
+        """A specified rgb() color reaches the box div background property."""
+        src = (
+            "sequenceDiagram\n"
+            "  box rgb(200,100,50) Group B\n"
+            "    participant Bob\n"
+            "  end\n"
+            "  Bob->>Bob: ping\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert "background:rgb(200,100,50)" in html, "Functional color must appear in box background"
+
+    def test_box_named_participant_message_renders(self):
+        """A participant named Box can send messages (unspaced and spaced arrow forms)."""
+        # Unspaced arrow
+        src = (
+            "sequenceDiagram\n"
+            "  Box->>Alice: hello\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        assert 'data-src="Box"' in html, "Unspaced: message from Box must render as arrow"
+        assert 'data-box-group="true"' not in html, "No box background for plain message"
+        # Spaced arrow (idiomatic: "Box ->> Alice: hello")
+        src2 = (
+            "sequenceDiagram\n"
+            "  Box ->> Alice: hello\n"
+        )
+        html2, geom2 = _layout_lifeline(src2, "LR", 0)
+        assert 'data-src="Box"' in html2, "Spaced: message from Box must render as arrow"
+        assert 'data-box-group="true"' not in html2, "No box background for spaced message"
 
 
 # ── SEQ-014: Note participant auto-registration ───────────────────────────────

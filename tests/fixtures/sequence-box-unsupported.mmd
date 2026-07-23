@@ -1,0 +1,13 @@
+sequenceDiagram
+    box Blue Group A
+        participant Alice
+        participant Bob
+    end
+    box rgb(200,100,50) Group B
+        participant Carol
+    end
+    participant Dave
+    Alice->>Bob: Hello
+    Bob->>Carol: Forward
+    Carol-->>Alice: Reply
+    Alice->>Dave: External message

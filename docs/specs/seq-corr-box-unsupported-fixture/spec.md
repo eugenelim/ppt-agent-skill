@@ -1,78 +1,57 @@
-Mode: full (structural change — new rendering pass for box grouping; unfamiliar territory)
+**Mode:** light (no risk trigger fired)
+
+**Status:** Shipped
 
 # seq-corr-box-unsupported-fixture
 
-**Status:** Draft
-
 ## Objective
 
-Implement sequence diagram `box` directive rendering: render a full-height colored background
-rect spanning all participants in the box group, with a label at the top. Currently parsed
-but silently ignored — produces no visual output.
-
-## Background
-
-The Mermaid `box` directive groups participants under a colored, labeled region:
-
-```
-sequenceDiagram
-    box Blue Alice's group
-        participant Alice
-        participant Bob
-    end
-    Alice->>Bob: Hello
-```
-
-**mmdc 11.15 SVG output for box:**
-```html
-<rect x="-20" y="-5" fill="Blue" stroke="rgb(0,0,0, 0.5)" width="400" height="246" class="rect"/>
-<text x="180" y="13.5" ...>Alice's group</text>
-```
-
-The box rect spans from before the leftmost participant to after the rightmost, full canvas
-height, with slight negative x/y offsets to create a border. The label appears at the top center.
-
-**Current state of parser:**
-The parser (`_strategies.py`) already parses the `box` directive and records participant
-group membership. The `box` keyword with color and label is available but not rendered.
+Parse the Mermaid `box` directive in sequence diagrams and render a colored group background behind grouped participants. Currently `box` is caught by `_SEQ_SKIP_RE` and turned into a Diagnostic — the color, label, and participant membership are discarded.
 
 ## Acceptance Criteria
 
-- [ ] AC-1: A `box` directive renders a background `<rect>` spanning all participants in the
-  box group, from `y=0` to `canvas_h`, with:
-  - `fill` set to the specified color (or a default gray if no color given)
-  - A semi-transparent `opacity` (0.15–0.3) to not obscure participant boxes
-  - `stroke` with a contrasting border
-- [ ] AC-2: The box label (text after the color) is rendered as a `<text>` or `<span>` element
-  at the top of the box (above participant header boxes), horizontally centered over the span.
-- [ ] AC-3: Box rects are drawn BELOW participant boxes and lifelines in z-order (painted first
-  in the SVG, so other elements appear on top).
-- [ ] AC-4: Multiple disjoint boxes on the same diagram render without overlap or z-order conflict.
-- [ ] AC-5: `tests/fixtures/sequence-box-unsupported.mmd` fixture is created with:
-  - At least 2 boxes (one with color, one without)
-  - Participants both inside and outside boxes
-  - Messages crossing box boundaries
-- [ ] AC-6: `structural_geometry` for the fixture reports `render` (not `syntax`).
-- [ ] AC-7: No box rendering in diagrams without `box` directives (no regression).
+- [x] AC-1: `box` is parsed before `_SEQ_SKIP_RE`; color and label are extracted.
+- [x] AC-2: Participants declared inside a `box`…`end` block are tracked as members of that box.
+- [x] AC-3: Each box with at least one recognized participant renders a full-height positioned `<div data-box-group="true">` behind the participants.
+- [x] AC-4: A non-empty box label renders as an absolutely-positioned sibling `<span>` at top-4px, centered over the box width.
+- [x] AC-5: Multiple disjoint boxes render independent backgrounds (count == number of boxes with members).
+- [x] AC-6: Diagrams with no `box` directive contain no `data-box-group` attribute.
+- [x] AC-7: `tests/fixtures/sequence-box-unsupported.mmd` fixture file exists and `_dispatch` renders it without error.
+- [x] AC-8: Full test suite (excluding snapshot tests) passes with no regressions.
 
-## Assumptions
+## Testing Strategy
 
-- **Parser**: The `box` directive is already parsed; we need to add only the render pass.
-- **Colors**: Accept any CSS color string that mmdc accepts (named colors, hex, rgb). If a
-  color is not specified in the `box` declaration, use `rgba(200,200,200,0.2)`.
-- **Label**: The box label is the text after the optional color on the `box` line.
-- **Z-order**: HTML `position:absolute` stack order — box rects use `z-index:0` or appear
-  before participant divs in DOM order.
-- **No geometry impact**: Box rects do not affect participant column placement or canvas width.
+Eight new unit tests added to `tests/test_fix_sequence.py` under a new `TestBoxGroups` class:
 
-## Testing strategy
+- `test_box_background_rect_rendered` — AC-3 (full-height div, z-order before participants)
+- `test_box_label_rendered` — AC-4 (label span at top:4px, centered)
+- `test_no_box_in_non_box_diagram` — AC-6
+- `test_multiple_boxes_rendered` — AC-5
+- `test_title_only_box_uses_label_not_color` — AC-1 (title-only: label not misused as color)
+- `test_named_color_appears_in_background` — AC-1 (named CSS color reaches background CSS)
+- `test_functional_color_appears_in_background` — AC-1 (rgb() color reaches background CSS)
+- `test_box_named_participant_message_renders` — regression (participant named Box not dropped)
 
-- Unit tests in `test_fix_sequence.py`: assert box background rect appears in HTML output;
-  assert label text appears; assert no box elements in a non-box diagram.
-- New fixture `tests/fixtures/sequence-box-unsupported.mmd` for integration check.
-- Run `pytest tests/test_fix_sequence.py -v -k "box"` to verify.
+The fixture file exercises AC-7 via the glob-parametrized tests in `tests/test_render_correctness.py` (the fixture is added to `_NO_PATHS` since it renders without path-annotated geometry).
 
-## Deferred
+## Task List
 
-- Box nesting (box inside box) — not supported by mmdc; defer.
-- Animation or hover effects on box groups — out of scope.
+1. Add lean spec (this file)
+2. Modify `scripts/mermaid_render/layout/_strategies.py`:
+   - Initialize `_all_box_groups`, `_open_box_stack`, `_block_type_stack` before `_ensure_p`
+   - Modify `_ensure_p` to add newly-registered participants to the current open box
+   - Add `box` handler before the `_SEQ_SKIP_RE` check in the parsing loop
+   - Push `"block"` to `_block_type_stack` in the `_SEQ_BLOCK_RE` handler
+   - Pop `_block_type_stack` in the `end` handler; pop `_open_box_stack` when type is `"box"`
+   - Render box backgrounds as positioned divs before participant boxes in HTML emission
+3. Create `tests/fixtures/sequence-box-unsupported.mmd`
+4. Add `TestBoxGroups` class to `tests/test_fix_sequence.py`
+
+## Boundaries
+
+Not changing:
+- `SequenceGeometry` dataclass (no new exported geometry fields)
+- SVG renderer or any other diagram type
+
+Deliberate changes beyond the obvious:
+- `_SEQ_SKIP_RE`: `box` alternation removed (the box handler intercepts `^box(?:\s|$)` first; keeping `box` in the skip regex would silently drop messages from a participant named `Box` since `^box\b` matches `Box->>...`)
