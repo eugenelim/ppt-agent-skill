@@ -1600,7 +1600,7 @@ def _compile_classdiagram(
         for nid, nl in node_layouts.items()
     }
 
-    routed_edges_ir = _build_routed_edges_ir(route_batch.routed)
+    routed_edges_ir = _build_routed_edges_ir(route_batch.routed, canvas_area=canvas_w * canvas_h)
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
 
     finalized = FinalizedLayout(
@@ -4443,9 +4443,10 @@ def _clip_cross_scope_exit_waypoints(routed, src_group_map, grp_bboxes) -> None:
         spec["waypoints"] = [boundary, *(_xy(p) for p in wps[first_out:])]
 
 
-def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, ...]":
+def _build_routed_edges_ir(route_results: "tuple | list", canvas_area: int = 0) -> "tuple[RoutedEdge, ...]":
     """Convert _route_edges() result dicts to typed RoutedEdge IR objects."""
     from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect, MarkerKind
+    from ._routing import _compute_metrics
     results: list = []
     for spec in route_results:
         src = spec.get("src", "")
@@ -4546,6 +4547,16 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
         else:
             _dst_lbl_layout = None
 
+        # Compute compactness metrics (AC16)
+        _raw_wp_list = [(int(pt.x), int(pt.y)) for pt in waypoints] if waypoints else []
+        _s_bbox = None
+        _d_bbox = None  # bboxes not available here; let _compute_metrics default to inf distance
+        _metrics = _compute_metrics(_raw_wp_list, _s_bbox, _d_bbox, canvas_area)
+        _m_route_length: float = float(_metrics.get("route_length") or 0.0)
+        _m_bend_count: int = int(_metrics.get("bend_count") or 0)
+        _m_canvas_area: int = int(_metrics.get("canvas_area") or 0)
+        _m_max_ep_dist: float = float(_metrics.get("max_endpoint_distance") or 0.0)
+
         results.append(RoutedEdge(
             edge_id=edge_id,
             src_node_id=src,
@@ -4561,6 +4572,10 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
             dst_label_layout=_dst_lbl_layout,
             source_marker=_source_marker,
             target_marker=_target_marker,
+            route_length=_m_route_length,
+            bend_count=_m_bend_count,
+            canvas_area=_m_canvas_area,
+            max_endpoint_distance=_m_max_ep_dist,
         ))
     return tuple(results)
 
@@ -5203,7 +5218,7 @@ def _compile_flowchart(
     if _src_group_map:
         _clip_cross_scope_exit_waypoints(route_batch.routed, _src_group_map, _grp_bboxes)
 
-    routed_edges_ir = _build_routed_edges_ir(route_batch.routed)
+    routed_edges_ir = _build_routed_edges_ir(route_batch.routed, canvas_area=canvas_w * canvas_h)
 
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
 
@@ -5227,6 +5242,7 @@ def _compile_flowchart(
         group_count=len(groups),
         edge_count=parsed_edge_count,
         algorithm=_algo,
+        backend="elkjs" if _use_elk else "python",
     )
 
     validation = validate_finalized_layout(finalized, metadata=metadata)

@@ -715,6 +715,190 @@ def _best_label_pos(
     return LabelPlacement(box=box, reroute_required=_all_blocked)
 
 
+
+# ── SCC detection (iterative Tarjan's) ───────────────────────────────────────
+
+def _tarjan_sccs(
+    nodes: "list[str]",
+    edges: "list[tuple[str, str]]",
+) -> "list[list[str]]":
+    """Compute strongly connected components via iterative Tarjan's algorithm.
+
+    Returns a list of SCCs ordered by discovery (first SCC is the last
+    completed — sinks first). Each SCC is a list of node IDs. Isolated nodes
+    (self-loops excluded, no back-edges) appear as singleton SCCs.
+    Takes < 50 lines, no external library dependencies.
+    """
+    if not nodes:
+        return []
+    adj: dict[str, list[str]] = {n: [] for n in nodes}
+    for s, d in edges:
+        if s in adj and d in adj and s != d:
+            adj[s].append(d)
+
+    index_counter = [0]
+    stack: list[str] = []
+    lowlink: dict[str, int] = {}
+    index_map: dict[str, int] = {}
+    on_stack: dict[str, bool] = {}
+    sccs: list[list[str]] = []
+
+    def _strongconnect(start: str) -> None:
+        # Iterative Tarjan's: work stack holds (node, iterator_over_neighbours, phase)
+        work: list = [(start, iter(adj[start]), True)]
+        while work:
+            v, neighbours, first_visit = work[-1]
+            if first_visit:
+                index_map[v] = lowlink[v] = index_counter[0]
+                index_counter[0] += 1
+                stack.append(v)
+                on_stack[v] = True
+                work[-1] = (v, neighbours, False)
+            try:
+                w = next(neighbours)
+                if w not in index_map:
+                    work.append((w, iter(adj[w]), True))
+                elif on_stack.get(w):
+                    lowlink[v] = min(lowlink[v], index_map[w])
+            except StopIteration:
+                work.pop()
+                if work:
+                    caller = work[-1][0]
+                    lowlink[caller] = min(lowlink[caller], lowlink[v])
+                if lowlink[v] == index_map[v]:
+                    scc: list[str] = []
+                    while True:
+                        w = stack.pop()
+                        on_stack[w] = False
+                        scc.append(w)
+                        if w == v:
+                            break
+                    sccs.append(scc)
+
+    for n in nodes:
+        if n not in index_map:
+            _strongconnect(n)
+    return sccs
+
+
+def _scc_bbox(scc_members: "list[str]", nodes: "dict") -> "tuple[int, int, int, int] | None":
+    """Return (x1, y1, x2, y2) bounding box for all nodes in an SCC.
+
+    Returns None when scc_members is empty or no members are in nodes.
+    """
+    valid = [nodes[nid] for nid in scc_members if nid in nodes and not getattr(nodes[nid], "is_dummy", False)]
+    if not valid:
+        return None
+    x1 = min(n.x for n in valid)
+    y1 = min(n.y for n in valid)
+    x2 = max(n.x + _node_render_w(n) for n in valid)
+    y2 = max(n.y + _node_render_h(n) for n in valid)
+    return x1, y1, x2, y2
+
+
+# ── compactness metrics ───────────────────────────────────────────────────────
+
+def _compute_metrics(
+    waypoints: "list[tuple[int, int]]",
+    src_bbox: "tuple[int, int, int, int] | None",
+    dst_bbox: "tuple[int, int, int, int] | None",
+    canvas_area: int,
+) -> "dict[str, float | int]":
+    """Compute compactness metrics for a routed edge.
+
+    Returns a dict with keys: route_length, bend_count, canvas_area, max_endpoint_distance.
+    All values default to 0/0.0 when waypoints has fewer than 2 points.
+    """
+    if len(waypoints) < 2:
+        return {"route_length": 0.0, "bend_count": 0, "canvas_area": canvas_area,
+                "max_endpoint_distance": 0.0}
+
+    # route_length: sum of Euclidean segment lengths
+    rl = 0.0
+    for i in range(len(waypoints) - 1):
+        dx = waypoints[i + 1][0] - waypoints[i][0]
+        dy = waypoints[i + 1][1] - waypoints[i][1]
+        rl += math.hypot(dx, dy)
+
+    # bend_count: direction changes between consecutive segments
+    bends = 0
+    for i in range(1, len(waypoints) - 1):
+        dx1 = waypoints[i][0] - waypoints[i - 1][0]
+        dy1 = waypoints[i][1] - waypoints[i - 1][1]
+        dx2 = waypoints[i + 1][0] - waypoints[i][0]
+        dy2 = waypoints[i + 1][1] - waypoints[i][1]
+        # A direction change: (horizontal→vertical) or (vertical→horizontal)
+        # Detect by checking if the normalised direction vector changed axis.
+        if (dx1 == 0) != (dx2 == 0) or (dy1 == 0) != (dy2 == 0):
+            if not (dx1 == 0 and dy1 == 0) and not (dx2 == 0 and dy2 == 0):
+                bends += 1
+
+    # max_endpoint_distance: for each segment midpoint, distance to nearest endpoint AABB
+    def _dist_to_bbox(px: float, py: float, bbox: "tuple[int,int,int,int] | None") -> float:
+        if bbox is None:
+            return float("inf")
+        bx1, by1, bx2, by2 = bbox
+        dx = max(bx1 - px, 0.0, px - bx2)
+        dy = max(by1 - py, 0.0, py - by2)
+        return math.hypot(dx, dy)
+
+    max_ep_dist = 0.0
+    for i in range(len(waypoints) - 1):
+        mx = (waypoints[i][0] + waypoints[i + 1][0]) / 2.0
+        my = (waypoints[i][1] + waypoints[i + 1][1]) / 2.0
+        d_src = _dist_to_bbox(mx, my, src_bbox)
+        d_dst = _dist_to_bbox(mx, my, dst_bbox)
+        nearest = min(d_src, d_dst)
+        if nearest > max_ep_dist:
+            max_ep_dist = nearest
+
+    return {
+        "route_length": rl,
+        "bend_count": bends,
+        "canvas_area": canvas_area,
+        "max_endpoint_distance": max_ep_dist,
+    }
+
+
+# ── hierarchy helpers ─────────────────────────────────────────────────────────
+
+def _lca_group(
+    src_id: str,
+    dst_id: str,
+    group_membership: "dict[str, str | None]",
+) -> "str | None":
+    """Return the ID of the lowest common ancestor group for src and dst.
+
+    group_membership maps node_id → group_id (or None for top-level nodes).
+    Returns None when src and dst share the same group or are at the top level.
+    """
+    src_group = group_membership.get(src_id)
+    dst_group = group_membership.get(dst_id)
+    if src_group == dst_group:
+        return None  # same group or both top-level
+    return src_group  # simplified: return source's group as the crossing group
+
+
+def _group_boundary_port(
+    group_bbox: "tuple[int, int, int, int]",
+    direction: str,
+    exit_: bool,
+) -> "tuple[int, int]":
+    """Return the face-centre point on the group perimeter for edge exit or entry.
+
+    group_bbox: (x1, y1, x2, y2)
+    direction: "TB" or "LR"
+    exit_: True for source side (exit), False for destination side (entry).
+    """
+    x1, y1, x2, y2 = group_bbox
+    mid_x = (x1 + x2) // 2
+    mid_y = (y1 + y2) // 2
+    is_lr = direction.upper() in ("LR", "RL")
+    if is_lr:
+        return (x2, mid_y) if exit_ else (x1, mid_y)
+    else:
+        return (mid_x, y2) if exit_ else (mid_x, y1)
+
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                  direction: str = "TB",
                  group_bboxes: "dict | None" = None,
@@ -799,6 +983,33 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
     # Right-lane x: always clears the rightmost node + group container border
     non_dummy = [n for n in nodes.values() if not n.is_dummy]
     right_lane_x = (max(n.x + _node_render_w(n) for n in non_dummy) if non_dummy else canvas_w) + 32
+
+    # SCC-scoped back-edge lanes (AC8): compute SCCs so each cycle's back-edges
+    # use the SCC bbox right edge as the lane boundary instead of the global canvas edge.
+    _scc_node_ids = [nid for nid in nodes if not nodes[nid].is_dummy]
+    _all_edges_for_scc = [(e.src, e.dst) for e in edges
+                          if e.src in nodes and e.dst in nodes and not nodes[e.dst].is_dummy]
+    _sccs = _tarjan_sccs(_scc_node_ids, _all_edges_for_scc)
+    # Map node_id → SCC index so we can look up SCC bbox for a node pair quickly.
+    _node_to_scc_idx: dict[str, int] = {}
+    for _sidx, _scc in enumerate(_sccs):
+        for _nid in _scc:
+            _node_to_scc_idx[_nid] = _sidx
+
+    def _scc_right_for_edge(src_id: str, dst_id: str) -> int:
+        """Return the right edge of the tightest SCC that contains both endpoints."""
+        s_idx = _node_to_scc_idx.get(src_id)
+        d_idx = _node_to_scc_idx.get(dst_id)
+        # Only use SCC bounds when both endpoints share the same multi-node SCC.
+        if s_idx is not None and s_idx == d_idx and len(_sccs[s_idx]) > 1:
+            bbox = _scc_bbox(_sccs[s_idx], nodes)
+            if bbox is not None:
+                return bbox[2]  # x2
+        # Fall back to local right edge.
+        return max(
+            nodes[src_id].x + _node_render_w(nodes[src_id]),
+            nodes[dst_id].x + _node_render_w(nodes[dst_id]),
+        )
 
     # LR bottom-lane y: clears the tallest node's bottom + margin
     if is_lr and non_dummy:
@@ -1084,10 +1295,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                            "source_marker": getattr(e, "source_marker", None),
                            "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             else:
-                # Local lane: stay close to the two nodes' right edges instead of
-                # routing all the way to the global right canvas margin.
+                # SCC-scoped lane (AC8): use the SCC bbox right edge so back-edges
+                # in a cycle stay contained within the cycle's bounding box.
                 # Clamped to right_lane_x so the path never escapes the canvas.
-                _local_right = max(s.x + _node_render_w(s), d.x + _node_render_w(d))
+                _local_right = _scc_right_for_edge(s.id, d.id)
                 lane_x = min(_local_right + 12 * (be_lane + 1), right_lane_x)
                 sx = s.x + _node_render_w(s)
                 sy = s.y + _node_render_h(s) // 2

@@ -318,6 +318,11 @@ class RoutedEdge:
     source_marker: "MarkerKind" = None  # type: ignore[assignment]
     target_marker: "MarkerKind" = None  # type: ignore[assignment]
     junction_points: "tuple[Point, ...]" = ()
+    # Compactness metrics (AC16) — all default to zero; computed by _compute_metrics()
+    route_length: float = 0.0          # total Euclidean path length (px)
+    bend_count: int = 0                # number of 90° direction changes
+    canvas_area: int = 0               # canvas_bounds.w × .h at routing time
+    max_endpoint_distance: float = 0.0 # max segment-midpoint distance to nearest endpoint AABB
 
     def __post_init__(self) -> None:
         # Coerce None defaults to MarkerKind.NONE so callers that don't set these fields

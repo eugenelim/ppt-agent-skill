@@ -173,6 +173,10 @@ _BAR_H = 8                # px height of the visible bar stroke
 _BAR_LABEL_H = 20         # px height reserved below bar for the node label text
 ICON_COL_WIDTH: int = 34  # icon 24px + margin 10px (icon-left card column reserved width)
 NODE_MAX_W: int = 220     # upper bound for text-box node widths (circle/diamond/hexagon uncapped)
+# Minimum empty-group dimensions (AC13, Task 7)
+MIN_EMPTY_GROUP_W = 120       # minimum width for an empty (zero-child) subgraph box
+MIN_EMPTY_GROUP_BODY_H = 40   # minimum body height below the title strip
+
 # Self-loop direction-aware routing constants
 BASE_LOOP_EXTENT = 32     # minimum side-protrusion of a self-loop arc (px)
 LOOP_LANE_GAP = 20        # additional extent per lane index for multiple loops on one node
