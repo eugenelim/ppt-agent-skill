@@ -17,6 +17,7 @@ import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ROOT / "scripts"))
+sys.path.insert(0, str(_ROOT / "tests" / "fidelity" / "adapters"))
 
 _FIXTURE_DIR = _ROOT / "tests" / "fixtures"
 
@@ -52,12 +53,8 @@ def test_graph_fixture_no_overlap(fixture_name: str) -> None:
     compiled = _compile_flowchart(_src(fixture_name), width_hint=0, options=None)
     result = validate_finalized_layout(compiled.layout, strict=True)
 
-    # Check structural invariants: no node-node overlap, no node outside parent group.
-    # Edge routing quality (label-node intersection, waypoints through nodes) is aspirational
-    # for the first ELK integration and is not checked here.
-    node_overlap_errors = [e for e in result.errors if e.startswith("Node overlap:")]
-    assert not node_overlap_errors, (
-        f"{fixture_name}: node overlap errors — {node_overlap_errors}"
+    assert result.geometry == "pass", (
+        f"{fixture_name}: geometry errors — {list(result.errors)}"
     )
     assert result.structural_geometry == "pass", (
         f"{fixture_name}: containment violations — "
@@ -81,14 +78,18 @@ _NON_GRAPH_FIXTURES = [
 
 @pytest.mark.parametrize("fixture_name", _NON_GRAPH_FIXTURES)
 def test_non_graph_fixture_produces_output(fixture_name: str) -> None:
-    """Each non-graph-topology fixture renders to a non-empty SVG string."""
+    """Each non-graph-topology fixture renders non-empty SVG with at least one semantic entity."""
     import mermaid_render
+    from native_svg import _extract_semantic_from_svg
 
-    # experimental=True: accept partial native output for diagram types with
-    # experimental native renderers (architecture, class, er, requirement).
     svg = mermaid_render.to_svg(_src(fixture_name), experimental=True)
     assert svg and len(svg) > 100, (
         f"{fixture_name}: to_svg returned empty or too-short output"
+    )
+    semantic = _extract_semantic_from_svg(svg, fixture_name)
+    assert semantic is not None and len(semantic.entities) >= 1, (
+        f"{fixture_name}: expected >= 1 semantic entity, got "
+        f"{len(semantic.entities) if semantic else 'None'}"
     )
 
 

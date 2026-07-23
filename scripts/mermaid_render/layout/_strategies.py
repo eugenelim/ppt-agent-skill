@@ -4951,6 +4951,25 @@ def _recursive_group_layout(
                         cur_y += (y1 - y0) + _col_gap
 
 
+def _elk_edge_id_map(edges: "list[_Edge]") -> "dict[str, _Edge]":
+    """Build {elk_edge_id: _Edge} using the canonical ELK-ID scheme.
+
+    Used by both _build_layout_graph (to set LayoutEdge.id) and _compile_flowchart
+    (to recover _Edge from a RoutedEdge returned by layout_with_elk) so the two
+    sites stay byte-identical without duplication.
+    """
+    result: dict = {}
+    seen: dict = {}
+    for e in edges:
+        if e.reversed_:
+            continue
+        base = f"{e.orig_src or e.src}->{e.orig_dst or e.dst}"
+        n = seen.get(base, 0)
+        seen[base] = n + 1
+        result[base if n == 0 else f"{base}#{n}"] = e
+    return result
+
+
 def _build_layout_graph(
     nodes: "dict[str, _Node]",
     edges: "list[_Edge]",
@@ -4994,15 +5013,8 @@ def _build_layout_graph(
             minimum_height=0.0,
         ))
 
-    seen_edge_ids: dict[str, int] = {}
     layout_edges = []
-    for e in edges:
-        if e.reversed_:
-            continue
-        base_id = f"{e.orig_src or e.src}->{e.orig_dst or e.dst}"
-        n = seen_edge_ids.get(base_id, 0)
-        seen_edge_ids[base_id] = n + 1
-        eid = base_id if n == 0 else f"{base_id}#{n}"
+    for eid, e in _elk_edge_id_map(edges).items():
         _sm = e.source_marker
         _tm = e.target_marker
         src_mk = _sm.kind if hasattr(_sm, "kind") else (MarkerKind(_sm) if isinstance(_sm, str) else MarkerKind.NONE)
@@ -5109,19 +5121,8 @@ def _compile_flowchart(
             raise Exception("terminal-circle fallback to Python")
         if _has_self_loops:
             raise Exception("self-loop fallback to Python")
-        from .elk_adapter import (
-            _to_elk_json, _run_elk, _find_node, _find_elkjs,
-            ElkUnavailable as _ElkUnavailable,
-        )
-        import os as _os
-        if _os.environ.get("MERMAID_LAYOUT_ENGINE", "").lower() == "python":
-            raise _ElkUnavailable("env var")
-        if _find_node() is None:
-            raise _ElkUnavailable("no node")
-        if _find_elkjs() is None:
-            raise _ElkUnavailable("no elkjs")
-        # Set node widths/heights via Python layout before giving ELK the graph.
-        # ELK needs correct measured bounds; it will replace x/y but not w/h.
+        from .elk_adapter import layout_with_elk as _layout_with_elk  # noqa: PLC0415
+        # ELK needs correct measured bounds; _assign_coordinates initialises w/h.
         _assign_coordinates(
             nodes, direction,
             col_gap=_init_cfg.get("col_gap"),
@@ -5129,36 +5130,20 @@ def _compile_flowchart(
             canvas_pad=_init_cfg.get("diagram_padding"),
         )
         _layout_graph = _build_layout_graph(nodes, edges, groups, direction)
-        _elk_json = _to_elk_json(_layout_graph, spacing=_init_cfg)
-        _elk_out = _run_elk(_elk_json)
-        # Apply ELK positions to _Node objects so IR builders work correctly.
-        for _child in _elk_out.get("children", []):
-            _nid = _child.get("id", "")
-            if _nid in nodes:
-                nodes[_nid].x = int(float(_child.get("x", nodes[_nid].x)))
-                nodes[_nid].y = int(float(_child.get("y", nodes[_nid].y)))
-        # Collect ELK edge waypoints for use after IR build.
-        _elk_routed = []
-        for _ee in _elk_out.get("edges", []):
-            _wp: list = []
-            for _sec in _ee.get("sections", []):
-                _sp2 = _sec.get("startPoint", {})
-                if _sp2:
-                    _wp.append((float(_sp2["x"]), float(_sp2["y"])))
-                for _bp in _sec.get("bendPoints", []):
-                    _wp.append((float(_bp["x"]), float(_bp["y"])))
-                _ep = _sec.get("endPoint", {})
-                if _ep:
-                    _wp.append((float(_ep["x"]), float(_ep["y"])))
-            _edge_obj = next(
-                (e for e in edges if (e.edge_id or f"{e.src}->{e.dst}") == _ee.get("id", "")),
-                None,
-            )
-            _elk_routed.append({
-                "id": _ee.get("id", ""),
-                "waypoints": _wp,
-                "edge": _edge_obj,
-            })
+        _orig_edge_map = _elk_edge_id_map(edges)
+        _elk_result = _layout_with_elk(_layout_graph, spacing=_init_cfg)
+        for _nid_elk, _nl_elk in _elk_result.node_layouts.items():
+            if _nid_elk in nodes:
+                nodes[_nid_elk].x = int(_nl_elk.outer_bounds.x)
+                nodes[_nid_elk].y = int(_nl_elk.outer_bounds.y)
+        _elk_routed = [
+            {
+                "id": _re.edge_id,
+                "waypoints": [(p.x, p.y) for p in _re.waypoints],
+                "edge": _orig_edge_map.get(_re.edge_id),
+            }
+            for _re in _elk_result.routed_edges
+        ]
         _use_elk = True
         _elk_metadata_algo = "ELK-layered"
     except Exception:  # includes ElkUnavailable and the inner-direction guard

@@ -654,38 +654,3 @@ update paint.py and svg_serializer.py to use only the `MarkerKind` enum values. 
 all callers are confirmed to use the new fields (grep for `.arrow`, `.bidir`, `.arrow_src` outside
 `_constants.py`).
 
-## mermaid-unified-layout-pipeline
-
-### elk-production-path-unification
-
-**Deferred from AC-ELK-1:** `layout_with_elk(graph: LayoutGraph) -> FinalizedLayout` is exported from
-`elk_adapter.py` and tested directly, but `_compile_flowchart` in `_strategies.py` applies ELK positions
-inline (overwriting `_Node.x`/`_Node.y`) rather than calling `layout_with_elk`. The two implementations
-can diverge (e.g. marker defaulting logic differs). Unblocked by routing `_compile_flowchart`'s ELK path
-through `layout_with_elk` or by deleting `layout_with_elk` and pointing adapter tests at the inline path.
-
-### elk-group-hierarchy-serialization
-
-**Deferred from AC-VAL-2:** `_to_elk_json` in `elk_adapter.py` sends a flat node list to ELK (all nodes
-as root-level children). ELK receives no group/subgraph structure and therefore cannot enforce
-group-member locality. Post-hoc: `_strategies.py` re-expands group bboxes after ELK runs to ensure
-containment. The correct fix is to serialize group hierarchy via ELK `elk.hierarchyHandling: INCLUDE_CHILDREN`
-(as noted in `plan.md:98`) so ELK enforces group separation natively. Unblocked by updating `_to_elk_json`
-to emit nested container nodes for each `LayoutGroup`.
-
-### elk-edge-routing-quality
-
-**Deferred from AC-FIX-1 (partial):** ELK with `ORTHOGONAL` routing sometimes places waypoints within
-a node interior (≤5 px inside the boundary) and edge labels (placed at the geometric midpoint of ELK
-waypoints by `_strategies.py`) can fall inside a source or destination node's bounds. These failures
-appear in `validate_finalized_layout` sections 6 and 11 but are not asserted in T8b tests. Unblocked
-by: (a) configuring ELK with `elk.layered.nodePlacementStrategy` / edge routing with full obstacle
-avoidance, or (b) nudging label position off source/dest node bounds in the label-placement pass of
-`_strategies.py`.
-
-### elk-non-graph-entity-count
-
-**Deferred from AC-FIX-2 (partial):** T8b's `test_non_graph_fixture_produces_output` asserts
-`len(svg) > 100` but does not assert "≥ 1 entity from the semantic extractor" as AC-FIX-2 specifies.
-Unblocked by calling the native semantic extractor on each non-graph fixture and asserting
-`len(result.semantic.entities) >= 1` (or `result.semantic is not None`).

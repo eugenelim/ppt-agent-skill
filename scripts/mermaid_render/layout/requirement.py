@@ -196,7 +196,7 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             w=float(_NODE_W), h=float(_HEADER_H),
             paint=PaintStyle(fill=FillStyle(color=hdr_fill)),
             semantic_role="node",
-            data_attrs=(("data-name", nname), ("data-kind", node["kind"])),
+            data_attrs=(("node-id", nname), ("data-name", nname), ("data-kind", node["kind"])),
         ))
         label_elements.append(SceneText(
             element_id=f"{scene_id}-node-lbl-{nname}",
