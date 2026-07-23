@@ -94,13 +94,26 @@ def _parse_attr_value(raw: str) -> tuple[str, Optional[str]]:
 
 
 def _wrap_text(text: str, max_chars: int) -> list[str]:
-    """Word-wrap text to at most max_chars per line."""
+    """Word-wrap text to at most max_chars per line.
+
+    Words longer than ``max_chars`` (e.g. an unbroken file path) are hard-broken
+    at the character limit so a single long token cannot overflow the card width.
+    """
     words = text.split()
     if not words:
         return [""]
     lines: list[str] = []
     current = ""
     for word in words:
+        # Hard-break any word that cannot fit on a line on its own.
+        while len(word) > max_chars:
+            if current:
+                lines.append(current)
+                current = ""
+            lines.append(word[:max_chars])
+            word = word[max_chars:]
+        if not word:
+            continue
         if not current:
             current = word
         elif len(current) + 1 + len(word) <= max_chars:
@@ -171,13 +184,16 @@ def _parse_requirement_source(src: str) -> tuple[dict, list[dict]]:
 # ── Layout helpers ────────────────────────────────────────────────────────────
 
 def _node_height(node: dict) -> float:
-    """Card height: header + wrapped attribute rows + vertical padding."""
+    """Card height: header + wrapped attribute rows + vertical padding.
+
+    Every attribute display line (``key: value``) is word-wrapped, so a long
+    value on any field — not just ``text`` — grows the card rather than
+    overflowing it.  Must stay in lockstep with the render loop in
+    :func:`layout_requirement_scene`.
+    """
     n_lines = 0
     for key, val in node.get("attrs", {}).items():
-        if key == "text":
-            n_lines += len(_wrap_text(val, _TEXT_WRAP_CHARS))
-        else:
-            n_lines += 1
+        n_lines += len(_wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS))
     return float(_HEADER_H + max(n_lines, 1) * _ATTR_H + _ATTR_PAD * 2)
 
 
@@ -259,6 +275,30 @@ def _order_nodes_in_ranks(
     return ordered
 
 
+def _clamp_mid_y(
+    mid_y: float,
+    src_rank: int,
+    dst_rank: int,
+    row_bands: dict[tuple[int, int], tuple[float, float]],
+) -> float:
+    """Clamp the horizontal channel into the true inter-row gap band.
+
+    ``mid_y = (exit_y + enter_y) / 2`` places the channel halfway between the
+    two *faces* being connected.  When a taller sibling shares the source rank,
+    that midpoint can land inside the sibling's body.  ``row_bands`` gives the
+    safe band — ``(max bottom edge of upper-rank nodes, min top edge of
+    lower-rank nodes)`` — so clamping into it keeps the channel clear of every
+    card in both ranks.
+    """
+    band = row_bands.get((src_rank, dst_rank))
+    if band is None:
+        return mid_y
+    lo, hi = band
+    if lo > hi:  # degenerate (overlapping rows) — leave the midpoint untouched
+        return mid_y
+    return min(max(mid_y, lo), hi)
+
+
 def _route_edge(
     src_name: str,
     dst_name: str,
@@ -267,11 +307,14 @@ def _route_edge(
     ranks: dict[str, int],
     col_of: dict[str, int],
     exit_fraction: float,
+    row_bands: dict[tuple[int, int], tuple[float, float]],
 ) -> tuple[tuple[float, float], ...]:
     """Compute orthogonal waypoints routing from source boundary to target boundary.
 
     For cross-rank edges (TB layout): exits the source bottom face and enters
-    the target top face via an L-shaped route through the inter-row gap.
+    the target top face via an L-shaped route through the inter-row gap.  The
+    horizontal channel is clamped into the inter-row band (see
+    :func:`_clamp_mid_y`) so it can never cross a taller sibling card.
     For same-rank edges: routes via left/right faces through the inter-column gap.
     """
     sx, sy = node_pos[src_name]
@@ -288,7 +331,7 @@ def _route_edge(
         exit_y = sy + sh
         enter_x = tx + _NODE_W * 0.5
         enter_y = ty
-        mid_y = (exit_y + enter_y) / 2
+        mid_y = _clamp_mid_y((exit_y + enter_y) / 2, src_rank, dst_rank, row_bands)
         if abs(exit_x - enter_x) < 2.0:
             return ((exit_x, exit_y), (enter_x, enter_y))
         return (
@@ -304,7 +347,7 @@ def _route_edge(
         exit_y = sy
         enter_x = tx + _NODE_W * 0.5
         enter_y = ty + th
-        mid_y = (exit_y + enter_y) / 2
+        mid_y = _clamp_mid_y((exit_y + enter_y) / 2, src_rank, dst_rank, row_bands)
         if abs(exit_x - enter_x) < 2.0:
             return ((exit_x, exit_y), (enter_x, enter_y))
         return (
@@ -414,6 +457,32 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
 
     canvas_h = float(cumulative_y - _ROW_GAP + _PAD_V)
 
+    # Per-rank extents: the lowest bottom edge and highest top edge of the cards
+    # in each rank.  Rows share a top (``cumulative_y``) but cards differ in
+    # height, so the bottom edge of a rank is that of its tallest card.
+    rank_bottom: dict[int, float] = {}
+    rank_top: dict[int, float] = {}
+    for n, (px, py) in node_pos.items():
+        r = ranks[n]
+        bottom = py + heights[n]
+        rank_bottom[r] = max(rank_bottom.get(r, bottom), bottom)
+        rank_top[r] = min(rank_top.get(r, py), py)
+
+    # Safe horizontal channel band per (src_rank, dst_rank) pair: from the
+    # lowest bottom edge of the upper rank to the highest top edge of the lower
+    # rank.  Keyed by the ordered pair so both forward and back edges resolve.
+    row_bands: dict[tuple[int, int], tuple[float, float]] = {}
+    for rel in relations:
+        fn, tn = rel["from"], rel["to"]
+        if fn not in ranks or tn not in ranks:
+            continue
+        sr, dr = ranks[fn], ranks[tn]
+        if sr == dr:
+            continue
+        upper, lower = (sr, dr) if sr < dr else (dr, sr)
+        band = (rank_bottom.get(upper, 0.0), rank_top.get(lower, 0.0))
+        row_bands[(sr, dr)] = band
+
     bg_elements: list = []
     edge_elements: list = []
     node_elements: list = []
@@ -470,29 +539,18 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             ),
         ))
 
-        # Attributes — text field word-wrapped; others on one line each
+        # Attributes — every field word-wrapped so long values (a long text
+        # sentence, a long docref path) grow across lines instead of overflowing
+        # the card width.  Continuation lines are indented under the key.
         ay = float(py + _HEADER_H + _ATTR_PAD)
         for key, val in node.get("attrs", {}).items():
-            if key == "text":
-                wrapped = _wrap_text(val, _TEXT_WRAP_CHARS)
-                for li, line_text in enumerate(wrapped):
-                    display = f"{key}: {line_text}" if li == 0 else f"  {line_text}"
-                    label_elements.append(SceneText(
-                        element_id=f"{scene_id}-attr-{nname}-{key}-{li}",
-                        lines=(SceneTextLine(
-                            text=display,
-                            x=px + 6, y=ay + _FONT_ATTR + 2,
-                            font_size=float(_FONT_ATTR),
-                            fill_color=_TEXT_COLOR,
-                        ),),
-                        text_anchor="start",
-                    ))
-                    ay += _ATTR_H
-            else:
+            wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
+            for li, line_text in enumerate(wrapped):
+                display = line_text if li == 0 else f"  {line_text}"
                 label_elements.append(SceneText(
-                    element_id=f"{scene_id}-attr-{nname}-{key}",
+                    element_id=f"{scene_id}-attr-{nname}-{key}-{li}",
                     lines=(SceneTextLine(
-                        text=f"{key}: {val}",
+                        text=display,
                         x=px + 6, y=ay + _FONT_ATTR + 2,
                         font_size=float(_FONT_ATTR),
                         fill_color=_TEXT_COLOR,
@@ -519,7 +577,9 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         n_src_edges = len(src_edges)
         exit_fraction = (edge_rank + 1) / (n_src_edges + 1)
 
-        waypoints = _route_edge(fn, tn, node_pos, heights, ranks, col_of, exit_fraction)
+        waypoints = _route_edge(
+            fn, tn, node_pos, heights, ranks, col_of, exit_fraction, row_bands
+        )
 
         edge_elements.append(ScenePolyline(
             element_id=f"{scene_id}-rel-{ri}",

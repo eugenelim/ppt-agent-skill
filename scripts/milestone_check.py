@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 from planning_validator import load_planning_pages
+from proof_gate import gate_status
 
 
 STAGE_ORDER = ("0", "1", "2", "3", "3.5", "4", "preview", "5")
@@ -418,6 +419,9 @@ class Checker:
     def check_preview(self) -> None:
         self.echo("== Preview ==")
         self.must_glob("*preview.html", "preview.html")
+        ok, msg = gate_status(self.output_dir)
+        if not ok:
+            self.fail(f"proof gate not recorded: {msg}")
         self.echo("[OK] preview")
 
     def check_step5(self) -> None:
@@ -452,6 +456,9 @@ class Checker:
             ],
             "contract_validator delivery-manifest",
         )
+        ok, msg = gate_status(self.output_dir)
+        if not ok:
+            self.fail(f"proof gate not recorded: {msg}")
         self.echo("[OK] step 5")
 
     def run(self) -> None:

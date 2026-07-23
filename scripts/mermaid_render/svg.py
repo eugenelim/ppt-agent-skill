@@ -493,6 +493,45 @@ def main():
     else:
         output_dir = (html_path.parent if html_path.is_file() else html_path.parent) / "svg"
 
+    # Gate: planning_validator + proof gate (via subprocess — mermaid_render/ must not
+    # import sibling scripts/*.py modules per test_mermaid_render_guards.py).
+    _scripts = Path(__file__).resolve().parent.parent
+    # Mirror svg2pptx.py's is_dir()-aware derivation: when the input is a directory
+    # (slides/), its parent is the deck root; when it's a single file (slides/slide-1.html),
+    # go up two levels. Using html_path instead of output_dir avoids the wrong parent when
+    # output_dir was not explicitly given (output_dir = slides/svg → parent = slides, not deck).
+    _deck_dir = html_path.parent if html_path.is_dir() else html_path.parent.parent
+    _planning_dir = _deck_dir / "planning"
+    if _planning_dir.is_dir():
+        if not any(_planning_dir.glob("*.json")):
+            print(
+                "error: deliverable gate not satisfied — "
+                f"no planning JSON in {_planning_dir}; run Step 4 before producing deliverables",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        import subprocess  # noqa: PLC0415
+        _refs = _scripts.parent / "references"
+        _cmd = [sys.executable, str(_scripts / "planning_validator.py"), str(_planning_dir)]
+        if _refs.is_dir():
+            _cmd += ["--refs", str(_refs)]
+        _r = subprocess.run(_cmd, capture_output=True, text=True)
+        if _r.returncode != 0:
+            _details = _r.stderr.strip() or _r.stdout.strip() or "(no output)"
+            print(
+                "error: deliverable gate not satisfied — "
+                f"planning validation failed:\n{_details}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        _r2 = subprocess.run(
+            [sys.executable, str(_scripts / "proof_gate.py"), str(_deck_dir), "--check"],
+            capture_output=True, text=True,
+        )
+        if _r2.returncode != 0:
+            print(_r2.stderr.strip(), file=sys.stderr)
+            sys.exit(1)
+
     success = convert(html_path, output_dir)
     sys.exit(0 if success else 1)
 
