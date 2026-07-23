@@ -32,9 +32,9 @@ Target fixture: `tests/fixtures/class-relationships-all.mmd`
 - [x] Routing derives marker placement from which of `source_marker`/`target_marker`
       is non-NONE, never from a boolean `arrow_src` field. (`MarkerSpec.end` is
       informational metadata; it does not drive routing decisions.)
-- [ ] Route paths for class edges shortened by `MarkerSpec.clearance` at the marker end so the marker sits at the card face, not inside it. (deferred: class-diagram-marker-clearance)
-- [ ] Route entry/exit points clipped to actual class-card bounding rect. (deferred: class-diagram-route-clip)
-- [ ] Edge labels placed on longest stable segment (≥40 px). (deferred: class-diagram-label-segment)
+- [x] Route paths for class edges shortened by `MarkerSpec.clearance` at the marker end so the marker sits at the card face, not inside it.
+- [x] Route entry/exit points clipped to actual class-card bounding rect.
+- [x] Edge labels placed on longest stable segment (≥40 px).
 - [x] Multiplicity (`src_label`/`dst_label`) threaded through for both ends.
 - [x] Declared relation direction preserved independently of graph rank order.
 - [x] Semantic tests pass for every relation in `class-relationships-all.mmd`:

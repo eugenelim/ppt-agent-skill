@@ -1402,22 +1402,22 @@ def _class_rel_markers(op: str) -> "tuple":
 
     # Source-end markers (left / A-end)
     if op.startswith("<|"):          # <|--, <|..
-        return (_MS(kind=_MK.HOLLOW_TRIANGLE, end="SOURCE"), NONE_TGT, line_style)
+        return (_MS(kind=_MK.HOLLOW_TRIANGLE, end="SOURCE", clearance=12.0), NONE_TGT, line_style)
     if op.startswith("*"):           # *--
-        return (_MS(kind=_MK.FILLED_DIAMOND, end="SOURCE"), NONE_TGT, line_style)
+        return (_MS(kind=_MK.FILLED_DIAMOND, end="SOURCE", clearance=12.0), NONE_TGT, line_style)
     if op.startswith("o"):           # o--
-        return (_MS(kind=_MK.HOLLOW_DIAMOND, end="SOURCE"), NONE_TGT, line_style)
+        return (_MS(kind=_MK.HOLLOW_DIAMOND, end="SOURCE", clearance=12.0), NONE_TGT, line_style)
 
     # Target-end markers (right / B-end)
     if op.endswith("*"):             # --*
-        return (NONE_SRC, _MS(kind=_MK.FILLED_DIAMOND, end="TARGET"), line_style)
+        return (NONE_SRC, _MS(kind=_MK.FILLED_DIAMOND, end="TARGET", clearance=12.0), line_style)
     if op.endswith("o"):             # --o
-        return (NONE_SRC, _MS(kind=_MK.HOLLOW_DIAMOND, end="TARGET"), line_style)
+        return (NONE_SRC, _MS(kind=_MK.HOLLOW_DIAMOND, end="TARGET", clearance=12.0), line_style)
     if op.endswith("|>") or op == "|>":   # ..|>, |>
-        return (NONE_SRC, _MS(kind=_MK.HOLLOW_TRIANGLE, end="TARGET"), line_style)
+        return (NONE_SRC, _MS(kind=_MK.HOLLOW_TRIANGLE, end="TARGET", clearance=12.0), line_style)
 
     # Default: open arrow at target (-->, ..>, .., ||, ..>|, etc.)
-    return (NONE_SRC, _MS(kind=_MK.OPEN_ARROW, end="TARGET"), line_style)
+    return (NONE_SRC, _MS(kind=_MK.OPEN_ARROW, end="TARGET", clearance=9.0), line_style)
 
 
 def _layout_class(src: str, direction: str, width_hint: int) -> str:
