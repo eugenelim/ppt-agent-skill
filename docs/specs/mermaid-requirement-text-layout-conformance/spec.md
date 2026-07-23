@@ -2,7 +2,7 @@
 
 Mode: full (multi-file; scaling coherence; pixel-width wrapping)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 Dependencies: mermaid-oracle-runtime-unification, mermaid-text-measurement-adoption
 
@@ -52,21 +52,21 @@ compiling at the target scale or transforming all nested fields consistently.
 ## Acceptance Criteria
 
 For `requirement-basic`:
-- [ ] AC1: Four semantic cards are present with all fields preserved.
-- [ ] AC2: Three relations have correct source, target, and label.
-- [ ] AC3: No field has a stub text layout; every field's `TextLayout` has positive
+- [x] AC1: Four semantic cards are present with all fields preserved.
+- [x] AC2: Three relations have correct source, target, and label.
+- [x] AC3: No field has a stub text layout; every field's `TextLayout` has positive
   width and height.
-- [ ] AC4: No relation route crosses any card interior.
-- [ ] AC5: Output size hints (`width_hint`, `height_hint`) affect the complete layout
+- [x] AC4: No relation route crosses any card interior.
+- [x] AC5: Output size hints (`width_hint`, `height_hint`) affect the complete layout
   coherently; changing a hint changes card positions, not just canvas bounds.
-- [ ] AC6: HTML and SVG geometry is identical; the same `FinalizedLayout` is consumed
+- [x] AC6: HTML and SVG geometry is identical; the same `FinalizedLayout` is consumed
   by both painters.
-- [ ] AC7: mmdc/reference comparison executes nonzero checks on `requirement-basic`.
-- [ ] AC8: Requirement card wrapping is pixel-based; `_TEXT_WRAP_CHARS` (or equivalent)
+- [x] AC7: mmdc/reference comparison executes nonzero checks on `requirement-basic`.
+- [x] AC8: Requirement card wrapping is pixel-based; `_TEXT_WRAP_CHARS` (or equivalent)
   is deleted.
-- [ ] AC9: The scaling validator raises when a layout's text bounds are at a different
+- [x] AC9: The scaling validator raises when a layout's text bounds are at a different
   scale than its node bounds.
-- [ ] AC10: `pytest tests/` continues to pass with zero regressions.
+- [x] AC10: `pytest tests/` continues to pass with zero regressions.
 
 ## Testing Strategy
 

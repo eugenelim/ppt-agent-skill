@@ -3,6 +3,7 @@
 Public API:
     layout_with_elk(graph: LayoutGraph, spacing=None) -> FinalizedLayout
     class ElkUnavailable(RuntimeError)
+    class ElkInvalidResult(ValueError)
 
 Exempted from tests/test_dependencies.py::TestNoSubprocess via _SUBPROCESS_EXEMPTIONS.
 See docs/adr/001-elk-layout-engine.md for the ADR that governs this dependency.
@@ -72,6 +73,10 @@ def _tangent_unit(p0: Point, p1: Point) -> Point:
 
 class ElkUnavailable(RuntimeError):
     """Raised when ELK layout cannot run (Node absent, elkjs missing, env opt-out, or subprocess failure)."""
+
+
+class ElkInvalidResult(ValueError):
+    """Raised when ELK returns a result that fails geometric validation (missing nodes, degenerate geometry)."""
 
 
 def _find_node() -> Optional[str]:

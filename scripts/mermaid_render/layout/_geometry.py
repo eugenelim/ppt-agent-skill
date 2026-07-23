@@ -396,6 +396,48 @@ class LayoutDiagnostics:
     warnings: tuple[str, ...]
 
 
+# ── Compound layout IR ───────────────────────────────────────────────────────
+
+
+class BoundaryGateKind(enum.Enum):
+    """Direction of a compound-boundary crossing for a cross-group edge."""
+    ENTRY = "ENTRY"
+    EXIT = "EXIT"
+
+
+@dataclass(frozen=True)
+class CompoundNode:
+    """Immutable tree node representing one compound group before placement.
+
+    Built by build_compound_tree() from a LayoutGraph before the recursive
+    layout pass runs. Frozen to guarantee no mutation after construction.
+    """
+    group_id: str
+    label_layout: Optional["TextLayout"]
+    local_direction: str              # "TB" | "LR" | "RL" | "BT"
+    child_node_ids: Tuple[str, ...]   # direct (non-group) member node IDs
+    child_groups: Tuple["CompoundNode", ...]  # direct child group compounds
+    padding: float
+    minimum_size: Tuple[float, float]  # (min_width, min_height)
+
+
+@dataclass(frozen=True)
+class BoundaryGate:
+    """Explicit crossing point where a cross-boundary edge enters/exits a compound.
+
+    EXIT at source compound boundary, ENTRY at target compound boundary.
+    One pair is created per cross-group edge. Gates are metadata on
+    FinalizedLayout.boundary_gates — never rendered as visible nodes.
+    """
+    gate_id: str
+    group_id: str
+    side: "PortSide"
+    point: "Point"
+    semantic_node_id: str
+    edge_id: str
+    kind: BoundaryGateKind
+
+
 # ── Finalized layout (the authoritative output) ───────────────────────────────
 
 @dataclass(frozen=True)
@@ -420,6 +462,7 @@ class FinalizedLayout:
     composite_gates: MappingProxyType = field(  # MappingProxyType[str, tuple[str, str]]
         default_factory=lambda: MappingProxyType({})
     )
+    boundary_gates: tuple = ()  # tuple[BoundaryGate, ...] — default () for compat; set by recursive_compound_layout
 
     def __post_init__(self) -> None:
         # Always deep-copy before wrapping: MappingProxyType(original) is a view — even
