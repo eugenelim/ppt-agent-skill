@@ -57,8 +57,8 @@ shipped = [
 open = [
   # ── Group 3: Needs spec / design first ───────────────────────────────────
 
-  # Spec recursive compound layout: group tree, edge partitioning, innermost-first compile, proxy-node expansion, boundary gate routing
-  {slug = "backlog-mermaid-p3-compound-layout", type = "shape"},
+  # Compound layout: group tree, edge partitioning, proxy gate nodes, route restoration
+  "backlog-mermaid-p3-compound-layout",
 
   # ── Group 6: Environment-blocked / requires manual QA ────────────────────
 
