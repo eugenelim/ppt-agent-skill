@@ -57,8 +57,6 @@ shipped = [
 open = [
   # ── Group 3: Needs spec / design first ───────────────────────────────────
 
-  # Write a dedicated sequence-box spec covering box label + fill rendering (box directive parsed but not rendered)
-  {slug = "seq-corr-box-unsupported-fixture", type = "shape"},
   # Spec recursive compound layout: group tree, edge partitioning, innermost-first compile, proxy-node expansion, boundary gate routing
   {slug = "backlog-mermaid-p3-compound-layout", type = "shape"},
 
