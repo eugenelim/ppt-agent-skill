@@ -2,7 +2,7 @@ Mode: full (structural change — new lifecycle geometry for sequence participan
 
 # seq-corr-create-destroy-fixture
 
-**Status:** Active
+**Status:** Shipped
 
 ## Objective
 
@@ -39,23 +39,23 @@ sequenceDiagram
 
 ## Acceptance Criteria
 
-- [ ] AC-1: `create participant NAME` causes `ParticipantGeometry.created_at_row` (or
+- [x] AC-1: `create participant NAME` causes `ParticipantGeometry.created_at_row` (or
   equivalent field) to be set to the row index of the creation event; `top_box` is absent
   (or placed at the creation row, not y=0).
-- [ ] AC-2: The created participant's lifeline starts at the creation row, not at the top
+- [x] AC-2: The created participant's lifeline starts at the creation row, not at the top
   of the diagram.
-- [ ] AC-3: `destroy NAME` causes `ParticipantGeometry.destroyed_at_row` (or equivalent)
+- [x] AC-3: `destroy NAME` causes `ParticipantGeometry.destroyed_at_row` (or equivalent)
   to be set to the destroy row index; the lifeline ends at that row.
-- [ ] AC-4: An X/crosshead marker is rendered at the destruction point (center of participant
+- [x] AC-4: An X/crosshead marker is rendered at the destruction point (center of participant
   lifeline at the destroy row y-coordinate).
-- [ ] AC-5: The `Diagnostic` entries for `create_participant` and `destroy` are removed
+- [x] AC-5: The `Diagnostic` entries for `create_participant` and `destroy` are removed
   (replaced by real geometry).
-- [ ] AC-6: `tests/fixtures/sequence-create-destroy.mmd` fixture created with:
+- [x] AC-6: `tests/fixtures/sequence-create-destroy.mmd` fixture created with:
   - 1 `create participant` mid-diagram
   - 1 `destroy` mid-diagram
   - Messages to/from both lifecycle participants
-- [ ] AC-7: `structural_geometry` for the fixture reports `render`.
-- [ ] AC-8: Existing tests (no create/destroy) continue to pass.
+- [x] AC-7: `structural_geometry` for the fixture reports `render`.
+- [x] AC-8: Existing tests (no create/destroy) continue to pass.
 
 ## Assumptions
 

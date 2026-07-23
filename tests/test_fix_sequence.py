@@ -902,17 +902,19 @@ class TestUnsupportedSyntaxDiagnostics:
         assert d.line_number == 1
         assert d.source_text == "autonumber"
 
-    def test_create_participant_emits_diagnostic(self):
+    def test_create_participant_no_diagnostic(self):
+        # create participant is now implemented — no Diagnostic emitted
         vr = self._validate("create participant Token\nA->>B: hi")
-        assert any(d.feature == "create_participant" for d in vr.diagnostics)
+        assert not any(d.feature == "create_participant" for d in vr.diagnostics)
 
     def test_create_actor_emits_diagnostic(self):
         vr = self._validate("create actor Robot\nA->>B: hi")
         assert any(d.feature == "create_actor" for d in vr.diagnostics)
 
-    def test_destroy_emits_diagnostic(self):
+    def test_destroy_no_diagnostic(self):
+        # destroy is now implemented — no Diagnostic emitted
         vr = self._validate("A->>B: hi\ndestroy B")
-        assert any(d.feature == "destroy" for d in vr.diagnostics)
+        assert not any(d.feature == "destroy" for d in vr.diagnostics)
 
     def test_par_over_emits_diagnostic(self):
         vr = self._validate("A->>B: hi\npar_over")
@@ -1334,3 +1336,57 @@ class TestP2Cleanup:
         # All edge labels use translateX(-50%) centering
         for style in edge_styles:
             assert "translateX(-50%)" in style
+
+
+# ── Participant lifecycle (create/destroy) ────────────────────────────────────
+
+class TestCreateDestroyLifecycle:
+    """Tests for create participant / destroy rendering."""
+
+    def test_created_participant_top_box_below_diagram_top(self):
+        """Created participant's top box should be below y=0 (below ll_top)."""
+        src = (
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  create participant Carol\n"
+            "  Alice->>Carol: Welcome\n"
+        )
+        html, geom = _layout_lifeline(src, "LR", 0)
+        carol = next(p for p in geom.participants if p.participant_id == "Carol")
+        alice = next(p for p in geom.participants if p.participant_id == "Alice")
+        # Carol's top box must be below Alice's top box
+        assert carol.top_box.top > alice.top_box.top
+
+    def test_destroyed_participant_has_x_markers(self):
+        """Destroyed participant generates X marker SVG lines (no bottom box)."""
+        src = (
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  destroy Bob\n"
+            "  Bob-->>Alice: Goodbye\n"
+        )
+        html, _ = _layout_lifeline(src, "LR", 0)
+        x_lines = re.findall(r'<line[^>]+stroke-width="2"[^/]*/>', html)
+        assert len(x_lines) == 2, f"Expected X marker (2 lines), got: {x_lines}"
+
+    def test_destroyed_participant_no_bottom_box_div(self):
+        """Destroyed participant's bottom node-lifeline-bottom div is absent."""
+        src = (
+            "sequenceDiagram\n"
+            "  Alice->>Bob: Hello\n"
+            "  destroy Bob\n"
+            "  Bob-->>Alice: Goodbye\n"
+        )
+        html, _ = _layout_lifeline(src, "LR", 0)
+        bottom_divs = re.findall(r'data-node-id="([^"]+)-bottom"', html)
+        assert "Bob" not in [bid.replace("&#x2013;", "-") for bid in bottom_divs], (
+            "Bob's bottom box div should be absent after destroy"
+        )
+
+    def test_create_destroy_fixture_renders(self):
+        """The create-destroy fixture renders with pass/pass/pass."""
+        src = (FIXTURES / "sequence-create-destroy.mmd").read_text()
+        vr = _dispatch_validate(src)
+        assert vr.render == "pass"
+        assert vr.syntax_coverage == "pass"
+        assert vr.structural_geometry == "pass"

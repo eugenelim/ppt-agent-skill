@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant Alice
+    participant Bob
+    Alice->>Bob: Hello
+    create participant Carol
+    Alice->>Carol: Welcome
+    Bob->>Carol: Nice to meet you
+    destroy Bob
+    Bob-->>Alice: Goodbye
+    Carol->>Alice: Thanks
