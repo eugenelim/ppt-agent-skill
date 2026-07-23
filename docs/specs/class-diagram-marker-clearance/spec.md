@@ -115,9 +115,11 @@ already shipped by the prior spec; verified here as non-regression).
   for `OPEN_ARROW`, and 0.0 for `NONE` — verified by unit test for each kind.
 
 - [ ] AC2: For every class-diagram edge whose marker endpoint has nonzero
-  clearance, the rendered SVG path's terminal waypoint is shortened by exactly
-  `clearance` px along the final route tangent — verified by asserting the
-  waypoint coordinate difference equals the clearance constant.
+  clearance and whose final route segment is longer than `clearance`, the rendered
+  SVG path's terminal waypoint is shortened by exactly `clearance` px along the
+  final route tangent — verified by asserting the waypoint coordinate difference
+  equals the clearance constant. (When the final segment is ≤ `clearance` px, the
+  orientation-fallback defined in AC3 applies instead.)
 
 - [ ] AC3: The final path segment direction `(dx, dy)` after shortening matches
   the direction of the pre-shortening last segment — verified by a unit test that

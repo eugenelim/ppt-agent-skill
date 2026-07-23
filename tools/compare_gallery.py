@@ -40,6 +40,14 @@ OUT_DIR = ROOT / "ppt-output" / "compare"
 sys.path.insert(0, str(ROOT / "scripts"))
 import mermaid_render
 
+# Best-effort import for ELK fallback detection during gallery runs.
+try:
+    from mermaid_render.layout import elk_adapter as _elk_mod
+    _ElkUnavailable = _elk_mod.ElkUnavailable
+except Exception:  # noqa: BLE001
+    _elk_mod = None  # type: ignore[assignment]
+    _ElkUnavailable = None  # type: ignore[assignment]
+
 _RENDERER_SCHEMA_VERSION = "2026-07-21"
 
 
@@ -76,6 +84,27 @@ def _collect_metadata(
     mmdc_ver = subprocess.run(
         ["mmdc", "--version"], capture_output=True, text=True
     ).stdout.strip()
+
+    # Node.js version (best-effort)
+    node_version = None
+    try:
+        node_version = subprocess.run(
+            ["node", "--version"], capture_output=True, text=True
+        ).stdout.strip() or None
+    except Exception:  # noqa: BLE001
+        pass
+
+    # elkjs version from node_modules package.json (best-effort)
+    elkjs_version = None
+    try:
+        _elkjs_pkg = (
+            ROOT / "scripts" / "mermaid_render" / "layout"
+            / "node_modules" / "elkjs" / "package.json"
+        )
+        if _elkjs_pkg.exists():
+            elkjs_version = json.loads(_elkjs_pkg.read_text(encoding="utf-8")).get("version")
+    except Exception:  # noqa: BLE001
+        pass
 
     # Chromium version via playwright (best-effort)
     chromium_version = None
@@ -134,6 +163,8 @@ def _collect_metadata(
         "pillow_version": PIL.__version__,
         "playwright_version": playwright_version,
         "chromium_version": chromium_version,
+        "node_version": node_version,
+        "elkjs_version": elkjs_version,
         "mmdc_version": mmdc_ver,
         "platform": platform.platform(),
         "renderer_width_hint": width_hint,
@@ -427,6 +458,97 @@ def _render_ours(src: str, width_hint: int = 0) -> tuple[str | None, str]:
         return None, str(e)
 
 
+def _render_fidelity(src: str, width_hint: int = 0) -> tuple[str | None, str]:
+    """Return (full_html, error_msg) rendered with faithful=True and neutral theme."""
+    try:
+        return mermaid_render.to_html(src, faithful=True, theme="neutral", width_hint=width_hint), ""
+    except Exception as e:
+        return None, str(e)
+
+
+def _html_svg_dims(html: str) -> "tuple[str | None, str | None, str | None]":
+    """Extract (viewBox, width, height) from the first <svg> tag in an HTML string."""
+    import re  # noqa: PLC0415
+    m = re.search(r"<svg\b([^>]*)>", html, re.IGNORECASE)
+    if not m:
+        return None, None, None
+    attrs = m.group(1)
+    vb = re.search(r'\bviewBox="([^"]*)"', attrs)
+    w = re.search(r'\bwidth="([^"]*)"', attrs)
+    h = re.search(r'\bheight="([^"]*)"', attrs)
+    return (
+        vb.group(1) if vb else None,
+        w.group(1) if w else None,
+        h.group(1) if h else None,
+    )
+
+
+def _validate_outputs(
+    fixture_results: "list[dict]",
+    out_dir: Path,
+    target_names: "list[str] | None" = None,
+) -> "list[str]":
+    """Return a list of failure strings; empty means no hard failures.
+
+    Checks (Task 4):
+    1. Each expected mmdc SVG exists in out_dir/mmdc/.
+    2. Each per-fixture provenance dict has a non-empty actual_layout_backend.
+    3. python-fallback records must have a non-empty fallback_reason.
+    4. fixture_sha256 values must match the file on disk (if provided).
+    """
+    failures: list[str] = []
+    for rec in fixture_results:
+        name = rec.get("name", rec.get("path", "?"))
+        # Guard 1: mmdc SVG must exist when mmdc was expected to have produced one.
+        if rec.get("mmdc_ok") and target_names is not None and name in target_names:
+            svg_path = out_dir / "mmdc" / f"{name}.svg"
+            if not svg_path.exists():
+                failures.append(f"{name}: mmdc SVG missing from {svg_path}")
+        # Guard 2: actual_layout_backend must be non-empty
+        backend = rec.get("actual_layout_backend", "")
+        if not backend:
+            failures.append(f"{name}: actual_layout_backend is empty or absent")
+        # Guard 3: python-fallback must have a reason
+        if backend == "python-fallback":
+            reason = rec.get("fallback_reason")
+            if not reason:
+                failures.append(f"{name}: python-fallback recorded without fallback_reason")
+        # Guard 4: fixture sha256 on disk must match provenance (if path recorded)
+        disk_path_str = rec.get("path")
+        prov_sha = rec.get("fixture_sha256")
+        if disk_path_str and prov_sha:
+            disk_path = ROOT / disk_path_str if not Path(disk_path_str).is_absolute() else Path(disk_path_str)
+            if disk_path.exists():
+                import hashlib  # noqa: PLC0415
+                actual_sha = hashlib.sha256(disk_path.read_bytes()).hexdigest()
+                if actual_sha != prov_sha:
+                    failures.append(
+                        f"{name}: fixture SHA-256 mismatch "
+                        f"(provenance={prov_sha[:8]}… disk={actual_sha[:8]}…)"
+                    )
+    return failures
+
+
+def _resolve_svg_references(svg_str: str) -> str:
+    """Post-process an SVG string to remove external relative references.
+
+    Replaces relative <image href="..."> with a data-URI so the SVG is
+    self-contained. Returns the (possibly unchanged) SVG string.
+    """
+    import re  # noqa: PLC0415
+    # Replace relative href values in <image> tags with empty data URIs.
+    # External absolute URLs (http/https) and data: URIs are left untouched.
+    def _replace_image_href(m: "re.Match[str]") -> str:
+        href = m.group(1)
+        if href.startswith(("http://", "https://", "data:", "#")):
+            return m.group(0)
+        # Replace with a transparent 1×1 PNG data URI.
+        return m.group(0).replace(href, "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
+    svg_str = re.sub(r'<image[^>]+\bhref="([^"]*)"', _replace_image_href, svg_str)
+    svg_str = re.sub(r'<image[^>]+\bxlink:href="([^"]*)"', _replace_image_href, svg_str)
+    return svg_str
+
+
 def _compare_mmdc_semantic(src: str, mmdc_svg_path: Path) -> str:
     """Compare mmdc SVG semantic elements against our SequenceGeometry.
 
@@ -511,13 +633,34 @@ def _atomic_write_gallery(out_dir: Path, *, raise_mid_write: bool = False) -> No
         raise
 
 
-def _build_gallery(mmd_files: list[Path], out_dir: Path, width_hint: int = 0, strict: bool = False) -> "tuple[Path, bool, list[dict]]":
+def _build_gallery(
+    mmd_files: list[Path],
+    out_dir: Path,
+    width_hint: int = 0,
+    strict: bool = False,
+    allow_dirty: bool = False,
+    mode: str = "both",
+) -> "tuple[Path, bool, list[dict]]":
     import shutil
 
+    # Dirty-tree guard (Task 3): fail fast before creating any output.
+    if not allow_dirty:
+        dirty_out = subprocess.run(
+            ["git", "status", "--short"], capture_output=True, text=True, cwd=ROOT
+        ).stdout.strip()
+        if dirty_out:
+            error_record = {
+                "error": "dirty-tree",
+                "git_status": dirty_out,
+                "message": "Working tree is dirty — pass allow_dirty=True or --allow-dirty to override",
+            }
+            return out_dir / "index.html", True, [error_record]
+
     # Build into a temp directory; atomically replace dest at the end.
+    out_dir.parent.mkdir(parents=True, exist_ok=True)
     tmp_dir = Path(tempfile.mkdtemp(dir=out_dir.parent, prefix="gallery_tmp_"))
     try:
-        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint, strict=strict)
+        return _build_gallery_into(mmd_files, tmp_dir, out_dir, width_hint, strict=strict, mode=mode)
     except Exception:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
@@ -529,7 +672,9 @@ def _build_gallery_into(
     dest_dir: Path,
     width_hint: int,
     strict: bool = False,
+    mode: str = "both",
 ) -> "tuple[Path, bool, list[dict]]":
+    import hashlib  # noqa: PLC0415
     import shutil
     from collections import defaultdict
     from mermaid_render.layout._geometry import ValidationResult
@@ -537,11 +682,16 @@ def _build_gallery_into(
     (tmp_dir / "ours").mkdir(exist_ok=True)
     (tmp_dir / "mmdc").mkdir(exist_ok=True)
 
-    # Tuple: (name, src, vr, ours_err, mmdc_svg_path_in_tmp, mmdc_ok, mmdc_err)
+    # Collect git SHA for HTML header (best-effort).
+    _git_sha = subprocess.run(
+        ["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT
+    ).stdout.strip() or "unknown"
+
+    # Tuple: (name, src, vr, ours_err, mmdc_svg_path_in_tmp, mmdc_ok, mmdc_err, prov_dict)
     # vr: ValidationResult with four-status lanes.
     # ours_html is NOT held in memory — written to disk, re-read per section.
     type_results: dict[str, list[tuple]] = defaultdict(list)
-    # Per-fixture provenance records (Task D).
+    # Per-fixture provenance records.
     fixture_results: list[dict] = []
 
     sorted_files = sorted(mmd_files)
@@ -550,14 +700,68 @@ def _build_gallery_into(
     for i, mmd_path in enumerate(sorted_files):
         name = mmd_path.stem
         src = mmd_path.read_text(encoding="utf-8").strip()
+        src_sha256 = hashlib.sha256(mmd_path.read_bytes()).hexdigest()
+        mmd_rel = str(mmd_path.relative_to(ROOT)) if mmd_path.is_relative_to(ROOT) else str(mmd_path)
         print(f"  [{i + 1}/{n_total}] {name} ...", end=" ", flush=True)
 
-        ours_html, ours_err = _render_ours(src, width_hint=width_hint)
+        # ELK tracking: temporarily wrap layout_with_elk to detect fallback.
+        elk_state: dict = {"called": False, "ok": True, "reason": None}
+        if _elk_mod is not None:
+            _orig_elk = _elk_mod.layout_with_elk
+
+            def _track_elk(graph: object, spacing: object = None) -> object:
+                elk_state["called"] = True
+                try:
+                    return _orig_elk(graph, spacing=spacing)  # type: ignore[arg-type]
+                except _elk_mod.ElkUnavailable as exc:  # type: ignore[union-attr]
+                    elk_state["ok"] = False
+                    elk_state["reason"] = str(exc)
+                    raise
+
+            _elk_mod.layout_with_elk = _track_elk  # type: ignore[assignment]
+
+        # When mode is "fidelity", use _render_fidelity as the primary render.
+        # When mode is "editorial" or "both", use _render_ours for the editorial pane.
+        _primary_is_fidelity = mode == "fidelity"
+
+        try:
+            if _primary_is_fidelity:
+                # Fidelity-only: skip editorial render.
+                ours_html, ours_err = None, ""
+            else:
+                ours_html, ours_err = _render_ours(src, width_hint=width_hint)
+        finally:
+            if _elk_mod is not None:
+                _elk_mod.layout_with_elk = _orig_elk  # type: ignore[assignment]
+
         if ours_html:
             (tmp_dir / "ours" / f"{name}.html").write_text(ours_html, encoding="utf-8")
             vr = mermaid_render.validate(src)
         else:
             vr = ValidationResult(render="fail", syntax_coverage="fail")
+
+        # Determine actual layout backend from ELK tracking.
+        if elk_state["called"]:
+            actual_layout_backend = "elk" if elk_state["ok"] else "python-fallback"
+            fallback_reason: str | None = elk_state["reason"] if not elk_state["ok"] else None
+        else:
+            actual_layout_backend = vr.renderer_backend or "native"
+            fallback_reason = None
+
+        # Extract SVG dimensions from rendered HTML.
+        output_viewbox, output_width, output_height = (
+            _html_svg_dims(ours_html) if ours_html else (None, None, None)
+        )
+
+        # Fidelity lane (mode "fidelity" or "both").
+        fidelity_html: str | None = None
+        fidelity_err = ""
+        fidelity_faithful = False
+        if mode in ("fidelity", "both"):
+            fidelity_html, fidelity_err = _render_fidelity(src, width_hint=width_hint)
+            fidelity_faithful = True
+            if fidelity_html:
+                (tmp_dir / "ours" / f"{name}_fidelity.html").write_text(fidelity_html, encoding="utf-8")
 
         mmdc_svg_path = tmp_dir / "mmdc" / f"{name}.svg"
         mmdc_ok, mmdc_err = _run_mmdc(src, mmdc_svg_path)
@@ -566,31 +770,68 @@ def _build_gallery_into(
             from dataclasses import replace as _dc_replace  # noqa: PLC0415
             oracle = _compare_mmdc_semantic(src, mmdc_svg_path)
             vr = _dc_replace(vr, mmdc_oracle=oracle)
+            # Post-process SVG to remove unresolved relative references.
+            try:
+                mmdc_svg_path.write_text(
+                    _resolve_svg_references(mmdc_svg_path.read_text(encoding="utf-8")),
+                    encoding="utf-8",
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
         print(
             f"render:{vr.render}  syntax:{vr.syntax_coverage}  "
             f"structural_geometry:{vr.structural_geometry}  "
             f"semantic_geometry:{vr.semantic_geometry}  "
             f"oracle:{vr.mmdc_oracle}  "
-            f"mmdc:{'ok' if mmdc_ok else 'err'}"
+            f"mmdc:{'ok' if mmdc_ok else 'err'}  "
+            f"backend:{actual_layout_backend}"
         )
 
         dtype = _diagram_type(name)
-        type_results[dtype].append((name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err))
-        fixture_results.append({
-            "path": str(mmd_path.relative_to(ROOT)) if mmd_path.is_relative_to(ROOT) else str(mmd_path),
+        # Provenance records the primary lane's parameters.
+        _prov_faithful = _primary_is_fidelity
+        _prov_theme = "neutral" if _primary_is_fidelity else None
+        prov: dict = {
+            "name": name,
+            "path": mmd_rel,
+            "fixture_sha256": src_sha256,
             "diagram_type": dtype,
             "renderer_backend": vr.renderer_backend,
+            "actual_layout_backend": actual_layout_backend,
+            "fallback_reason": fallback_reason,
+            "renderer_api": "to_html",
+            "faithful": _prov_faithful,
+            "theme": _prov_theme,
+            "width_hint": width_hint,
+            "height_hint": 0,
+            "output_width": output_width,
+            "output_height": output_height,
+            "output_viewbox": output_viewbox,
             "geometry": vr.geometry,
             "render": vr.render,
+            "mmdc_ok": mmdc_ok,
             "timestamp_utc": run_timestamp,
-        })
+        }
+        # In "both" mode, also record fidelity lane parameters as a sub-record.
+        if fidelity_faithful:
+            prov["fidelity_lane"] = {
+                "faithful": True,
+                "theme": "neutral",
+                "render": "pass" if fidelity_html else "fail",
+            }
+        type_results[dtype].append((name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err, prov, fidelity_html, fidelity_err))
+        fixture_results.append(prov)
+
+    # Hard-fail validation pass (Task 4).
+    target_names = [p.stem for p in sorted_files]
+    validation_failures = _validate_outputs(fixture_results, tmp_dir, target_names)
 
     # Build nav — requires all results, so collected first.
     nav_parts: list[str] = []
     for dtype in sorted(type_results):
         items = type_results[dtype]
-        n_render_ok = sum(1 for _, _, vr, _, _, _, _ in items if vr.render == "pass")
+        n_render_ok = sum(1 for _, _, vr, *_ in items if vr.render == "pass")
         n_items = len(items)
         group_status = "ok" if n_render_ok == n_items else ("err" if n_render_ok == 0 else "warn")
         badge_cls = "badge-ok" if group_status == "ok" else ("badge-err" if group_status == "err" else "badge-warn")
@@ -599,7 +840,7 @@ def _build_gallery_into(
             f'<span class="nav-type">{_html_mod.escape(dtype)}'
             f'<span class="status-badge {badge_cls}">{n_render_ok}/{n_items}</span></span>'
         )
-        for name, _, vr, _, _, mmdc_ok, _ in items:
+        for name, _, vr, _, _, mmdc_ok, *_ in items:
             short = name[len(dtype):].lstrip("-") or name
             _obadge = _lane_badge_cls(vr.render)
             nav_parts.append(
@@ -611,24 +852,24 @@ def _build_gallery_into(
         nav_parts.append('</div>')
 
     total_diags = sum(len(v) for v in type_results.values())
-    n_ours_ok = sum(1 for items in type_results.values() for _, _, vr, _, _, _, _ in items if vr.render == "pass")
-    n_mmdc_ok = sum(m for items in type_results.values() for _, _, _, _, _, m, _ in items)
+    n_ours_ok = sum(1 for items in type_results.values() for _, _, vr, *_ in items if vr.render == "pass")
+    n_mmdc_ok = sum(m for items in type_results.values() for _, _, _, _, _, m, *_ in items)
     n_syntax_ok = sum(
         1 for items in type_results.values()
-        for _, _, vr, _, _, _, _ in items if vr.syntax_coverage == "pass"
+        for _, _, vr, *_ in items if vr.syntax_coverage == "pass"
     )
     n_geom_ok = sum(
         1 for items in type_results.values()
-        for _, _, vr, _, _, _, _ in items if vr.geometry == "pass"
+        for _, _, vr, *_ in items if vr.geometry == "pass"
     )
     n_geom_total = sum(
         1 for dtype, items in type_results.items()
-        for _, _, vr, _, _, _, _ in items
+        for _, _, vr, *_ in items
         if vr.geometry != "unvalidated"
     )
     n_oracle_ok = sum(
         1 for items in type_results.values()
-        for _, _, vr, _, _, _, _ in items if vr.mmdc_oracle == "pass"
+        for _, _, vr, *_ in items if vr.mmdc_oracle == "pass"
     )
     n_types = len(type_results)
     nav_html = "\n".join(nav_parts)
@@ -641,7 +882,9 @@ def _build_gallery_into(
 <head>
   <meta charset="utf-8">
   <title>mermaid_render vs mmdc — comparison gallery</title>
-  <style>{_PAGE_CSS}</style>
+  <style>{_PAGE_CSS}
+.mmdc-inline-svg svg {{ max-width: 100%; height: auto; display: block; margin: 0 auto; }}
+  </style>
 </head>
 <body>
   <header>
@@ -651,7 +894,8 @@ def _build_gallery_into(
       syntax {n_syntax_ok}/{total_diags} &nbsp;·&nbsp;
       geometry {n_geom_ok}/{n_geom_total} &nbsp;·&nbsp;
       oracle {n_oracle_ok}/{total_diags} &nbsp;·&nbsp;
-      mmdc {n_mmdc_ok}/{total_diags}</span>
+      mmdc {n_mmdc_ok}/{total_diags} &nbsp;·&nbsp;
+      sha: {_html_mod.escape(_git_sha)}</span>
   </header>
   <nav>{nav_html}</nav>
 """)
@@ -659,12 +903,12 @@ def _build_gallery_into(
         for dtype in sorted(type_results):
             items = type_results[dtype]
             f.write(f'  <div class="type-group-header" id="type-{dtype}">{_html_mod.escape(dtype)}</div>\n')
-            for name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err in items:
+            for name, src, vr, ours_err, mmdc_svg_path, mmdc_ok, mmdc_err, prov, fidelity_html, fidelity_err in items:
                 mmdc_status = "ok" if mmdc_ok else "err"
 
                 if vr.render == "pass":
-                    ours_html = (tmp_dir / "ours" / f"{name}.html").read_text(encoding="utf-8")
-                    ours_srcdoc = _html_mod.escape(ours_html, quote=True)
+                    ours_html_str = (tmp_dir / "ours" / f"{name}.html").read_text(encoding="utf-8")
+                    ours_srcdoc = _html_mod.escape(ours_html_str, quote=True)
                     ours_content = (
                         '<div class="render-box">'
                         f'<iframe class="render-frame" srcdoc="{ours_srcdoc}"></iframe>'
@@ -673,26 +917,50 @@ def _build_gallery_into(
                 else:
                     ours_content = f'<div class="error-box">{_html_mod.escape(ours_err)}</div>'
 
-                if mmdc_ok:
-                    mmdc_url = f"mmdc/{quote(mmdc_svg_path.name)}"
-                    aspect = _svg_aspect(mmdc_svg_path)
-                    ar_data = (
-                        f' data-aw="{aspect[0]}" data-ah="{aspect[1]}"'
-                        if aspect else ""
-                    )
-                    mmdc_content = (
-                        '<div class="render-box">'
-                        f'<iframe class="mmdc-frame" src="{mmdc_url}"{ar_data}'
-                        f' title="mmdc rendering of {_html_mod.escape(name, quote=True)}">'
-                        '</iframe>'
-                        '</div>'
-                    )
+                # mmdc pane: inline SVG directly (Task 6).
+                if mmdc_ok and mmdc_svg_path.exists():
+                    try:
+                        mmdc_svg_str = mmdc_svg_path.read_text(encoding="utf-8")
+                        mmdc_content = (
+                            '<div class="render-box">'
+                            f'<div class="mmdc-inline-svg">{mmdc_svg_str}</div>'
+                            '</div>'
+                        )
+                    except Exception:  # noqa: BLE001
+                        mmdc_content = (
+                            '<div class="error-box">mmdc SVG read error</div>'
+                        )
                 else:
                     mmdc_content = (
                         '<div class="error-box">'
                         f'{_html_mod.escape(mmdc_err or "mmdc failed (no output)")}'
                         '</div>'
                     )
+
+                # Fidelity pane (shown when mode includes fidelity).
+                fidelity_section = ""
+                if fidelity_html is not None:
+                    fidelity_srcdoc = _html_mod.escape(fidelity_html, quote=True)
+                    fidelity_section = f"""
+  <div class="pane-fidelity" style="margin-top:12px;">
+    <div class="pane-header" style="background:#f0e8f8;color:#6b2e8f;">Fidelity lane (faithful=True, neutral)</div>
+    <div class="render-box">
+      <iframe class="render-frame" srcdoc="{fidelity_srcdoc}"></iframe>
+    </div>
+  </div>"""
+                elif fidelity_err:
+                    fidelity_section = f"""
+  <div class="pane-fidelity" style="margin-top:12px;">
+    <div class="pane-header" style="background:#f0e8f8;color:#6b2e8f;">Fidelity lane (error)</div>
+    <div class="error-box">{_html_mod.escape(fidelity_err)}</div>
+  </div>"""
+
+                # Provenance details block (Task 7).
+                prov_json = json.dumps(prov, indent=2)
+                prov_section = (
+                    f'<details><summary>provenance</summary>'
+                    f'<pre>{_html_mod.escape(prov_json)}</pre></details>'
+                )
 
                 f.write(f"""
 <div class="diagram-section" id="{name}">
@@ -704,34 +972,31 @@ def _build_gallery_into(
     <span class="status-badge {_lane_badge_cls(vr.semantic_geometry)} badge-semantic-geometry">semantic_geometry: {vr.semantic_geometry}</span>
     <span class="status-badge {_lane_badge_cls(vr.mmdc_oracle)} badge-oracle">mmdc_oracle: {vr.mmdc_oracle}</span>
     <span class="status-badge badge-{"ok" if mmdc_ok else "err"}">mmdc: {mmdc_status}</span>
+    <span class="status-badge badge-unvalidated">backend: {_html_mod.escape(prov.get("actual_layout_backend", ""))}</span>
   </div>
   <div class="comparison-grid">
     <div class="pane-ours">
-      <div class="pane-header">Our renderer</div>
+      <div class="pane-header">Our renderer (editorial)</div>
       {ours_content}
     </div>
     <div class="pane-mmdc">
       <div class="pane-header">mmdc 11.15.0</div>
       {mmdc_content}
     </div>
-  </div>
+  </div>{fidelity_section}
   <details>
     <summary>Mermaid source</summary>
     <pre>{_html_mod.escape(src)}</pre>
   </details>
+  {prov_section}
 </div>
 """)
 
         f.write("""  <script>
-    // Both panes fit into the same box: available column width x MAX_H,
-    // preserving aspect ratio and centered, so ours and mmdc render at
-    // comparable sizes and no pane runs away vertically.
     const MAX_H = 600;
-    function boxInnerWidth(frame) {
-      const box = frame.parentElement;
-      const cs = getComputedStyle(box);
-      return box.clientWidth
-        - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    function boxInnerWidth(el) {
+      const cs = getComputedStyle(el);
+      return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     }
     function fitOursFrame(frame) {
       const doc = frame.contentDocument;
@@ -749,23 +1014,10 @@ def _build_gallery_into(
       frame.style.width = `${Math.ceil(iw * scale)}px`;
       frame.style.height = `${Math.ceil(ih * scale)}px`;
     }
-    function fitMmdcFrame(frame) {
-      const aw = parseFloat(frame.dataset.aw), ah = parseFloat(frame.dataset.ah);
-      if (!aw || !ah) return;
-      const scale = Math.min(boxInnerWidth(frame) / aw, MAX_H / ah);
-      frame.style.width = `${Math.ceil(aw * scale)}px`;
-      frame.style.height = `${Math.ceil(ah * scale)}px`;
-    }
     function attachFrameObservers() {
       document.querySelectorAll("iframe.render-frame").forEach(frame => {
         frame.addEventListener("load", () => fitOursFrame(frame));
         new ResizeObserver(() => fitOursFrame(frame)).observe(frame.parentElement);
-      });
-      document.querySelectorAll("iframe.mmdc-frame").forEach(frame => {
-        const fit = () => fitMmdcFrame(frame);
-        fit();
-        frame.addEventListener("load", fit);
-        new ResizeObserver(fit).observe(frame.parentElement);
       });
     }
     document.addEventListener("DOMContentLoaded", attachFrameObservers);
@@ -783,8 +1035,12 @@ def _build_gallery_into(
         or vr.renderer_backend.endswith("-stub")
         or bool(vr.errors)
         for dtype, items in type_results.items()
-        for _, _, vr, _, _, _, _ in items
+        for _, _, vr, *_ in items
     )
+
+    # Hard-fail guard: validation failures (Task 4).
+    if validation_failures:
+        has_failures = True
 
     if strict:
         has_failures = has_failures or any(
@@ -795,7 +1051,7 @@ def _build_gallery_into(
                 for d in vr.diagnostics
             )
             for items in type_results.values()
-            for _, _, vr, _, _, _, _ in items
+            for _, _, vr, *_ in items
         )
 
     # Atomically replace destination with tmp_dir.
@@ -821,6 +1077,10 @@ def main() -> None:
                     help="Renderer width hint in px (default: 0 = auto); does not alter gallery CSS")
     ap.add_argument("--strict", action="store_true",
                     help="Exit non-zero if any fixture has render/structural_geometry fail or error-severity diagnostic")
+    ap.add_argument("--allow-dirty", dest="allow_dirty", action="store_true",
+                    help="Allow generation from a dirty working tree (skips dirty-tree guard)")
+    ap.add_argument("--mode", choices=["editorial", "fidelity", "both"], default="both",
+                    help="Rendering mode: editorial (default styling), fidelity (faithful=True, neutral theme), or both")
     args = ap.parse_args()
 
     out_dir = Path(args.output_dir).resolve() if args.output_dir else OUT_DIR
@@ -877,7 +1137,11 @@ def main() -> None:
 
     print(f"Building comparison gallery for {len(mmd_files)} diagram(s)...")
     index_path, has_failures, fixture_results = _build_gallery(
-        mmd_files, out_dir, width_hint=args.width_hint, strict=args.strict
+        mmd_files, out_dir,
+        width_hint=args.width_hint,
+        strict=args.strict,
+        allow_dirty=args.allow_dirty,
+        mode=args.mode,
     )
     # Add per-fixture provenance to metadata (Task D).
     metadata["fixture_results"] = fixture_results
