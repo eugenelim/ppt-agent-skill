@@ -18,4 +18,82 @@
 # Run `workspace-status` to see all open backlog items.
 
 [backlog]
-open = []
+open = [
+  # ── Group 1: Easy quick wins ─────────────────────────────────────────────
+
+  # Add height_hint column to gallery/metadata.json per-fixture provenance rows so CI can detect height-scaling regressions
+  {slug = "seq-corr-height-hint-gallery-metadata"},
+  # npm ci --prefix scripts/mermaid_render/layout; then pytest tests/test_compound_layout.py -m requires_elk
+  {slug = "backlog-compound-elk-ac1-ac3"},
+  # Export VALID_PAGE_TYPES from planning_validator; import into contract_validator / visual_qa / smoke_skill (3-site collapse)
+  {slug = "page-type-enum-consolidation"},
+  # Add pytest-xdist to dev requirements; write subprocess test asserting rc != 0 and "not xdist-safe" in stderr
+  {slug = "xdist-snapshot-guard"},
+  # Split _strategies.py into _pipeline.py + _diagram_types.py; update CONVENTIONS.md mermaid_render/ line-count exception
+  {slug = "strategies-module-split"},
+  # Create tools/check_bundle_hash.py pinning dom-to-svg.bundle.js SHA-256; wire into CI as a check step
+  {slug = "vendor-bundle-checksum-gate"},
+
+  # ── Group 2: Investigation + implementation ───────────────────────────────
+
+  # Probe mmdc 11.15 SVG output to confirm <g data-et="participant"> selector attribute names used in T11
+  {slug = "seq-corr-mmdc-data-et-selectors"},
+  # Regenerate smoke_skill.py fixtures against current charts/ and styles/ file set; fix cli-cheatsheet:275 runtime-style ref
+  {slug = "smoke-skill-pre-existing-fixture-drift"},
+  # Teach planning_validator.resource_exists to resolve chart_type against grouped recipe files; drop chart_free() helper
+  {slug = "diagram-consistency-system-chart-refs"},
+  # Create scripts/assemble_diagram_slide.py [--fragment] [--style] [--title] [--annotation] [--output]; auto-read fragment dims
+  {slug = "fragment-to-slide-assembler"},
+  # Set non-zero MarkerSpec.clearance (12.0 triangle/diamond, 9.0 open arrow) in _class_rel_markers(); shorten polylines in _route_edges()
+  {slug = "class-diagram-marker-clearance"},
+  # Investigate mmdc layout rule for single-participant fragment headers wider than natural canvas; implement override
+  {slug = "seq-corr-single-participant-fragment-long-header"},
+
+  # ── Group 3: Needs spec / design first ───────────────────────────────────
+
+  # Write a dedicated sequence-box spec covering box label + fill rendering (box directive parsed but not rendered)
+  {slug = "seq-corr-box-unsupported-fixture", type = "shape"},
+  # Write a dedicated lifecycle spec for create/destroy participant geometry (mid-diagram appearance/disappearance)
+  {slug = "seq-corr-create-destroy-fixture", type = "shape"},
+  # Spec recursive compound layout: group tree, edge partitioning, innermost-first compile, proxy-node expansion, boundary gate routing
+  {slug = "backlog-mermaid-p3-compound-layout", type = "shape"},
+
+  # ── Group 4: Security / infra ─────────────────────────────────────────────
+
+  # Wrap Puppeteer render in a minimal container with seccomp/AppArmor; remove --no-sandbox inside it (AST06/ASI02)
+  {slug = "no-sandbox-container-isolation"},
+
+  # ── Group 5: Deferred until regression observed ───────────────────────────
+
+  # Clip route entry/exit to actual class-card bounding rect — defer until a fixture shows visible overshoot
+  {slug = "class-diagram-route-clip"},
+  # Place edge labels on longest stable segment (≥40 px) — defer until label-overlap regression is observed in fixture gallery
+  {slug = "class-diagram-label-segment"},
+  # Extend _routing.py with per-edge column-confinement hints for cycle-back transitions — defer until _routing.py decouples back-edge detection from global lane assignment
+  {slug = "state-diagram-local-cycle-routing"},
+
+  # ── Group 6: Environment-blocked / requires manual QA ────────────────────
+
+  # Compute real mmdc_oracle comparison vs our SVG geometry — blocked on SequenceGeometry T7 stability and mmdc availability
+  {slug = "seq-mmdc-oracle-comparison"},
+  # Render mermaid_layout.py fragment under dark/light/editorial style.json variants; confirm visual_qa non-FAIL — blocked on diagram-consistency-system CSS overrides shipping
+  {slug = "mermaid-source-bridge-ac3-visual-qa"},
+  # Run live puppeteer e2e: render a real fixture deck through --with-visual-qa in an environment with puppeteer installed
+  {slug = "render-gate-live-e2e-qa"},
+  # Replace _note_row_h() Pillow font-metrics with Playwright page.evaluate() text measurement at exact note width
+  {slug = "seq-variable-height-rows-playwright"},
+  # Batch mmdc per-fixture subprocess calls in test_oracle.py to reduce spawning overhead — needs its own spec
+  {slug = "batch-mmdc", type = "shape"},
+  # Extend reference adapter to extract per-entity bounding boxes and group geometry from real mmdc SVG renders
+  {slug = "mmdc-geometry-capture"},
+  # Extend reference adapter to sample connector paths (edge routing geometry) via Playwright
+  {slug = "browser-geometry-capture"},
+  # Extract Mermaid/mmdc/Node/Playwright/Chromium version provenance by probing the live environment at capture time
+  {slug = "browser-probing"},
+  # Render corpus through mermaid_render.to_svg() and diff against pre-rearchitecture html2svg.py golden SVGs
+  {slug = "differential-parity-test"},
+  # CI: pytest --run-snapshots-quick tests/test_snapshots.py asserting exit 0 (excl. pre-existing sequence-basic failures)
+  {slug = "playwright-gated-snapshot-verification"},
+  # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
+  {slug = "gpu-benchmark"},
+]
