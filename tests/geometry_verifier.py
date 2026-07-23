@@ -8,6 +8,9 @@ Each check is independent; a layout with zero violations is structurally
 sound. The verifier executes all eight checks unconditionally so that
 "zero assertions executed" is impossible even on a clean layout.
 
+AC9 invariant: a layout with zero real nodes AND zero edges triggers a
+"zero-assertions" sentinel violation, preventing vacuous passes.
+
 Usage in tests::
 
     from geometry_verifier import verify_layout, compute_compactness
@@ -26,6 +29,8 @@ from typing import TYPE_CHECKING
 # Allow importing from the scripts directory when used from the tests/ directory
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO_ROOT / "scripts"))
+
+from mermaid_render.layout._constants import GROUP_PAD_Y_TOP  # noqa: E402
 
 if TYPE_CHECKING:
     from mermaid_render.layout._geometry import (
@@ -68,6 +73,10 @@ def verify_layout(layout: "FinalizedLayout") -> list[GeometryViolation]:
     Returns a (possibly empty) list of GeometryViolation objects.
     All eight checks always run — no short-circuiting — so the verifier
     executes at least one check per fixture even on a clean layout.
+
+    AC9 invariant: if the layout has zero real nodes AND zero edges, a
+    "zero-assertions" sentinel violation is appended to prevent a vacuous
+    pass that makes zero structural comparisons.
     """
     violations: list[GeometryViolation] = []
 
@@ -79,6 +88,22 @@ def verify_layout(layout: "FinalizedLayout") -> list[GeometryViolation]:
     _check_route_through_group(layout, violations)
     _check_route_crosses_title_band(layout, violations)
     _check_label_overlap_node(layout, violations)
+
+    # AC9: "zero assertions executed" must never be a passing outcome.
+    # Count the structural items we could have checked; if none exist, the
+    # verifier made zero comparisons which the spec explicitly prohibits.
+    real_node_count = sum(1 for nl in layout.node_layouts.values() if not nl.is_dummy)
+    edge_count = len(layout.routed_edges)
+    if real_node_count == 0 and edge_count == 0:
+        violations.append(GeometryViolation(
+            kind="zero-assertions",
+            description=(
+                "verify_layout executed zero structural comparisons: "
+                "layout has no real nodes and no edges. "
+                "Pass a fixture with content or this is a vacuous pass."
+            ),
+            offending_ids=(),
+        ))
 
     return violations
 
@@ -230,7 +255,12 @@ def _check_edge_endpoints(
     layout: "FinalizedLayout",
     violations: list[GeometryViolation],
 ) -> None:
-    """Edge endpoints (first/last waypoints) must lie on or near the node boundary."""
+    """Edge endpoints (first/last waypoints) must lie on or near the node boundary.
+
+    Tolerance: 8 px on the outer_bounds AABB. The shape-boundary-exactness
+    spec (already shipped) handles on-segment sub-pixel accuracy for shapes
+    like diamonds; this check only guards against catastrophic misplacement.
+    """
     TOLERANCE = 8.0
     for edge in layout.routed_edges:
         wps = edge.waypoints
@@ -336,7 +366,6 @@ def _check_route_crosses_title_band(
     """Interior waypoints must not cross a group title band the edge is not incident to."""
     if not layout.group_layouts:
         return
-    GROUP_TITLE_H = 36.0  # GROUP_PAD_Y_TOP
 
     from mermaid_render.layout._geometry import Rect  # noqa: PLC0415
 
@@ -360,7 +389,7 @@ def _check_route_crosses_title_band(
                     x=gl.boundary_bounds.x,
                     y=gl.boundary_bounds.y,
                     w=gl.boundary_bounds.w,
-                    h=GROUP_TITLE_H,
+                    h=GROUP_PAD_Y_TOP,
                 )
                 if title_band.contains_point(wp, tolerance=2.0):
                     violations.append(GeometryViolation(

@@ -27,6 +27,7 @@ from mermaid_render.layout._pipeline import (
     _compile_flowchart,
     RenderOptions,
 )
+from mermaid_render.layout._strategies import _dispatch
 from mermaid_render.layout._geometry import (
     FinalizedLayout,
     NodeLayout,
@@ -216,20 +217,21 @@ class TestGeometryVerifier:
     def test_verifier_detects_route_through_node(self):
         """An edge whose interior waypoints pass through an unrelated node triggers violation."""
         import dataclasses
-        # Three nodes: A (0,0), B (400,0), C (200, 100)
+        # Three nodes: A (0,0), B (400,0), C (200, -5)
         # Edge A->B with waypoints that go through C's bounding box
         layout = self._make_layout(
             node_ids=("A", "B", "C"),
             node_positions=[(0, 0), (400, 0), (200, -5)],  # C is at 200,-5 so y=0 is inside
             edge_ids=("A->B",),
         )
-        # Override the A->B waypoints to pass through C at (200, 20) which is inside C's box
+        # Override the A->B waypoints to pass through C at (250, 10) which is inside C's box
+        # C is at x=200, y=-5, w=120, h=42 → inner (after -2px margin) = [202, 318]×[-3, 35]
         edges = list(layout.routed_edges)
         new_edge = dataclasses.replace(
             edges[0],
             waypoints=(
                 Point(60.0, 42.0),
-                Point(250.0, 10.0),  # inside C's inner box (C at x=200, y=-5, w=120, h=42 → inner starts at x=202)
+                Point(250.0, 10.0),  # inside C's inner box
                 Point(460.0, 0.0),
             ),
         )
@@ -238,6 +240,33 @@ class TestGeometryVerifier:
         kinds = [v.kind for v in violations]
         assert "route-through-node" in kinds, (
             f"Expected route-through-node violation, got: {kinds}"
+        )
+
+    def test_verifier_fails_on_degenerate_layout(self):
+        """verify_layout returns a 'zero-assertions' violation for an empty layout. (AC9)
+
+        AC9 spec constraint: 'Never accept a geometry verifier pass that executes
+        zero assertions.' A layout with no nodes and no edges would make zero
+        structural comparisons — the verifier must flag this as a sentinel violation
+        rather than silently returning an empty (passing) list.
+        """
+        # Completely empty layout: no nodes, no edges, no groups
+        empty_canvas = Rect(x=0.0, y=0.0, w=800.0, h=600.0)
+        empty_layout = FinalizedLayout(
+            node_layouts=_types.MappingProxyType({}),
+            group_layouts=_types.MappingProxyType({}),
+            routed_edges=(),
+            routing_failures=(),
+            visible_bounds=empty_canvas,
+            diagram_padding=48.0,
+            canvas_bounds=empty_canvas,
+            direction="TB",
+            diagnostics=_empty_diagnostics(),
+        )
+        violations = verify_layout(empty_layout)
+        kinds = [v.kind for v in violations]
+        assert "zero-assertions" in kinds, (
+            f"Expected 'zero-assertions' sentinel for empty layout, got violations: {kinds}"
         )
 
     def test_verifier_zero_violations_reported(self):
@@ -304,20 +333,18 @@ class TestFlowchartArrowsDefs:
         assert violations == [], f"Geometry violations: {violations}"
 
     def test_faithful_no_legend(self):
-        """Compiling with faithful_mermaid=True adds no legend node. (AC2)"""
+        """Compiling with faithful_mermaid=True produces HTML without a legend. (AC2)
+
+        Legends are injected by the Python legend-inference pass. With
+        faithful_mermaid=True and inferred_legend=False, no legend HTML
+        strip should appear in the rendered output.
+        """
+        src = _load("flowchart-arrows-defs")
         opts = RenderOptions(faithful_mermaid=True, inferred_legend=False)
-        layout = _compile("flowchart-arrows-defs", opts)
-        # Legend nodes are typically injected via the Python legend pass;
-        # in faithful mode no legend strip should appear. We verify by
-        # checking that all node_ids are present in the source Mermaid text.
-        for nid in layout.node_layouts:
-            nl = layout.node_layouts[nid]
-            if nl.is_dummy:
-                continue
-            # Legend nodes would have IDs like "legend_..." or labels not in source
-            assert not nid.startswith("legend_"), (
-                f"Faithful mode produced a legend node: {nid!r}"
-            )
+        html = _dispatch(src, None, 800, opts=opts)
+        assert "legend" not in html.lower(), (
+            "Faithful mode with inferred_legend=False produced unexpected legend HTML"
+        )
 
 
 # ── Task 3: Decision-branch label assignment ──────────────────────────────────
@@ -365,6 +392,47 @@ class TestFlowchartDiamondBranch:
             f"Check->Error label expected 'No', got {edge.label_layout.text!r}"
         )
 
+    def test_retry_feedback_local_lane(self, layout: FinalizedLayout):
+        """The Retry->Yes->Check feedback edge routes locally within the canvas. (AC3)
+
+        Verifies that the backward (feedback) edge does not route at the
+        canvas perimeter: all waypoints must be inside the canvas bounds and
+        not within 5 px of the canvas edges. This catches perimeter-routing
+        regressions where ELK sends feedback paths around the entire diagram.
+        """
+        feedback = [
+            e for e in layout.routed_edges
+            if e.src_node_id == "Retry" and e.dst_node_id == "Check"
+        ]
+        assert feedback, "No Retry->Check feedback edge found in diamond-branch layout"
+        edge = feedback[0]
+        # Label must be 'Yes' to confirm we have the correct edge
+        assert edge.label_layout is not None, "Retry->Check edge has no label_layout"
+        assert edge.label_layout.text == "Yes", (
+            f"Expected 'Yes' label on Retry->Check, got {edge.label_layout.text!r}"
+        )
+        # Feedback edge must have interior waypoints (it routes, not a direct line)
+        assert len(edge.waypoints) >= 3, (
+            f"Retry->Check feedback edge has only {len(edge.waypoints)} waypoints "
+            f"(expected ≥3 for a routed backward edge)"
+        )
+        # All waypoints must lie within the canvas bounds (not perimeter routing)
+        canvas = layout.canvas_bounds
+        PERIMETER_MARGIN = 5.0
+        for wp in edge.waypoints:
+            assert wp.x >= canvas.x - PERIMETER_MARGIN, (
+                f"Waypoint {wp} exceeds left canvas edge (canvas.x={canvas.x})"
+            )
+            assert wp.x <= canvas.x1 + PERIMETER_MARGIN, (
+                f"Waypoint {wp} exceeds right canvas edge (canvas.x1={canvas.x1})"
+            )
+            assert wp.y >= canvas.y - PERIMETER_MARGIN, (
+                f"Waypoint {wp} exceeds top canvas edge (canvas.y={canvas.y})"
+            )
+            assert wp.y <= canvas.y1 + PERIMETER_MARGIN, (
+                f"Waypoint {wp} exceeds bottom canvas edge (canvas.y1={canvas.y1})"
+            )
+
     def test_decision_ports_stable(self):
         """Compiling the same fixture twice produces the same edge IDs. (AC3)"""
         layout1 = _compile("flowchart-diamond-branch")
@@ -374,9 +442,9 @@ class TestFlowchartDiamondBranch:
         assert ids1 == ids2, f"Edge ID set differs between compilations: {ids1} vs {ids2}"
 
     def test_geometry_verifier_passes(self, layout: FinalizedLayout):
-        """Geometry verifier reports zero node-overlap violations. (AC9)"""
-        violations = [v for v in verify_layout(layout) if v.kind == "node-overlap"]
-        assert violations == [], f"Node overlap violations: {violations}"
+        """Geometry verifier reports zero violations on diamond-branch layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
 
 
 # ── Task 4: Fan-out and fan-in port ordering ──────────────────────────────────
@@ -420,25 +488,32 @@ class TestFlowchartParallelLinks:
         assert ids1 == ids2, f"Edge IDs differ between compilations: {ids1} vs {ids2}"
 
     def test_geometry_verifier_passes(self, layout: FinalizedLayout):
-        """Geometry verifier reports zero node-overlap violations. (AC9)"""
-        violations = [v for v in verify_layout(layout) if v.kind == "node-overlap"]
-        assert violations == [], f"Node overlap violations: {violations}"
+        """Geometry verifier reports zero violations on parallel-links layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
 
 
 # ── Task 5: Compactness diagnostics ───────────────────────────────────────────
 
 # Committed baseline constants (AC10): metrics must be <= these values.
-# These are generous upper bounds — tighter baselines should be committed
-# after observing actual metrics in CI.
+# Actual observed values are roughly 2-10x smaller; baselines are generous
+# regression guards — tighten after observing stable CI runs.
+#
+# max_edge_excursion: maximum distance (px) an interior waypoint is outside
+#   the bounding box of its edge's src+dst nodes. Feedback loops and
+#   cross-group edges naturally have high excursion.
+# crossing_count: number of pairwise segment intersections; ideally 0 but
+#   feedback edges in diamond-branch create 1 crossing.
 _COMPACTNESS_BASELINES = {
-    "flowchart-all-shapes":      {"total_route_length": 20_000, "total_bends": 200, "canvas_area": 5_000_000},
-    "flowchart-arrows-defs":     {"total_route_length": 10_000, "total_bends": 100, "canvas_area": 3_000_000},
-    "flowchart-diamond-branch":  {"total_route_length": 15_000, "total_bends": 150, "canvas_area": 4_000_000},
-    "flowchart-diamond-clipping":{"total_route_length": 10_000, "total_bends": 100, "canvas_area": 3_000_000},
-    "flowchart-empty-subgraph":  {"total_route_length": 5_000,  "total_bends": 50,  "canvas_area": 2_000_000},
-    "flowchart-groups-complex":  {"total_route_length": 25_000, "total_bends": 250, "canvas_area": 8_000_000},
-    "flowchart-inner-direction": {"total_route_length": 10_000, "total_bends": 100, "canvas_area": 3_000_000},
-    "flowchart-parallel-links":  {"total_route_length": 10_000, "total_bends": 100, "canvas_area": 3_000_000},
+    # name:                          route_len  bends  excursion  canvas_area  crossings
+    "flowchart-all-shapes":     dict(total_route_length=20_000, total_bends=200, max_edge_excursion=500,  canvas_area=5_000_000, crossing_count=5),
+    "flowchart-arrows-defs":    dict(total_route_length=10_000, total_bends=100, max_edge_excursion=500,  canvas_area=3_000_000, crossing_count=5),
+    "flowchart-diamond-branch": dict(total_route_length=15_000, total_bends=150, max_edge_excursion=500,  canvas_area=4_000_000, crossing_count=5),
+    "flowchart-diamond-clipping":dict(total_route_length=10_000, total_bends=100, max_edge_excursion=500, canvas_area=3_000_000, crossing_count=5),
+    "flowchart-empty-subgraph": dict(total_route_length=5_000,  total_bends=50,  max_edge_excursion=500,  canvas_area=2_000_000, crossing_count=5),
+    "flowchart-groups-complex": dict(total_route_length=25_000, total_bends=250, max_edge_excursion=1500, canvas_area=8_000_000, crossing_count=5),
+    "flowchart-inner-direction":dict(total_route_length=10_000, total_bends=100, max_edge_excursion=500,  canvas_area=3_000_000, crossing_count=5),
+    "flowchart-parallel-links": dict(total_route_length=10_000, total_bends=100, max_edge_excursion=500,  canvas_area=3_000_000, crossing_count=5),
 }
 
 
@@ -456,6 +531,7 @@ class TestCompactnessDiagnostics:
         assert report.total_bends >= 0, "total_bends must be non-negative"
         assert report.canvas_area > 0, "canvas_area must be positive"
         assert report.crossing_count >= 0, "crossing_count must be non-negative"
+        assert report.max_edge_excursion >= 0, "max_edge_excursion must be non-negative"
 
         assert report.total_route_length <= baseline["total_route_length"], (
             f"{fixture_name}: total_route_length={report.total_route_length:.0f} "
@@ -468,6 +544,14 @@ class TestCompactnessDiagnostics:
         assert report.canvas_area <= baseline["canvas_area"], (
             f"{fixture_name}: canvas_area={report.canvas_area:.0f} "
             f"exceeds baseline {baseline['canvas_area']}"
+        )
+        assert report.max_edge_excursion <= baseline["max_edge_excursion"], (
+            f"{fixture_name}: max_edge_excursion={report.max_edge_excursion:.0f} "
+            f"exceeds baseline {baseline['max_edge_excursion']}"
+        )
+        assert report.crossing_count <= baseline["crossing_count"], (
+            f"{fixture_name}: crossing_count={report.crossing_count} "
+            f"exceeds baseline {baseline['crossing_count']}"
         )
 
     @pytest.mark.parametrize("fixture_name", list(_COMPACTNESS_BASELINES.keys()))
@@ -519,9 +603,9 @@ class TestFlowchartAllShapes:
             )
 
     def test_geometry_verifier_passes(self, layout: FinalizedLayout):
-        """Geometry verifier runs on all-shapes layout with zero node-overlap violations. (AC9)"""
-        violations = [v for v in verify_layout(layout) if v.kind == "node-overlap"]
-        assert violations == [], f"Node-overlap violations: {violations}"
+        """Geometry verifier reports zero violations on all-shapes layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
 
     def test_all_nodes_have_positive_bounds(self, layout: FinalizedLayout):
         """Every non-dummy node has positive outer_bounds dimensions. (AC1)"""
@@ -536,7 +620,13 @@ class TestFlowchartDiamondClipping:
     """Edge endpoints for diamond nodes lie near the diamond boundary. (AC4)
 
     Tolerance: endpoints must lie within 16 px of the diamond node's
-    outer_bounds (the shape-boundary-exactness spec handles tighter clipping).
+    outer_bounds AABB. The mermaid-shape-boundary-exactness spec (already
+    shipped) covers sub-pixel on-segment accuracy for diamond edges; this
+    test guards only against catastrophic misplacement (endpoint far off
+    the node entirely).
+
+    Deferred (shape-boundary-exactness backlog): 0.5-px on-segment check
+    for diamond edge intersection points.
     """
 
     @pytest.fixture(scope="class")
@@ -553,7 +643,7 @@ class TestFlowchartDiamondClipping:
 
     def test_edge_endpoints_near_diamond_boundary(self, layout: FinalizedLayout):
         """Edge endpoints incident to diamond nodes lie near the node boundary. (AC4)"""
-        TOLERANCE = 16.0  # generous: shape-boundary-exactness handles sub-pixel
+        TOLERANCE = 16.0  # generous: shape-boundary-exactness spec handles sub-pixel
         diamond_ids = {
             nid for nid, nl in layout.node_layouts.items()
             if nl.semantic_shape == "diamond" and not nl.is_dummy
@@ -575,9 +665,9 @@ class TestFlowchartDiamondClipping:
                 )
 
     def test_geometry_verifier_passes(self, layout: FinalizedLayout):
-        """Geometry verifier reports zero node-overlap violations. (AC9)"""
-        violations = [v for v in verify_layout(layout) if v.kind == "node-overlap"]
-        assert violations == [], f"Node-overlap violations: {violations}"
+        """Geometry verifier reports zero violations on diamond-clipping layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
 
 
 class TestFlowchartEmptySubgraph:
@@ -587,8 +677,23 @@ class TestFlowchartEmptySubgraph:
     def layout(self):
         return _compile("flowchart-empty-subgraph")
 
+    def test_groups_present_in_layout(self, layout: FinalizedLayout):
+        """The fixture produces at least one group in the layout. (AC5)"""
+        # ELK may collapse empty subgraphs; if it does, the subsequent
+        # empty-group test skips gracefully. This test confirms the pipeline
+        # produced some group structure.
+        assert len(layout.group_layouts) > 0, (
+            "No groups found — ELK may have collapsed all subgraphs. "
+            "If this is a known ELK limitation, skip via pytest.skip above."
+        )
+
     def test_empty_group_has_positive_bounds(self, layout: FinalizedLayout):
-        """The 'Empty' group has positive width and height. (AC5)"""
+        """The 'Empty' group has positive width and height. (AC5)
+
+        Note: ELK may drop subgraphs with no member nodes. If that happens,
+        this test skips rather than fails — the empty-subgraph rendering
+        limitation is tracked separately.
+        """
         # The group ID may vary; we look for a group with no member nodes
         empty_groups = [
             (gid, gl) for gid, gl in layout.group_layouts.items()
@@ -605,11 +710,10 @@ class TestFlowchartEmptySubgraph:
         violations = [v for v in verify_layout(layout) if v.kind == "group-overlap"]
         assert violations == [], f"Sibling group overlap violations: {violations}"
 
-    def test_geometry_verifier_runs(self, layout: FinalizedLayout):
-        """Geometry verifier executes on empty-subgraph layout. (AC9)"""
-        # verify_layout always runs all 8 checks; this just confirms it doesn't crash
-        result = verify_layout(layout)
-        assert isinstance(result, list)
+    def test_geometry_verifier_passes(self, layout: FinalizedLayout):
+        """Geometry verifier reports zero violations on empty-subgraph layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
 
 
 class TestFlowchartGroupsComplex:
@@ -634,12 +738,9 @@ class TestFlowchartGroupsComplex:
         assert violations == [], f"Node-overlap violations: {violations}"
 
     def test_geometry_verifier_passes(self, layout: FinalizedLayout):
-        """Geometry verifier passes on groups-complex (no node-overlap or containment violations)."""
-        violations = [
-            v for v in verify_layout(layout)
-            if v.kind in {"node-overlap", "containment", "group-overlap"}
-        ]
-        assert violations == [], f"Critical geometry violations: {violations}"
+        """Geometry verifier reports zero violations on groups-complex layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
 
 
 class TestFlowchartInnerDirection:
@@ -655,20 +756,27 @@ class TestFlowchartInnerDirection:
 
     def test_pipeline_group_exists(self, layout: FinalizedLayout):
         """The inner-direction fixture has a group (pipeline) in the layout. (AC7)"""
-        # The group may be named 'pipeline' or similar
         assert len(layout.group_layouts) > 0, (
             "No groups found — inner-direction subgraph was not preserved"
         )
 
     def test_inner_direction_nodes_arranged_horizontally(self, layout: FinalizedLayout):
-        """Child nodes of the LR pipeline group have distinct x-positions. (AC7)"""
-        # Find any group with local_direction LR
+        """Child nodes of the LR pipeline group have distinct x-positions. (AC7)
+
+        Note: inner-direction uses Python fallback (has_inner_dir=True), so
+        local_direction on the GroupLayout reflects the declared direction even
+        when ELK is not used for the inner layout. If no LR group is found,
+        the test fails — this would indicate the inner-direction metadata was
+        not preserved.
+        """
         lr_groups = {
             gid: gl for gid, gl in layout.group_layouts.items()
             if gl.local_direction in ("LR", "RL")
         }
-        if not lr_groups:
-            pytest.skip("No LR-direction groups found in layout (inner-direction may use Python fallback)")
+        assert lr_groups, (
+            "No LR/RL-direction groups found in inner-direction layout. "
+            "The pipeline subgraph's direction LR should be captured in GroupLayout.local_direction."
+        )
 
         for gid, gl in lr_groups.items():
             member_ids = gl.member_ids
@@ -694,7 +802,7 @@ class TestFlowchartInnerDirection:
                 f"— nodes may not be arranged horizontally"
             )
 
-    def test_geometry_verifier_runs(self, layout: FinalizedLayout):
-        """Geometry verifier executes on inner-direction layout. (AC9)"""
-        result = verify_layout(layout)
-        assert isinstance(result, list)
+    def test_geometry_verifier_passes(self, layout: FinalizedLayout):
+        """Geometry verifier reports zero violations on inner-direction layout. (AC9)"""
+        violations = verify_layout(layout)
+        assert violations == [], f"Geometry violations: {violations}"
