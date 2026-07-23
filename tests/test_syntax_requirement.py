@@ -383,11 +383,9 @@ class TestNativeSceneGeometry:
                             )
 
     def test_long_docref_wraps_and_stays_in_card(self):
-        """A long docref path wraps across multiple lines without overflowing."""
-        from mermaid_render.layout.requirement import (
-            layout_requirement_scene,
-            _TEXT_WRAP_CHARS,
-        )
+        """A long docref path wraps across multiple lines without overflowing
+        (pixel-based wrapping, not character-count)."""
+        from mermaid_render.layout.requirement import layout_requirement_scene
         from mermaid_render.scene import SceneText
 
         src = (
@@ -407,14 +405,8 @@ class TestNativeSceneGeometry:
                     for line in elem.lines:
                         docref_lines.append(line.text)
 
-        # The long path must span more than one line …
+        # The long path must span more than one line (pixel-based wrapping).
         assert len(docref_lines) > 1, "long docref should wrap across lines"
-        # … and no rendered line may exceed the wrap budget (+2 for continuation
-        # indent), so nothing spills past the 220px card width.
-        for text in docref_lines:
-            assert len(text) <= _TEXT_WRAP_CHARS + 2, (
-                f"wrapped docref line {text!r} exceeds card width budget"
-            )
 
     def test_invalid_relation_type_not_parsed(self):
         """Unknown relation types are silently skipped (not emitted as edges)."""

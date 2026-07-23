@@ -36,6 +36,43 @@ from ..scene import (
     SvgScene,
     make_scene_id,
 )
+from ._text import get_default_measurer, REQUIREMENT_FIELD
+
+# Process-wide text measurer singleton
+_MEASURER = get_default_measurer()
+
+
+def _scale_text_layout(tl: "TextLayout", scale: float) -> "TextLayout":
+    """Return a new TextLayout with all geometric fields scaled by *scale*.
+
+    ``resolved_font_path`` and ``resolved_font_family`` are unchanged because
+    they describe the font file, not geometry.  The caller is responsible for
+    ensuring ``scale > 0``.
+    """
+    from ._geometry import TextLayout, TextLine, TextRun  # local to avoid circular at module init
+
+    new_lines = tuple(
+        TextLine(
+            runs=tuple(
+                TextRun(text=run.text, style=run.style, width=run.width * scale, height=run.height * scale)
+                for run in line.runs
+            ),
+            width=line.width * scale,
+            height=line.height * scale,
+            baseline=line.baseline * scale,
+        )
+        for line in tl.lines
+    )
+    return TextLayout(
+        lines=new_lines,
+        width=tl.width * scale,
+        height=tl.height * scale,
+        line_height=tl.line_height * scale,
+        min_content_width=tl.min_content_width * scale,
+        max_content_width=tl.max_content_width * scale,
+        resolved_font_path=tl.resolved_font_path,
+        resolved_font_family=tl.resolved_font_family,
+    )
 
 
 # ── Color tokens ──────────────────────────────────────────────────────────────
@@ -66,7 +103,6 @@ _COL_GAP = 64
 _FONT_HEADER = 12
 _FONT_ATTR = 10
 _FONT_REL = 9
-_TEXT_WRAP_CHARS = 30   # approximate chars per line at 10px font in a 220px card
 
 
 # ── Parser ────────────────────────────────────────────────────────────────────
@@ -130,6 +166,18 @@ def _wrap_text(text: str, max_chars: int) -> list[str]:
     return lines
 
 
+def _wrap_text_px(text: str, max_width_px: float) -> list[str]:
+    """Word-wrap ``text`` to at most ``max_width_px`` pixel width.
+
+    Uses the process-wide text measurer with REQUIREMENT_FIELD style.
+    Replaces the old character-count-based ``_TEXT_WRAP_CHARS`` approach.
+    Long unbroken tokens are hard-broken at character boundaries
+    (``allow_emergency_break=True``) to prevent overflow.
+    """
+    tl = _MEASURER.layout(text, REQUIREMENT_FIELD, max_width_px, allow_emergency_break=True)
+    return ["".join(run.text for run in line.runs) for line in tl.lines] or [""]
+
+
 def _parse_requirement_source(src: str) -> tuple[dict, list[dict]]:
     """Return ``(nodes, relations)``.
 
@@ -190,29 +238,34 @@ def _parse_requirement_source(src: str) -> tuple[dict, list[dict]]:
 def _node_height(node: dict) -> float:
     """Card height: header + wrapped attribute rows + vertical padding.
 
-    Every attribute display line (``key: value``) is word-wrapped, so a long
-    value on any field — not just ``text`` — grows the card rather than
+    Every attribute display line (``key: value``) is pixel-wrapped at
+    ``_NODE_W - 2 * _ATTR_PAD`` so a long value grows the card rather than
     overflowing it.  Must stay in lockstep with the render loop in
     :func:`layout_requirement_scene`.
     """
+    _max_w = float(_NODE_W - 2 * _ATTR_PAD)
     n_lines = 0
     for key, val in node.get("attrs", {}).items():
-        n_lines += len(_wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS))
+        tl = _MEASURER.layout(f"{key}: {val}", REQUIREMENT_FIELD, _max_w, allow_emergency_break=True)
+        n_lines += len(tl.lines)
     return float(_HEADER_H + max(n_lines, 1) * _ATTR_H + _ATTR_PAD * 2)
 
 
 def _node_width(node: dict, name: str) -> float:
-    """Estimated card width from the longest rendered line + horizontal padding.
+    """Measured card width from the longest rendered line + horizontal padding.
 
-    Uses char-count * font-size * 0.6 as a pixel approximation.  The result is
+    Uses the process-wide text measurer for accurate pixel widths.  The result is
     clamped to at least _NODE_W so this is always a minimum-preserving measure.
     """
-    header_w = float(len(name)) * _FONT_HEADER * 0.6
-    subtype_w = float(len(node.get("subtype", ""))) * _FONT_ATTR * 0.6
+    from ._geometry import TextStyle as _TextStyle
+    _header_style = _TextStyle(font_size=float(_FONT_HEADER), font_weight=700)
+    header_w = _MEASURER.layout(name, _header_style, None).width
+    subtype_w = _MEASURER.layout(node.get("subtype", ""), REQUIREMENT_FIELD, None).width
     max_w = max(header_w, subtype_w)
+    _max_px = float(_NODE_W - 2 * _ATTR_PAD)
     for key, val in node.get("attrs", {}).items():
-        for line in _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS):
-            max_w = max(max_w, float(len(line)) * _FONT_ATTR * 0.6)
+        attr_layout = _MEASURER.layout(f"{key}: {val}", REQUIREMENT_FIELD, _max_px)
+        max_w = max(max_w, attr_layout.width)
     return max(float(_NODE_W), max_w + 2 * _ATTR_PAD)
 
 
@@ -438,6 +491,7 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
         Rect,
         RoutedEdge,
         TextLayout,
+        TextStyle,
         _empty_diagnostics,
     )
 
@@ -541,6 +595,8 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
 
     # Build NodeLayout objects
     node_layouts: dict[str, NodeLayout] = {}
+    _header_style = TextStyle(font_size=float(_FONT_HEADER), font_weight=700)
+    _attr_max_w = float(_NODE_W - 2 * _ATTR_PAD)
     for nname, node in nodes.items():
         if nname not in node_pos:
             continue
@@ -548,14 +604,22 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
         nh = heights[nname]
         shape = "req-element" if node["kind"] == "element" else "req-requirement"
         cw_n = card_widths.get(nname, float(_NODE_W))
+        # Measure the node name so both painters share a common TextLayout.
+        _title_tl = _MEASURER.layout(nname, _header_style, None)
+        # Measure subtype and each attribute so both painters share real TextLayouts.
+        _subtitle_tl = _MEASURER.layout(node.get("subtype", ""), REQUIREMENT_FIELD, None)
+        _member_tls = tuple(
+            _MEASURER.layout(f"{key}: {val}", REQUIREMENT_FIELD, _attr_max_w, allow_emergency_break=True)
+            for key, val in node.get("attrs", {}).items()
+        )
         node_layouts[nname] = NodeLayout(
             node_id=nname,
             semantic_shape=shape,
             outer_bounds=Rect(px, py, cw_n, nh),
             content_bounds=Rect(px, py + _HEADER_H, cw_n, max(nh - _HEADER_H, 0.0)),
-            title_layout=None,
-            subtitle_layout=None,
-            member_layouts=(),
+            title_layout=_title_tl,
+            subtitle_layout=_subtitle_tl,
+            member_layouts=_member_tls,
             icon_bounds=None,
             ports=(),
             css_classes=(f"req-{node['subtype']}",),
@@ -594,12 +658,14 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
             dx0, dy0, dxn, dyn = 0.0, 1.0, 0.0, 1.0
 
         rel_type = rel["rel_type"]
-        lbl_w = float(len(rel_type)) * _FONT_REL * 0.65
+        _rel_style = TextStyle(font_size=float(_FONT_REL), font_weight=400)
+        _lbl_tl = _MEASURER.layout(rel_type, _rel_style, None)
+        lbl_w = _lbl_tl.width
         lp_x, lp_y = _label_point(tuple((wp.x, wp.y) for wp in waypoints))
         lbl_layout = EdgeLabelLayout(
             text=rel_type,
-            layout=_stub_text_layout(lbl_w, float(_FONT_REL)),
-            bounds=Rect(lp_x - lbl_w / 2, lp_y - float(_FONT_REL), lbl_w, float(_FONT_REL)),
+            layout=_lbl_tl,
+            bounds=Rect(lp_x - lbl_w / 2, lp_y - _lbl_tl.height, lbl_w, _lbl_tl.height),
             anchor_point=Point(lp_x, lp_y),
         )
 
@@ -654,9 +720,11 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
                 semantic_shape=nl.semantic_shape,
                 outer_bounds=_sr(nl.outer_bounds),
                 content_bounds=_sr(nl.content_bounds),
-                title_layout=nl.title_layout,
-                subtitle_layout=nl.subtitle_layout,
-                member_layouts=nl.member_layouts,
+                title_layout=_scale_text_layout(nl.title_layout, scale) if nl.title_layout else None,
+                subtitle_layout=_scale_text_layout(nl.subtitle_layout, scale) if nl.subtitle_layout else None,
+                member_layouts=tuple(
+                    _scale_text_layout(m, scale) for m in nl.member_layouts
+                ),
                 icon_bounds=nl.icon_bounds,
                 ports=nl.ports,
                 css_classes=nl.css_classes,
@@ -673,7 +741,7 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
             if lbl is not None:
                 lbl = EdgeLabelLayout(
                     text=lbl.text,
-                    layout=lbl.layout,
+                    layout=_scale_text_layout(lbl.layout, scale),
                     bounds=_sr(lbl.bounds),
                     anchor_point=_sp(lbl.anchor_point),
                 )
@@ -829,9 +897,22 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0, height_hint: int 
         ))
 
         ay = float(py + _HEADER_H + _ATTR_PAD)
-        for key, val in node.get("attrs", {}).items():
-            wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
-            for li, line_text in enumerate(wrapped):
+        for attr_idx, (key, _) in enumerate(node.get("attrs", {}).items()):
+            # Use the stored TextLayout from FinalizedLayout so SVG and HTML
+            # consume the same wrapped lines — satisfying AC6 (HTML/SVG identity).
+            member_tl = (
+                _nl.member_layouts[attr_idx]
+                if attr_idx < len(_nl.member_layouts)
+                else None
+            )
+            if member_tl is not None:
+                lines_iter = [
+                    "".join(run.text for run in line.runs)
+                    for line in member_tl.lines
+                ] or [f"{key}: "]
+            else:
+                lines_iter = _wrap_text_px(f"{key}: _", float(_NODE_W - 2 * _ATTR_PAD))
+            for li, line_text in enumerate(lines_iter):
                 display = line_text if li == 0 else f"  {line_text}"
                 label_elements.append(SceneText(
                     element_id=f"{scene_id}-attr-{nname}-{key}-{li}",
@@ -984,9 +1065,23 @@ def requirement_to_html(src: str, *, width_hint: int = 0, height_hint: int = 0) 
             f'<div style="background:{body_fill}; padding:{_ATTR_PAD}px 6px; '
             f'font-size:{_FONT_ATTR}px; color:{_TEXT_COLOR}; overflow:hidden;">'
         )
-        for key, val in node.get("attrs", {}).items():
-            wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
-            for li, line_text in enumerate(wrapped):
+        _html_nl = fl.node_layouts[nname]
+        for attr_idx, (key, _) in enumerate(node.get("attrs", {}).items()):
+            # Use the stored TextLayout from FinalizedLayout so HTML and SVG
+            # consume the same wrapped lines — satisfying AC6 (HTML/SVG identity).
+            member_tl = (
+                _html_nl.member_layouts[attr_idx]
+                if attr_idx < len(_html_nl.member_layouts)
+                else None
+            )
+            if member_tl is not None:
+                lines_iter = [
+                    "".join(run.text for run in line.runs)
+                    for line in member_tl.lines
+                ] or [f"{key}: "]
+            else:
+                lines_iter = _wrap_text_px(f"{key}: _", float(_NODE_W - 2 * _ATTR_PAD))
+            for li, line_text in enumerate(lines_iter):
                 display = line_text if li == 0 else f"  {line_text}"
                 parts.append(
                     f'<div style="height:{_ATTR_H}px; overflow:hidden; white-space:nowrap;">'
@@ -994,7 +1089,6 @@ def requirement_to_html(src: str, *, width_hint: int = 0, height_hint: int = 0) 
                 )
         parts.append("</div>")  # body
         parts.append("</div>")  # node card
-
     # SVG overlay for edges
     parts.append(
         f'<svg style="position:absolute; top:0; left:0; overflow:visible; pointer-events:none;" '
@@ -1024,7 +1118,8 @@ def requirement_to_html(src: str, *, width_hint: int = 0, height_hint: int = 0) 
         parts.append(
             f'<polyline points="{pts}" '
             f'fill="none" stroke="{_rel_stroke}" stroke-width="1.5" '
-            f'stroke-dasharray="4 2"/>'
+            f'stroke-dasharray="4 2" '
+            f'data-src="{_h(fn)}" data-dst="{_h(tn)}"/>'
         )
         if _edge.label_layout is not None:
             lx = _edge.label_layout.anchor_point.x
@@ -1044,3 +1139,102 @@ def requirement_to_html(src: str, *, width_hint: int = 0, height_hint: int = 0) 
     parts.append("</svg>")
     parts.append("</div>")
     return "".join(parts)
+
+
+# ── Scaling coherence validator ───────────────────────────────────────────────
+
+class ScalingViolation:
+    """Describes a detected scaling incoherence in a FinalizedLayout."""
+
+    def __init__(self, edge_id: str, detail: str) -> None:
+        self.edge_id = edge_id
+        self.detail = detail
+
+    def __repr__(self) -> str:
+        return f"ScalingViolation(edge_id={self.edge_id!r}, detail={self.detail!r})"
+
+
+def validate_requirement_scaling_coherence(
+    layout: "FinalizedLayout",
+    tolerance: float = 0.02,
+) -> list[ScalingViolation]:
+    """Detect partially-scaled layouts where text bounds are at a different scale
+    than node or edge geometry.
+
+    Two checks run for each edge label:
+
+    **Check A** — ``bounds.w ≈ layout.width``: catches the case where
+    ``EdgeLabelLayout.bounds`` were scaled (along with node bounds) but the
+    ``TextLayout`` was not — i.e. text geometry is still at natural scale while
+    positional geometry is at the target scale.
+
+    **Check B** — ``anchor_point.x ≈ bounds.x + bounds.w / 2``: catches the
+    opposite direction — node bounds (and thus edge waypoints and anchor points)
+    were scaled, but ``bounds`` were not updated to match. Mermaid ``compile_requirement``
+    constructs labels so that ``bounds.x = anchor.x - bounds.w / 2``, making this
+    invariant exact at compile time.  If anchor_point is at 2× but bounds stay at
+    1×, the anchor will be far from the bounds centre.
+
+    Together the two checks cover both directions of partial scaling:
+    - "node bounds 2×, text (label bounds + TextLayout) 1×" → caught by Check B
+    - "node bounds 1×, label bounds 2×, TextLayout 1×" → caught by Check A
+
+    Parameters
+    ----------
+    layout:
+        A ``FinalizedLayout`` returned by ``compile_requirement()``.
+    tolerance:
+        Relative tolerance as a fraction of the reference quantity.
+        Defaults to 2% (0.02).
+
+    Returns
+    -------
+    list[ScalingViolation]
+        Empty when the layout is coherent.
+
+    Raises
+    ------
+    RuntimeError
+        When any violation is detected.  The exception message lists every
+        violation so callers can diagnose partial scaling at a glance.
+    """
+    violations: list[ScalingViolation] = []
+    for edge in layout.routed_edges:
+        lbl = edge.label_layout
+        if lbl is None:
+            continue
+
+        # Check A: bounds.w must match layout.width within tolerance.
+        layout_w = lbl.layout.width
+        bounds_w = lbl.bounds.w
+        if layout_w > 0.0:
+            ratio_a = abs(bounds_w - layout_w) / layout_w
+            if ratio_a > tolerance:
+                violations.append(ScalingViolation(
+                    edge.edge_id,
+                    f"Check A: bounds.w={bounds_w:.2f} but layout.width={layout_w:.2f} "
+                    f"(ratio={ratio_a:.3f} > tolerance={tolerance})",
+                ))
+
+        # Check B: anchor_point.x must be the horizontal centre of bounds.
+        # At compile time bounds.x = anchor.x - bounds.w/2, so centre = anchor.x.
+        # A partially-scaled layout breaks this because anchor_point is derived from
+        # waypoints (scaled with nodes) while bounds may remain unscaled.
+        anchor_x = lbl.anchor_point.x
+        bounds_cx = lbl.bounds.x + lbl.bounds.w / 2
+        ref_b = max(abs(anchor_x), abs(bounds_cx), 1.0)
+        ratio_b = abs(anchor_x - bounds_cx) / ref_b
+        if ratio_b > tolerance:
+            violations.append(ScalingViolation(
+                edge.edge_id,
+                f"Check B: anchor_point.x={anchor_x:.2f} but bounds.cx={bounds_cx:.2f} "
+                f"(ratio={ratio_b:.3f} > tolerance={tolerance})",
+            ))
+
+    if violations:
+        details = "; ".join(repr(v) for v in violations)
+        raise RuntimeError(
+            f"Requirement layout has partially-scaled text bounds ({len(violations)} "
+            f"violation(s)): {details}"
+        )
+    return violations
