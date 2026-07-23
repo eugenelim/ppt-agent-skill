@@ -4,9 +4,10 @@
 > [`../CONVENTIONS.md`](../CONVENTIONS.md#2-adr--architecture-decision-records--docsadr)
 > for what goes here and what doesn't.
 
-| #    | Title                                       | Status   |
-| ---- | ------------------------------------------- | -------- |
-<!-- no ADRs yet -->
+| #    | Title                                       | Status       |
+| ---- | ------------------------------------------- | ------------ |
+| 001  | [ELK as Primary Layout Engine for Graph-Topology Diagrams](001-elk-layout-engine.md) | Accepted     |
+| 002  | [Mermaid Render Lift Seam](002-mermaid-render-lift-seam.md) | Informational |
 
 ## Adding a new ADR
 

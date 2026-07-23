@@ -270,6 +270,14 @@
     <div class="label">PPT AGENT SKILL · WORLD-CLASS</div>
     <h1>风格预览<em>画廊。</em></h1>
     <p class="deck">30 个世界级演示文稿风格，按 5 板块分组。每张卡片是真实 1280×720 设计稿的缩略预览；有封面 / 详情两版的风格可切换查看，点击 ↗ 打开原尺寸。</p>
+    <p class="deck" style="margin-top:10px; font-size:12px; color:rgba(255,255,255,0.4); font-family:'JetBrains Mono',monospace; letter-spacing:0.01em;">
+      ⚠ Non-canonical mock — these files use an ad-hoc CSS variable vocabulary
+      (<code>--accent</code>, <code>--bg-base</code>, <code>--display-font</code>, …)
+      rather than the canonical set the real pipeline injects from <code>style.json</code>
+      (<code>--accent-1..4</code>, <code>--card-bg-from/to</code>, <code>--font-primary</code>).
+      Diagram recipes target the canonical set and theme correctly under the real pipeline;
+      they render low-contrast when fed this gallery's <code>:root</code> directly.
+    </p>
     <div class="stats">
       <div class="stat"><div class="num">30</div><div class="l">STYLES</div></div>
       <div class="stat"><div class="num">5</div><div class="l">CATEGORIES</div></div>
