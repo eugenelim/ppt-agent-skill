@@ -504,6 +504,235 @@ def _render_legend_from_layout(layout: "FinalizedLayout") -> str:
     return _render_legend(stubs, layout.group_layouts)  # type: ignore[arg-type]
 
 
+def _build_group_tree(
+    groups: "dict[str, _Group]",
+) -> "tuple[dict[str, list[str]], list[str]]":
+    """Extract parent→children map and DFS post-order traversal from a group dict.
+
+    Returns ``(children_map, post_order)`` where:
+    - ``children_map[gid]`` = list of direct child group IDs (empty list for leaves).
+    - ``post_order`` = DFS post-order list (inner/leaf groups before outer/root groups).
+
+    Root groups are those with no ``parent_group`` or whose ``parent_group`` is
+    not present in ``groups``.
+    """
+    children: "dict[str, list[str]]" = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        if grp.parent_group and grp.parent_group in groups:
+            children[grp.parent_group].append(gid)
+    root_groups = [
+        gid for gid, grp in groups.items()
+        if not grp.parent_group or grp.parent_group not in groups
+    ]
+
+    post_order: "list[str]" = []
+    _seen: "set[str]" = set()
+
+    def _visit(gid: str) -> None:
+        if gid in _seen:
+            return
+        _seen.add(gid)
+        for c in children[gid]:
+            _visit(c)
+        post_order.append(gid)
+
+    for gid in root_groups:
+        _visit(gid)
+
+    return children, post_order
+
+
+def _partition_edges(
+    edges: "list[_Edge]",
+    nodes: "dict[str, _Node]",
+    groups: "dict[str, _Group]",
+) -> "tuple[list[_Edge], list[_Edge], list[_Edge]]":
+    """Classify edges as free, intra-group, or cross-boundary.
+
+    Returns ``(free, intra, cross)`` — mutually exclusive, in this precedence:
+
+    - **free**: neither src nor dst is in any group.
+    - **intra**: both endpoints share the same deepest group (``node.group``).
+    - **cross**: at least one endpoint is grouped and endpoints don't share deepest group.
+
+    "Deepest group" is the group that directly contains the node (``nodes[nid].group``).
+    Missing nodes are treated as ungrouped.
+    """
+    free: "list[_Edge]" = []
+    intra: "list[_Edge]" = []
+    cross: "list[_Edge]" = []
+    for e in edges:
+        src_node = nodes.get(e.src)
+        dst_node = nodes.get(e.dst)
+        src_grp = src_node.group if src_node is not None else None
+        dst_grp = dst_node.group if dst_node is not None else None
+        if src_grp is None and dst_grp is None:
+            free.append(e)
+        elif src_grp == dst_grp:
+            intra.append(e)
+        else:
+            cross.append(e)
+    return free, intra, cross
+
+
+def _expand_boundary_gates(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    groups: "dict[str, _Group]",
+) -> "tuple[list[_Edge], dict[str, _Edge]]":
+    """Inject dummy gate nodes for each cross-boundary edge and split it into two.
+
+    For each cross-boundary edge ``e`` (classified by ``_partition_edges``):
+
+    1. Creates a gate node ``_Node(id=f"_gate_{e.edge_id}", is_dummy=True, ...)``
+       and adds it to ``nodes``.
+    2. Replaces ``e`` with two edges: ``src→gate`` (no label, no arrowhead) and
+       ``gate→dst`` (carries ``label``, ``target_marker``, and stable ``edge_id``).
+    3. Records ``gate_id → original_edge`` in ``gate_to_original``.
+
+    **Guard**: edges where src or dst starts with ``"_sm_"`` are passed through
+    unchanged — those are state-diagram proxy nodes handled by ``statediagram.py``.
+
+    Returns ``(new_edges_list, gate_to_original)``.
+    """
+    _, _, cross = _partition_edges(edges, nodes, groups)
+    cross_ids: "set[int]" = {id(e) for e in cross}
+    gate_to_original: "dict[str, _Edge]" = {}
+    new_edges: "list[_Edge]" = []
+
+    for e in edges:
+        if id(e) not in cross_ids:
+            new_edges.append(e)
+            continue
+        # Guard: skip state-diagram proxy endpoints (already handled by statediagram.py)
+        if e.src.startswith("_sm_") or e.dst.startswith("_sm_"):
+            new_edges.append(e)
+            continue
+        # Build a stable gate ID from the edge's own ID (fallback: src->dst)
+        _eid = e.edge_id if e.edge_id else f"{e.src}->{e.dst}"
+        gate_id = f"_gate_{_eid}"
+        gate_node = _Node(
+            id=gate_id,
+            label="",
+            shape="rect",
+            is_dummy=True,
+            x=0,
+            y=0,
+            width=0,
+            height=0,
+        )
+        nodes[gate_id] = gate_node
+        gate_to_original[gate_id] = e
+        # First half: src → gate (no label, no marker at gate)
+        new_edges.append(_Edge(src=e.src, dst=gate_id, label="", style=e.style))
+        # Second half: gate → dst (carries label, target_marker, and stable edge_id suffix)
+        new_edges.append(_Edge(
+            src=gate_id,
+            dst=e.dst,
+            label=e.label,
+            style=e.style,
+            target_marker=e.target_marker,
+            edge_id=(_eid + "_out"),
+        ))
+
+    return new_edges, gate_to_original
+
+
+def _restore_gate_edges(
+    route_dicts: "list[dict]",
+    gate_to_original: "dict[str, _Edge]",
+    nodes: "dict[str, _Node]",
+) -> "list[dict]":
+    """Merge split route-dicts back into single route-dicts for each original edge.
+
+    For each ``gate_id`` in ``gate_to_original``:
+
+    1. Finds the route-dict for ``src→gate_id`` (``d["dst"] == gate_id``) and
+       ``gate_id→dst`` (``d["src"] == gate_id``).
+    2. Concatenates their ``"waypoints"`` lists.
+    3. Builds a new route-dict for the original edge inheriting ``src``, ``dst``,
+       merged waypoints, ``label``, ``style``, ``target_marker``, and ``edge_id``
+       from the original ``_Edge``.
+    4. Removes both halves from the list and removes the gate node from ``nodes``.
+
+    If either half's route-dict is missing (routing failure), any found half is discarded
+    and the gate node is removed from nodes (preventing dangling node references).
+
+    Returns the updated route-dicts list.
+    """
+    if not gate_to_original:
+        return route_dicts
+
+    to_remove: "set[int]" = set()
+    to_add: "list[dict]" = []
+
+    for gate_id, orig in gate_to_original.items():
+        first_idx: "int | None" = None   # route to gate (dst == gate_id)
+        second_idx: "int | None" = None  # route from gate (src == gate_id)
+        for i, d in enumerate(route_dicts):
+            if d.get("dst") == gate_id and first_idx is None:
+                first_idx = i
+            if d.get("src") == gate_id and second_idx is None:
+                second_idx = i
+
+        # Always remove the gate node; on routing failure also discard orphan halves
+        nodes.pop(gate_id, None)
+
+        if first_idx is None or second_idx is None:
+            # Discard any found half to prevent dangling gate-node references
+            if first_idx is not None:
+                to_remove.add(first_idx)
+            if second_idx is not None:
+                to_remove.add(second_idx)
+            continue
+
+        first = route_dicts[first_idx]
+        second = route_dicts[second_idx]
+        merged_wps = list(first.get("waypoints") or []) + list(second.get("waypoints") or [])
+
+        # Compute label position from merged-waypoints midpoint
+        if merged_wps:
+            def _wp_coord(w: object, axis: int) -> float:
+                if isinstance(w, (tuple, list)):
+                    return float(w[axis])
+                return float(getattr(w, ("x", "y")[axis], 0))
+            _mx = sum(_wp_coord(w, 0) for w in merged_wps) / len(merged_wps)
+            _my = sum(_wp_coord(w, 1) for w in merged_wps) / len(merged_wps)
+            _lx, _ly = _mx - 30.0, _my - 9.0
+        else:
+            _lx, _ly = 0.0, 0.0
+
+        _orig_sm = orig.source_marker
+        _orig_tm = orig.target_marker
+        merged: "dict" = {
+            "d": "",
+            "waypoints": merged_wps,
+            "ah": second.get("ah"),
+            "label": orig.label,
+            "style": orig.style,
+            "lx": _lx,
+            "ly": _ly,
+            "rot": 0,
+            "marker_id": second.get("marker_id"),
+            "src": first["src"],
+            "dst": second["dst"],
+            "extra_css": orig.extra_css,
+            "src_label": orig.src_label,
+            "dst_label": orig.dst_label,
+            "bidir": orig.bidir,
+            "source_marker": (_orig_sm.kind if hasattr(_orig_sm, "kind") else _orig_sm),
+            "target_marker": (_orig_tm.kind if hasattr(_orig_tm, "kind") else _orig_tm),
+            "edge_id": orig.edge_id,
+        }
+        to_remove.add(first_idx)
+        to_remove.add(second_idx)
+        to_add.append(merged)
+
+    result = [d for i, d in enumerate(route_dicts) if i not in to_remove]
+    result.extend(to_add)
+    return result
+
+
 def _recursive_group_layout(
     nodes: "dict[str, _Node]",
     edges: "list[_Edge]",
@@ -528,15 +757,8 @@ def _recursive_group_layout(
     # Match _assign_coordinates axis classification exactly: anything not LR/RL is vertical.
     is_outer_tb = outer_direction.upper() not in ("LR", "RL")
 
-    # Build parent → children map
-    children: "dict[str, list[str]]" = {gid: [] for gid in groups}
-    for gid, grp in groups.items():
-        if grp.parent_group and grp.parent_group in groups:
-            children[grp.parent_group].append(gid)
-    root_groups = [
-        gid for gid, grp in groups.items()
-        if not grp.parent_group or grp.parent_group not in groups
-    ]
+    # Build parent→children map and post-order traversal via shared helper
+    children, processed = _build_group_tree(groups)
 
     def _all_member_nodes(gid: str, _seen: "set[str] | None" = None) -> "list[_Node]":
         if _seen is None:
@@ -595,21 +817,6 @@ def _recursive_group_layout(
             if m not in result:
                 result.append(m)
         return result
-
-    # Process groups leaf-first (DFS post-order)
-    processed: "list[str]" = []
-    _visit_seen: "set[str]" = set()
-
-    def _visit(gid: str) -> None:
-        if gid in _visit_seen:
-            return
-        _visit_seen.add(gid)
-        for c in children[gid]:
-            _visit(c)
-        processed.append(gid)
-
-    for gid in root_groups:
-        _visit(gid)
 
     for gid in processed:
         grp = groups[gid]
@@ -876,6 +1083,20 @@ def _compile_flowchart(
         raise ValueError("No nodes found in diagram source.")
 
     _init_cfg = _parse_init_config(src)
+
+    # ── Gate injection for inner-direction cross-boundary edges ──────────────────
+    # Only inject when groups exist, this is a flowchart (not statediagram), and at
+    # least one group declares a direction that differs from the outer layout direction.
+    # Gate nodes are is_dummy=True so the renderer skips them; _restore_gate_edges
+    # removes them from nodes and merges the split route-dicts before IR construction.
+    _gate_to_orig: "dict[str, _Edge]" = {}
+    if groups and _top_directive not in _state_directives:
+        _has_inner_dir_pre = any(
+            grp.direction and grp.direction.upper() != direction.upper()
+            for grp in groups.values()
+        )
+        if _has_inner_dir_pre:
+            edges, _gate_to_orig = _expand_boundary_gates(nodes, edges, groups)
 
     # ── ELK layout path ──────────────────────────────────────────────────────
     # Try ELK for positions and edge waypoints. On success, we still run the
@@ -1158,6 +1379,17 @@ def _compile_flowchart(
         route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes,
                                    scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None)
 
+    # ── Gate restoration: merge split route-dicts before IR construction ────────
+    # _restore_gate_edges also removes gate nodes from the `nodes` dict so they
+    # are not included in node_layouts (gate nodes are is_dummy=True and invisible,
+    # but removing them keeps the IR clean).
+    if _gate_to_orig:
+        _restored_routes: "list[dict]" = _restore_gate_edges(
+            list(route_batch.routed), _gate_to_orig, nodes
+        )
+    else:
+        _restored_routes = list(route_batch.routed)
+
     # Build typed IR
     node_layouts = _build_node_layouts_ir(nodes, groups)
     group_layouts = _build_group_layouts_ir(groups, _grp_bboxes)
@@ -1171,10 +1403,10 @@ def _compile_flowchart(
         if getattr(e, "src_group", None) and e.edge_id
     }
     if _src_group_map:
-        _clip_cross_scope_exit_waypoints(route_batch.routed, _src_group_map, _grp_bboxes)
+        _clip_cross_scope_exit_waypoints(_restored_routes, _src_group_map, _grp_bboxes)
 
     routed_edges_ir = _build_routed_edges_ir(
-        route_batch.routed,
+        _restored_routes,
         canvas_area=canvas_w * canvas_h,
         sm_edge_semantic=_sm_edge_semantic if _sm_edge_semantic else None,
     )

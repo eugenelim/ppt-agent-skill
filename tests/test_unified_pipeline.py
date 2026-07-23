@@ -33,6 +33,7 @@ def _src(name: str) -> str:
 _GRAPH_FIXTURES = [
     "flowchart-all-shapes",
     "flowchart-arrows-defs",
+    "flowchart-cross-scope-edge",
     "flowchart-diamond-branch",
     "flowchart-diamond-clipping",
     "flowchart-empty-subgraph",
