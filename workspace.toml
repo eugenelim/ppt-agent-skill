@@ -55,11 +55,6 @@ shipped = [
 
 [backlog]
 open = [
-  # ── Group 3: Needs spec / design first ───────────────────────────────────
-
-  # Compound layout: group tree, edge partitioning, proxy gate nodes, route restoration
-  "backlog-mermaid-p3-compound-layout",
-
   # ── Group 6: Environment-blocked / requires manual QA ────────────────────
 
   # Compute real mmdc_oracle comparison vs our SVG geometry — blocked on SequenceGeometry T7 stability and mmdc availability
