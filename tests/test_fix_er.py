@@ -345,7 +345,6 @@ class TestCardNonOverlap:
         """Native SVG path: entity header rects must not overlap x-wise per rank."""
         from mermaid_render.layout.er import layout_er_scene
         from mermaid_render.scene import SceneRect, LAYER_NODES
-        from collections import defaultdict
 
         src = (REPO_ROOT / "tests" / "fixtures" / "er-cardinality-all.mmd").read_text()
         scene = layout_er_scene(src, width_hint=600)  # downscale from natural ~1064px
@@ -359,17 +358,29 @@ class TestCardNonOverlap:
         ]
         assert len(headers) == 8, f"Expected 8 entity header rects, got {len(headers)}"
 
-        # Group by y-coordinate (proxy for rank) and check x-axis non-overlap
-        by_y: dict[float, list[tuple[float, float]]] = defaultdict(list)
-        for x, y, w in headers:
-            by_y[y].append((x, w))
-        for y_pos, group in by_y.items():
+        # Cluster into ranks by y-tolerance, then check x-axis non-overlap per rank.
+        # er.py centers shorter cards within a taller rank
+        # (y = y_cursor + (rank_h - eh) / 2), so same-rank cards of differing
+        # height get distinct y values — exact-y grouping would split them into
+        # single-element buckets and silently void the check. Intra-rank y
+        # variance is at most (rank_h - min_h)/2 (well under 50px); the
+        # inter-rank gap RANK_GAP is 80px, so a 50px tolerance separates ranks.
+        Y_TOL = 50.0
+        by_y = sorted(headers, key=lambda h: h[1])
+        clusters: list[list[tuple[float, float]]] = []
+        last_y: float | None = None
+        for x, y, w in by_y:
+            if last_y is None or y - last_y > Y_TOL:
+                clusters.append([])
+            clusters[-1].append((x, w))
+            last_y = y
+        for group in clusters:
             group.sort()
             for i in range(1, len(group)):
                 prev_x, prev_w = group[i - 1]
                 curr_x, _ = group[i]
                 assert prev_x + prev_w <= curr_x, (
-                    f"Native path: cards overlap at rank y={y_pos}: "
+                    f"Native path: cards overlap within rank: "
                     f"[{prev_x},{prev_x+prev_w}) vs [{curr_x},...)"
                 )
 
