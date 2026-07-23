@@ -48,8 +48,6 @@ queue = [
   {path = "docs/specs/architecture-elk-authoritative-layout", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
   # 6 — ShapeGeometry painters: one implementation per shape for HTML and SVG
   "docs/specs/shape-geometry-authoritative-painters",
-  # 7 — Class marker clearance: correct clearance, orientation, and label placement
-  "docs/specs/class-diagram-marker-clearance",
   # 8 — Flowchart routing regressions: ELK sections + fallback correctness for 6 fixtures
   {path = "docs/specs/flowchart-elk-routing-regression-pack", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
   # 9 — State local cycles and semantic endpoints
@@ -59,6 +57,7 @@ active = []
 shipped = [
   "docs/specs/er-finalized-layout-and-dynamic-width",
   "docs/specs/requirement-finalized-layout-sizing",
+  "docs/specs/class-diagram-marker-clearance",
 ]
 
 [backlog]
@@ -88,8 +87,6 @@ open = [
   {slug = "diagram-consistency-system-chart-refs"},
   # Create scripts/assemble_diagram_slide.py [--fragment] [--style] [--title] [--annotation] [--output]; auto-read fragment dims
   {slug = "fragment-to-slide-assembler"},
-  # Set non-zero MarkerSpec.clearance (12.0 triangle/diamond, 9.0 open arrow) in _class_rel_markers(); shorten polylines in _route_edges()
-  {slug = "class-diagram-marker-clearance"},
   # Investigate mmdc layout rule for single-participant fragment headers wider than natural canvas; implement override
   {slug = "seq-corr-single-participant-fragment-long-header"},
 
@@ -109,10 +106,6 @@ open = [
 
   # ── Group 5: Deferred until regression observed ───────────────────────────
 
-  # Clip route entry/exit to actual class-card bounding rect — defer until a fixture shows visible overshoot
-  {slug = "class-diagram-route-clip"},
-  # Place edge labels on longest stable segment (≥40 px) — defer until label-overlap regression is observed in fixture gallery
-  {slug = "class-diagram-label-segment"},
   # Extend _routing.py with per-edge column-confinement hints for cycle-back transitions — defer until _routing.py decouples back-edge detection from global lane assignment
   {slug = "state-diagram-local-cycle-routing"},
 

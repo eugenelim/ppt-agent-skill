@@ -11,22 +11,6 @@ Closed/shipped work remains in each spec's Changelog and
 
 ---
 
-## class-diagram-marker-semantics
-
-### class-diagram-marker-clearance
-
-→ `workspace.toml` slug: `class-diagram-marker-clearance`
-
-### class-diagram-route-clip
-
-→ `workspace.toml` slug: `class-diagram-route-clip`
-
-### class-diagram-label-segment
-
-→ `workspace.toml` slug: `class-diagram-label-segment`
-
----
-
 ## sequence-renderer-correctness-pass
 
 ### seq-corr-box-unsupported-fixture

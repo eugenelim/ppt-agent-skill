@@ -142,6 +142,11 @@ _FIXTURE_MINIMUMS: dict[str, FixtureMinimums] = {
     "flowchart-self-loops":       FixtureMinimums(min_entities=2),
     "flowchart-shapes-new":       FixtureMinimums(min_entities=2),
     "flowchart-tb-text-metrics":  FixtureMinimums(min_entities=2),
+    # class
+    "class-basic":                FixtureMinimums(min_entities=2, min_relations=1),
+    "class-methods":              FixtureMinimums(min_entities=2, min_relations=1),
+    "class-relationships-all":    FixtureMinimums(min_entities=2, min_relations=7),
+    "class-visibility":           FixtureMinimums(min_entities=2, min_relations=2),
     # requirement
     "requirement-basic":          FixtureMinimums(min_entities=2),
 }
@@ -323,9 +328,43 @@ def _mm_requirement(svg: str) -> tuple:
     return frozenset(node_set), edges, frozenset(), {}
 
 
+
+
+_MM_CLASS_GROUP_RE = re.compile(
+    r'<g[^>]*class="[^"]*classGroup[^"]*"[^>]*>\s*<g[^>]*id="([^"]+)"'
+)
+_MM_CLASS_EDGE_RE  = re.compile(
+    r'<(?:path|line)[^>]*id="([A-Za-z0-9_]+)-([A-Za-z0-9_]+)(?:-\d+)?"'
+)
+
+
+def _mm_class(svg: str) -> tuple:
+    """Extract topology from an mmdc-rendered classDiagram SVG.
+
+    Node ids: inner <g id="..."> of each <g class="classGroup ..."> element.
+    Edge ids: <path id="SRC-DST[-N]"> elements.
+    Labels: shared _MM_EDGE_LABEL pattern.
+
+    Regex patterns unconfirmed (mmdc not run during initial authoring); emit an
+    empty tuple on mismatch (triggers [EXTRACTOR_GAP] skip in the differential
+    test). Verify by running pytest --run-external-reference tests/test_oracle.py.
+    """
+    nodes  = frozenset(_MM_CLASS_GROUP_RE.findall(svg))
+    raw_edges = _MM_CLASS_EDGE_RE.findall(svg)
+    # Filter out self-loops and entries where both ids look like class names
+    edges = frozenset(
+        (src, dst) for src, dst in raw_edges if src != dst
+    )
+    labels = frozenset(
+        _strip_html_tags(raw) for raw in _MM_EDGE_LABEL.findall(svg)
+        if _strip_html_tags(raw)
+    )
+    return nodes, edges, labels
+
 _DIFFERENTIAL: dict[str, Any] = {
     "flowchart":    _mm_flowchart,
     "architecture": _mm_architecture,
+    "class":        _mm_class,
     "er":           _mm_er,
     "requirement":  _mm_requirement,
 }
@@ -361,6 +400,14 @@ def _compare_topology(
             [
                 f"ref returned {len(ref_nodes)} entities but manifest "
                 f"declares min_entities={mins.min_entities}"
+            ],
+        )
+    if mins.min_relations > 0 and len(ref_edges) < mins.min_relations:
+        return _make_result(
+            fixture_stem, OracleStatus.extractor_gap, 0,
+            [
+                f"ref returned {len(ref_edges)} edges but manifest "
+                f"declares min_relations={mins.min_relations}"
             ],
         )
     if not ref_nodes and not our_semantic:

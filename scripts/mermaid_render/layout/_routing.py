@@ -891,7 +891,7 @@ def _lca_group(
 ) -> "str | None":
     """Return the ID of the lowest common ancestor group for src and dst.
 
-    group_membership maps node_id → group_id (or None for top-level nodes).
+    group_membership maps node_id \u2192 group_id (or None for top-level nodes).
     Returns None when src and dst share the same group or are at the top level.
     """
     src_group = group_membership.get(src_id)
@@ -920,6 +920,111 @@ def _group_boundary_port(
         return (x2, mid_y) if exit_ else (x1, mid_y)
     else:
         return (mid_x, y2) if exit_ else (mid_x, y1)
+
+
+# ── Class-diagram route shortening and label floor ────────────────────────────
+
+def _shorten_cls_route(
+    pts: list,
+    src_cl: float,
+    tgt_cl: float,
+    src_node: "_Node",
+    dst_node: "_Node",
+) -> list:
+    """Shorten a class-diagram edge route at marked endpoints by their clearance.
+
+    For tgt_cl > 0: shortens pts[-1] toward pts[-2] by tgt_cl px.  When the last
+    segment is shorter than tgt_cl, falls back to the second-to-last segment
+    tangent to preserve orientation.  Clamps the result to dst_node's card face.
+
+    For src_cl > 0: same operation at pts[0] using the reversed tangent.
+
+    Returns a new pts list (never mutates the original).
+    """
+    if len(pts) < 2:
+        return list(pts)
+
+    def _bounds(n: "_Node") -> "tuple[int, int, int, int]":
+        return n.x, n.y, _node_render_w(n), _node_render_h(n)
+
+    def _clamp_to_face(
+        px: int, py: int, nx: int, ny: int, nw: int, nh: int,
+        tx: float, ty: float,
+    ) -> "tuple[int, int]":
+        """Push (px, py) to the card face if it falls strictly inside the card."""
+        if nx < px < nx + nw and ny < py < ny + nh:
+            if abs(ty) >= abs(tx):
+                py = ny if ty > 0 else ny + nh
+            else:
+                px = nx if tx > 0 else nx + nw
+        return px, py
+
+    def _shorten_end(
+        points: list, cl: float, at_end: bool,
+        nx: int, ny: int, nw: int, nh: int,
+    ) -> list:
+        ep   = points[-1] if at_end else points[0]
+        prev = points[-2] if at_end else points[1]
+        dx = ep[0] - prev[0]
+        dy = ep[1] - prev[1]
+        seg_len = math.hypot(dx, dy)
+        if seg_len < 1e-9:
+            return points
+
+        if cl >= seg_len and len(points) >= 3:
+            # Fallback: use the second-to-last segment tangent to preserve orientation.
+            fb0 = points[-2] if at_end else points[1]
+            fb1 = points[-3] if at_end else points[2]
+            dx = fb0[0] - fb1[0]
+            dy = fb0[1] - fb1[1]
+            seg_len = math.hypot(dx, dy)
+            if seg_len < 1e-9:
+                return points
+
+        tx = dx / seg_len
+        ty = dy / seg_len
+        new_x = int(round(ep[0] - cl * tx))
+        new_y = int(round(ep[1] - cl * ty))
+        # Prevent overshooting prev (which would invert the final segment direction).
+        # If the new endpoint went past prev in the tangent direction, clamp it to prev.
+        if (new_x - prev[0]) * tx + (new_y - prev[1]) * ty < 0:
+            new_x, new_y = prev[0], prev[1]
+        new_x, new_y = _clamp_to_face(new_x, new_y, nx, ny, nw, nh, tx, ty)
+        result = list(points)
+        if at_end:
+            result[-1] = (new_x, new_y)
+        else:
+            result[0] = (new_x, new_y)
+        return result
+
+    result = list(pts)
+    if tgt_cl > 0:
+        nx, ny, nw, nh = _bounds(dst_node)
+        result = _shorten_end(result, tgt_cl, at_end=True,  nx=nx, ny=ny, nw=nw, nh=nh)
+    if src_cl > 0:
+        nx, ny, nw, nh = _bounds(src_node)
+        result = _shorten_end(result, src_cl, at_end=False, nx=nx, ny=ny, nw=nw, nh=nh)
+    return result
+
+
+def _cls_eligible_span(pts: list) -> float:
+    """Longest eligible span (px) for the 40-px label-floor check on a class edge.
+
+    For collinear paths (all same x or all same y) the eligible span is the full
+    path length.  For multi-segment paths it is the longest individual segment's
+    Manhattan length.
+    """
+    if len(pts) < 2:
+        return 0.0
+    all_same_x = all(p[0] == pts[0][0] for p in pts)
+    all_same_y = all(p[1] == pts[0][1] for p in pts)
+    if all_same_x or all_same_y:
+        return float(abs(pts[-1][0] - pts[0][0]) + abs(pts[-1][1] - pts[0][1]))
+    return float(max(
+        abs(pts[i + 1][0] - pts[i][0]) + abs(pts[i + 1][1] - pts[i][1])
+        for i in range(len(pts) - 1)
+    ))
+
 
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                  direction: str = "TB",
@@ -1480,6 +1585,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     _pts_lr[0] = (int(x1), int(y1))
                     _pts_lr[-1] = (int(x2), int(y2))
             _accumulate_occupied(_pts_lr)
+            if e.style.startswith("cls"):
+                _pts_lr = _shorten_cls_route(
+                    _pts_lr, e.source_marker.clearance, e.target_marker.clearance, s, d,
+                )
             path = _smooth_orthogonal_path(_pts_lr)
             if e.arrow:
                 _ldx_lr, _ldy_lr = 1, 0  # LR nominal default
@@ -1494,8 +1603,20 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if e.label:
                 H = _LABEL_CHIP_H
                 _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
-                lx, ly = _label_on_longest(_pts_lr, e.label, canvas_w, obstacles, placed_labels,
-                                           y_range=_yr)
+                if e.style.startswith("cls") and _cls_eligible_span(_pts_lr) < 40:
+                    _cl_mid_x = (_pts_lr[0][0] + _pts_lr[-1][0]) // 2
+                    _cl_mid_y = (_pts_lr[0][1] + _pts_lr[-1][1]) // 2
+                    _cl_sx = all(p[0] == _pts_lr[0][0] for p in _pts_lr)
+                    _cls_shelf = (
+                        (_cl_mid_x + 4, _cl_mid_y) if _cl_sx
+                        else (_cl_mid_x - _est_label_w(e.label) // 2, _cl_mid_y - H - 4)
+                    )
+                    _lp_cls = _best_label_pos([_cls_shelf], e.label, obstacles, placed_labels, canvas_w, y_range=_yr)
+                    lx = int(_lp_cls.box.x) if _lp_cls.box else _cls_shelf[0]
+                    ly = int(_lp_cls.box.y + _lp_cls.box.h) if _lp_cls.box else _cls_shelf[1]
+                else:
+                    lx, ly = _label_on_longest(_pts_lr, e.label, canvas_w, obstacles, placed_labels,
+                                               y_range=_yr)
             else:
                 lx, ly = int((x1 + x2) // 2), int(min(y1, y2)) - 12
             result.append({"d": path, "waypoints": _pts_lr, "ah": ah, "label": e.label, "style": e.style,
@@ -1588,6 +1709,10 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 _pts[-1] = (int(x2), int(y2))
                 _pts = _ensure_orthogonal(_pts)
         _accumulate_occupied(_pts)
+        if e.style.startswith("cls"):
+            _pts = _shorten_cls_route(
+                _pts, e.source_marker.clearance, e.target_marker.clearance, s, d,
+            )
         path = _smooth_orthogonal_path(_pts)
 
         # Derive arrowhead direction from the actual last path segment so A*-routed
@@ -1606,8 +1731,20 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if e.label:
             H = _LABEL_CHIP_H
             _yr = (int(min(y1, y2)) - H - 4, int(max(y1, y2)) + H + 4)
-            lx, ly = _label_on_longest(_pts, e.label, canvas_w, obstacles, placed_labels,
-                                       y_range=_yr)
+            if e.style.startswith("cls") and _cls_eligible_span(_pts) < 40:
+                _cl_mid_x = (_pts[0][0] + _pts[-1][0]) // 2
+                _cl_mid_y = (_pts[0][1] + _pts[-1][1]) // 2
+                _cl_sx = all(p[0] == _pts[0][0] for p in _pts)
+                _cls_shelf = (
+                    (_cl_mid_x + 4, _cl_mid_y) if _cl_sx
+                    else (_cl_mid_x - _est_label_w(e.label) // 2, _cl_mid_y - H - 4)
+                )
+                _lp_cls = _best_label_pos([_cls_shelf], e.label, obstacles, placed_labels, canvas_w, y_range=_yr)
+                lx = int(_lp_cls.box.x) if _lp_cls.box else _cls_shelf[0]
+                ly = int(_lp_cls.box.y + _lp_cls.box.h) if _lp_cls.box else _cls_shelf[1]
+            else:
+                lx, ly = _label_on_longest(_pts, e.label, canvas_w, obstacles, placed_labels,
+                                           y_range=_yr)
         else:
             lx, ly = int(x1 + _LABEL_PERP), int((y1 + mid_y) // 2)
         result.append({"d": path, "waypoints": list(_pts), "ah": ah, "label": e.label, "style": e.style,
