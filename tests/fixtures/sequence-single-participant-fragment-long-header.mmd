@@ -1,0 +1,8 @@
+sequenceDiagram
+    participant Alice
+    loop This is a very long fragment header label that extends beyond the natural canvas width
+        Alice->>Alice: Self message
+    end
+    alt Another very long condition text that should trigger the header overflow case too
+        Alice->>Alice: Option A
+    end

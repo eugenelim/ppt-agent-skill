@@ -560,7 +560,17 @@ def _layout_lifeline(
             else:
                 frag_w = canvas_w
         else:
-            frag_w = canvas_w
+            # Single-participant (or no participants): use actual fragment rect width, not canvas_w.
+            # canvas_w is wider than the fragment rect for single-participant diagrams.
+            # Note: _frag_x_bounds is defined later; inline the equivalent logic here.
+            _fv = [p for p in it.get("frag_parts", set()) if p in _p_index]
+            if _fv:
+                _lp = min(_fv, key=lambda p: _p_index[p])
+                _rp = max(_fv, key=lambda p: _p_index[p])
+                frag_w = (float(_cx(_rp)) + _box_hw(_rp) + PAD_H / 2
+                          - (float(_cx(_lp)) - _box_hw(_lp) - PAD_H / 2))
+            else:
+                frag_w = canvas_w
         tl = _MEASURER.layout(hdr, _FRAG_HDR_STYLE, max_width=max(1.0, frag_w - 8))
         return max(ROW_H, int(math.ceil(tl.height)) + 8)
 
@@ -1070,9 +1080,11 @@ def _layout_lifeline(
         if it["type"] in ("block", "rect"):
             ry = ll_top + _row_top_list[row]
             if it["type"] == "block":
-                x0, _ = _frag_x_bounds(it)
+                x0, x1 = _frag_x_bounds(it)
+                _lbl_w = max(1, int(x1 - x0) - 8)
                 parts.append(
                     f'<span style="position:absolute;left:{x0 + 4}px;top:{ry + 3}px;'
+                    f'max-width:{_lbl_w}px;overflow-wrap:break-word;'
                     f'font-size:10px;font-weight:700;text-transform:uppercase;'
                     f'letter-spacing:.08em;'
                     f'color:var(--node-fg-dim,var(--text-secondary,#75736C));'

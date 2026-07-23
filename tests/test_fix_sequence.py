@@ -1237,6 +1237,47 @@ class TestNaturalHorizontalLayout:
             f"Long fragment header should widen gap: {gap_long}px vs {gap_short}px"
         )
 
+    def test_single_participant_fragment_long_header_row_height(self):
+        """Single-participant fragment with long header: row tall enough to contain wrapped text."""
+        long_label = "this is a very long loop condition label that extends beyond the natural participant canvas width"
+        src_long = (
+            "sequenceDiagram\n"
+            f"  loop {long_label}\n"
+            "    Alice->>Alice: Self\n"
+            "  end\n"
+        )
+        src_short = (
+            "sequenceDiagram\n"
+            "  loop short\n"
+            "    Alice->>Alice: Self\n"
+            "  end\n"
+        )
+        html_long, geom_long = _layout_lifeline(src_long, "LR", 0)
+        html_short, geom_short = _layout_lifeline(src_short, "LR", 0)
+        # Fragment with long header must be taller than one with short header
+        assert len(geom_long.fragments) == 1
+        assert len(geom_short.fragments) == 1
+        frag_long_h = geom_long.fragments[0].bounds.bottom - geom_long.fragments[0].bounds.top
+        frag_short_h = geom_short.fragments[0].bounds.bottom - geom_short.fragments[0].bounds.top
+        assert frag_long_h > frag_short_h, (
+            f"Long header fragment should be taller: {frag_long_h}px vs {frag_short_h}px"
+        )
+
+    def test_single_participant_fragment_header_has_max_width(self):
+        """Single-participant fragment header span has max-width style to prevent overflow."""
+        long_label = "this is a very long loop condition label wider than the participant box"
+        src = (
+            "sequenceDiagram\n"
+            f"  loop {long_label}\n"
+            "    Alice->>Alice: Self\n"
+            "  end\n"
+        )
+        html, _ = _layout_lifeline(src, "LR", 0)
+        # Should have max-width in the fragment header span
+        assert "max-width:" in html or "overflow-wrap:" in html, (
+            "Fragment header span should have max-width/overflow-wrap to prevent text overflow"
+        )
+
 
 # ── T11: P2 cleanup ───────────────────────────────────────────────────────────
 
