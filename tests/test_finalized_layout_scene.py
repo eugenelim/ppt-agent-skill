@@ -574,6 +574,13 @@ def test_routed_edge_field_coverage_reflective():
     # - bend_count: compactness metric (AC16); layout metadata, not rendered
     # - canvas_area: compactness metric (AC16); layout metadata, not rendered
     # - max_endpoint_distance: compactness metric (AC16); layout metadata, not rendered
+    # state-diagram-local-cycle-routing semantic/routing/scope metadata:
+    # - semantic_source_id: state-machine concept node; non-visual, consumed by oracle adapter
+    # - semantic_target_id: state-machine concept node; non-visual, consumed by oracle adapter
+    # - routing_source_id: actual routing proxy node; non-visual, consumed by validate_finalized_layout
+    # - routing_target_id: actual routing proxy node; non-visual, consumed by validate_finalized_layout
+    # - source_scope: composite state ID containing source; non-visual, consumed by validate_finalized_layout
+    # - target_scope: composite state ID containing target; non-visual, consumed by validate_finalized_layout
     _DECLARED_NON_CONSUMED: set[str] = {
         "src_port",
         "dst_port",
@@ -588,6 +595,12 @@ def test_routed_edge_field_coverage_reflective():
         "bend_count",
         "canvas_area",
         "max_endpoint_distance",
+        "semantic_source_id",
+        "semantic_target_id",
+        "routing_source_id",
+        "routing_target_id",
+        "source_scope",
+        "target_scope",
     }
 
     from scripts.mermaid_render.layout._geometry import MarkerKind as _MarkerKindT

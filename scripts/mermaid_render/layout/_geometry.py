@@ -323,6 +323,16 @@ class RoutedEdge:
     bend_count: int = 0                # number of 90° direction changes
     canvas_area: int = 0               # canvas_bounds.w × .h at routing time
     max_endpoint_distance: float = 0.0 # max segment-midpoint distance to nearest endpoint AABB
+    # ── Semantic / routing endpoint fields (state-diagram-local-cycle-routing) ──
+    # Non-empty only for state-diagram edges where a routing proxy differs from
+    # the semantic source/target (e.g. composite-exit via _sm_end_ proxy).
+    # Default "" for all non-state-diagram edges.
+    semantic_source_id: str = ""   # state-machine concept node (e.g. "Processing")
+    semantic_target_id: str = ""   # state-machine concept node (e.g. "Done")
+    routing_source_id: str = ""    # actual node used for routing (e.g. "Processing_sm_end_")
+    routing_target_id: str = ""    # actual node used for routing
+    source_scope: str = ""         # composite state ID containing source
+    target_scope: str = ""         # composite state ID containing target
 
     def __post_init__(self) -> None:
         # Coerce None defaults to MarkerKind.NONE so callers that don't set these fields
@@ -407,6 +417,9 @@ class FinalizedLayout:
     direction: str          # "TB" | "LR" | "RL" | "BT"
     diagnostics: LayoutDiagnostics
     routing_failures: tuple["RoutingFailure", ...] = ()  # default for compat; always set by pipeline
+    composite_gates: MappingProxyType = field(  # MappingProxyType[str, tuple[str, str]]
+        default_factory=lambda: MappingProxyType({})
+    )
 
     def __post_init__(self) -> None:
         # Always deep-copy before wrapping: MappingProxyType(original) is a view — even
@@ -695,6 +708,31 @@ def validate_finalized_layout(
                     warnings.append(
                         f"Tight clearance ({gap:.1f}px) between nodes"
                     )
+
+    # AC11: scope-marked edges must carry both semantic and routing endpoint IDs
+    for re_obj in layout.routed_edges:
+        if re_obj.source_scope:
+            if not re_obj.semantic_source_id:
+                errors.append(
+                    f"Edge {re_obj.edge_id!r} has source_scope "
+                    f"{re_obj.source_scope!r} but missing semantic_source_id"
+                )
+            if not re_obj.routing_source_id:
+                errors.append(
+                    f"Edge {re_obj.edge_id!r} has source_scope "
+                    f"{re_obj.source_scope!r} but missing routing_source_id"
+                )
+        if re_obj.target_scope:
+            if not re_obj.semantic_target_id:
+                errors.append(
+                    f"Edge {re_obj.edge_id!r} has target_scope "
+                    f"{re_obj.target_scope!r} but missing semantic_target_id"
+                )
+            if not re_obj.routing_target_id:
+                errors.append(
+                    f"Edge {re_obj.edge_id!r} has target_scope "
+                    f"{re_obj.target_scope!r} but missing routing_target_id"
+                )
 
     all_errors = tuple(errors) + tuple(structural_errors)
     return ValidationResult(

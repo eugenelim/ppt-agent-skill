@@ -4443,8 +4443,19 @@ def _clip_cross_scope_exit_waypoints(routed, src_group_map, grp_bboxes) -> None:
         spec["waypoints"] = [boundary, *(_xy(p) for p in wps[first_out:])]
 
 
-def _build_routed_edges_ir(route_results: "tuple | list", canvas_area: int = 0) -> "tuple[RoutedEdge, ...]":
-    """Convert _route_edges() result dicts to typed RoutedEdge IR objects."""
+def _build_routed_edges_ir(
+    route_results: "tuple | list",
+    canvas_area: int = 0,
+    *,
+    sm_edge_semantic: "dict | None" = None,
+) -> "tuple[RoutedEdge, ...]":
+    """Convert _route_edges() result dicts to typed RoutedEdge IR objects.
+
+    canvas_area: canvas_w * canvas_h for compactness metric normalisation.
+    sm_edge_semantic: optional dict keyed by (src, dst) → _Edge, for state-diagram
+    edges that carry semantic_src / source_scope / target_scope info.  Used to
+    populate the six semantic/routing/scope fields on each RoutedEdge.
+    """
     from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect, MarkerKind
     from ._routing import _compute_metrics
     results: list = []
@@ -4556,6 +4567,15 @@ def _build_routed_edges_ir(route_results: "tuple | list", canvas_area: int = 0) 
         _m_bend_count: int = int(_metrics.get("bend_count") or 0)
         _m_canvas_area: int = int(_metrics.get("canvas_area") or 0)
         _m_max_ep_dist: float = float(_metrics.get("max_endpoint_distance") or 0.0)
+        # Semantic / routing / scope fields for state-diagram edges
+        _sem_e = (sm_edge_semantic or {}).get((src, dst))
+        _semantic_source_id = getattr(_sem_e, 'semantic_src', '') if _sem_e else ''
+        _semantic_target_id = getattr(_sem_e, 'semantic_dst', '') if _sem_e else ''
+        _source_scope = getattr(_sem_e, 'source_scope', '') if _sem_e else ''
+        _target_scope = getattr(_sem_e, 'target_scope', '') if _sem_e else ''
+        # routing_source_id / routing_target_id are the actual node IDs used for routing
+        _routing_source_id = src if (_source_scope or _semantic_source_id) else ''
+        _routing_target_id = dst if (_target_scope or _semantic_target_id) else ''
 
         results.append(RoutedEdge(
             edge_id=edge_id,
@@ -4576,6 +4596,12 @@ def _build_routed_edges_ir(route_results: "tuple | list", canvas_area: int = 0) 
             bend_count=_m_bend_count,
             canvas_area=_m_canvas_area,
             max_endpoint_distance=_m_max_ep_dist,
+            semantic_source_id=_semantic_source_id,
+            semantic_target_id=_semantic_target_id,
+            routing_source_id=_routing_source_id,
+            routing_target_id=_routing_target_id,
+            source_scope=_source_scope,
+            target_scope=_target_scope,
         ))
     return tuple(results)
 
@@ -4922,10 +4948,23 @@ def _compile_flowchart(
 
     _state_directives = frozenset({"statediagram-v2", "statediagram"})
     _top_directive = lines[directive_index].strip().split()[0].lower() if lines else ""
+    _sm_edge_semantic: "dict" = {}    # (src, dst) → _Edge with semantic info
+    _sm_composite_gates: "dict" = {}  # composite_id → (entry_gate_id, exit_gate_id)
     if _top_directive in _state_directives:
-        from .statediagram import compile_state_machine as _compile_sm, state_model_to_graph as _sm_to_graph
+        from .statediagram import compile_state_machine as _compile_sm, state_model_to_graph as _sm_to_graph, CompositeState as _CompositeState
         _sm_model = _compile_sm(content_lines)
         nodes, edges, groups = _sm_to_graph(_sm_model)
+        # Capture edge semantic info BEFORE _break_cycles() modifies the edge list
+        for _se in edges:
+            _sm_src = getattr(_se, 'semantic_src', '')
+            _sm_sc = getattr(_se, 'source_scope', '')
+            _sm_sg = getattr(_se, 'target_scope', '')
+            if _sm_src or _sm_sc or _sm_sg:
+                _sm_edge_semantic[(_se.src, _se.dst)] = _se
+        # AC3: collect composite gates from the compiled model
+        for _cs in _sm_model.states:
+            if isinstance(_cs, _CompositeState) and _cs.entry_gate and _cs.exit_gate:
+                _sm_composite_gates[_cs.id] = (_cs.entry_gate.id, _cs.exit_gate.id)
         # Assign stable edge IDs to any not already set by state_model_to_graph
         _eid_counts: dict[str, int] = {}
         for _e in edges:
@@ -5200,8 +5239,17 @@ def _compile_flowchart(
                 if _grp_bboxes:
                     _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
 
+        # Build scope_bbox_map for state-diagram composite back-edge routing (AC5/AC6/AC7)
+        # Maps composite_id → (x0, y0, x1, y1) from group_bboxes using "_g_" prefix convention
+        _scope_bbox_map: "dict" = {
+            gid[3:]: bbox
+            for gid, bbox in (_grp_bboxes or {}).items()
+            if gid.startswith("_g_")
+        } if _sm_composite_gates else {}
+
         # Route edges
-        route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
+        route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes,
+                                   scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None)
 
     # Build typed IR
     node_layouts = _build_node_layouts_ir(nodes, groups)
@@ -5218,7 +5266,11 @@ def _compile_flowchart(
     if _src_group_map:
         _clip_cross_scope_exit_waypoints(route_batch.routed, _src_group_map, _grp_bboxes)
 
-    routed_edges_ir = _build_routed_edges_ir(route_batch.routed, canvas_area=canvas_w * canvas_h)
+    routed_edges_ir = _build_routed_edges_ir(
+        route_batch.routed,
+        canvas_area=canvas_w * canvas_h,
+        sm_edge_semantic=_sm_edge_semantic if _sm_edge_semantic else None,
+    )
 
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
 
@@ -5232,6 +5284,7 @@ def _compile_flowchart(
         canvas_bounds=canvas_bounds,
         direction=direction,
         diagnostics=_empty_diagnostics(),
+        composite_gates=_types.MappingProxyType(_sm_composite_gates),
     )
 
     _algo = "ELK-layered" if _use_elk else "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"

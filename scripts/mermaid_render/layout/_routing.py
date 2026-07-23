@@ -29,6 +29,107 @@ _CLS_KIND_TO_MARKER_ID = {
 _POLY_CLIP_SHAPES = frozenset({"diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag"})
 
 
+# ── SCC-scoped local cycle routing helpers ─────────────────────────────────────
+
+def _tarjan_sccs(nodes: "list[str]", edges: "list[tuple[str, str]]") -> "list[list[str]]":
+    """Iterative Tarjan's SCC algorithm.  < 50 lines, no external libs.
+
+    Returns a list of SCCs, each SCC as a list of node IDs.
+    Single-node SCCs (no self-loop) are included; trivial entries are fine.
+    """
+    adj: "dict[str, list[str]]" = {n: [] for n in nodes}
+    for s, d in edges:
+        if s in adj and d in adj:
+            adj[s].append(d)
+    idx: "dict[str, int]" = {}
+    low: "dict[str, int]" = {}
+    on_stk: "set[str]" = set()
+    stk: "list[str]" = []
+    sccs: "list[list[str]]" = []
+    ctr = [0]
+    for root in nodes:
+        if root in idx:
+            continue
+        idx[root] = low[root] = ctr[0]; ctr[0] += 1
+        stk.append(root); on_stk.add(root)
+        call: "list[list]" = [[root, 0]]
+        while call:
+            frame = call[-1]
+            v, ci = frame[0], frame[1]
+            nbrs = adj[v]
+            if ci < len(nbrs):
+                frame[1] += 1
+                w = nbrs[ci]
+                if w not in idx:
+                    idx[w] = low[w] = ctr[0]; ctr[0] += 1
+                    stk.append(w); on_stk.add(w)
+                    call.append([w, 0])
+                elif w in on_stk:
+                    low[v] = min(low[v], idx[w])
+            else:
+                call.pop()
+                if call:
+                    low[call[-1][0]] = min(low[call[-1][0]], low[v])
+                if low[v] == idx[v]:
+                    scc: "list[str]" = []
+                    while True:
+                        w = stk.pop(); on_stk.discard(w)
+                        scc.append(w)
+                        if w == v:
+                            break
+                    sccs.append(scc)
+    return sccs
+
+
+def _scc_bbox(scc_members: "list[str]", node_map: "dict") -> "tuple[int, int, int, int] | None":
+    """Bounding box (x1, y1, x2, y2) of all real (non-dummy) nodes in the SCC.
+
+    Returns None if scc_members is empty or no real nodes are found.
+    """
+    valid = [node_map[nid] for nid in scc_members
+             if nid in node_map and not getattr(node_map[nid], "is_dummy", False)]
+    if not valid:
+        return None
+    x1 = min(n.x for n in valid)
+    y1 = min(n.y for n in valid)
+    x2 = max(n.x + _node_render_w(n) for n in valid)
+    y2 = max(n.y + _node_render_h(n) for n in valid)
+    return int(x1), int(y1), int(x2), int(y2)
+
+
+def _route_local_cycle(
+    src_bbox: "Rect",
+    dst_bbox: "Rect",
+    scope_bbox: "Rect",
+    be_lane: int = 0,
+    *,
+    direction: str = "TB",
+) -> "list[tuple[int, int]]":
+    """Local cycle back-edge waypoints using scope bounding box as lane reference.
+
+    For TB direction: exits source right edge → vertical lane to the right of
+    scope_bbox → enters destination right edge.
+    For LR direction: exits source bottom → horizontal lane below scope_bbox →
+    enters destination bottom.
+
+    The lane stagger `12 * (be_lane + 1)` keeps multiple back-edges separated.
+    """
+    if direction.upper() in ("LR", "RL"):
+        sx = int(src_bbox.x + src_bbox.w / 2)
+        sy = int(src_bbox.y + src_bbox.h)
+        dx_ = int(dst_bbox.x + dst_bbox.w / 2)
+        dy_ = int(dst_bbox.y + dst_bbox.h)
+        lane_y = int(scope_bbox.y + scope_bbox.h) + 32 * (be_lane + 1)
+        return [(sx, sy), (sx, lane_y), (dx_, lane_y), (dx_, dy_)]
+    else:  # TB / BT
+        sx = int(src_bbox.x + src_bbox.w)
+        sy = int(src_bbox.y + src_bbox.h / 2)
+        dx_ = int(dst_bbox.x + dst_bbox.w)
+        dy_ = int(dst_bbox.y + dst_bbox.h / 2)
+        lane_x = int(scope_bbox.x + scope_bbox.w) + 12 * (be_lane + 1)
+        return [(sx, sy), (lane_x, sy), (lane_x, dy_), (dx_, dy_)]
+
+
 @dataclass(frozen=True)
 class LabelPlacement:
     """Result of label position selection.
@@ -716,85 +817,6 @@ def _best_label_pos(
 
 
 
-# ── SCC detection (iterative Tarjan's) ───────────────────────────────────────
-
-def _tarjan_sccs(
-    nodes: "list[str]",
-    edges: "list[tuple[str, str]]",
-) -> "list[list[str]]":
-    """Compute strongly connected components via iterative Tarjan's algorithm.
-
-    Returns a list of SCCs ordered by discovery (first SCC is the last
-    completed — sinks first). Each SCC is a list of node IDs. Isolated nodes
-    (self-loops excluded, no back-edges) appear as singleton SCCs.
-    Takes < 50 lines, no external library dependencies.
-    """
-    if not nodes:
-        return []
-    adj: dict[str, list[str]] = {n: [] for n in nodes}
-    for s, d in edges:
-        if s in adj and d in adj and s != d:
-            adj[s].append(d)
-
-    index_counter = [0]
-    stack: list[str] = []
-    lowlink: dict[str, int] = {}
-    index_map: dict[str, int] = {}
-    on_stack: dict[str, bool] = {}
-    sccs: list[list[str]] = []
-
-    def _strongconnect(start: str) -> None:
-        # Iterative Tarjan's: work stack holds (node, iterator_over_neighbours, phase)
-        work: list = [(start, iter(adj[start]), True)]
-        while work:
-            v, neighbours, first_visit = work[-1]
-            if first_visit:
-                index_map[v] = lowlink[v] = index_counter[0]
-                index_counter[0] += 1
-                stack.append(v)
-                on_stack[v] = True
-                work[-1] = (v, neighbours, False)
-            try:
-                w = next(neighbours)
-                if w not in index_map:
-                    work.append((w, iter(adj[w]), True))
-                elif on_stack.get(w):
-                    lowlink[v] = min(lowlink[v], index_map[w])
-            except StopIteration:
-                work.pop()
-                if work:
-                    caller = work[-1][0]
-                    lowlink[caller] = min(lowlink[caller], lowlink[v])
-                if lowlink[v] == index_map[v]:
-                    scc: list[str] = []
-                    while True:
-                        w = stack.pop()
-                        on_stack[w] = False
-                        scc.append(w)
-                        if w == v:
-                            break
-                    sccs.append(scc)
-
-    for n in nodes:
-        if n not in index_map:
-            _strongconnect(n)
-    return sccs
-
-
-def _scc_bbox(scc_members: "list[str]", nodes: "dict") -> "tuple[int, int, int, int] | None":
-    """Return (x1, y1, x2, y2) bounding box for all nodes in an SCC.
-
-    Returns None when scc_members is empty or no members are in nodes.
-    """
-    valid = [nodes[nid] for nid in scc_members if nid in nodes and not getattr(nodes[nid], "is_dummy", False)]
-    if not valid:
-        return None
-    x1 = min(n.x for n in valid)
-    y1 = min(n.y for n in valid)
-    x2 = max(n.x + _node_render_w(n) for n in valid)
-    y2 = max(n.y + _node_render_h(n) for n in valid)
-    return x1, y1, x2, y2
-
 
 # ── compactness metrics ───────────────────────────────────────────────────────
 
@@ -902,7 +924,8 @@ def _group_boundary_port(
 def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                  direction: str = "TB",
                  group_bboxes: "dict | None" = None,
-                 route_failures: "list | None" = None) -> RouteBatch:
+                 route_failures: "list | None" = None,
+                 scope_bbox_map: "dict | None" = None) -> RouteBatch:
     """Return a RouteBatch containing routed edge dicts and RoutingFailure entries.
 
     route_failures: deprecated legacy parameter; ignored. Failures are returned in
@@ -1295,10 +1318,17 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                            "source_marker": getattr(e, "source_marker", None),
                            "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             else:
-                # SCC-scoped lane (AC8): use the SCC bbox right edge so back-edges
-                # in a cycle stay contained within the cycle's bounding box.
-                # Clamped to right_lane_x so the path never escapes the canvas.
-                _local_right = _scc_right_for_edge(s.id, d.id)
+                # Composite-scope lane takes priority for scope-exit edges;
+                # SCC-scoped lane is the fallback for intra-cycle back-edges.
+                _scope_id = getattr(e, 'source_scope', '')
+                if _scope_id and scope_bbox_map and _scope_id in scope_bbox_map:
+                    _scope_bb = scope_bbox_map[_scope_id]
+                    _scope_right = _scope_bb[2]  # x1 of (x0, y0, x1, y1)
+                    _local_right = max(_scope_right, d.x + _node_render_w(d))
+                else:
+                    # SCC-scoped lane: use SCC bbox right edge so back-edges
+                    # stay contained within the cycle's bounding box.
+                    _local_right = _scc_right_for_edge(s.id, d.id)
                 lane_x = min(_local_right + 12 * (be_lane + 1), right_lane_x)
                 sx = s.x + _node_render_w(s)
                 sy = s.y + _node_render_h(s) // 2
