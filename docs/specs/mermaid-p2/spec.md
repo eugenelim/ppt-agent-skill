@@ -73,10 +73,10 @@ use the same layout algorithms but bypass HTML serialization.
 - [x] Native SVG IDs and float formatting are deterministic
 - [x] Native SVG text uses `<text>` / `<tspan>` based on `TextLayout`
 - [x] Every supported Mermaid diagram type has a native-scene path
-- [ ] `layout: tidy-tree` selects tidy-tree Mind Map strategy (deferred: backlog-mindmap-tidy-tree)
+- [x] `layout: tidy-tree` selects tidy-tree Mind Map strategy
 - [x] Default radial Mind Map behavior still covered independently
-- [ ] Tidy-tree uses variable measured node dimensions (deferred: backlog-mindmap-tidy-tree)
-- [ ] Tidy-tree: zero node overlap and zero tree-edge crossings on regression set (deferred: backlog-mindmap-tidy-tree)
+- [x] Tidy-tree uses variable measured node dimensions
+- [x] Tidy-tree: zero node overlap and zero tree-edge crossings on regression set
 - [x] Timeline source order preserved
 - [x] Timeline continuation events belong to correct task column
 - [x] Timeline uses task/event columns (not alternating above/below)
