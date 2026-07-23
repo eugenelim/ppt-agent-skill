@@ -135,46 +135,9 @@ current `charts/` and `styles/` file set (or restores the missing files).
   code sites to one. Out of scope for `reference-runbook-page-types` (which added
   both values to every site in lockstep as the spec's *Always do* demanded).
 
-## slide-intent-review
-
-- **Discovered (not an AC deferral): the review gate (and the whole Step-4 planning
-  chain) is honor-system, not mechanically enforced.** The soft-token defect that let
-  the model skip Step 4.5 is fixed in wording (matched Step 1's `[STOP]` pattern +
-  de-optionalized the cheatsheet; `check_step45_review_gate` pins it). But wording is
-  still adherence-based: real runs (Agentic-RAG, OSS onboarding) skipped straight from
-  interview to slide HTML, so `planning/*.json` was never persisted and Step 4.5 had no
-  artifact to run on. A hook is **not portable** — it lives in the consumer's
-  `settings.json`, not the installed skill. Unblocked by a follow-up that bakes the gate
-  into the skill's *own* export scripts (`html_packager.py` / `html2svg.py` /
-  `svg2pptx.py` refuse to produce the deliverable unless `planning/*.json` exists,
-  passes `planning_validator`, and a `runtime/.review-consent` marker is present) — the
-  one mechanical enforcement that travels with the skill. Out of scope for the
-  soft-token bug-fix.
-- **Discovered (not an AC deferral): Step 4 planning-persistence is skippable.** Step 4's
-  PageAgent flow + `planning_validator` "强制闸门" are documented but not enforced; the
-  model can plan in-context and emit `slides/*.html` directly. Same root cause and same
-  fix as the item above (export-script gate); tracked together.
-
-## proof-gate-enforcement
-
-- **Deferred: make the marker truly mechanical via the export scripts.** Shipped:
-  `proof_gate.py` records a `runtime/proof/gate.json` decision marker and `--check`
-  hard-fails pre-render; `SKILL.md` Step 5c runs it. But this is still *prose-invoked*
-  (a model that skips Step 4.5 can skip the `--check` too). The portable, unskippable
-  form is the **export-script gate** already tracked under `slide-intent-review` above:
-  `html_packager.py` / `html2svg.py` / `svg2pptx.py` refuse to produce the deliverable
-  unless `gate.json` (serving as / aliasing the `runtime/.review-consent` marker) is
-  present. `gate.json` is the marker that follow-up should consume — track together.
-- **Deferred: formal-acceptance wiring in `milestone_check.py`.** If `milestone_check`
-  is ever wired into Step 6 as a run acceptance gate, add a `gate_status` check to
-  `check_preview` / `check_step5` so a proof-skipped deck also fails acceptance
-  post-render. Dropped from this spec because `milestone_check` stages are post-render
-  and currently unwired from the flow (see spec Assumptions / plan Declined patterns).
-
 ## owasp-llm-agentic-security
 
 Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic Skills Top 10 review.
-
 
 - **no-sandbox-container-isolation (AST06 / ASI02):** Puppeteer scripts launch with `--no-sandbox` (needed in
   non-userns environments). The portable mitigation is an OS-level container with `seccomp`/`AppArmor` profiles.
@@ -182,22 +145,8 @@ Security hardening items deferred from the 2026-07-04 OWASP LLM Top 10 + Agentic
   `--no-sandbox` inside the container. Unblocked by: adding a Docker or OCI container spec for the render
   step and documenting it in SKILL.md Step 6.
 
-- **proof-gate-harness-hook (Nit 7):** `proof_gate.py --decision render-direct` is self-attested (model can write
-  it without presenting the choice). The truly unskippable form requires a harness `PreToolUse` hook in
-  `settings.json` that fires before `html_packager.py`/`html2svg.py` and checks `gate.json`. Track together
-  with the `slide-intent-review` export-script gate above.
-
 ## render-visual-check-and-diagram-routing
 
-- **render-gate-automated-invocation:** the render-completeness gate
-  (`milestone_check.py 4 --with-visual-qa`: PNG-per-slide + freshness + `visual_qa`
-  batch) is invoked by a **prose** render-done step in SKILL.md; a future HTML-only
-  fan-out that skips both Stage 3 and the gate invocation would reproduce the original
-  failure (nothing runs the check). The gate itself is mechanical and cannot be fooled;
-  only its *invocation* is discretionary. Fix: wire the gate into an automated seam — a
-  render-driver step or a harness `PreToolUse` hook before the Step-6 export scripts
-  (track with `proof-gate-harness-hook` above). Deliberately deferred: spec AC B accepts
-  "naming the invocation point" as the fix for this loop.
 - **render-gate-live-e2e-qa:** the gate's live end-to-end QA (render a real fixture deck
   through `--with-visual-qa`) was not run in the implementing environment (puppeteer not
   installed; a live install triggers `npm ci`). Covered instead by unit tests

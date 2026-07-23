@@ -141,3 +141,20 @@ opt-in, and the skill must activate on English prompts.
   unwired from the flow); rationale in [`plan.md`](plan.md) Declined patterns. A
   future formal-acceptance wiring can add a marker check to
   `check_preview`/`check_step5` (follow-up in `docs/backlog.md`).
+
+## Amendment — mechanical export-script gate (2026-07-22)
+
+The export scripts now enforce the gate mechanically (no longer prose-invoked):
+
+- `scripts/html_packager.py`, `scripts/html2svg.py` (`mermaid_render/svg.py`),
+  and `scripts/svg2pptx.py` each call `check_deliverable_gate()` (in
+  `proof_gate.py`) before producing any output. They exit 1 unless:
+  1. `planning/*.json` exists and passes `planning_validator` (Step 4 precondition), **and**
+  2. `runtime/proof/gate.json` is present and valid (Step 4.5 precondition).
+- `html_packager.py` and `svg2pptx.py` treat an absent `planning/` dir as a
+  failure (`deck_required=True`); `html2svg.py` silently skips for standalone
+  non-deck diagram conversions.
+- `milestone_check.check_preview` and `check_step5` also call `gate_status()`.
+- `SKILL.md` documents the gate and a harness `PreToolUse` hook option.
+- Known limits (unchanged from original spec): `render-direct` is still a
+  zero-evidence self-attest; `png2pptx.py` and `build_pdf.py` are not gated.

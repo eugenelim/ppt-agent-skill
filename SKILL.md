@@ -555,3 +555,33 @@ python3 scripts/visual_qa.py              # 视觉 QA 双层断言（planning + 
 python3 tools/smoke_test.py             # 我们简化版端到端冒烟测试
 python3 tools/smoke_skill.py            # sunbigfly 完整版冒烟测试
 ```
+
+---
+
+## 可选加固：Harness PreToolUse 钩子
+
+**脚本内置闸门（已上线）**：`html_packager.py` / `html2svg.py` / `svg2pptx.py` 现已内置 Step 4.5 前置闸门检查——调用时先运行 `planning_validator`（Step 4 JSON 必须零 ERROR）再检查 `runtime/proof/gate.json`（Step 4.5 决定必须已落盘），任一未满足则 exit 1。该闸门随 Skill 打包；跳过前序步骤的 agent 只要调用上述三个脚本，均会触发 exit 1。注意：闸门仅证明**决定已落盘**，不证明评审实际发生（`render-direct` 为零凭证自证路径）；`png2pptx.py`、`build_pdf.py` 等其他导出脚本暂未纳入同一闸门。
+
+**可选：Harness 层额外加固**。如需在 harness 的 `PreToolUse` 事件中也拦截对这三个导出脚本的调用，可在消费者的 `.claude/settings.json` 中为 Bash 工具注册一个 `PreToolUse` 钩子，在钩子里对包含上述脚本名的命令先行运行 `proof_gate.py <OUTPUT_DIR> --check`。该层是消费者侧的可选配置，不随 Skill 安装；脚本内置闸门是所有安装环境下的通用兜底，无需 Harness 配合即可生效。
+
+示例（消费者 `.claude/settings.json` 片段，具体路径按实际安装位置调整）：
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 SKILL_DIR/scripts/proof_gate.py \"$OUTPUT_DIR\" --check"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+> **注意**：harness 钩子中 `$OUTPUT_DIR` 和 `SKILL_DIR` 须替换为实际值；钩子触发条件（matcher）也应限定为仅在调用导出脚本时才运行，避免误拦截无关 Bash 命令。脚本内置闸门已覆盖"脚本被调用时"的机械拦截，harness 钩子是额外的纵深防御层。

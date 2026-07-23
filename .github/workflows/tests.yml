@@ -142,3 +142,17 @@ jobs:
         with:
           name: fidelity-reports
           path: tests/fidelity/reports/
+
+  deliverable-gate:
+    name: deliverable gate enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install pytest python-pptx lxml
+      # Gate tests: planning_validator + proof gate block export scripts
+      # from producing deliverables unless Step 4 and Step 4.5 are satisfied.
+      - run: python3 -m pytest tests/test_deliverable_gate.py -q
