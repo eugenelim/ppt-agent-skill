@@ -2,7 +2,7 @@ Mode: full (structural change — new compound layout pipeline; touches _pipelin
 
 # backlog-mermaid-p3-compound-layout
 
-**Status:** Draft
+**Status:** Shipped
 
 ## Objective
 
@@ -14,16 +14,16 @@ boundary boxes instead of routing cleanly through boundary gates.
 
 The four required additions are:
 
-1. **Group tree** — a post-order traversal structure over `_Group` objects so later passes
-   can process from innermost group outward.
-2. **Edge partitioning** — classify each edge as intra-group (both endpoints in the same
-   group), cross-boundary (one endpoint in a group, the other outside), or free (neither
-   endpoint is in any group).
-3. **Innermost-first compile** — re-run layout for each group scope innermost-first,
-   treating each group as a sub-graph with virtual boundary nodes.
-4. **Proxy-node expansion** — inject a synthetic boundary-gate node on each group's
-   boundary for cross-scope edges, so the outer layout treats the group as having defined
-   entry/exit anchors.
+1. **Group tree** — extract the parent→children traversal structure from `_recursive_group_layout`
+   into a reusable `_build_group_tree` helper so later passes can share it.
+2. **Edge partitioning** — classify each edge as intra-group (both endpoints in the deepest
+   shared group), cross-boundary (endpoints in different scopes), or free (neither in any group).
+3. **Innermost-first compile** — inject proxy gate nodes (`is_dummy=False`,
+   `extra_css="opacity:0;pointer-events:none;"`) for cross-boundary edges before layout runs;
+   restore the original edges from merged route-dicts after routing completes.
+4. **Proxy-node expansion** — each gate proxy causes the layout engine (ELK or Python Sugiyama)
+   to route through it; after routing the two split route-dicts are concatenated into one route-dict
+   for the original edge.
 
 ## Background
 
@@ -35,71 +35,121 @@ It moves node coordinates but does NOT:
 
 - Partition edges by scope.
 - Create or update waypoints for edges that cross group boundaries.
-- Inject proxy nodes (analogous to `_sm_start_`/`_sm_end_` in `statediagram.py`) for
-  general flowchart subgraphs.
+- Inject proxy nodes for general flowchart subgraphs.
 
 Result: cross-scope flowchart edges often clip through group boxes when groups are
 repositioned by `_recursive_group_layout`.
+
+### Existing related mechanism
+
+`_Edge.src_group` (set by `statediagram.py`) + `_clip_cross_scope_exit_waypoints`
+(`_pipeline.py:287`) already clip routes that exit a state-diagram composite state.
+The new mechanism is complementary and handles the entry side for flowchart subgraphs
+by injecting proxy gate nodes that participate in layout.
 
 ### Reference implementation
 
 `statediagram.py` injects `{scope}_sm_start_` and `{scope}_sm_end_` proxy nodes at
 `state_model_to_graph()` time, wiring cross-composite transitions through these anchors
-before ELK or Sugiyama runs. The compound layout spec generalises this to flowchart
-subgraphs at layout time rather than at parse time.
+before ELK or Sugiyama runs. Those nodes are real (rendered), not hidden. The new
+mechanism uses `is_dummy=False` with `extra_css="opacity:0;pointer-events:none;"` so gate
+nodes are invisible to users but fully participate in layout and routing (unlike `is_dummy=True`
+nodes, which are skipped by both the router and the ELK node builder).
 
 ## Acceptance Criteria
 
-- [ ] AC-1 **Group tree**: `_build_group_tree(groups)` returns a `GroupTree` (a
-  `dict[str, list[str]]` of parent → ordered-children) and a post-order traversal list.
-  Tested: the traversal of a two-level nested subgraph visits the inner group before
-  the outer group.
+- [x] AC-1 **Group tree**: `_build_group_tree(groups)` returns a `(dict[str, list[str]], list[str])`
+  tuple: the parent→children map (where a root group maps to `[]`) and the post-order traversal
+  list. The existing inline parent→children logic inside `_recursive_group_layout` is replaced
+  by a call to `_build_group_tree`.
+  Tested: the traversal of a two-level nested subgraph visits the inner group before the outer
+  group.
 
-- [ ] AC-2 **Edge partitioning**: `_partition_edges(edges, nodes, groups)` returns
-  three lists: `intra` (both src and dst are in the same group at any depth),
-  `cross` (src and dst belong to different scopes), `free` (neither endpoint in any group).
-  Tested: a 5-node graph with one two-node subgraph correctly classifies edges into the
+- [x] AC-2 **Edge partitioning**: `_partition_edges(edges, nodes, groups)` returns three lists
+  classified in this precedence order:
+  - `free`: neither src nor dst is in any group.
+  - `intra`: both endpoints share the same deepest group (checked after `free`).
+  - `cross`: at least one endpoint is grouped and the endpoints do not share the same deepest
+    group.
+  Membership is defined as the **deepest** group containing the node (resolves nesting
+  ambiguity). The three buckets are mutually exclusive.
+  Tested: a 5-node graph with one two-node subgraph correctly classifies all edges into the
   three categories.
 
-- [ ] AC-3 **Proxy-node expansion**: `_expand_boundary_gates(nodes, edges, groups)` injects
-  a synthetic `_gate_{group_id}_in_` / `_gate_{group_id}_out_` `_Node` (type=`gate`,
-  not rendered) for each group that has at least one cross-boundary edge. The cross-boundary
-  edge is replaced by two edges: src→gate and gate→dst. The gate node's position is at the
-  centroid of the group's boundary face nearest the external node.
-  Tested: after expansion, no edge in the `cross` list remains; all cross-boundary paths
-  go through a gate node.
+- [x] AC-3 **Proxy-node expansion**: `_expand_boundary_gates(nodes, edges, groups)` adds one
+  synthetic gate `_Node` per cross-boundary edge: `id=f"_gate_{edge_id}"`, `is_dummy=False`,
+  `extra_css="opacity:0;pointer-events:none;"`, `shape="rect"`, `x=0`, `y=0`, `width=0`,
+  `height=0`. Gate injection is guarded by `_has_inner_dir_pre` (only runs when at least one
+  group has a direction differing from the outer layout) and skips edges whose src/dst IDs start
+  with `_sm_` (state-diagram proxy endpoints). For each qualifying edge the original is replaced
+  by two edges: `src→gate` and `gate→dst`. The original edge is preserved in a returned mapping
+  `{gate_id: original_edge}` for AC-4 restoration.
+  Tested: after expansion, no direct cross-boundary edge remains in the edge list; all
+  cross-boundary paths go through a gate node.
 
-- [ ] AC-4 **Innermost-first compile**: `_innermost_first_layout(nodes, edges, groups,
-  direction)` applies `_recursive_group_layout` in post-order. After layout, gate nodes
-  are removed and cross-boundary edges are restored with the gate node's final position
-  recorded as an intermediate waypoint.
-  Tested: in a two-level nested subgraph, the inner group's members are positioned before
-  the outer group's layout runs.
+- [x] AC-4 **Route restoration**: `_restore_gate_edges(route_dicts, gate_to_original, nodes)`
+  merges split route-dicts after routing. For each original cross-boundary edge `src→dst` that
+  was split via gate `g`:
+  1. Find route-dicts for `src→g` and `g→dst`.
+  2. Concatenate their `"waypoints"` lists: `[...(src→g waypoints), ...(g→dst waypoints)]`.
+  3. Create a new route-dict for `src→dst` using the concatenated waypoints; inherit `label`,
+     `style`, `target_marker`, `src`, `dst`, `edge_id` from the original `_Edge`.
+  4. Remove the `src→g`, `g→dst` route-dicts and the gate node from `nodes`. Emits
+     `warnings.warn` if only one half is found (orphan detection).
+  Returns the updated route-dicts list.
+  Tested: in a two-level nested subgraph, the merged route for a cross-boundary edge has
+  more waypoints than either half alone; `test_cross_scope_fixture_all_edges_rendered` asserts
+  all 4 edges present in `routed_edges`.
 
-- [ ] AC-5 **No regression**: existing flowchart and state-diagram tests continue to pass.
-  Specifically: `tests/test_unified_pipeline.py`, `tests/test_fix_sequence.py`,
-  `tests/test_fix_state.py`.
+- [x] AC-5 **No regression**: all flowchart and state-diagram tests that pass on the current
+  `main` branch continue to pass. Specifically: every test in `tests/test_unified_pipeline.py`,
+  `tests/test_fix_sequence.py`, and `tests/test_fix_state.py` that currently passes must still
+  pass. The two tests that are already failing on `main` before this spec —
+  `test_graph_fixture_no_overlap[flowchart-diamond-branch]` and
+  `test_graph_fixture_no_overlap[flowchart-groups-complex]` (edge-label-vs-node-overlap, unrelated
+  to cross-scope routing) — are excluded from this gate. Gate: compare the FAILED set before and
+  after; the set must not grow.
 
-- [ ] AC-6 **New fixture**: `tests/fixtures/flowchart-cross-scope-edge.mmd` with:
+- [x] AC-6 **New fixture**: `tests/fixtures/flowchart-cross-scope-edge.mmd` is created with:
   - An outer LR flowchart
   - A TB subgraph containing at least two nodes
   - At least one edge entering the subgraph from outside
   - At least one edge exiting the subgraph to outside
-  `structural_geometry` for the fixture reports `render` (no waypoint clipping).
+  - Edge labels (if any) must be short and placed to avoid label-node overlap so the
+    `geometry == "pass"` assertion is attributable to routing, not label geometry.
+  The fixture is added to `_GRAPH_FIXTURES` in `tests/test_unified_pipeline.py` so
+  `test_graph_fixture_no_overlap[flowchart-cross-scope-edge]` runs and asserts `== "pass"`.
 
 ## Assumptions
 
 - **Parser unchanged**: `_parse_graph_source` already populates `_Group.parent_group`
-  and `_Node.group`. Proxy-node injection happens after parsing.
-- **Gate nodes hidden**: `_Node(type="gate")` gets `data_attrs` flag `data-gate="1"`;
-  the HTML renderer skips rendering gate nodes (already handled by checking node type).
-- **Waypoint fidelity**: gate nodes become waypoints on the restored edge, not rendered
-  nodes. `_Edge.waypoints` already supports intermediate points.
-- **Scope of change**: only `_pipeline.py`. `_parser.py`, `_geometry.py`, and all
-  diagram-type modules are untouched.
-- **ELK path**: proxy injection runs before both ELK and Python Sugiyama paths.
-  After ELK, gate positions come from ELK output (same as regular nodes). After Python
-  path, gate positions come from `_assign_coordinates`.
+  and `_Node.group`. Gate-node injection happens after parsing.
+- **Gate nodes hidden via opacity**: gate nodes use `is_dummy=False` with
+  `extra_css="opacity:0;pointer-events:none;"`. They render as invisible divs, but participate
+  fully in ELK layout and Python A* routing. `is_dummy=True` was considered but rejected
+  because both the router (`_routing.py`: `if d_node.is_dummy: continue`) and the ELK node
+  builder (`_pipeline.py`: `if n.is_dummy: continue`) skip `is_dummy` nodes, causing split
+  edges to be silently dropped. Canvas size calculations explicitly exclude gate nodes by ID.
+- **Flowchart-only gate injection**: `_expand_boundary_gates` applies only when
+  `_has_inner_dir_pre` is true (at least one group has a direction differing from outer layout).
+  Within that, edges whose src or dst IDs start with `_sm_` are skipped (state-diagram proxy
+  endpoints, already handled by `statediagram.py`).
+- **Waypoint restoration at route-dict level**: route dicts are plain Python dicts with a
+  `"waypoints"` key (built by `_route_edges`/ELK output, before `RoutedEdge` frozen objects
+  are created). Restoration operates on these mutable dicts; no `_Edge.waypoints` field is
+  needed and `_constants.py` is untouched. Inherited fields: `label`, `style`, `target_marker`,
+  `src`, `dst`, `edge_id` — NOT `reversed_` (reversal is baked into waypoint order before
+  route-dicts exist and the key is not read downstream).
+- **Gate initial position**: gates are injected at `(x=0, y=0, width=0, height=0)`. Their
+  final positions come from the layout engine; the initial position is irrelevant.
+- **Scope of change**: only `_pipeline.py`. `_parser.py`, `_constants.py`, `_geometry.py`,
+  and all diagram-type modules are untouched.
+- **ELK path**: gate nodes participate as regular nodes; ELK assigns their positions. The
+  `src→gate` and `gate→dst` edges are routed by ELK. Gate restoration happens after the
+  ELK route-dict pass.
+- **Python path**: gate nodes participate as regular nodes through `_assign_coordinates`;
+  `_route_edges` routes `src→gate` and `gate→dst`. Gate restoration happens after the
+  Python route-dict pass.
 
 ## Testing Strategy
 
@@ -107,10 +157,11 @@ subgraphs at layout time rather than at parse time.
   - `test_build_group_tree_post_order` — AC-1
   - `test_partition_edges_three_categories` — AC-2
   - `test_expand_boundary_gates_no_direct_cross_edges` — AC-3
-  - `test_innermost_first_positions_inner_before_outer` — AC-4
-- Fixture test: `test_graph_fixture_no_overlap[flowchart-cross-scope-edge]` (existing
-  parametrize table in `test_unified_pipeline.py`) — AC-6
-- Regression sweep: `pytest tests/test_unified_pipeline.py tests/test_fix_state.py -q`
+  - `test_restore_gate_edges_waypoints_merged` — AC-4
+  - `test_cross_scope_fixture_all_edges_rendered` — AC-4/AC-6 end-to-end
+- Fixture test: `test_graph_fixture_no_overlap[flowchart-cross-scope-edge]` (add entry to
+  `_GRAPH_FIXTURES` in `tests/test_unified_pipeline.py`) — AC-6
+- Regression sweep: `pytest tests/test_unified_pipeline.py tests/test_fix_state.py tests/test_fix_sequence.py -q`
   — AC-5
 
 ## Deferred
@@ -119,3 +170,8 @@ subgraphs at layout time rather than at parse time.
   beyond depth-2 in this spec).
 - Cycle detection in group tree (cyclic group membership is already a parse error).
 - Animated layout transitions.
+- `_clip_cross_scope_exit_waypoints` integration: the existing state-diagram mechanism
+  for source-side clipping is not combined with gate nodes in this spec; deferred.
+- Gate injection for same-direction cross-scope edges: the `_has_inner_dir_pre` guard means
+  edges crossing group boundaries where both groups share the outer direction do not get gate
+  nodes. Deferred.

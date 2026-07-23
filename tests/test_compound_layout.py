@@ -559,3 +559,202 @@ class TestGroupRegressions:
                 assert nb.y + nb.h <= b.y + b.h + tol, (
                     f"{mid} bottom={nb.y + nb.h:.1f} outside {gid} bottom={b.y + b.h:.1f}"
                 )
+
+
+# ── Compound layout proxy gate tests (spec: backlog-mermaid-p3-compound-layout) ─
+
+
+class TestBuildGroupTree:
+    """AC-1: _build_group_tree returns correct children_map and post_order."""
+
+    def test_build_group_tree_post_order(self):
+        """Two-level nested groups: inner group appears before outer in post_order."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._pipeline import _build_group_tree
+
+        outer = _make_group("outer", ["A", "B"])
+        inner = _make_group("inner", ["C", "D"], parent="outer")
+        groups = {"outer": outer, "inner": inner}
+
+        children_map, post_order = _build_group_tree(groups)
+
+        assert "inner" in post_order, "inner group should be in post_order"
+        assert "outer" in post_order, "outer group should be in post_order"
+        assert post_order.index("inner") < post_order.index("outer"), (
+            f"inner should appear before outer in post_order; got {post_order}"
+        )
+        assert "inner" in children_map["outer"], "inner should be a child of outer"
+        assert children_map.get("inner") == [], "inner has no children"
+
+
+class TestPartitionEdges:
+    """AC-2: _partition_edges returns mutually exclusive free/intra/cross buckets."""
+
+    def test_partition_edges_three_categories(self):
+        """5-node graph with one 2-node subgraph: correct free/intra/cross counts."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._pipeline import _partition_edges
+
+        # Nodes: A, B are ungrouped; C and D are in g1; E is ungrouped
+        nodes = {
+            "A": _make_node("A", x=0, y=0),
+            "B": _make_node("B", x=100, y=0),
+            "C": _make_node("C", x=200, y=0, group="g1"),
+            "D": _make_node("D", x=300, y=0, group="g1"),
+            "E": _make_node("E", x=400, y=0),
+        }
+        groups = {"g1": _make_group("g1", ["C", "D"])}
+        edges = [
+            _make_edge("A", "B"),   # free: A ungrouped, B ungrouped
+            _make_edge("C", "D"),   # intra: both in g1
+            _make_edge("A", "C"),   # cross: A ungrouped, C in g1
+            _make_edge("D", "E"),   # cross: D in g1, E ungrouped
+            _make_edge("B", "A"),   # free: both ungrouped
+        ]
+        free, intra, cross = _partition_edges(edges, nodes, groups)
+
+        assert len(free) == 2, f"Expected 2 free edges, got {len(free)}"
+        assert len(intra) == 1, f"Expected 1 intra edge, got {len(intra)}"
+        assert len(cross) == 2, f"Expected 2 cross edges, got {len(cross)}"
+        assert len(free) + len(intra) + len(cross) == len(edges), (
+            "Buckets must be mutually exclusive and exhaustive"
+        )
+
+
+class TestExpandBoundaryGates:
+    """AC-3: _expand_boundary_gates injects gate nodes for cross-boundary edges."""
+
+    def test_expand_boundary_gates_no_direct_cross_edges(self):
+        """After expansion, no edge directly connects nodes from two different named groups.
+
+        For X (in g1) → Y (in g2), the gate node has no group, so neither X→gate
+        nor gate→Y connects two named groups directly.
+        """
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._pipeline import _expand_boundary_gates
+        from mermaid_render.layout._constants import _Edge as ConstEdge
+
+        nodes = {
+            "X": _make_node("X", x=0, y=0, group="g1"),
+            "Y": _make_node("Y", x=100, y=0, group="g2"),
+        }
+        groups = {
+            "g1": _make_group("g1", ["X"]),
+            "g2": _make_group("g2", ["Y"]),
+        }
+        edges = [ConstEdge(src="X", dst="Y", edge_id="X->Y")]
+
+        new_edges, gate_to_orig = _expand_boundary_gates(nodes, edges, groups)
+
+        # After expansion: no edge should directly connect two DIFFERENT named groups
+        for e in new_edges:
+            src_node = nodes.get(e.src)
+            dst_node = nodes.get(e.dst)
+            src_grp = src_node.group if src_node is not None else None
+            dst_grp = dst_node.group if dst_node is not None else None
+            assert not (src_grp is not None and dst_grp is not None and src_grp != dst_grp), (
+                f"Edge {e.src}→{e.dst} still directly connects group {src_grp} to {dst_grp}"
+            )
+        # One gate was created for the X→Y cross-boundary edge
+        assert len(gate_to_orig) == 1, f"Expected 1 gate, got {len(gate_to_orig)}"
+        gate_id = next(iter(gate_to_orig))
+        assert gate_id.startswith("_gate_"), f"gate_id should start with '_gate_': {gate_id}"
+        assert gate_id in nodes, "Gate node should be in nodes"
+        assert not nodes[gate_id].is_dummy, "Gate node should have is_dummy=False (invisible via extra_css)"
+        assert "opacity:0" in nodes[gate_id].extra_css, "Gate node should be invisible via extra_css"
+
+
+class TestRestoreGateEdges:
+    """AC-4: _restore_gate_edges merges split route-dicts into one."""
+
+    def test_restore_gate_edges_waypoints_merged(self):
+        """Merged route has more waypoints than either half alone."""
+        import sys
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._pipeline import _restore_gate_edges
+        from mermaid_render.layout._constants import _Edge as ConstEdge
+
+        orig = ConstEdge(src="A", dst="B", label="lbl", style="solid", edge_id="A->B")
+        gate_id = "_gate_A->B"
+        gate_to_original = {gate_id: orig}
+
+        nodes: dict = {
+            "A": _make_node("A", x=0, y=0),
+            "B": _make_node("B", x=200, y=0),
+        }
+        gate_node = _make_node(gate_id, x=100, y=0)
+        gate_node.is_dummy = False
+        gate_node.extra_css = "opacity:0;pointer-events:none;"
+        nodes[gate_id] = gate_node
+
+        # Simulate two half route-dicts produced by _route_edges
+        route_dicts = [
+            {
+                "src": "A", "dst": gate_id,
+                "waypoints": [(0, 20), (50, 20)],
+                "label": "", "style": "solid",
+                "lx": 0.0, "ly": 0.0, "rot": 0, "marker_id": None,
+                "d": "", "ah": None, "extra_css": "",
+                "src_label": "", "dst_label": "", "bidir": False,
+                "source_marker": None, "target_marker": None,
+                "edge_id": "A->B",
+            },
+            {
+                "src": gate_id, "dst": "B",
+                "waypoints": [(100, 20), (200, 20)],
+                "label": "lbl", "style": "solid",
+                "lx": 150.0, "ly": 11.0, "rot": 0, "marker_id": "arrow-normal",
+                "d": "", "ah": None, "extra_css": "",
+                "src_label": "", "dst_label": "", "bidir": False,
+                "source_marker": None, "target_marker": None,
+                "edge_id": "A->B_out",
+            },
+        ]
+        first_half_wps = len(route_dicts[0]["waypoints"])
+        second_half_wps = len(route_dicts[1]["waypoints"])
+
+        result = _restore_gate_edges(route_dicts, gate_to_original, nodes)
+
+        assert len(result) == 1, f"Expected 1 merged route-dict, got {len(result)}"
+        merged = result[0]
+        assert merged["src"] == "A", f"src should be A, got {merged['src']}"
+        assert merged["dst"] == "B", f"dst should be B, got {merged['dst']}"
+        assert merged["edge_id"] == "A->B", f"edge_id should be A->B, got {merged['edge_id']}"
+        assert merged["label"] == "lbl", f"label should be 'lbl', got {merged['label']}"
+        assert len(merged["waypoints"]) == first_half_wps + second_half_wps, (
+            f"Expected {first_half_wps + second_half_wps} merged waypoints, "
+            f"got {len(merged['waypoints'])}"
+        )
+        assert len(merged["waypoints"]) > first_half_wps, (
+            "Merged should have more waypoints than first half"
+        )
+        assert len(merged["waypoints"]) > second_half_wps, (
+            "Merged should have more waypoints than second half"
+        )
+        # Gate node should be removed from nodes
+        assert gate_id not in nodes, "Gate node should be removed from nodes after restoration"
+
+
+class TestCrossScopeFixtureEdges:
+    """AC-6: cross-scope fixture must render all 4 edges."""
+
+    def test_cross_scope_fixture_all_edges_rendered(self):
+        """All 4 edges (A→B, B→C, C→D, D→E) must be present in the compiled layout."""
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _compile_flowchart
+        from pathlib import Path
+
+        fixture = Path(__file__).parent / "fixtures" / "flowchart-cross-scope-edge.mmd"
+        src = fixture.read_text()
+        result = _compile_flowchart(src, width_hint=0, options=None)
+
+        edge_pairs = {(e.src_node_id, e.dst_node_id) for e in result.layout.routed_edges}
+        assert ("A", "B") in edge_pairs, f"A→B missing; edges: {edge_pairs}"
+        assert ("B", "C") in edge_pairs, f"B→C missing; edges: {edge_pairs}"
+        assert ("C", "D") in edge_pairs, f"C→D missing; edges: {edge_pairs}"
+        assert ("D", "E") in edge_pairs, f"D→E missing; edges: {edge_pairs}"
