@@ -15,6 +15,10 @@ from ._constants import (
     MIN_EMPTY_GROUP_W, MIN_EMPTY_GROUP_BODY_H,
 )
 from ._routing import _route_edges, _node_render_w
+from ._text import get_default_measurer, GROUP_LABEL
+
+# Process-wide text measurer singleton
+_MEASURER = get_default_measurer()
 
 
 def _nh(text: str) -> str:
@@ -1149,7 +1153,7 @@ def _compute_group_bboxes(
             # Width: at least label_w + 2*GROUP_PAD_X, clamped to MIN_EMPTY_GROUP_W.
             # Height: at least GROUP_PAD_Y_TOP + MIN_EMPTY_GROUP_BODY_H.
             _grp_label = groups[gid].label or ""
-            _label_w = max(len(_grp_label) * 8, NODE_W)  # rough em-width estimate
+            _label_w = max(_MEASURER.layout(_grp_label, GROUP_LABEL, None).max_content_width, NODE_W)
             _emp_w = float(max(_label_w + 2 * GROUP_PAD_X, MIN_EMPTY_GROUP_W))
             _emp_h = float(max(GROUP_PAD_Y_TOP + MIN_EMPTY_GROUP_BODY_H, GROUP_PAD_Y_TOP + GROUP_PAD_Y_BOT))
             bboxes[gid] = [0.0, 0.0, _emp_w, _emp_h]

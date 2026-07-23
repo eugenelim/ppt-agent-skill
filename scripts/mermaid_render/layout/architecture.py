@@ -10,6 +10,10 @@ if TYPE_CHECKING:
     from ._geometry import TextLayout
 
 from ..scene import SvgScene
+from ._text import get_default_measurer, ARCH_SERVICE_LABEL, GROUP_LABEL, EDGE_LABEL
+
+# Process-wide text measurer singleton
+_MEASURER = get_default_measurer()
 
 
 # ── Regex mirrors from _strategies.py ─────────────────────────────────────────
@@ -100,25 +104,11 @@ class ArchitectureDiagramLayout:
 
 # ── Text layout helper ─────────────────────────────────────────────────────────
 
-def _arch_text_layout(label: str, font_size: float = 15.0, font_weight: int = 700) -> "TextLayout":  # type: ignore[return-value]
-    """Single-line TextLayout with bucketed width estimate."""
-    from ._geometry import TextLayout, TextLine, TextRun, TextStyle
-    from ._constants import _measure_text_width
-    line_h = 18.0 if font_size >= 14 else 16.0
-    w = float(max(_measure_text_width(label, int(font_size), font_weight), 10.0))
+def _arch_text_layout(label: str, font_size: float = 15.0, font_weight: int = 700) -> "TextLayout":
+    """Single-line TextLayout measured by the process-wide text measurer."""
+    from ._geometry import TextStyle
     style = TextStyle(font_size=float(font_size), font_weight=font_weight)
-    run = TextRun(text=label, style=style, width=w, height=line_h)
-    line = TextLine(runs=(run,), width=w, height=line_h, baseline=line_h - 4.0)
-    return TextLayout(
-        lines=(line,),
-        width=w,
-        height=line_h,
-        line_height=line_h,
-        min_content_width=min(w, 40.0),
-        max_content_width=w,
-        resolved_font_path=None,
-        resolved_font_family="system-ui",
-    )
+    return _MEASURER.layout(label, style, None)
 
 
 # ── Waypoint extraction (from SVG path string) ─────────────────────────────────
@@ -208,7 +198,7 @@ def _build_arch_layout_graph(nodes: dict, groups: dict, edges: list) -> object:
             id=gid,
             parent_id=getattr(g, "parent_group", None) or None,
             label=label,
-            label_width=float(max(80, len(label) * 8)),
+            label_width=float(max(80, _MEASURER.layout(label, ARCH_SERVICE_LABEL, None).max_content_width)),
             label_height=20.0,
             padding=16.0,
             local_direction=None,

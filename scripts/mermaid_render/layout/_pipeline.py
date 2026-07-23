@@ -38,6 +38,10 @@ from ._renderer import (
     _compute_group_bboxes,
     _ACCENT_CYCLE,
 )
+from ._text import get_default_measurer, GROUP_LABEL
+
+# Process-wide text measurer singleton
+_MEASURER = get_default_measurer()
 
 @dataclass(frozen=True)
 class RenderOptions:
@@ -978,7 +982,7 @@ def _build_layout_graph(
             id=gid,
             parent_id=g.parent_group if g.parent_group else None,
             label=g.label or "",
-            label_width=float(max(80, len(g.label or "") * 8)),
+            label_width=float(max(80, _MEASURER.layout(g.label or "", GROUP_LABEL, None).max_content_width)),
             label_height=20.0,
             padding=16.0,
             local_direction=g.direction.upper() if g.direction else direction,

@@ -67,6 +67,10 @@ from ._layout import (
     _break_cycles,
     _minimize_crossings,
 )
+from ._text import get_default_measurer, ER_ENTITY_HEADER, ER_CELL
+
+# Process-wide text measurer singleton
+_MEASURER = get_default_measurer()
 
 
 # ── Color tokens ──────────────────────────────────────────────────────────────
@@ -157,22 +161,21 @@ def _card_height(attrs: list[dict]) -> float:
 
 
 def _measure_card_width(entity_name: str, attrs: list[dict]) -> float:
-    """Measure the pixel width needed for an entity card.
+    """Measure the pixel width needed for an entity card using the text measurer.
 
-    Uses character-width estimates:
-    - header_w: entity name text at 13 px bold (7.8 px/char + 16 padding)
+    - header_w: measured entity name width at ER_ENTITY_HEADER style + 16 px padding
     - badge_col: 22 px badge column if any PK/FK/UK constraint present
-    - type_col: max type string width at 6.5 px/char + 4 padding
-    - name_col: max attr name width at 7.0 px/char + 4 padding
+    - type_col: max measured type string width at ER_CELL style + 4 px padding
+    - name_col: max measured attr name width at ER_CELL style + 4 px padding
     - row_padding: 16 px (8 px each side)
 
     Clamped between ``_ER_MIN_CARD_W`` and ``_ER_MAX_CARD_W``.
     """
-    header_w = len(entity_name) * 7.8 + 16
+    header_w = _MEASURER.layout(entity_name, ER_ENTITY_HEADER, None).width + 16
     has_badge = any(a.get("constraint") in ("PK", "FK", "UK") for a in attrs)
     badge_col = 22.0 if has_badge else 0.0
-    type_col = max((len(a["type"]) * 6.5 for a in attrs), default=0.0) + 4.0
-    name_col = max((len(a["name"]) * 7.0 for a in attrs), default=0.0) + 4.0
+    type_col = max((_MEASURER.layout(a["type"], ER_CELL, None).width for a in attrs), default=0.0) + 4.0
+    name_col = max((_MEASURER.layout(a["name"], ER_CELL, None).width for a in attrs), default=0.0) + 4.0
     row_padding = 16.0
     raw = max(header_w, badge_col + type_col + name_col + row_padding)
     return float(max(_ER_MIN_CARD_W, min(_ER_MAX_CARD_W, raw)))
