@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
-from planning_validator import load_jsonish, load_planning_pages
+from planning_validator import VALID_PAGE_TYPES, load_jsonish, load_planning_pages
 
 
 PASS_WORDS = {"pass", "passed", "通过", "已通过", "ok"}
@@ -998,7 +998,7 @@ def validate_html(path: Path, page_type: str) -> tuple[ValidationResult, dict[st
         has_footer = bool(re.search(r'<footer[^>]*class=([\'"])[^\'"]*\bslide-footer\b[^\'"]*\1[^>]*>', text, re.IGNORECASE))
         if not has_footer:
             result.error(f"html: page type '{page_type}' must contain a <footer class=\"slide-footer\"> DOM element")
-    elif page_type not in ("cover", "end"):
+    elif page_type not in VALID_PAGE_TYPES:
         result.warn(f"html: unrecognized page_type '{page_type}'")
 
     summary = {
