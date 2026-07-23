@@ -760,20 +760,15 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
 def compile_er(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
     """Parse erDiagram source and return a ``FinalizedLayout`` IR.
 
-    Runs the full Sugiyama pipeline (rank assignment, crossing minimisation,
-    coordinate assignment) and packages the result as an immutable geometry
-    record.  The caller may use this for rendering (HTML or SVG) without
-    repeating the layout work.
-
-    Returns
-    -------
-    FinalizedLayout
-        ``node_layouts[eid].outer_bounds`` holds each entity card's bounding
-        box; ``routed_edges[i].waypoints`` holds the trimmed line endpoints
-        for relationship ``i`` (matching the order of relationships from
-        ``_parse_er_source``).  ``canvas_bounds`` is the natural (unscaled)
-        canvas rectangle.
+    Delegates to ``compile_er_layout()`` so that both SVG and HTML paths
+    consume identical geometry (dynamic card widths, crow-foot markers).
+    Kept as a stable public alias; prefer ``compile_er_layout()`` for new callers.
     """
+    return compile_er_layout(src, width_hint=width_hint)
+
+
+def _compile_er_legacy(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
+    """Legacy Sugiyama-only implementation kept for reference. Not called."""
     from collections import defaultdict
 
     from ._geometry import (
