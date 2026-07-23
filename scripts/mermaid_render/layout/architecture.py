@@ -350,7 +350,7 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
     )
     from ._renderer import _compute_group_bboxes
     from ._routing import _route_edges
-    from ._geometry import Rect, Point, PortLayout, PortSide, EdgeLabelLayout
+    from ._geometry import Rect, Point, PortLayout, PortSide, EdgeLabelLayout, MarkerKind, MarkerSpec
 
     # ── Parse ──────────────────────────────────────────────────────────────────
     lines = src.splitlines()
@@ -423,18 +423,22 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
             dst_side = (m.group(4) or "").upper() or None
             dst_id = m.group(5)
             lbl = (m.group(6) or "").strip()
+            _arrow_src = MarkerSpec(kind=MarkerKind.ARROW, end="SOURCE")
+            _arrow_tgt = MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")
+            _none_tgt = MarkerSpec(kind=MarkerKind.NONE, end="TARGET")
             if op == "<-->":
-                # BiRel: one edge with bidir=True — one path, two arrowheads
+                # BiRel: one edge with bidir (arrowheads on both ends) — one path
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=True, bidir=True,
+                                   style="solid", source_marker=_arrow_src, target_marker=_arrow_tgt,
                                    src_side=src_side, dst_side=dst_side))
             elif op == "<--":
                 edges.append(_Edge(src=dst_id, dst=src_id, label=lbl,
-                                   style="solid", arrow=True,
+                                   style="solid", target_marker=_arrow_tgt,
                                    src_side=dst_side, dst_side=src_side))
             else:
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=(op == "-->"),
+                                   style="solid",
+                                   target_marker=(_arrow_tgt if op == "-->" else _none_tgt),
                                    src_side=src_side, dst_side=dst_side))
 
     if not nodes:

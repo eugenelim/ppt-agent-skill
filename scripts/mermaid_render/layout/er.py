@@ -365,7 +365,7 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         for eid in entity_names
     }
     edges: list[_Edge] = [
-        _Edge(src=rel["from"], dst=rel["to"], label=rel["label"], arrow=False)
+        _Edge(src=rel["from"], dst=rel["to"], label=rel["label"])
         for rel in relationships
     ]
 

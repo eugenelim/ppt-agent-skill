@@ -56,19 +56,6 @@ _ARCH_ICON_MAP: dict[str, str] = {
     "vector": "vector-store",
 }
 
-# C4 element type → asset name
-_C4_ICON_MAP: dict[str, str] = {
-    "person": "users",
-    "person_ext": "users",
-    "systemdb": "database",
-    "containerdb": "database",
-    "system": "node",
-    "system_ext": "node",
-    "container": "connector",
-    "container_ext": "connector",
-    "component": "bolt",
-}
-
 # Flowchart label keyword → icon name (ordered: first match wins; longer phrases before substrings).
 # Used by _infer_label_icons to auto-assign icons when no explicit :::icon-name class is set.
 # Matching uses word boundaries (\b) so short tokens like "cli" or "mcp" don't false-positive
@@ -245,15 +232,35 @@ _NONE_SRC_SPEC: MarkerSpec = MarkerSpec(kind=MarkerKind.NONE, end="SOURCE")
 _NONE_TGT_SPEC: MarkerSpec = MarkerSpec(kind=MarkerKind.NONE, end="TARGET")
 
 
+def _marker_kind(m: object) -> MarkerKind:
+    """Coerce a polymorphic marker to its MarkerKind, total over every form the
+    pipeline produces (MarkerSpec | MarkerKind | str | None) and degrading any
+    unrecognised value to MarkerKind.NONE. Check MarkerKind before str because
+    MarkerKind subclasses str."""
+    if m is None:
+        return MarkerKind.NONE
+    if isinstance(m, MarkerKind):
+        return m
+    kind = getattr(m, "kind", None)  # MarkerSpec
+    if kind is not None:
+        m = kind
+    if isinstance(m, MarkerKind):
+        return m
+    if isinstance(m, str):
+        try:
+            return MarkerKind(m)
+        except ValueError:
+            return MarkerKind.NONE
+    return MarkerKind.NONE
+
+
 @dataclass
 class _Edge:
     src: str
     dst: str
     label: str = ""
     style: str = "solid"          # solid|dotted|thick
-    arrow: bool = True
     reversed_: bool = False       # back-edge flag
-    bidir: bool = False           # True for <--> edges — renders marker-start in addition to marker-end
     source_marker: MarkerSpec = field(default_factory=lambda: _NONE_SRC_SPEC)
     target_marker: MarkerSpec = field(default_factory=lambda: _NONE_TGT_SPEC)
     src_label: str = ""           # text label near source endpoint (e.g. class multiplicities)
@@ -267,6 +274,20 @@ class _Edge:
     dst_side: Optional[str] = None  # architecture-beta port side: L|R|T|B
     edge_id: str = ""             # stable parse-time ID: "src->dst" (or "src->dst#N" for duplicates)
     src_group: Optional[str] = None  # group ID whose boundary clips the source endpoint (cross-scope exit)
+
+    @property
+    def arrow(self) -> bool:
+        """True when a target-end marker (arrowhead) is present. Derived from the
+        canonical target_marker — the single source of truth for edge markers."""
+        return _marker_kind(self.target_marker) != MarkerKind.NONE
+
+    @property
+    def bidir(self) -> bool:
+        """True for <--> edges: an arrowhead on both ends. Derived from the
+        markers — both ends must be plain ARROW (class relationship markers such
+        as diamonds/triangles are not bidirectional)."""
+        return (_marker_kind(self.source_marker) == MarkerKind.ARROW
+                and _marker_kind(self.target_marker) == MarkerKind.ARROW)
 
 
 @dataclass

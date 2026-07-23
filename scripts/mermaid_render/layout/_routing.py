@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 
 from ._constants import (
-    _Node, _Edge,
+    _Node, _Edge, _marker_kind,
     NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
     BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD,
     GROUP_PAD_Y_TOP,
@@ -577,10 +577,9 @@ def _est_label_w(text: str) -> int:
     """Estimate rendered edge-label chip width in px.
 
     Uses _measure_text_width at font_size=12, weight=400, matching the computation
-    in _strategies._estimate_text_width / _make_text_layout_ir. For labels >56 chars
-    the 450px cap creates a minor divergence vs. _make_text_layout_ir (which has no
-    cap); routing and stored bounds can disagree there, but labels that long are unusual
-    and the discrepancy is bounded.
+    in _strategies._estimate_text_width / _make_text_layout_ir. Both apply the same
+    450px cap, so routing placement and stored label bounds agree for labels of any
+    length.
     """
     if not text:
         return 0
@@ -847,15 +846,13 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         elif e.style.startswith("cls"):
             # Class diagram edge: derive marker ID from source_marker / target_marker kind.
             ah_kw = {"back": 9, "half_w": 4}
-            _sm = e.source_marker
-            _tm = e.target_marker
-            _src_kind = _sm.kind if hasattr(_sm, "kind") else _MarkerKind.NONE
-            _tgt_kind = _tm.kind if hasattr(_tm, "kind") else _MarkerKind.NONE
-            if _src_kind != _MarkerKind.NONE and e.arrow:
+            _src_kind = _marker_kind(e.source_marker)
+            _tgt_kind = _marker_kind(e.target_marker)
+            if _src_kind != _MarkerKind.NONE:
                 # Source-end marker → use "-rev" so renderer emits marker-start
                 _mid = _CLS_KIND_TO_MARKER_ID.get(_src_kind, "cls-dep")
                 marker_id = _mid + "-rev"
-            elif _tgt_kind != _MarkerKind.NONE and e.arrow:
+            elif _tgt_kind != _MarkerKind.NONE:
                 _mid = _CLS_KIND_TO_MARKER_ID.get(_tgt_kind, "cls-dep")
                 marker_id = _mid
             else:

@@ -187,11 +187,14 @@ def _insert_dummies(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
             dummy = _Node(id=dummy_id, label="", is_dummy=True, rank=dummy_rank)
             new_nodes[dummy_id] = dummy
             new_edges.append(_Edge(src=prev_id, dst=dummy_id, label="",
-                                   style=e.style, arrow=False,
+                                   style=e.style,
                                    orig_src=e.src, orig_dst=e.dst))
             prev_id = dummy_id
+        # Copy only target_marker: this reproduces the old `arrow=e.arrow` exactly
+        # (arrow ≡ target_marker != NONE) while leaving bidir False, matching the
+        # pre-refactor behaviour where the reassembled segment never carried bidir.
         new_edges.append(_Edge(src=prev_id, dst=e.dst, label=e.label,
-                               style=e.style, arrow=e.arrow,
+                               style=e.style, target_marker=e.target_marker,
                                orig_src=e.src, orig_dst=e.dst))
 
     nodes.update(new_nodes)

@@ -25,7 +25,7 @@ class RenderOptions:
     inferred_legend: bool = True
 
 from ._constants import (
-    _Node, _Edge, _Group,
+    _Node, _Edge, _Group, _marker_kind,
     NODE_CAP, EDGE_CAP, GROUP_CAP,
     NODE_W, NODE_H, COL_GAP, RANK_GAP, CANVAS_PAD,
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
@@ -1374,7 +1374,7 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
                 entity_attrs.setdefault(eid, [])
             er_style = "dotted" if m.group("line").startswith(".") else "solid"
             edges.append(_Edge(
-                src=e1, dst=e2, label=lbl, style=er_style, arrow=False,
+                src=e1, dst=e2, label=lbl, style=er_style,
                 cardinality_src=m.group("card_src") or None,
                 cardinality_dst=m.group("card_dst") or None,
             ))
@@ -1772,7 +1772,7 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
                 _class_members.setdefault(cid, [])
             src_spec, tgt_spec, line_style = _class_rel_markers(op)
             edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(),
-                               style=line_style, arrow=True,
+                               style=line_style,
                                source_marker=src_spec, target_marker=tgt_spec,
                                src_label=mul_src, dst_label=mul_dst))
             continue
@@ -3967,6 +3967,7 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
     nodes: dict[str, _Node] = {}
     groups: dict[str, _Group] = {}
     edges: list[_Edge] = []
+    from ._geometry import MarkerKind, MarkerSpec
 
     # Indentation-based group tracking.
     # Stack of (indent_level, group_id): when a line's indent drops to or
@@ -4039,23 +4040,26 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
             dst_side = (m.group(4) or "").upper() or None
             dst_id = m.group(5)
             lbl = (m.group(6) or "").strip()
+            _arrow_tgt = MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")
+            _none_tgt = MarkerSpec(kind=MarkerKind.NONE, end="TARGET")
             if op == "<-->":
                 # Bidirectional: emit forward + reverse edges so both ends get arrowheads.
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=True,
+                                   style="solid", target_marker=_arrow_tgt,
                                    src_side=src_side, dst_side=dst_side))
                 edges.append(_Edge(src=dst_id, dst=src_id, label="",
-                                   style="solid", arrow=True,
+                                   style="solid", target_marker=_arrow_tgt,
                                    src_side=dst_side, dst_side=src_side))
             elif op == "<--":
                 # Reverse arrow: swap src/dst so layout flows correctly.
                 edges.append(_Edge(src=dst_id, dst=src_id, label=lbl,
-                                   style="solid", arrow=True,
+                                   style="solid", target_marker=_arrow_tgt,
                                    src_side=dst_side, dst_side=src_side))
             else:
                 # --> (directed) or -- (undirected)
                 edges.append(_Edge(src=src_id, dst=dst_id, label=lbl,
-                                   style="solid", arrow=(op == "-->"),
+                                   style="solid",
+                                   target_marker=(_arrow_tgt if op == "-->" else _none_tgt),
                                    src_side=src_side, dst_side=dst_side))
 
     if not nodes:
@@ -4327,6 +4331,7 @@ _REQ_REL_RE = re.compile(
 
 def _layout_requirement(src: str, direction: str, width_hint: int) -> str:
     """requirementDiagram: requirement/element nodes + typed relation edges."""
+    from ._geometry import MarkerKind, MarkerSpec
     content_lines = _directive_content(src)
     nodes: dict[str, _Node] = {}
     edges: list[_Edge] = []
@@ -4378,7 +4383,8 @@ def _layout_requirement(src: str, direction: str, width_hint: int) -> str:
         m = _REQ_REL_RE.match(line)
         if m:
             src_id, rel_type, dst_id = m.group(1), m.group(2).lower(), m.group(3)
-            edges.append(_Edge(src=src_id, dst=dst_id, label=rel_type, style="solid", arrow=True))
+            edges.append(_Edge(src=src_id, dst=dst_id, label=rel_type, style="solid",
+                               target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")))
             continue
 
     if not nodes:
@@ -4609,7 +4615,10 @@ def _make_text_layout_ir(text: str) -> "TextLayout":
     """Minimal single-run TextLayout for building NodeLayout / GroupLayout IR."""
     from ._geometry import TextLayout, TextLine, TextRun, TextStyle
     style = TextStyle()
-    w = _estimate_text_width(text)
+    # Cap at 450px to match _routing._est_label_w; without this, long (>56 char)
+    # labels diverge between routing placement and stored bounds. Affects
+    # node/group width for long labels too (single label-layout path).
+    w = min(450.0, _estimate_text_width(text))
     run = TextRun(text=text, style=style, width=w, height=18.0)
     line = TextLine(runs=(run,), width=w, height=18.0, baseline=14.0)
     return TextLayout(
@@ -5194,11 +5203,10 @@ def _build_layout_graph(
 
     layout_edges = []
     for eid, e in _elk_edge_id_map(edges).items():
-        _sm = e.source_marker
-        _tm = e.target_marker
-        src_mk = _sm.kind if hasattr(_sm, "kind") else (MarkerKind(_sm) if isinstance(_sm, str) else MarkerKind.NONE)
-        _tm_kind = _tm.kind if hasattr(_tm, "kind") else (MarkerKind(_tm) if isinstance(_tm, str) else MarkerKind.NONE)
-        dst_mk = _tm_kind if _tm_kind != MarkerKind.NONE else (MarkerKind.ARROW if e.arrow else MarkerKind.NONE)
+        src_mk = _marker_kind(e.source_marker)
+        # target_marker is now authoritative (all writers populate it), so no
+        # e.arrow fallback is needed.
+        dst_mk = _marker_kind(e.target_marker)
         layout_edges.append(LayoutEdge(
             id=eid,
             sources=[e.orig_src or e.src],
