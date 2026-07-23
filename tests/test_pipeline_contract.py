@@ -435,11 +435,18 @@ class TestNoForbiddenRuntimeDependency:
                     names.add(node.module.split(".")[0])
         return names
 
+    # elk_adapter.py and _strategies.py are exempt from the subprocess ban — ADR-001.
+    _LAYOUT_SUBPROCESS_EXEMPTIONS: frozenset[str] = frozenset({"elk_adapter.py", "_strategies.py"})
+
     def test_no_forbidden_runtime_dependency(self):
         violations: list[str] = []
         for path in self._py_files:
+            if path.name in self._LAYOUT_SUBPROCESS_EXEMPTIONS:
+                forbidden_here = self.FORBIDDEN  # subprocess allowed for exempt file
+            else:
+                forbidden_here = self.FORBIDDEN | self.LAYOUT_ONLY_FORBIDDEN
             imports = self._imported_names(path)
-            for bad in self.FORBIDDEN | self.LAYOUT_ONLY_FORBIDDEN:
+            for bad in forbidden_here:
                 if bad in imports:
                     violations.append(f"{path.name}: imports '{bad}'")
         assert not violations, (
@@ -586,15 +593,19 @@ class TestPortSideAutoForbiddenInFinalizedOutput:
 class TestAlgorithmMetadataIsAccurate:
     """LayoutMetadata.algorithm must name the algorithms actually invoked."""
 
-    EXPECTED = "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
+    PYTHON_ALGO = "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
+    ELK_ALGO = "ELK-layered"
 
     def test_algorithm_metadata_matches_actual_calls(self):
         from mermaid_render.layout._strategies import _compile_flowchart
+        from mermaid_render.layout.elk_adapter import _find_node, _find_elkjs
         src = "flowchart TD\n    A --> B\n    B --> C\n"
         result = _compile_flowchart(src, width_hint=0, options=None)
-        assert result.metadata.algorithm == self.EXPECTED, (
+        elk_available = _find_node() is not None and _find_elkjs() is not None
+        expected = self.ELK_ALGO if elk_available else self.PYTHON_ALGO
+        assert result.metadata.algorithm == expected, (
             f"metadata.algorithm={result.metadata.algorithm!r}, "
-            f"expected {self.EXPECTED!r}. "
+            f"expected {expected!r}. "
             "Must report the algorithms actually invoked, not the enhanced variants."
         )
 

@@ -136,6 +136,15 @@ tasks, not most — the work-loop skill covers when it's the right tool.
 
 <!-- Keep this short. Detailed command reference goes in docs/. -->
 
+**External runtime dependencies** (must be present for full functionality):
+
+| Dependency | Version | Purpose | Install |
+| --- | --- | --- | --- |
+| Node.js | ≥18 | elkjs subprocess for ELK layout | system package manager |
+| elkjs | 0.12.0 | graph layout engine (ELK-layered algorithm) | `npm install --prefix scripts/mermaid_render/layout` (package.json pinned) |
+
+`elkjs` + Node are optional — the pipeline falls back to the Python layout engine when either is unavailable. Without them, `metadata.algorithm` reports `LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner` instead of `ELK-layered`. ADR: `docs/adr/001-elk-layout-engine.md`.
+
 ```bash
 pip install -r requirements.txt && playwright install chromium  # one-time setup
 python tools/smoke_test.py      # phased smoke test (accepts --phase N, --style ID)

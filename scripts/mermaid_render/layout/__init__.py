@@ -71,6 +71,9 @@ from ._geometry import (
     RoutingFailure, LayoutDiagnostics, FinalizedLayout,
     LayoutMetadata, CompiledFlowchart, ValidationResult,
     validate_finalized_layout, _empty_diagnostics,
+    # Pre-layout IR (LayoutGraph)
+    MarkerKind, PortSpec, LayoutNode, LayoutGroup, LayoutEdge, LayoutGraph,
+    SequenceMarkerKind,
 )
 from ._strategies import _dispatch
 
@@ -90,4 +93,6 @@ __all__ = [
     "STYLE_COMPACT", "STYLE_LARGE",
     "THEME_DARK", "THEME_LIGHT", "make_page",
     "_dispatch",
+    "MarkerKind", "SequenceMarkerKind",
+    "PortSpec", "LayoutNode", "LayoutGroup", "LayoutEdge", "LayoutGraph",
 ]

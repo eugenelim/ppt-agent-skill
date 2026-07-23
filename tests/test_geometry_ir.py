@@ -16,6 +16,8 @@ from mermaid_render.layout._geometry import (
     NodeLayout, GroupLayout, EdgeLabelLayout, RoutedEdge,
     LayoutDiagnostics, FinalizedLayout,
     _empty_diagnostics,
+    # Pre-layout IR (T1)
+    MarkerKind, PortSpec, LayoutNode, LayoutGroup, LayoutEdge, LayoutGraph,
 )
 
 
@@ -203,3 +205,206 @@ class TestFinalizedLayout:
     def test_canvas_contains_visible(self):
         layout = self._make_layout()
         assert layout.canvas_bounds.contains(layout.visible_bounds)
+
+
+# ── Pre-layout IR (T1: LayoutGraph) ──────────────────────────────────────────
+
+class TestMarkerKind:
+    def test_values_importable(self):
+        assert MarkerKind.NONE.value == "none"
+        assert MarkerKind.ARROW.value == "arrow"
+        assert MarkerKind.CROW_ZERO_MANY.value == "crow_zero_many"
+
+    def test_crow_variants_present(self):
+        assert MarkerKind.CROW_ONE in MarkerKind
+        assert MarkerKind.CROW_MANY in MarkerKind
+        assert MarkerKind.CROW_ZERO_ONE in MarkerKind
+        assert MarkerKind.CROW_ZERO_MANY in MarkerKind
+
+    def test_string_coercible(self):
+        assert MarkerKind("arrow") == MarkerKind.ARROW
+
+
+class TestPortSpec:
+    def test_construction(self):
+        ps = PortSpec(id="p0", node_id="A", side="NORTH", index=0,
+                      fixed_side=True, fixed_order=False)
+        assert ps.side == "NORTH"
+        assert ps.fixed_side is True
+
+    def test_immutable(self):
+        ps = PortSpec(id="p0", node_id="A", side="EAST", index=0,
+                      fixed_side=False, fixed_order=False)
+        with pytest.raises((TypeError, AttributeError)):
+            ps.side = "WEST"  # type: ignore[misc]
+
+
+class TestLayoutNode:
+    def test_construction(self):
+        node = LayoutNode(id="A", measured_width=192, measured_height=42,
+                          shape_id="rect", parent_id=None, ports=[], labels=["A"],
+                          semantic_data={})
+        assert node.id == "A"
+        assert node.measured_width == 192
+        assert node.parent_id is None
+        assert node.labels == ("A",)
+        assert node.ports == ()
+
+    def test_ports_coerced_to_tuple(self):
+        ps = PortSpec(id="p0", node_id="A", side="NORTH", index=0,
+                      fixed_side=True, fixed_order=False)
+        node = LayoutNode(id="A", measured_width=100, measured_height=40,
+                          shape_id="rect", parent_id=None, ports=[ps], labels=[],
+                          semantic_data={})
+        assert isinstance(node.ports, tuple)
+        assert node.ports[0].id == "p0"
+
+    def test_semantic_data_immutable_proxy(self):
+        node = LayoutNode(id="A", measured_width=100, measured_height=40,
+                          shape_id="rect", parent_id=None, ports=[], labels=[],
+                          semantic_data={"k": "v"})
+        assert node.semantic_data["k"] == "v"
+        with pytest.raises(TypeError):
+            node.semantic_data["k"] = "x"  # type: ignore[index]
+
+
+class TestLayoutEdge:
+    def test_construction(self):
+        edge = LayoutEdge(id="e0", sources=["A"], targets=["B"],
+                          source_port=None, target_port=None,
+                          source_marker=MarkerKind.NONE,
+                          target_marker=MarkerKind.ARROW,
+                          line_style="solid", label="", semantic_data={})
+        assert edge.source_marker == MarkerKind.NONE
+        assert edge.target_marker == MarkerKind.ARROW
+        assert edge.sources == ("A",)
+
+    def test_marker_string_coercion(self):
+        edge = LayoutEdge(id="e0", sources=["A"], targets=["B"],
+                          source_port=None, target_port=None,
+                          source_marker="arrow",  # type: ignore[arg-type]
+                          target_marker="none",   # type: ignore[arg-type]
+                          line_style="solid", label="", semantic_data={})
+        assert edge.source_marker == MarkerKind.ARROW
+        assert edge.target_marker == MarkerKind.NONE
+
+
+class TestLayoutGraph:
+    def test_construction(self):
+        node = LayoutNode(id="A", measured_width=192, measured_height=42,
+                          shape_id="rect", parent_id=None, ports=[], labels=["A"],
+                          semantic_data={})
+        graph = LayoutGraph(nodes=[node], groups=[], edges=[], direction="TB")
+        assert graph.direction == "TB"
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].id == "A"
+
+    def test_immutable(self):
+        graph = LayoutGraph(nodes=[], groups=[], edges=[], direction="LR")
+        with pytest.raises((TypeError, AttributeError)):
+            graph.direction = "TB"  # type: ignore[misc]
+
+    def test_sequences_coerced_to_tuple(self):
+        graph = LayoutGraph(nodes=[], groups=[], edges=[], direction="TB")
+        assert isinstance(graph.nodes, tuple)
+        assert isinstance(graph.edges, tuple)
+
+
+# ── ShapeGeometry (T2) ────────────────────────────────────────────────────────
+
+class TestShapeRegistry:
+    def test_registry_covers_all_shapes(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        expected = {
+            "rect", "round", "stadium", "diamond", "circle", "doublecircle",
+            "cylinder", "hexagon", "trapezoid", "trapezoid-alt", "subroutine",
+            "flag", "bar",
+        }
+        assert expected <= set(SHAPE_REGISTRY.keys())
+
+    def test_all_registry_entries_are_shape_geometry(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY, ShapeGeometry
+        for name, sg in SHAPE_REGISTRY.items():
+            assert isinstance(sg, ShapeGeometry), f"{name!r} does not satisfy ShapeGeometry"
+
+    def test_rect_boundary_right(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        sg = SHAPE_REGISTRY["rect"]
+        x, y = sg.boundary_intersection(96, 21, 192, 42, 1.0, 0.0)
+        assert x == pytest.approx(192.0)
+        assert y == pytest.approx(21.0)
+
+    def test_rect_boundary_left(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        sg = SHAPE_REGISTRY["rect"]
+        x, y = sg.boundary_intersection(96, 21, 192, 42, -1.0, 0.0)
+        assert x == pytest.approx(0.0)
+        assert y == pytest.approx(21.0)
+
+    def test_rect_boundary_top(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        sg = SHAPE_REGISTRY["rect"]
+        x, y = sg.boundary_intersection(96, 21, 192, 42, 0.0, -1.0)
+        assert x == pytest.approx(96.0)
+        assert y == pytest.approx(0.0)
+
+    def test_diamond_boundary_right(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        sg = SHAPE_REGISTRY["diamond"]
+        x, y = sg.boundary_intersection(0, 0, 80, 40, 1.0, 0.0)
+        assert x > 0
+        assert abs(y) < 0.1
+
+    def test_diamond_boundary_matches_clip_to_diamond(self):
+        """DiamondGeometry.boundary_intersection must be bit-identical to _clip_to_diamond."""
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        from mermaid_render.layout._routing import _clip_to_diamond
+        sg = SHAPE_REGISTRY["diamond"]
+        for dx, dy in [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0),
+                       (1.0, 1.0), (-1.0, 1.0)]:
+            cx, cy, w, h = 50.0, 25.0, 100.0, 50.0
+            reg_x, reg_y = sg.boundary_intersection(cx, cy, w, h, dx, dy)
+            # _clip_to_diamond takes (tip_x, tip_y, cx, cy, w, h, dx, dy)
+            # where tip is a point in the outward direction; use cx+dx*1000
+            tip_x, tip_y = cx + dx * 1000, cy + dy * 1000
+            old_x, old_y = _clip_to_diamond(tip_x, tip_y, cx, cy, w, h, dx, dy)
+            assert reg_x == pytest.approx(old_x, abs=0.01), f"dx={dx},dy={dy}"
+            assert reg_y == pytest.approx(old_y, abs=0.01), f"dx={dx},dy={dy}"
+
+    def test_circle_boundary_right(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        sg = SHAPE_REGISTRY["circle"]
+        x, y = sg.boundary_intersection(0, 0, 80, 80, 1.0, 0.0)
+        assert x == pytest.approx(40.0)
+        assert abs(y) < 0.1
+
+    def test_bar_available_ports(self):
+        from mermaid_render.layout.shape_geometry import SHAPE_REGISTRY
+        sg = SHAPE_REGISTRY["bar"]
+        ports = sg.available_ports(60, 8)
+        assert set(ports) == {"NORTH", "SOUTH"}
+
+
+class TestShapeRegistryWiring:
+    """T2b: _routing.py routes diamond clipping through SHAPE_REGISTRY."""
+
+    def test_diamond_clipping_uses_registry(self, monkeypatch):
+        import os
+        from mermaid_render.layout import shape_geometry as sg_mod
+        original_sg = sg_mod.SHAPE_REGISTRY["diamond"]
+        calls: list = []
+
+        class TrackingDiamond:
+            def boundary_intersection(self, *args, **kwargs):
+                calls.append(args)
+                return original_sg.boundary_intersection(*args, **kwargs)
+            def __getattr__(self, name):
+                return getattr(original_sg, name)
+
+        monkeypatch.setitem(sg_mod.SHAPE_REGISTRY, "diamond", TrackingDiamond())
+        monkeypatch.setenv("MERMAID_LAYOUT_ENGINE", "python")
+
+        from mermaid_render.layout._strategies import _compile_flowchart, RenderOptions
+        _compile_flowchart("flowchart TD\n  A{Decision} --> B", None, RenderOptions())
+
+        assert len(calls) > 0, "SHAPE_REGISTRY['diamond'].boundary_intersection was never called"

@@ -24,6 +24,7 @@ docs/specs/<feature>/
 | [`diagram-consistency-system`](diagram-consistency-system/spec.md) | Implementing | none | Themed, pipeline-safe per-type diagram/architecture/PM recipes + expanded visual-consistency QA (per-page + deck-level) |
 | [`mermaid-source-bridge`](mermaid-source-bridge/spec.md) | Implementing | `diagram-consistency-system` | Extract Mermaid fences from any source document into planning JSON; native Python layout engine (`mermaid_layout.py`) renders all Mermaid diagram types to pipeline-safe HTML/CSS, bypassing dagre |
 | [`mermaid-renderer-uplift`](mermaid-renderer-uplift/spec.md) | Draft | none | 9-area renderer quality uplift: pixel-accurate text metrics, diamond clipping, 6 new node shapes, inline label formatting, SVG marker defs, sequence/ER/class notation, visual fixture corpus + screenshot baseline |
+| [`mermaid-unified-layout-pipeline`](mermaid-unified-layout-pipeline/spec.md) | Shipped | ADR-001 | ELK-layered algorithm via elkjs 0.12.0 Node subprocess for flowchart/stateDiagram; Python fallback for inner-direction groups, terminal circles, self-loops; strict layout validation; fidelity oracle entity-mismatch classification |
 
 ## Shipped specs (archived)
 

@@ -315,6 +315,16 @@ class RoutedEdge:
     dst_label_layout: Optional[EdgeLabelLayout]
     is_reversed: bool = False      # back-edge (drawn reversed)
     route_diagnostics: str = ""    # "ok" | "fallback" | "failed:..."
+    source_marker: "MarkerKind" = None  # type: ignore[assignment]  — set post-init below
+    target_marker: "MarkerKind" = None  # type: ignore[assignment]  — set post-init below
+
+    def __post_init__(self) -> None:
+        # Coerce None defaults to MarkerKind.NONE so callers that don't set these fields
+        # get a safe default. Frozen dataclass requires object.__setattr__.
+        if self.source_marker is None:
+            object.__setattr__(self, "source_marker", MarkerKind.NONE)
+        if self.target_marker is None:
+            object.__setattr__(self, "target_marker", MarkerKind.NONE)
 
 
 # ── Routing failure (typed result for an edge that could not be routed) ───────
@@ -444,6 +454,7 @@ def validate_finalized_layout(
     layout: FinalizedLayout,
     metadata: "LayoutMetadata | None" = None,
     clearance_threshold: float = 4.0,
+    strict: bool = True,
 ) -> "ValidationResult":
     """Validate a FinalizedLayout against geometry constraints.
 
@@ -553,27 +564,36 @@ def validate_finalized_layout(
                 f"Edge {re_obj.edge_id!r} dst_port has PortSide.AUTO (must be resolved before finalization)"
             )
 
-    # 7. No two ordinary non-dummy node outer_bounds overlap
-    real_nodes = [(nid, nl) for nid, nl in layout.node_layouts.items() if not nl.is_dummy]
-    for i in range(len(real_nodes)):
-        for j in range(i + 1, len(real_nodes)):
-            nid_a, nl_a = real_nodes[i]
-            nid_b, nl_b = real_nodes[j]
-            if nl_a.outer_bounds.overlaps(nl_b.outer_bounds):
-                errors.append(
-                    f"Node overlap: {nid_a!r} {nl_a.outer_bounds} overlaps {nid_b!r} {nl_b.outer_bounds}"
-                )
+    # 7. No two ordinary non-dummy node outer_bounds overlap by > 1px (strict only)
+    # ≤1px linear overlap in either dimension is tolerated (floating-point imprecision).
+    def _overlap_exceeds_1px(a: "Rect", b: "Rect") -> bool:
+        ox = min(a.x1, b.x1) - max(a.x, b.x)
+        oy = min(a.y1, b.y1) - max(a.y, b.y)
+        return ox > 1.0 and oy > 1.0
 
-    # 8. Each child node inside parent group boundary
-    for gid, gl in layout.group_layouts.items():
-        for mid in gl.member_ids:
-            nl = layout.node_layouts.get(mid)
-            if nl is not None and not nl.is_dummy:
-                if not gl.boundary_bounds.contains(nl.outer_bounds):
+    real_nodes = [(nid, nl) for nid, nl in layout.node_layouts.items() if not nl.is_dummy]
+    if strict:
+        for i in range(len(real_nodes)):
+            for j in range(i + 1, len(real_nodes)):
+                nid_a, nl_a = real_nodes[i]
+                nid_b, nl_b = real_nodes[j]
+                if _overlap_exceeds_1px(nl_a.outer_bounds, nl_b.outer_bounds):
                     errors.append(
-                        f"Node {mid!r} outer_bounds {nl.outer_bounds} outside "
-                        f"parent group {gid!r} boundary {gl.boundary_bounds}"
+                        f"Node overlap: {nid_a!r} {nl_a.outer_bounds} overlaps {nid_b!r} {nl_b.outer_bounds}"
                     )
+
+    # 8. Each child node inside parent group boundary (strict only; tracked in structural_errors)
+    structural_errors: list[str] = []
+    if strict:
+        for gid, gl in layout.group_layouts.items():
+            for mid in gl.member_ids:
+                nl = layout.node_layouts.get(mid)
+                if nl is not None and not nl.is_dummy:
+                    if not gl.boundary_bounds.contains(nl.outer_bounds):
+                        structural_errors.append(
+                            f"Node {mid!r} outer_bounds {nl.outer_bounds} outside "
+                            f"parent group {gid!r} boundary {gl.boundary_bounds}"
+                        )
 
     # 9. Intersecting group-title boxes
     group_label_bounds: list[tuple[str, Rect]] = []
@@ -665,10 +685,12 @@ def validate_finalized_layout(
                         f"Tight clearance ({gap:.1f}px) between nodes"
                     )
 
+    all_errors = tuple(errors) + tuple(structural_errors)
     return ValidationResult(
-        errors=tuple(errors),
+        errors=all_errors,
         warnings=tuple(warnings),
         geometry="fail" if errors else "pass",
+        structural_geometry="fail" if structural_errors else "pass",
     )
 
 
@@ -693,8 +715,12 @@ class SequenceDiagnostic:
     source_text: Optional[str] = None
 
 
-class MarkerKind(enum.Enum):
-    """Arrow endpoint marker kinds (AC-8.1)."""
+class SequenceMarkerKind(enum.Enum):
+    """Arrow endpoint marker kinds for sequence diagrams (AC-8.1).
+
+    Renamed from MarkerKind to avoid collision with the graph-edge MarkerKind
+    added for the unified pipeline (see LayoutEdge.source_marker/target_marker).
+    """
     triangle = "triangle"
     cross = "cross"
     filled_head = "filled_head"
@@ -704,21 +730,21 @@ class MarkerKind(enum.Enum):
 class ArrowSpec:
     """Typed arrow specification (AC-8.2)."""
     dashed: bool
-    start_marker: Optional[MarkerKind]
-    end_marker: Optional[MarkerKind]
+    start_marker: Optional[SequenceMarkerKind]
+    end_marker: Optional[SequenceMarkerKind]
 
 
 ARROW_SPECS: "Mapping[str, ArrowSpec]" = MappingProxyType({
     "->":     ArrowSpec(dashed=False, start_marker=None, end_marker=None),
     "-->":    ArrowSpec(dashed=True,  start_marker=None, end_marker=None),
-    "->>":    ArrowSpec(dashed=False, start_marker=None, end_marker=MarkerKind.triangle),
-    "-->>":   ArrowSpec(dashed=True,  start_marker=None, end_marker=MarkerKind.triangle),
-    "-x":     ArrowSpec(dashed=False, start_marker=None, end_marker=MarkerKind.cross),
-    "--x":    ArrowSpec(dashed=True,  start_marker=None, end_marker=MarkerKind.cross),
-    "-)":     ArrowSpec(dashed=False, start_marker=None, end_marker=MarkerKind.filled_head),
-    "--)":    ArrowSpec(dashed=True,  start_marker=None, end_marker=MarkerKind.filled_head),
-    "<<->>":  ArrowSpec(dashed=False, start_marker=MarkerKind.triangle, end_marker=MarkerKind.triangle),
-    "<<-->>": ArrowSpec(dashed=True,  start_marker=MarkerKind.triangle, end_marker=MarkerKind.triangle),
+    "->>":    ArrowSpec(dashed=False, start_marker=None, end_marker=SequenceMarkerKind.triangle),
+    "-->>":   ArrowSpec(dashed=True,  start_marker=None, end_marker=SequenceMarkerKind.triangle),
+    "-x":     ArrowSpec(dashed=False, start_marker=None, end_marker=SequenceMarkerKind.cross),
+    "--x":    ArrowSpec(dashed=True,  start_marker=None, end_marker=SequenceMarkerKind.cross),
+    "-)":     ArrowSpec(dashed=False, start_marker=None, end_marker=SequenceMarkerKind.filled_head),
+    "--)":    ArrowSpec(dashed=True,  start_marker=None, end_marker=SequenceMarkerKind.filled_head),
+    "<<->>":  ArrowSpec(dashed=False, start_marker=SequenceMarkerKind.triangle, end_marker=SequenceMarkerKind.triangle),
+    "<<-->>": ArrowSpec(dashed=True,  start_marker=SequenceMarkerKind.triangle, end_marker=SequenceMarkerKind.triangle),
 })
 
 
@@ -914,3 +940,149 @@ class ValidationResult:
         if self.warnings:
             return "warning"
         return "ok"
+
+
+# ── Pre-layout IR (LayoutGraph) ───────────────────────────────────────────────
+# Input to the ELK layout engine (and the Python Sugiyama fallback).
+# These are frozen dataclasses that capture *measured* node sizes,
+# group hierarchy, edge semantics, and port specs before any coordinate
+# assignment is performed.
+
+class MarkerKind(str, enum.Enum):
+    """Arrow marker types for edge endpoints.
+
+    Replaces the ambiguous arrow/bidir/arrow_src boolean trio on _Edge.
+    Serialises as a plain string so JSON round-trips without enum import.
+    """
+    NONE = "none"
+    ARROW = "arrow"
+    OPEN_ARROW = "open_arrow"
+    DIAMOND = "diamond"
+    FILLED_DIAMOND = "filled_diamond"
+    CIRCLE = "circle"
+    CROSS = "cross"
+    CROW_ONE = "crow_one"
+    CROW_MANY = "crow_many"
+    CROW_ZERO_ONE = "crow_zero_one"
+    CROW_ZERO_MANY = "crow_zero_many"
+
+
+@dataclass(frozen=True)
+class PortSpec:
+    """Port specification for a single port on a layout node."""
+    id: str
+    node_id: str
+    side: str        # "NORTH" | "EAST" | "SOUTH" | "WEST"
+    index: int
+    fixed_side: bool
+    fixed_order: bool
+
+
+@dataclass(frozen=True)
+class LayoutNode:
+    """A node with measured dimensions, ready to hand to the layout engine."""
+    id: str
+    measured_width: float
+    measured_height: float
+    shape_id: str           # key into SHAPE_REGISTRY
+    parent_id: Optional[str]
+    ports: Tuple[PortSpec, ...]
+    labels: Tuple[str, ...]
+    semantic_data: Mapping[str, object]
+
+    def __init__(
+        self,
+        id: str,
+        measured_width: float,
+        measured_height: float,
+        shape_id: str,
+        parent_id: Optional[str],
+        ports: Sequence[PortSpec],
+        labels: Sequence[str],
+        semantic_data: Optional[dict] = None,
+    ) -> None:
+        # use object.__setattr__ since the dataclass is frozen
+        object.__setattr__(self, "id", id)
+        object.__setattr__(self, "measured_width", measured_width)
+        object.__setattr__(self, "measured_height", measured_height)
+        object.__setattr__(self, "shape_id", shape_id)
+        object.__setattr__(self, "parent_id", parent_id)
+        object.__setattr__(self, "ports", tuple(ports))
+        object.__setattr__(self, "labels", tuple(labels))
+        object.__setattr__(self, "semantic_data",
+                            MappingProxyType(semantic_data or {}))
+
+
+@dataclass(frozen=True)
+class LayoutGroup:
+    """A subgraph/group with measured label dimensions and layout hints."""
+    id: str
+    parent_id: Optional[str]
+    label: str
+    label_width: float
+    label_height: float
+    padding: float
+    local_direction: Optional[str]   # "TB" | "LR" | "BT" | "RL" | None
+    minimum_width: float
+    minimum_height: float
+
+
+@dataclass(frozen=True)
+class LayoutEdge:
+    """An edge with independent source and target marker kinds."""
+    id: str
+    sources: Tuple[str, ...]
+    targets: Tuple[str, ...]
+    source_port: Optional[str]
+    target_port: Optional[str]
+    source_marker: MarkerKind
+    target_marker: MarkerKind
+    line_style: str    # "solid" | "dotted" | "thick"
+    label: str
+    semantic_data: Mapping[str, object]
+
+    def __init__(
+        self,
+        id: str,
+        sources: Sequence[str],
+        targets: Sequence[str],
+        source_port: Optional[str],
+        target_port: Optional[str],
+        source_marker: MarkerKind,
+        target_marker: MarkerKind,
+        line_style: str,
+        label: str,
+        semantic_data: Optional[dict] = None,
+    ) -> None:
+        object.__setattr__(self, "id", id)
+        object.__setattr__(self, "sources", tuple(sources))
+        object.__setattr__(self, "targets", tuple(targets))
+        object.__setattr__(self, "source_port", source_port)
+        object.__setattr__(self, "target_port", target_port)
+        object.__setattr__(self, "source_marker", MarkerKind(source_marker))
+        object.__setattr__(self, "target_marker", MarkerKind(target_marker))
+        object.__setattr__(self, "line_style", line_style)
+        object.__setattr__(self, "label", label)
+        object.__setattr__(self, "semantic_data",
+                            MappingProxyType(semantic_data or {}))
+
+
+@dataclass(frozen=True)
+class LayoutGraph:
+    """Complete pre-layout graph passed to the layout engine."""
+    nodes: Tuple[LayoutNode, ...]
+    groups: Tuple[LayoutGroup, ...]
+    edges: Tuple[LayoutEdge, ...]
+    direction: str   # "TB" | "LR" | "BT" | "RL"
+
+    def __init__(
+        self,
+        nodes: Sequence[LayoutNode],
+        groups: Sequence[LayoutGroup],
+        edges: Sequence[LayoutEdge],
+        direction: str,
+    ) -> None:
+        object.__setattr__(self, "nodes", tuple(nodes))
+        object.__setattr__(self, "groups", tuple(groups))
+        object.__setattr__(self, "edges", tuple(edges))
+        object.__setattr__(self, "direction", direction)

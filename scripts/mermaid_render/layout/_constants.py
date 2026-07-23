@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+from ._geometry import MarkerKind
+
 # ── icon loader ───────────────────────────────────────────────────────────────
 
 _ICON_DIR = Path(__file__).parent.parent / "icons"
@@ -246,6 +248,8 @@ class _Edge:
     reversed_: bool = False       # back-edge flag
     bidir: bool = False           # True for <--> edges — renders marker-start in addition to marker-end
     arrow_src: bool = False       # True when the UML marker belongs at SRC (e.g. Animal <|-- Dog)
+    source_marker: MarkerKind = MarkerKind.NONE  # deferred: backlog#arrow-semantics-cleanup
+    target_marker: MarkerKind = MarkerKind.NONE  # deferred: backlog#arrow-semantics-cleanup
     src_label: str = ""           # text label near source endpoint (e.g. class multiplicities)
     dst_label: str = ""           # text label near destination endpoint
     cardinality_src: Optional[str] = None  # ER crow's foot: 'one'|'zero-one'|'many'|'zero-many'

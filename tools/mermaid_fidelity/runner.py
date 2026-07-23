@@ -166,17 +166,28 @@ class FidelityRunner:
                         reason = "; ".join(semantic_result.diff.to_lines()[:5])
                         diagnostics.extend(semantic_result.diff.to_lines())
                 elif semantic_strict:
-                    # Strict semantic checks declared but one or both sides have no data.
+                    # When native has no semantic but oracle has entities, treat as
+                    # a missing-entity failure (SEMANTIC_MISMATCH), not an excused gap.
+                    _ref_has_entities = bool(
+                        ref_obs.semantic and getattr(ref_obs.semantic, "entities", None)
+                    )
                     missing = []
                     if not native_obs.semantic:
                         missing.append("native")
                     if not ref_obs.semantic:
                         missing.append("reference")
-                    status = ComparisonStatus.EXTRACTOR_GAP
-                    reason = (
-                        f"strict checks {semantic_strict[:3]} declared but "
-                        f"{' and '.join(missing)} observation has no semantic data"
-                    )
+                    if not native_obs.semantic and _ref_has_entities:
+                        status = ComparisonStatus.SEMANTIC_MISMATCH
+                        reason = (
+                            f"native semantic is absent but reference has "
+                            f"{len(ref_obs.semantic.entities)} entities"
+                        )
+                    else:
+                        status = ComparisonStatus.EXTRACTOR_GAP
+                        reason = (
+                            f"strict checks {semantic_strict[:3]} declared but "
+                            f"{' and '.join(missing)} observation has no semantic data"
+                        )
                     diagnostics.append(reason)
 
             if status == ComparisonStatus.PASS:
