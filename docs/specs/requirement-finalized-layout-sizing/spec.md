@@ -2,7 +2,7 @@
 
 Mode: full (structural change, dependent tasks)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** eugenelim
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** `mermaid-single-finalized-layout-pipeline` (must ship first — it provides the shared FinalizedLayout → HTML and FinalizedLayout → SVG rendering paths that this feature wires into)
@@ -74,32 +74,32 @@ coordinates; there is no second layout pass.
 
 ## Acceptance Criteria
 
-- [ ] AC1: `requirement-basic` fixture parses successfully in both native SVG
+- [x] AC1: `requirement-basic` fixture parses successfully in both native SVG
   mode (`layout_requirement_scene`) and mmdc/HTML mode (`_layout_requirement`),
   producing non-empty output with no error.
-- [ ] AC2: All four cards (`test_req`, `func_req`, `perf_req`, `test_entity`)
+- [x] AC2: All four cards (`test_req`, `func_req`, `perf_req`, `test_entity`)
   appear in both HTML and SVG output of `requirement-basic`.
-- [ ] AC3: All three relations (`satisfies`, `verifies`, `derives`) appear in
+- [x] AC3: All three relations (`satisfies`, `verifies`, `derives`) appear in
   both HTML and SVG output of `requirement-basic`.
-- [ ] AC4: No text is clipped — every attribute line (including wrapped lines)
+- [x] AC4: No text is clipped — every attribute line (including wrapped lines)
   fits within its card's content bounds; card height is strictly >= the sum of
   header height + all wrapped-line heights + vertical padding.
-- [ ] AC5: No relation route passes through any card — every waypoint segment
+- [x] AC5: No relation route passes through any card — every waypoint segment
   in `RoutedEdge.waypoints` lies outside the `outer_bounds` of all
   `NodeLayout` entries.
-- [ ] AC6: A nonempty diagram with a nonzero `width_hint` produces a canvas
+- [x] AC6: A nonempty diagram with a nonzero `width_hint` produces a canvas
   whose width is exactly `width_hint` (repacked or uniformly scaled), never
   the raw unconstrained width.
-- [ ] AC7: A nonempty diagram with a nonzero `height_hint` produces a canvas
+- [x] AC7: A nonempty diagram with a nonzero `height_hint` produces a canvas
   whose height is exactly `height_hint` (repacked or uniformly scaled), never
   the raw unconstrained height.
-- [ ] AC8: `NodeLayout.css_classes` contains the requirement subtype string
+- [x] AC8: `NodeLayout.css_classes` contains the requirement subtype string
   (e.g. `"req-functionalRequirement"`) for requirement nodes and the element
   type for element nodes; this metadata is present in both HTML and SVG output.
-- [ ] AC9: Each `RoutedEdge` in the `FinalizedLayout` produced by
+- [x] AC9: Each `RoutedEdge` in the `FinalizedLayout` produced by
   `compile_requirement()` carries a non-None `label_layout` with `text` equal
   to the relation type string.
-- [ ] AC10: HTML coordinates (`NodeLayout.outer_bounds`, `RoutedEdge.waypoints`)
+- [x] AC10: HTML coordinates (`NodeLayout.outer_bounds`, `RoutedEdge.waypoints`)
   and SVG coordinates (scene rects / polyline points) are identical — both
   consumers read the same `FinalizedLayout` from `compile_requirement()`,
   no second geometry pass.

@@ -5391,7 +5391,7 @@ def _dispatch(
         return _layout_journey(clean, direction, width_hint)
     if d == "requirementdiagram":
         from .requirement import requirement_to_html
-        return requirement_to_html(clean, width_hint=width_hint)
+        return requirement_to_html(clean, width_hint=width_hint, height_hint=effective_height)
     if d == "gitgraph":
         return _layout_gitgraph(clean, direction, width_hint)
     if d == "sankey-beta":

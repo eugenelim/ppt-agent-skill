@@ -56,11 +56,11 @@ queue = [
   "docs/specs/state-diagram-local-cycle-routing",
   # 10a — ER pipeline consolidation: measured dynamic width + single FinalizedLayout
   {path = "docs/specs/er-finalized-layout-and-dynamic-width", needs = ["work:docs/specs/elk-finalized-layout-roundtrip", "work:docs/specs/mermaid-single-finalized-layout-pipeline"]},
-  # 10b — Requirement pipeline consolidation: compile_requirement() → FinalizedLayout
-  {path = "docs/specs/requirement-finalized-layout-sizing", needs = ["work:docs/specs/mermaid-single-finalized-layout-pipeline"]},
 ]
 active = []
-shipped = []
+shipped = [
+  "docs/specs/requirement-finalized-layout-sizing",
+]
 
 [backlog]
 open = [
