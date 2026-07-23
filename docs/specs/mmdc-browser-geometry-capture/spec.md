@@ -2,7 +2,7 @@
 
 Mode: full (structural change — new abstraction layer; new external dependencies; browser automation)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 Merges: mmdc-geometry-capture, browser-geometry-capture, browser-probing, batch-mmdc
 
@@ -67,28 +67,28 @@ exist before capture results can be fed to the oracle).
 
 ## Acceptance Criteria
 
-- [ ] AC1: Every in-scope fixture produces a `ReferenceDiagram` JSON record containing
+- [x] AC1: Every in-scope fixture produces a `ReferenceDiagram` JSON record containing
   all required fields for that diagram type.
-- [ ] AC2: Each record meets the minimum counts declared in the `mermaid-oracle-
+- [x] AC2: Each record meets the minimum counts declared in the `mermaid-oracle-
   runtime-unification` manifest for that fixture.
-- [ ] AC3: Coordinate normalization is deterministic: identical source, toolchain, and
+- [x] AC3: Coordinate normalization is deterministic: identical source, toolchain, and
   fonts produce numerically identical bounding rectangles across repeated clean runs.
-- [ ] AC4: Parallel edges remain distinct in the extracted record — each has a unique
+- [x] AC4: Parallel edges remain distinct in the extracted record — each has a unique
   normalized edge ID.
-- [ ] AC5: Class diagram markers are resolved to canonical kinds (hollow triangle, filled
+- [x] AC5: Class diagram markers are resolved to canonical kinds (hollow triangle, filled
   diamond, hollow diamond, open arrow, none); ER cardinality ends are represented as
   `CardinalityEnd` with `minimum` and `maximum` fields.
-- [ ] AC6: State diagram symbols are classified as initial, final, simple, composite, or
+- [x] AC6: State diagram symbols are classified as initial, final, simple, composite, or
   composite-boundary transition endpoint.
-- [ ] AC7: Provenance records tool versions and font fingerprints at capture time;
+- [x] AC7: Provenance records tool versions and font fingerprints at capture time;
   records from different toolchain versions compare as distinct in the cache.
-- [ ] AC8: The reference extraction process runs in a single batched browser session, not
+- [x] AC8: The reference extraction process runs in a single batched browser session, not
   one session per fixture.
-- [ ] AC9: Fields that cannot be captured produce a typed `ExtractorGap` diagnostic in
+- [x] AC9: Fields that cannot be captured produce a typed `ExtractorGap` diagnostic in
   the `ReferenceDiagram`; the overall result is `EXTRACTOR_GAP`, not `PASS`.
-- [ ] AC10: The cache correctly invalidates when source hash, Mermaid version, browser
+- [x] AC10: The cache correctly invalidates when source hash, Mermaid version, browser
   version, or font fingerprint changes.
-- [ ] AC11: `pytest tests/` continues to pass with zero regressions (capture pipeline
+- [x] AC11: `pytest tests/` continues to pass with zero regressions (capture pipeline
   tests are gated on browser availability).
 
 ## Testing Strategy
