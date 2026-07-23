@@ -62,8 +62,7 @@ prohibitions are each covered by explicit tests rather than inferred from visual
 
 - [x] AC1 (flowchart-all-shapes): All declared shapes map to the correct `ShapeGeometry`;
   every node has positive outer_bounds; geometry verifier reports zero violations.
-  (deferred: label-fits-within-usable-interior sub-check — depends on content_bounds
-  contract not yet exported by the pipeline)
+  (deferred: flowchart-label-fits-interior — content_bounds export not yet shipped)
 - [x] AC2 (flowchart-arrows-defs): All edge styles and marker kinds match source tokens;
   faithful mode adds no legend HTML to the rendered output.
 - [x] AC3 (flowchart-diamond-branch): Branch labels belong to the correct edge IDs; the
@@ -71,8 +70,7 @@ prohibitions are each covered by explicit tests rather than inferred from visual
   ports are stable across runs.
 - [x] AC4 (flowchart-diamond-clipping): Every edge endpoint lies within 16 px of the
   diamond node's outer_bounds AABB; geometry verifier reports zero violations.
-  (deferred: 0.5-px on-segment diamond intersection check — tracked in
-  mermaid-shape-boundary-exactness backlog)
+  (deferred: flowchart-diamond-endpoint-on-segment)
 - [x] AC5 (flowchart-empty-subgraph): Groups present in layout have positive bounds;
   sibling groups do not overlap; geometry verifier reports zero violations.
 - [x] AC6 (flowchart-groups-complex): All containment is valid; no node overlap; geometry

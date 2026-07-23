@@ -15,6 +15,7 @@ Each fixture test:
 """
 from __future__ import annotations
 
+import math
 import sys
 import types as _types
 from pathlib import Path
@@ -333,17 +334,19 @@ class TestFlowchartArrowsDefs:
         assert violations == [], f"Geometry violations: {violations}"
 
     def test_faithful_no_legend(self):
-        """Compiling with faithful_mermaid=True produces HTML without a legend. (AC2)
+        """faithful_mermaid=True suppresses the legend even when inferred_legend=True. (AC2)
 
-        Legends are injected by the Python legend-inference pass. With
-        faithful_mermaid=True and inferred_legend=False, no legend HTML
-        strip should appear in the rendered output.
+        Legend inference is enabled (inferred_legend=True) so that a non-faithful
+        dispatch would produce legend HTML. faithful_mermaid=True must suppress it.
+        Verifying with inferred_legend=False would be vacuous (the flag alone
+        suppresses; faithful has nothing to do).
         """
         src = _load("flowchart-arrows-defs")
-        opts = RenderOptions(faithful_mermaid=True, inferred_legend=False)
+        # inferred_legend=True: a non-faithful dispatch would produce legend HTML
+        opts = RenderOptions(faithful_mermaid=True, inferred_legend=True)
         html = _dispatch(src, None, 800, opts=opts)
         assert "legend" not in html.lower(), (
-            "Faithful mode with inferred_legend=False produced unexpected legend HTML"
+            "faithful_mermaid=True should suppress legend even when inferred_legend=True"
         )
 
 
@@ -393,12 +396,14 @@ class TestFlowchartDiamondBranch:
         )
 
     def test_retry_feedback_local_lane(self, layout: FinalizedLayout):
-        """The Retry->Yes->Check feedback edge routes locally within the canvas. (AC3)
+        """The Retry->Yes->Check feedback edge stays in a local routing lane. (AC3)
 
-        Verifies that the backward (feedback) edge does not route at the
-        canvas perimeter: all waypoints must be inside the canvas bounds and
-        not within 5 px of the canvas edges. This catches perimeter-routing
-        regressions where ELK sends feedback paths around the entire diagram.
+        The spec forbids canvas-perimeter routing for feedback edges. A perimeter-
+        routed edge would have interior waypoints far from the src/dst bounding box
+        (excursion ≫ a routing gutter width). We assert that each interior waypoint
+        is within LOCAL_LANE_THRESHOLD px of the union of the Retry and Check node
+        bounds — tight enough to catch a path routed around the entire canvas but
+        loose enough to permit a normal ELK routing gutter.
         """
         feedback = [
             e for e in layout.routed_edges
@@ -406,7 +411,7 @@ class TestFlowchartDiamondBranch:
         ]
         assert feedback, "No Retry->Check feedback edge found in diamond-branch layout"
         edge = feedback[0]
-        # Label must be 'Yes' to confirm we have the correct edge
+        # Confirm correct edge via label
         assert edge.label_layout is not None, "Retry->Check edge has no label_layout"
         assert edge.label_layout.text == "Yes", (
             f"Expected 'Yes' label on Retry->Check, got {edge.label_layout.text!r}"
@@ -416,21 +421,21 @@ class TestFlowchartDiamondBranch:
             f"Retry->Check feedback edge has only {len(edge.waypoints)} waypoints "
             f"(expected ≥3 for a routed backward edge)"
         )
-        # All waypoints must lie within the canvas bounds (not perimeter routing)
-        canvas = layout.canvas_bounds
-        PERIMETER_MARGIN = 5.0
-        for wp in edge.waypoints:
-            assert wp.x >= canvas.x - PERIMETER_MARGIN, (
-                f"Waypoint {wp} exceeds left canvas edge (canvas.x={canvas.x})"
-            )
-            assert wp.x <= canvas.x1 + PERIMETER_MARGIN, (
-                f"Waypoint {wp} exceeds right canvas edge (canvas.x1={canvas.x1})"
-            )
-            assert wp.y >= canvas.y - PERIMETER_MARGIN, (
-                f"Waypoint {wp} exceeds top canvas edge (canvas.y={canvas.y})"
-            )
-            assert wp.y <= canvas.y1 + PERIMETER_MARGIN, (
-                f"Waypoint {wp} exceeds bottom canvas edge (canvas.y1={canvas.y1})"
+        # Forbid canvas-perimeter routing: interior waypoints must not be far from
+        # the src/dst bounding box. A local routing gutter (ELK side-lane) has
+        # excursion ~20–60px; a perimeter route would have excursion in the hundreds.
+        LOCAL_LANE_THRESHOLD = 150.0  # px; loose guard — tighten if ELK routing improves
+        retry_nl = layout.node_layouts["Retry"]
+        check_nl = layout.node_layouts["Check"]
+        combined = retry_nl.outer_bounds.union(check_nl.outer_bounds)
+        for wp in edge.waypoints[1:-1]:  # interior waypoints only
+            dx = max(combined.x - wp.x, 0.0, wp.x - combined.x1)
+            dy = max(combined.y - wp.y, 0.0, wp.y - combined.y1)
+            excursion = math.hypot(dx, dy)
+            assert excursion < LOCAL_LANE_THRESHOLD, (
+                f"Retry->Check feedback waypoint {wp} is {excursion:.0f}px from the "
+                f"src/dst bounding box {combined} — exceeds LOCAL_LANE_THRESHOLD "
+                f"({LOCAL_LANE_THRESHOLD}px). This suggests perimeter routing."
             )
 
     def test_decision_ports_stable(self):

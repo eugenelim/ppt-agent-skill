@@ -149,3 +149,25 @@ Closed/shipped work remains in each spec's Changelog and
 exit edges with the composite's group ID. `_compile_flowchart()` now calls
 `_clip_cross_scope_exit_waypoints()` after `_route_edges()` and before `_build_routed_edges_ir()`,
 clipping the routed path's start point to the composite group's bounding-box boundary.
+---
+
+## mermaid-flowchart-conformance
+
+### flowchart-label-fits-interior
+
+→ `workspace.toml` slug: `flowchart-label-fits-interior`
+
+AC1 (flowchart-all-shapes) deferred sub-check: verify that each edge label's
+`bounds` fits within the node `content_bounds` (usable interior). Requires the
+pipeline to export `content_bounds` separately from `outer_bounds`. Deferred
+until that export lands.
+
+### flowchart-diamond-endpoint-on-segment
+
+→ `workspace.toml` slug: `flowchart-diamond-endpoint-on-segment`
+
+AC4 (flowchart-diamond-clipping) deferred sub-check: assert that each edge
+endpoint incident to a diamond node lies on an actual diamond segment (not
+the rectangular AABB) within 0.5-pixel tolerance. The mermaid-shape-boundary-
+exactness spec covers this for general shapes; the diamond case needs the
+same on-segment assertion wired into the flowchart conformance tests.
