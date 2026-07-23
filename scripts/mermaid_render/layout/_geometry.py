@@ -317,6 +317,7 @@ class RoutedEdge:
     route_diagnostics: str = ""    # "ok" | "fallback" | "failed:..."
     source_marker: "MarkerKind" = None  # type: ignore[assignment]
     target_marker: "MarkerKind" = None  # type: ignore[assignment]
+    junction_points: "tuple[Point, ...]" = ()
 
     def __post_init__(self) -> None:
         # Coerce None defaults to MarkerKind.NONE so callers that don't set these fields
@@ -436,6 +437,11 @@ class LayoutMetadata:
     group_count: int
     edge_count: int         # original parsed edge count (before routing)
     algorithm: str          # e.g. "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
+    backend: str = ""
+    backend_version: str = ""
+    fallback_reason: Optional[str] = None
+    elapsed_ms: float = 0.0
+    options_applied: Mapping[str, str] = field(default_factory=dict)
 
 
 # ── Compiled flowchart (shared result of _compile_flowchart) ──────────────────

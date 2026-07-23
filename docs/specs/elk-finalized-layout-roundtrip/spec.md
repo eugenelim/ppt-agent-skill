@@ -2,7 +2,7 @@
 
 Mode: full (structural change, unfamiliar territory)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 ## Objective
 

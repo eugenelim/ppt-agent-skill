@@ -4226,7 +4226,7 @@ def _layout_architecture(src: str, direction: str, width_hint: int) -> str:
         from .architecture import _build_arch_layout_graph, _heuristic_arch_placement
         from .elk_adapter import layout_with_elk as _layout_with_elk
         _lg = _build_arch_layout_graph(nodes, groups, edges)
-        _fl = _layout_with_elk(_lg)  # type: ignore[arg-type]
+        _fl, _elk_meta = _layout_with_elk(_lg)  # type: ignore[arg-type]
         _expected_nids = {n.id for n in _lg.nodes}  # type: ignore[attr-defined]
         if _expected_nids - set(_fl.node_layouts.keys()):
             raise RuntimeError("ELK returned incomplete node positions")
@@ -5509,7 +5509,7 @@ def _compile_flowchart(
         )
         _layout_graph = _build_layout_graph(nodes, edges, groups, direction)
         _orig_edge_map = _elk_edge_id_map(edges)
-        _elk_result = _layout_with_elk(_layout_graph, spacing=_init_cfg)
+        _elk_result, _elk_meta = _layout_with_elk(_layout_graph, spacing=_init_cfg)
         for _nid_elk, _nl_elk in _elk_result.node_layouts.items():
             if _nid_elk in nodes:
                 nodes[_nid_elk].x = int(_nl_elk.outer_bounds.x)

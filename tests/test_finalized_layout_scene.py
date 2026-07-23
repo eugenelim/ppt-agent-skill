@@ -569,6 +569,7 @@ def test_routed_edge_field_coverage_reflective():
     # - route_diagnostics: diagnostic string ("ok"/"fallback"/...); non-visual metadata
     # - has_marker_end: legacy bool derived from target_marker; paint.py now uses target_marker directly
     # - has_marker_start: legacy bool derived from source_marker; paint.py now uses source_marker directly
+    # - junction_points: ELK branch-point dots; rendering deferred (backlog)
     _DECLARED_NON_CONSUMED: set[str] = {
         "src_port",
         "dst_port",
@@ -578,6 +579,7 @@ def test_routed_edge_field_coverage_reflective():
         "route_diagnostics",
         "has_marker_end",
         "has_marker_start",
+        "junction_points",
     }
 
     from scripts.mermaid_render.layout._geometry import MarkerKind as _MarkerKindT

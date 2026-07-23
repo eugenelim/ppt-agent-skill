@@ -18,7 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import mermaid_render.layout.elk_adapter as _mod
 from mermaid_render.layout.elk_adapter import ElkUnavailable, layout_with_elk, _to_elk_json, _from_elk_result
 from mermaid_render.layout._geometry import (
-    LayoutEdge, LayoutGraph, LayoutGroup, LayoutNode, MarkerKind, PortSpec,
+    LayoutEdge, LayoutGraph, LayoutGroup, LayoutNode, MarkerKind, PortSide,
+    PortSpec, Point,
 )
 
 
@@ -78,7 +79,7 @@ class TestElkAdapterMocked:
         """AC-ELK-3: FinalizedLayout built from ELK child x/y and edge sections."""
         elk_output = _minimal_elk_output()
         with patch.object(_mod, "_run_elk", return_value=elk_output):
-            result = layout_with_elk(_simple_graph())
+            result, _meta = layout_with_elk(_simple_graph())
         assert "A" in result.node_layouts
         assert "B" in result.node_layouts
         assert result.node_layouts["B"].outer_bounds.y > result.node_layouts["A"].outer_bounds.y
@@ -260,11 +261,256 @@ class TestElkFromResultCompound:
 class TestElkAdapterReal:
     def test_elk_places_nodes_real(self):
         """AC-ELK-3 (real): ELK subprocess places B below A in TB direction."""
-        result = layout_with_elk(_simple_graph())
+        result, _meta = layout_with_elk(_simple_graph())
         assert result.node_layouts["B"].outer_bounds.y > result.node_layouts["A"].outer_bounds.y
 
     def test_elk_routed_edges_have_waypoints_real(self):
         """AC-ELK-3 (real): ELK edge sections produce waypoints in RoutedEdge."""
-        result = layout_with_elk(_simple_graph())
+        result, _meta = layout_with_elk(_simple_graph())
         assert len(result.routed_edges) > 0
         assert len(result.routed_edges[0].waypoints) >= 2
+
+
+# ── Round-trip tests (T1–T10) ─────────────────────────────────────────────────
+
+class TestRoundTrip:
+    """Tests for the _from_elk_result improvements (T1-T10) and layout_with_elk metadata (T10)."""
+
+    # T1: junction_points field on RoutedEdge
+    def test_junction_points_collected_from_sections(self):
+        """T1/AC9: junctionPoints in ELK sections are captured on RoutedEdge."""
+        out = {
+            "id": "root", "width": 400, "height": 300,
+            "children": [
+                {"id": "A", "x": 10, "y": 10, "width": 100, "height": 40},
+                {"id": "B", "x": 10, "y": 150, "width": 100, "height": 40},
+            ],
+            "edges": [{"id": "e0", "sections": [{
+                "startPoint": {"x": 60, "y": 50},
+                "endPoint": {"x": 60, "y": 150},
+                "bendPoints": [],
+                "junctionPoints": [{"x": 60, "y": 100}],
+            }]}],
+        }
+        result = _from_elk_result(out, _simple_graph())
+        assert len(result.routed_edges) == 1
+        re = result.routed_edges[0]
+        assert len(re.junction_points) == 1
+        assert re.junction_points[0] == Point(60.0, 100.0)
+
+    def test_junction_points_empty_when_none(self):
+        """T1: junction_points is empty tuple when no junctionPoints in sections."""
+        result = _from_elk_result(_minimal_elk_output(), _simple_graph())
+        assert result.routed_edges[0].junction_points == ()
+
+    # T2: edge_style from orig_edge.line_style
+    def test_edge_style_from_orig_edge(self):
+        """T2: edge_style on RoutedEdge reflects orig_edge.line_style."""
+        graph = LayoutGraph(
+            nodes=[
+                LayoutNode("A", 100, 40, "rect", None, [], ["A"], {}),
+                LayoutNode("B", 100, 40, "rect", None, [], ["B"], {}),
+            ],
+            groups=[],
+            edges=[
+                LayoutEdge("e0", ["A"], ["B"], None, None,
+                           MarkerKind.NONE, MarkerKind.ARROW, "dashed", "", {}),
+            ],
+            direction="TB",
+        )
+        out = _minimal_elk_output()
+        result = _from_elk_result(out, graph)
+        assert result.routed_edges[0].edge_style == "dashed"
+
+    # T3: src/dst node IDs from orig_edge (not port strings from ELK)
+    def test_src_dst_ids_from_orig_edge(self):
+        """T3: RoutedEdge.src_node_id / dst_node_id taken from orig_edge.sources/targets."""
+        lb_port = PortSpec(id="lb_R", node_id="lb", side="EAST", index=0,
+                           fixed_side=True, fixed_order=False)
+        api_port = PortSpec(id="api_L", node_id="api", side="WEST", index=0,
+                            fixed_side=True, fixed_order=False)
+        graph = LayoutGraph(
+            nodes=[
+                LayoutNode("lb", 192, 48, "rect", None, [lb_port], ["lb"], {}),
+                LayoutNode("api", 192, 48, "rect", None, [api_port], ["api"], {}),
+            ],
+            groups=[],
+            edges=[
+                LayoutEdge("e0", ["lb"], ["api"], "lb_R", "api_L",
+                           MarkerKind.NONE, MarkerKind.ARROW, "solid", "", {}),
+            ],
+            direction="LR",
+        )
+        out = {
+            "id": "root", "width": 600, "height": 200,
+            "children": [
+                {"id": "lb", "x": 10, "y": 80, "width": 192, "height": 48},
+                {"id": "api", "x": 300, "y": 80, "width": 192, "height": 48},
+            ],
+            "edges": [{"id": "e0",
+                       "sources": ["lb_R"],  # ELK uses port IDs
+                       "targets": ["api_L"],
+                       "sections": [{"startPoint": {"x": 202, "y": 104},
+                                     "endPoint": {"x": 300, "y": 104},
+                                     "bendPoints": []}]}],
+        }
+        result = _from_elk_result(out, graph)
+        re = result.routed_edges[0]
+        assert re.src_node_id == "lb"   # not "lb_R"
+        assert re.dst_node_id == "api"  # not "api_L"
+
+    # T5: tangent-based port direction and side
+    def test_src_port_direction_right_going_edge(self):
+        """T5: src_port.side==RIGHT and direction.x>0 for a left-to-right edge."""
+        out = {
+            "id": "root", "width": 600, "height": 200,
+            "children": [
+                {"id": "A", "x": 0, "y": 0, "width": 192, "height": 42},
+                {"id": "B", "x": 300, "y": 0, "width": 192, "height": 42},
+            ],
+            "edges": [{"id": "e0", "sections": [{
+                "startPoint": {"x": 192, "y": 21},
+                "bendPoints": [{"x": 250, "y": 21}],
+                "endPoint": {"x": 300, "y": 21},
+            }]}],
+        }
+        graph = LayoutGraph(
+            nodes=[
+                LayoutNode("A", 192, 42, "rect", None, [], ["A"], {}),
+                LayoutNode("B", 192, 42, "rect", None, [], ["B"], {}),
+            ],
+            groups=[],
+            edges=[LayoutEdge("e0", ["A"], ["B"], None, None,
+                              MarkerKind.NONE, MarkerKind.ARROW, "solid", "", {})],
+            direction="LR",
+        )
+        result = _from_elk_result(out, graph)
+        re = result.routed_edges[0]
+        assert re.src_port.side == PortSide.RIGHT
+        assert re.src_port.direction.x > 0
+
+    def test_dst_port_direction_into_top(self):
+        """T5: dst_port.side==TOP and direction.y<0 when edge arrives from above."""
+        out = {
+            "id": "root", "width": 400, "height": 300,
+            "children": [
+                {"id": "A", "x": 50, "y": 0, "width": 100, "height": 40},
+                {"id": "B", "x": 50, "y": 200, "width": 100, "height": 40},
+            ],
+            "edges": [{"id": "e0", "sections": [{
+                "startPoint": {"x": 100, "y": 40},
+                "endPoint": {"x": 100, "y": 200},
+                "bendPoints": [],
+            }]}],
+        }
+        graph = LayoutGraph(
+            nodes=[
+                LayoutNode("A", 100, 40, "rect", None, [], ["A"], {}),
+                LayoutNode("B", 100, 40, "rect", None, [], ["B"], {}),
+            ],
+            groups=[],
+            edges=[LayoutEdge("e0", ["A"], ["B"], None, None,
+                              MarkerKind.NONE, MarkerKind.ARROW, "solid", "", {})],
+            direction="TB",
+        )
+        result = _from_elk_result(out, graph)
+        re = result.routed_edges[0]
+        assert re.dst_port.side == PortSide.TOP
+        assert re.dst_port.direction.y < 0
+
+    # T7: EdgeLabelLayout from ELK label geometry
+    def test_edge_label_layout_from_elk(self):
+        """T7: EdgeLabelLayout populated when orig_edge has a label and ELK returns label geometry."""
+        graph = LayoutGraph(
+            nodes=[
+                LayoutNode("A", 100, 40, "rect", None, [], ["A"], {}),
+                LayoutNode("B", 100, 40, "rect", None, [], ["B"], {}),
+            ],
+            groups=[],
+            edges=[
+                LayoutEdge("e0", ["A"], ["B"], None, None,
+                           MarkerKind.NONE, MarkerKind.ARROW, "solid", "uses", {}),
+            ],
+            direction="TB",
+        )
+        out = {
+            "id": "root", "width": 400, "height": 300,
+            "children": [
+                {"id": "A", "x": 10, "y": 10, "width": 100, "height": 40},
+                {"id": "B", "x": 10, "y": 150, "width": 100, "height": 40},
+            ],
+            "edges": [{"id": "e0",
+                       "labels": [{"x": 40, "y": 90, "width": 40, "height": 14}],
+                       "sections": [{"startPoint": {"x": 60, "y": 50},
+                                     "endPoint": {"x": 60, "y": 150},
+                                     "bendPoints": []}]}],
+        }
+        result = _from_elk_result(out, graph)
+        re = result.routed_edges[0]
+        assert re.label_layout is not None
+        assert re.label_layout.text == "uses"
+        assert re.label_layout.bounds.x == 40.0
+
+    # T8: GroupLayout.label_layout from LayoutGroup.label
+    def test_group_label_layout_populated(self):
+        """T8: GroupLayout.label_layout is not None when the group has a label."""
+        result = _from_elk_result(
+            {
+                "id": "root", "width": 600, "height": 300,
+                "children": [{
+                    "id": "cloud", "x": 48, "y": 48, "width": 460, "height": 200,
+                    "children": [
+                        {"id": "lb", "x": 28, "y": 36, "width": 192, "height": 48},
+                        {"id": "api", "x": 240, "y": 36, "width": 192, "height": 48},
+                    ],
+                }],
+                "edges": [],
+            },
+            _compound_graph(),
+        )
+        assert result.group_layouts["cloud"].label_layout is not None
+
+    # T9: NodeLayout.rank from coordinates
+    def test_node_rank_reconstructed_from_positions(self):
+        """T9: rank=1 for top node, rank=2 for lower node in TB layout."""
+        result = _from_elk_result(_minimal_elk_output(), _simple_graph())
+        # A is at y=10, B is at y=132 → A gets rank 1, B gets rank 2
+        assert result.node_layouts["A"].rank == 1
+        assert result.node_layouts["B"].rank == 2
+
+    # T10: LayoutMetadata with ELK provenance fields
+    def test_layout_metadata_elk_fields(self, monkeypatch):
+        """T10: layout_with_elk returns LayoutMetadata with backend=elkjs."""
+        monkeypatch.setattr(_mod, "_find_node", lambda: "/usr/bin/node")
+        monkeypatch.setattr(_mod, "_find_elkjs", lambda: "/fake/elk.bundled.js")
+        with patch.object(_mod, "_run_elk", return_value=_minimal_elk_output()):
+            _result, meta = layout_with_elk(_simple_graph())
+        assert meta.backend == "elkjs"
+        assert meta.backend_version == "0.12.0"
+        assert meta.fallback_reason is None
+        assert meta.elapsed_ms >= 0.0
+        assert "elk.algorithm" in meta.options_applied
+
+    def test_multi_section_waypoints_deduped(self):
+        """T1/AC10: consecutive duplicate points from section joins are removed."""
+        out = {
+            "id": "root", "width": 400, "height": 300,
+            "children": [
+                {"id": "A", "x": 10, "y": 10, "width": 100, "height": 40},
+                {"id": "B", "x": 10, "y": 200, "width": 100, "height": 40},
+            ],
+            "edges": [{"id": "e0", "sections": [
+                {"startPoint": {"x": 60, "y": 50}, "endPoint": {"x": 60, "y": 120},
+                 "bendPoints": []},
+                # second section starts where first ended → duplicate should be dropped
+                {"startPoint": {"x": 60, "y": 120}, "endPoint": {"x": 60, "y": 200},
+                 "bendPoints": []},
+            ]}],
+        }
+        result = _from_elk_result(out, _simple_graph())
+        wps = result.routed_edges[0].waypoints
+        # (60,50) → (60,120) → (60,200): the shared join point appears once
+        assert len(wps) == 3
+        assert wps[0] == Point(60.0, 50.0)
+        assert wps[1] == Point(60.0, 120.0)
+        assert wps[2] == Point(60.0, 200.0)
