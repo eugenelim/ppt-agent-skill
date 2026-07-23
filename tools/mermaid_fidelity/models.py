@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 
 # ── implementation / environment identity ─────────────────────────────────────
@@ -289,3 +289,135 @@ class RenderProfile:
 class FidelityManifest:
     schema_version: int
     cases: list[FidelityCase]
+
+
+# ── reference diagram types (browser geometry capture) ────────────────────────
+
+@dataclass
+class CardinalityEnd:
+    """ER diagram cardinality end representation."""
+    minimum: Literal["ZERO", "ONE"]
+    maximum: Literal["ONE", "MANY"]
+
+
+@dataclass
+class ExtractorGap:
+    """Typed diagnostic for a field that could not be captured."""
+    field: str
+    reason: str
+
+
+@dataclass
+class ReferenceNode:
+    """A node extracted from a rendered SVG."""
+    id: str
+    label: str
+    shape: str | None           # "rect"|"diamond"|"circle"|"roundedrect"|...
+    kind: str | None            # entity kind from diagram type
+    bbox: BoundingBox
+    transform_chain: list[str] = field(default_factory=list)
+    parent_group_id: str | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ReferenceGroup:
+    """A group/subgraph extracted from a rendered SVG."""
+    id: str
+    label: str
+    bbox: BoundingBox
+    parent_group_id: str | None = None
+    node_ids: list[str] = field(default_factory=list)
+    group_ids: list[str] = field(default_factory=list)
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ReferenceLabel:
+    """A label attached to an edge or standalone element."""
+    id: str
+    text: str
+    bbox: BoundingBox
+    edge_id: str | None = None
+
+
+@dataclass
+class ReferenceMarker:
+    """A resolved SVG marker (arrowhead/decorator) on an edge endpoint."""
+    marker_id: str
+    kind: Literal[
+        "hollow_triangle",
+        "filled_diamond",
+        "hollow_diamond",
+        "open_arrow",
+        "none",
+    ]
+    edge_id: str
+    end: Literal["start", "end"]
+
+
+@dataclass
+class ReferenceEdge:
+    """An edge extracted from a rendered SVG."""
+    id: str
+    source: str                 # normalized node/entity id
+    target: str                 # normalized node/entity id
+    path_data: str              # raw SVG path d= attribute
+    sampled_points: list[tuple[float, float]] = field(default_factory=list)
+    stroke_width: float = 1.0
+    dash_pattern: str | None = None
+    marker_start: ReferenceMarker | None = None
+    marker_end: ReferenceMarker | None = None
+    label_bbox: BoundingBox | None = None
+    cardinality_start: CardinalityEnd | None = None
+    cardinality_end: CardinalityEnd | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+class StateSymbolKind(str, Enum):
+    INITIAL = "initial"
+    FINAL = "final"
+    SIMPLE = "simple"
+    COMPOSITE = "composite"
+    COMPOSITE_BOUNDARY = "composite_boundary"
+
+
+@dataclass
+class ReferenceProvenance:
+    """Version and environment fingerprint recorded at capture time."""
+    mermaid_version: str
+    mmdc_version: str
+    node_version: str
+    playwright_version: str
+    chromium_version: str
+    platform: str
+    font_families: list[str]
+    font_fingerprint: str       # sha256 hex of font files
+    fixture_source_hash: str    # sha256 hex of the .mmd source bytes
+    render_config_hash: str     # sha256 hex of the render configuration
+    captured_at: str | None = None  # ISO 8601 timestamp; not used in cache key
+
+
+@dataclass
+class ReferenceDiagram:
+    """Structured geometry record extracted from a browser-rendered Mermaid diagram.
+
+    Only structured JSON records are used as oracle input — screenshots are never the input.
+    Status is EXTRACTOR_GAP when any field has a typed ExtractorGap diagnostic.
+    """
+    fixture_stem: str
+    diagram_type: str
+    canvas_bounds: BoundingBox
+    view_box: str | None
+    provenance: ReferenceProvenance
+    nodes: list[ReferenceNode] = field(default_factory=list)
+    groups: list[ReferenceGroup] = field(default_factory=list)
+    edges: list[ReferenceEdge] = field(default_factory=list)
+    labels: list[ReferenceLabel] = field(default_factory=list)
+    markers: list[ReferenceMarker] = field(default_factory=list)
+    gaps: list[ExtractorGap] = field(default_factory=list)
+    status: ComparisonStatus = ComparisonStatus.PASS
+
+    def __post_init__(self) -> None:
+        if self.gaps and self.status == ComparisonStatus.PASS:
+            object.__setattr__(self, "status", ComparisonStatus.EXTRACTOR_GAP)
