@@ -418,224 +418,58 @@ def _render_graph_fragment(
                 f'{_nh(n.label)}</span></div>'
             )
         else:
-            # For clip-path shapes, CSS border bleeds through polygon vertices as
-            # orphan dot artifacts. Use SVG polygon overlays instead that trace
-            # the actual shape outline — same pattern used for diamonds.
-            _uses_clip = n.shape in ("diamond", "flag", "hexagon", "trapezoid", "trapezoid-alt")
-            _shape_border_svg = ""
+            # Delegate all shape-specific HTML to the authoritative ShapeGeometry painter.
+            from .shape_geometry import SHAPE_REGISTRY as _SR
+            # Compute shape-specific border CSS (external dashes override shape default)
             if is_external:
                 _border_css = f'border:1.5px dashed {border_var};'
-            elif n.shape == "diamond":
-                _border_css = ""
-                _dw = n.width if n.width > 0 else _DIAMOND_SIZE
-                _dx_half = _dw // 2
-                _dy_half = node_h // 2
-                _shape_border_svg = (
-                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                    f'width="{_dw}" height="{node_h}">'
-                    f'<polygon points="{_dx_half},1 {_dw-1},{_dy_half} {_dx_half},{node_h-1} 1,{_dy_half}" '
-                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
-                )
-            elif n.shape == "hexagon":
-                _border_css = ""
-                _hw = n.width if n.width > 0 else _HEXAGON_SIZE
-                _hh = node_h
-                _shape_border_svg = (
-                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                    f'width="{_hw}" height="{_hh}">'
-                    f'<polygon points="{_hw//4},1 {3*_hw//4},1 {_hw-1},{_hh//2} {3*_hw//4},{_hh-1} {_hw//4},{_hh-1} 1,{_hh//2}" '
-                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
-                )
-            elif n.shape in ("trapezoid", "trapezoid-alt"):
-                _border_css = ""
-                _tw = n.width or NODE_W
-                _th = node_h
-                if n.shape == "trapezoid":
-                    # clip-path: 15% 0%, 100% 0%, 85% 100%, 0% 100%
-                    _pts = (f'{int(_tw*0.15)},1 {_tw-1},1 {int(_tw*0.85)},{_th-1} 1,{_th-1}')
-                else:
-                    # clip-path: 0% 0%, 85% 0%, 100% 100%, 15% 100%
-                    _pts = (f'1,1 {int(_tw*0.85)},1 {_tw-1},{_th-1} {int(_tw*0.15)},{_th-1}')
-                _shape_border_svg = (
-                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                    f'width="{_tw}" height="{_th}">'
-                    f'<polygon points="{_pts}" '
-                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
-                )
             elif n.shape == "stadium":
-                # Full accent-color border all around (pill shape via border-radius)
                 _border_css = f'border:1.5px solid {accent_color};'
-            elif n.shape == "flag":
-                _border_css = ""
-                _fw = n.width or NODE_W
-                _fh = node_h
-                _fp = int(_fw * 0.88)
-                _shape_border_svg = (
-                    f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                    f'width="{_fw}" height="{_fh}">'
-                    f'<polygon points="1,1 {_fp},1 {_fw-1},{_fh//2} {_fp},{_fh-1} 1,{_fh-1}" '
-                    f'fill="none" stroke="{accent_color}" stroke-width="2"/></svg>'
-                )
+            elif n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag", "bar",
+                             "doublecircle", "cylinder", "circle"):
+                _border_css = ""  # handled internally by paint_html
             else:
                 _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent_color};'
-
-            if n.shape == "doublecircle":
-                # Outer circle + inner concentric circle (5px inset)
-                parts.append(
-                    f'<div class="node node-doublecircle{extra_cls}" {_node_data_attrs(nid, n)} style="'
-                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{node_h}px; height:{node_h}px; '
-                    f'border-radius:50%; box-sizing:border-box; overflow:visible; '
-                    f'border:2px solid {accent_color}; '
-                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
-                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                    f'display:flex; align-items:center; justify-content:center;">'
-                    f'<div style="position:absolute; inset:5px; border-radius:50%; '
-                    f'border:2px solid {accent_color}; pointer-events:none;"></div>'
-                    f'{inner}</div>'
-                )
-            elif n.shape == "subroutine":
-                # Rect with two inner vertical lines near left and right edges
-                _nw = n.width or NODE_W
-                parts.append(
-                    f'<div class="node node-subroutine{extra_cls}" {_node_data_attrs(nid, n)} style="'
-                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{_nw}px; min-height:{node_h}px; '
-                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                    f'box-sizing:border-box; overflow:visible; '
-                    f'{_border_css} '
-                    f'{shape_css} '
-                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2))); '
-                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                    f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
-                    f'text-align:left;">'
-                    f'{inner}'
-                    f'<svg style="position:absolute;inset:0;width:{_nw}px;height:{node_h}px;pointer-events:none;overflow:visible;">'
-                    f'<line x1="8" y1="2" x2="8" y2="{node_h - 2}" stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'<line x1="{_nw - 8}" y1="2" x2="{_nw - 8}" y2="{node_h - 2}" stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'</svg>'
-                    f'</div>'
-                )
-            elif n.shape == "cylinder":
-                # Proper silo/drum shape: SVG overlay draws two elliptical caps
-                # and side walls; the div provides background fill and label text.
-                _nw = n.width or NODE_W
-                _cyl_ry = min(10, node_h // 5)
-                _cyl_rx = _nw // 2 - 2
-                _cyl_cx = _nw // 2
-                _bg = (f'linear-gradient({_depth_wash},{_depth_wash}),'
-                       f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-                       f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)))')
-                _cyl_svg = (
-                    f'<svg style="position:absolute;inset:0;width:{_nw}px;height:{node_h}px;'
-                    f'pointer-events:none;overflow:visible;">'
-                    # Side walls
-                    f'<line x1="2" y1="{_cyl_ry}" x2="2" y2="{node_h - _cyl_ry}"'
-                    f' stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'<line x1="{_nw - 2}" y1="{_cyl_ry}" x2="{_nw - 2}" y2="{node_h - _cyl_ry}"'
-                    f' stroke="{accent_color}" stroke-width="1.5"/>'
-                    # Bottom cap ellipse (outline only — back half hidden behind body)
-                    f'<ellipse cx="{_cyl_cx}" cy="{node_h - _cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
-                    f' fill="none" stroke="{accent_color}" stroke-width="1.5" opacity="0.6"/>'
-                    # Top cap ellipse (filled to cover rectangular div edge)
-                    f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
-                    f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent_color}" stroke-width="1.5"/>'
-                    f'</svg>'
-                )
-                parts.append(
-                    f'<div class="node node-cylinder{extra_cls}" {_node_data_attrs(nid, n)} style="'
-                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{_nw}px; min-height:{node_h}px; '
-                    f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
-                    f'box-sizing:border-box; overflow:visible; '
-                    f'border:none; '
-                    f'background:{_bg}; '
-                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                    f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
-                    f'text-align:left;">'
-                    f'{inner}{_cyl_svg}</div>'
-                )
+            # Compute node width per shape
+            if n.shape == "diamond":
+                _nw = n.width if n.width > 0 else _DIAMOND_SIZE
+            elif n.shape == "hexagon":
+                _nw = n.width if n.width > 0 else _HEXAGON_SIZE
             elif n.shape == "circle":
-                # Non-terminal circle: dynamic-sized square rendered as a perfect circle
-                # (border-radius:50%). Using an explicit fixed height avoids the oval
-                # produced by border-radius:50% on a tall/wide rect.
-                _circ_sz = n.width if n.width > 0 else _CIRCLE_NODE_SIZE
-                parts.append(
-                    f'<div class="node node-circle{extra_cls}" {_node_data_attrs(nid, n)} style="'
-                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{_circ_sz}px; height:{_circ_sz}px; '
-                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                    f'box-sizing:border-box; overflow:hidden; '
-                    f'{_border_css} '
-                    f'{shape_css} '
-                    f'background:linear-gradient({_depth_wash},{_depth_wash}),linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css} '
-                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03)); '
-                    f'display:flex; flex-direction:column; align-items:center; justify-content:center; '
-                    f'text-align:center;">'
-                    f'{inner}</div>'
-                )
+                _nw = n.width if n.width > 0 else _CIRCLE_NODE_SIZE
+            elif n.shape == "doublecircle":
+                _nw = node_h
             elif n.shape == "bar":
-                # UML fork/join sync bar: a solid horizontal rectangle with a label below.
-                _bar_w = n.width if n.width > 0 else _BAR_W
-                _bar_top = (node_h - _BAR_H) // 2
-                parts.append(
-                    f'<div class="node node-bar{extra_cls}" {_node_data_attrs(nid, n)} style="'
-                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{_bar_w}px; height:{node_h}px; '
-                    f'box-sizing:border-box; overflow:visible;">'
-                    f'<div style="position:absolute; left:0; top:{_bar_top}px; '
-                    f'width:{_bar_w}px; height:{_BAR_H}px; '
-                    f'background:var(--node-fg,var(--text-primary,#191A17)); '
-                    f'border-radius:2px;"></div>'
-                    f'<span class="node-label" style="'
-                    f'position:absolute; left:0; top:{_bar_top + _BAR_H + 2}px; '
-                    f'width:{_bar_w}px; font-size:9px; text-align:center; '
-                    f'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
-                    f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
-                    f'">{_nh(n.label)}</span>'
-                    f'</div>'
-                )
+                _nw = n.width if n.width > 0 else _BAR_W
             else:
-                # Polygon shapes: clip-path goes on a background div (not the outer container)
-                # so the label text is never clipped by the polygon boundary.
-                _center_shapes = n.shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag")
-                _align = "center" if _center_shapes else "flex-start"
-                _text_align = "center" if _center_shapes else "left"
-                if n.shape == "diamond":
-                    _nw = n.width if n.width > 0 else _DIAMOND_SIZE
-                elif n.shape == "hexagon":
-                    _nw = n.width if n.width > 0 else _HEXAGON_SIZE
-                else:
-                    _nw = n.width or NODE_W
-                _bg_css = (
-                    f'background:linear-gradient({_depth_wash},{_depth_wash}),'
-                    f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css}'
-                )
-                _clip_css = _CLIP_PATH_CSS.get(n.shape, "")
-                parts.append(
-                    # Outer container: no clip-path, no overflow:hidden, no box-shadow
-                    # (box-shadow goes on the background div so it follows the polygon outline)
-                    f'<div class="node node-{_h(n.shape)}{extra_cls}" {_node_data_attrs(nid, n)} style="'
-                    f'position:absolute; left:{n.x}px; top:{n.y}px; '
-                    f'width:{_nw}px; min-height:{node_h}px; '
-                    f'box-sizing:border-box; overflow:visible; '
-                    f'{_border_css} '
-                    f'{shape_css}">'
-                    # SVG polygon border first (before inner divs so existing tests
-                    # that search up to the first </div> still find the polygon)
-                    f'{_shape_border_svg}'
-                    # Background div: carries the polygon clip, fill, and shadow
-                    f'<div style="position:absolute; inset:0; {_clip_css} {_bg_css} '
-                    f'box-shadow:var(--node-shadow,0 1px 2px rgba(25,26,23,0.06),0 1px 0 rgba(25,26,23,0.03));"></div>'
-                    # Text div: no clip-path — label text always visible
-                    f'<div style="position:absolute; inset:0; '
-                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                    f'box-sizing:border-box; display:flex; flex-direction:column; '
-                    f'align-items:{_align}; justify-content:center; '
-                    f'text-align:{_text_align}; overflow:visible;">'
-                    f'{inner}</div>'
-                    f'</div>'
-                )
+                _nw = n.width or NODE_W
+            _bg_css = (
+                f'background:linear-gradient({_depth_wash},{_depth_wash}),'
+                f'linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
+                f'var(--node-bg-to,var(--card-bg-to,#F7F6F2)));{_extra_css}'
+            )
+            _data_attrs_html = (
+                f'class="node node-{_h(n.shape)}{extra_cls}" {_node_data_attrs(nid, n)}'
+            )
+            _paint_kw: dict = {
+                "inner_html": inner,
+                "border_css": _border_css,
+                "shape_css": shape_css,
+                "bg_css": _bg_css,
+                "box_shadow": (
+                    "var(--node-shadow,"
+                    "0 1px 2px rgba(25,26,23,0.06),"
+                    "0 1px 0 rgba(25,26,23,0.03))"
+                ),
+                "data_attrs_html": _data_attrs_html,
+                "accent": accent_color,
+            }
+            if n.shape == "bar":
+                _paint_kw["bar_label_html"] = _nh(raw_label or n.label)
+            _geom = _SR.get(n.shape, _SR["rect"])
+            _html = _geom.paint_html(n.x, n.y, _nw, node_h, **_paint_kw)
+            if _html is not None:
+                parts.append(_html)
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
     # clip-path:inset(0) keeps edges inside the diagram area so they cannot
@@ -1717,52 +1551,14 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'{tech_span}'
             )
 
-        # Shape-specific SVG/HTML overlays
-        shape_overlay = ""
-        if shape == "diamond":
-            _dx_half = nw // 2
-            _dy_half = nh // 2
-            shape_overlay = (
-                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                f'width="{nw}" height="{nh}">'
-                f'<polygon points="{_dx_half},1 {nw-1},{_dy_half} {_dx_half},{nh-1} 1,{_dy_half}" '
-                f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
-            )
-        elif shape == "hexagon":
-            shape_overlay = (
-                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                f'width="{nw}" height="{nh}">'
-                f'<polygon points="{nw//4},1 {3*nw//4},1 {nw-1},{nh//2} {3*nw//4},{nh-1} {nw//4},{nh-1} 1,{nh//2}" '
-                f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
-            )
-        elif shape in ("trapezoid", "trapezoid-alt"):
-            if shape == "trapezoid":
-                _pts = f'{int(nw*0.15)},1 {nw-1},1 {int(nw*0.85)},{nh-1} 1,{nh-1}'
-            else:
-                _pts = f'1,1 {int(nw*0.85)},1 {nw-1},{nh-1} {int(nw*0.15)},{nh-1}'
-            shape_overlay = (
-                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                f'width="{nw}" height="{nh}">'
-                f'<polygon points="{_pts}" fill="none" stroke="{accent}" stroke-width="2"/></svg>'
-            )
-        elif shape == "flag":
-            _fp = int(nw * 0.88)
-            shape_overlay = (
-                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;" '
-                f'width="{nw}" height="{nh}">'
-                f'<polygon points="1,1 {_fp},1 {nw-1},{nh//2} {_fp},{nh-1} 1,{nh-1}" '
-                f'fill="none" stroke="{accent}" stroke-width="2"/></svg>'
-            )
-
         # Fidelity data attributes for this node; strip HTML tags so
         # data-label contains plain text (e.g. <br> → space, not &lt;br&gt;).
         import re as _re_fid
         _fid_label = _h(_re_fid.sub(r'<[^>]+>', ' ', decoded_label).strip())
         _fid_parent = f' data-parent-id="{_h(nl.parent_group_id)}"' if nl.parent_group_id else ""
 
-        # Special full-node renderings
+        # Special full-node renderings (UML initial pseudo-state)
         if nid.endswith("_sm_start_") and shape == "circle":
-            # UML initial pseudo-state: solid filled disc, no label text
             parts.append(
                 f'<div class="node node-circle state-initial{extra_cls}" data-node-id="{_h(nid)}"'
                 f' data-kind="node" data-label="●" data-shape="circle"'
@@ -1772,125 +1568,50 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
                 f'border-radius:50%; background:{accent}; box-sizing:border-box;">'
                 f'</div>'
             )
-        elif shape == "doublecircle":
-            parts.append(
-                f'<div class="node node-doublecircle{extra_cls}" data-node-id="{_h(nid)}"'
-                f' data-kind="node" data-label="{_fid_label}" data-shape="doublecircle"'
-                f' data-order="{nl.rank}"{_fid_parent} style="'
-                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
-                f'width:{nh}px; height:{nh}px; '
-                f'border-radius:50%; box-sizing:border-box; overflow:visible; '
-                f'border:2px solid {accent}; '
-                f'background:{_bg}; box-shadow:{_shadow}; '
-                f'display:flex; align-items:center; justify-content:center;">'
-                f'<div style="position:absolute; inset:5px; border-radius:50%; '
-                f'background:{accent}; pointer-events:none;"></div>'
-                f'{inner}</div>'
-            )
-        elif shape == "subroutine":
-            parts.append(
-                f'<div class="node node-subroutine{extra_cls}" data-node-id="{_h(nid)}"'
-                f' data-kind="node" data-label="{_fid_label}" data-shape="subroutine"'
-                f' data-order="{nl.rank}"{_fid_parent} style="'
-                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
-                f'width:{nw}px; min-height:{nh}px; '
-                f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                f'box-sizing:border-box; overflow:visible; '
-                f'{_border_css} {shape_css} background:{_bg}; box-shadow:{_shadow}; '
-                f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center;">'
-                f'{inner}'
-                f'<svg style="position:absolute;inset:0;width:{nw}px;height:{nh}px;pointer-events:none;overflow:visible;">'
-                f'<line x1="8" y1="2" x2="8" y2="{nh - 2}" stroke="{accent}" stroke-width="1.5"/>'
-                f'<line x1="{nw - 8}" y1="2" x2="{nw - 8}" y2="{nh - 2}" stroke="{accent}" stroke-width="1.5"/>'
-                f'</svg></div>'
-            )
-        elif shape == "cylinder":
-            _cyl_ry = min(10, nh // 5)
-            _cyl_rx = nw // 2 - 2
-            _cyl_cx = nw // 2
-            parts.append(
-                f'<div class="node node-cylinder{extra_cls}" data-node-id="{_h(nid)}"'
-                f' data-kind="node" data-label="{_fid_label}" data-shape="cylinder"'
-                f' data-order="{nl.rank}"{_fid_parent} style="'
-                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
-                f'width:{nw}px; min-height:{nh}px; '
-                f'padding:{12 + _cyl_ry}px 12px 12px 12px; '
-                f'box-sizing:border-box; overflow:visible; border:none; '
-                f'background:{_bg}; box-shadow:{_shadow}; '
-                f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center;">'
-                f'{inner}'
-                f'<svg style="position:absolute;inset:0;width:{nw}px;height:{nh}px;pointer-events:none;overflow:visible;">'
-                f'<line x1="2" y1="{_cyl_ry}" x2="2" y2="{nh - _cyl_ry}" stroke="{accent}" stroke-width="1.5"/>'
-                f'<line x1="{nw - 2}" y1="{_cyl_ry}" x2="{nw - 2}" y2="{nh - _cyl_ry}" stroke="{accent}" stroke-width="1.5"/>'
-                f'<ellipse cx="{_cyl_cx}" cy="{nh - _cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
-                f' fill="none" stroke="{accent}" stroke-width="1.5" opacity="0.6"/>'
-                f'<ellipse cx="{_cyl_cx}" cy="{_cyl_ry}" rx="{_cyl_rx}" ry="{_cyl_ry}"'
-                f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent}" stroke-width="1.5"/>'
-                f'</svg></div>'
-            )
-        elif shape == "bar":
-            # UML fork/join sync bar: solid horizontal rectangle with label below.
-            _bar_top = (nh - _BAR_H) // 2
-            parts.append(
-                f'<div class="node node-bar{extra_cls}" data-node-id="{_h(nid)}"'
-                f' data-kind="node" data-label="{_fid_label}" data-shape="bar"'
-                f' data-order="{nl.rank}"{_fid_parent} style="'
-                f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
-                f'width:{nw}px; height:{nh}px; '
-                f'box-sizing:border-box; overflow:visible;">'
-                f'<div style="position:absolute; left:0; top:{_bar_top}px; '
-                f'width:{nw}px; height:{_BAR_H}px; '
-                f'background:var(--node-fg,var(--text-primary,#191A17)); '
-                f'border-radius:2px;"></div>'
-                f'<span class="node-label" style="'
-                f'position:absolute; left:0; top:{_bar_top + _BAR_H + 2}px; '
-                f'width:{nw}px; font-size:9px; text-align:center; '
-                f'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
-                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
-                f'">{_h(raw_label)}</span>'
-                f'</div>'
-            )
         else:
-            # Standard node (includes diamond, hexagon, trapezoid overlays)
-            # Clip-path shapes need a background overlay div (so text isn't clipped)
-            clip_css = _CLIP_PATH_CSS.get(shape, "")
-            bg_overlay = ""
-            label_html = inner
-            if clip_css:
-                bg_overlay = (
-                    f'<div style="position:absolute; inset:0; {clip_css} '
-                    f'background:linear-gradient(180deg,var(--node-bg-from,var(--card-bg-from,#ffffff)),'
-                    f'var(--node-bg-to,var(--card-bg-to,#F7F6F2))); pointer-events:none;"></div>'
-                )
-                # bg_overlay is absolutely positioned, so it paints on top of any
-                # in-flow (static) label — hiding it. Lift the label into its own
-                # absolutely-positioned layer that follows in DOM order, so it paints
-                # above the overlay. Centre it: polygon tips leave no room for the
-                # flush-left flow alignment used by rectangular nodes.
-                label_html = (
-                    f'<div style="position:absolute; inset:0; display:flex; '
-                    f'flex-direction:column; align-items:center; justify-content:center; '
-                    f'text-align:center; box-sizing:border-box; '
-                    f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
-                    f'pointer-events:none;">{inner}</div>'
-                )
-            parts.append(
-                f'<div class="node{extra_cls}"'
+            # Delegate all shape-specific HTML to the authoritative ShapeGeometry painter.
+            from .shape_geometry import SHAPE_REGISTRY as _SR
+            if is_ext:
+                _border_css = f'border:1.5px dashed {border_var};'
+            elif shape == "stadium":
+                _border_css = f'border:1.5px solid {accent};'
+            elif shape in ("diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag", "bar",
+                           "doublecircle", "cylinder", "circle"):
+                _border_css = ""
+            else:
+                _border_css = f'border:1.5px solid {border_var}; border-top:3px solid {accent};'
+            if shape == "diamond":
+                _nw = nw if nw > 0 else _DIAMOND_SIZE
+            elif shape == "hexagon":
+                _nw = nw if nw > 0 else _HEXAGON_SIZE
+            elif shape in ("circle", "doublecircle"):
+                _nw = nh
+            elif shape == "bar":
+                _nw = nw if nw > 0 else _BAR_W
+            else:
+                _nw = nw or NODE_W
+            _bg_css = f'background:{_bg};{nl.extra_css}'
+            _fid_data = (
+                f'class="node{extra_cls}"'
                 f' data-node-id="{_h(nid)}"'
                 f' data-kind="node" data-label="{_fid_label}" data-shape="{shape}"'
                 f' data-order="{nl.rank}"{_fid_parent}'
-                f' style="position:absolute;'
-                f' left:{int(b.x)}px; top:{int(b.y)}px;'
-                f' width:{nw}px; height:{nh}px;'
-                f' {_border_css} {shape_css}'
-                f' background:{_bg}; box-shadow:{_shadow};'
-                f' box-sizing:border-box; overflow:visible;'
-                f' display:flex; flex-direction:column; align-items:flex-start; justify-content:center;'
-                f' padding:var(--node-pad-v,12px) var(--node-pad-h,12px);'
-                f' {nl.extra_css}">'
-                f'{shape_overlay}{bg_overlay}{label_html}'
-                f'</div>'
             )
+            _paint_kw: dict = {
+                "inner_html": inner,
+                "border_css": _border_css,
+                "shape_css": shape_css,
+                "bg_css": _bg_css,
+                "box_shadow": _shadow,
+                "data_attrs_html": _fid_data,
+                "accent": accent,
+            }
+            if shape == "bar":
+                _paint_kw["bar_label_html"] = _h(raw_label)
+            _geom = _SR.get(shape, _SR["rect"])
+            _html = _geom.paint_html(int(b.x), int(b.y), _nw, nh, **_paint_kw)
+            if _html is not None:
+                parts.append(_html)
 
     # SVG overlay for routed edges (geometry pre-computed, no routing calls)
     parts.append(

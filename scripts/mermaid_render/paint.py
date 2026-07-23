@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from .scene import (
     SvgScene, SceneGroup, SceneRect, SceneRoundedRect, SceneCircle, SceneEllipse,
     SceneLine, ScenePolyline, ScenePolygon, ScenePath, SceneText, SceneTextLine,
-    SceneImage, PaintStyle, StrokeStyle, FillStyle,
+    SceneImage, SceneRaw, PaintStyle, StrokeStyle, FillStyle,
     MarkerDefinition, AccessibilityMetadata, make_scene_id,
     LAYER_BACKGROUND, LAYER_BOUNDARIES, LAYER_EDGES, LAYER_NODES,
     LAYER_LABELS, LAYER_NOTES, LAYER_OVERLAYS, LAYER_ORDER,
@@ -196,135 +196,24 @@ def _node_scene_elements(node: Any, tokens: _Tokens, order: int = 0) -> list:
         ("order", str(order)),
     ) + ((("parent-id", parent_id),) if parent_id else ())
 
-    if shape in ("rect", "round", "stadium", "subroutine", "flag"):
-        rx = {"rect": tokens.node_rx, "round": 14.0, "stadium": 50.0,
-              "subroutine": 4.0, "flag": 0.0}.get(shape, tokens.node_rx)
-        elements.append(SceneRoundedRect(
-            element_id=eid, x=x, y=y, w=nw, h=nh, rx=rx, ry=rx,
-            css_classes=("node", f"node-{shape}"),
-            data_attrs=_node_data,
-            paint=paint,
-        ))
-
-    elif shape == "circle":
-        r = min(nw, nh) / 2
-        elements.append(SceneCircle(
-            element_id=eid, cx=x + nw/2, cy=y + nh/2, r=r,
-            css_classes=("node", "node-circle"),
-            data_attrs=_node_data,
-            paint=paint,
-        ))
-
-    elif shape == "doublecircle":
-        r_outer = min(nw, nh) / 2
-        r_inner = r_outer - 6
-        outer_paint = _make_node_paint(tokens.node_stroke, tokens.node_fill, tokens.node_stroke_w)
-        inner_paint = PaintStyle(
-            fill=FillStyle(color="none"),
-            stroke=StrokeStyle(color=tokens.node_stroke, width=tokens.node_stroke_w),
-        )
-        elements.append(SceneCircle(
-            element_id=eid + "-outer", cx=x + nw/2, cy=y + nh/2, r=r_outer,
-            css_classes=("node", "node-doublecircle"),
-            data_attrs=_node_data,
-            paint=outer_paint,
-        ))
-        elements.append(SceneCircle(
-            element_id=eid + "-inner", cx=x + nw/2, cy=y + nh/2, r=r_inner,
-            paint=inner_paint,
-        ))
-
-    elif shape == "diamond":
-        cx, cy = x + nw/2, y + nh/2
-        pts = ((cx, y), (x + nw, cy), (cx, y + nh), (x, cy))
-        elements.append(ScenePolygon(
-            element_id=eid,
-            points=pts,
-            css_classes=("node", "node-diamond"),
-            data_attrs=_node_data,
-            paint=paint,
-        ))
-
-    elif shape == "hexagon":
-        hw = nw * 0.25
-        pts = (  # type: ignore[assignment]
-            (x + hw, y), (x + nw - hw, y),
-            (x + nw, y + nh/2), (x + nw - hw, y + nh),
-            (x + hw, y + nh), (x, y + nh/2),
-        )
-        elements.append(ScenePolygon(
-            element_id=eid,
-            points=pts,
-            css_classes=("node", "node-hexagon"),
-            data_attrs=_node_data,
-            paint=paint,
-        ))
-
-    elif shape in ("trapezoid", "trapezoid-alt"):
-        inset = nw * 0.15
-        if shape == "trapezoid":
-            pts = ((x + inset, y), (x + nw, y), (x + nw - inset, y + nh), (x, y + nh))
-        else:
-            pts = ((x, y), (x + nw - inset, y), (x + nw, y + nh), (x + inset, y + nh))
-        elements.append(ScenePolygon(
-            element_id=eid,
-            points=pts,
-            css_classes=("node", f"node-{shape}"),
-            data_attrs=_node_data,
-            paint=paint,
-        ))
-
-    elif shape == "cylinder":
-        # Cylinder: rect body + elliptical top/bottom caps
-        cap_ry = max(8.0, nh * 0.12)
-        body_paint = _make_node_paint(tokens.node_stroke, tokens.node_fill, tokens.node_stroke_w)
-        cap_paint = _make_node_paint(tokens.node_stroke, tokens.node_fill, tokens.node_stroke_w)
-        # Body rect
-        elements.append(SceneRect(
-            element_id=eid + "-body",
-            x=x, y=y + cap_ry, w=nw, h=nh - 2*cap_ry,
-            css_classes=("node", "node-cylinder"),
-            data_attrs=_node_data,
-            paint=body_paint,
-        ))
-        # Bottom cap (filled)
-        elements.append(SceneEllipse(
-            element_id=eid + "-bottom",
-            cx=x + nw/2, cy=y + nh - cap_ry,
-            rx=nw/2, ry=cap_ry,
-            paint=cap_paint,
-        ))
-        # Top cap (outline only - to show the "opening")
-        elements.append(SceneEllipse(
-            element_id=eid + "-top",
-            cx=x + nw/2, cy=y + cap_ry,
-            rx=nw/2, ry=cap_ry,
-            paint=_make_node_paint(tokens.node_stroke, tokens.node_fill, tokens.node_stroke_w),
-        ))
-
-    elif shape == "bar":
-        # UML fork/join sync bar: solid horizontal rectangle centered vertically
-        _bar_h = 8.0
-        _bar_y = y + (nh - _bar_h) / 2
-        elements.append(SceneRect(
-            element_id=eid,
-            x=x, y=_bar_y, w=nw, h=_bar_h,
-            css_classes=("node", "node-bar"),
-            data_attrs=_node_data,
-            paint=PaintStyle(
-                fill=FillStyle(color=tokens.text_fill),
-                stroke=StrokeStyle(color="none", width=0),
-            ),
-        ))
-
-    else:
-        # Default: rounded rect
-        elements.append(SceneRoundedRect(
-            element_id=eid, x=x, y=y, w=nw, h=nh, rx=tokens.node_rx, ry=tokens.node_rx,
-            css_classes=("node",),
-            data_attrs=_node_data,
-            paint=paint,
-        ))
+    from .shape_geometry import SHAPE_REGISTRY as _SR
+    _geom = _SR.get(shape, _SR["rect"])
+    _svg_frag = _geom.paint_svg(
+        x, y, nw, nh,
+        fill=tokens.node_fill,
+        stroke=tokens.node_stroke,
+        stroke_w=tokens.node_stroke_w,
+    )
+    elements.append(SceneRaw(
+        element_id=eid,
+        svg=_svg_frag,
+        x=x,
+        y=y,
+        w=nw,
+        h=nh,
+        css_classes=("node", f"node-{shape}"),
+        data_attrs=_node_data,
+    ))
 
     # Label text
     label_text = label.replace("<br>", "\n").replace("<br/>", "\n")

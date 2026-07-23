@@ -6,7 +6,7 @@ Each shape knows how to:
 - clip an edge connector to its outline (boundary_intersection)
 - enumerate available port sides (available_ports)
 - report connector marker clearance (marker_clearance)
-- paint itself as SVG or HTML (stubs — wired fully in a later pass)
+- paint itself as SVG or HTML
 """
 from __future__ import annotations
 
@@ -215,6 +215,50 @@ def _default_anchor(geom: ShapeGeometry, side: str, offset: float,
     return bx, by
 
 
+# ── paint helpers ─────────────────────────────────────────────────────────────
+
+def _verts_to_points(
+    verts: List[Tuple[float, float]],
+    x_off: float = 0.0,
+    y_off: float = 0.0,
+) -> str:
+    """Convert vertex list to SVG points string with optional offset."""
+    return " ".join(f"{x + x_off:.1f},{y + y_off:.1f}" for x, y in verts)
+
+
+def _verts_to_clip_path(
+    verts: List[Tuple[float, float]],
+    w: float,
+    h: float,
+) -> str:
+    """Convert vertex list to CSS polygon() clip-path value (no 'clip-path:' prefix)."""
+    if w <= 0 or h <= 0:
+        return "polygon(0% 0%,100% 0%,100% 100%,0% 100%)"
+
+    def _pct(val: float, dim: float) -> str:
+        p = round(100 * val / dim, 6)
+        return f"{int(p)}%" if p == int(p) else f"{p:.1f}%"
+
+    return "polygon(" + ",".join(
+        f"{_pct(x, w)} {_pct(y, h)}" for x, y in verts
+    ) + ")"
+
+
+def _svg_border_pts(
+    verts: List[Tuple[float, float]],
+    w: float,
+    h: float,
+) -> str:
+    """Return SVG polygon border points with 1px inset, matching int()-based renderer."""
+    INSET = 1.0
+    result = []
+    for vx, vy in verts:
+        px = INSET if vx < INSET else (w - INSET if vx > w - INSET else vx)
+        py = INSET if vy < INSET else (h - INSET if vy > h - INSET else vy)
+        result.append(f"{int(px)},{int(py)}")
+    return " ".join(result)
+
+
 # ── shape implementations ─────────────────────────────────────────────────────
 
 class RectGeometry:
@@ -241,10 +285,38 @@ class RectGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        return (
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'<div style="position:absolute; inset:0; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:flex-start; justify-content:center; '
+            f'text-align:left; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class RoundGeometry:
@@ -271,10 +343,39 @@ class RoundGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        return (
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"'
+            f' rx="14" ry="14"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'<div style="position:absolute; inset:0; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:flex-start; justify-content:center; '
+            f'text-align:left; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class StadiumGeometry:
@@ -302,10 +403,40 @@ class StadiumGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        rx = min(h / 2, 50.0)
+        return (
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"'
+            f' rx="{rx:.1f}" ry="{rx:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'<div style="position:absolute; inset:0; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:flex-start; justify-content:center; '
+            f'text-align:left; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class DiamondGeometry:
@@ -342,10 +473,56 @@ class DiamondGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        verts = self.outline_path(w, h)
+        pts = _verts_to_points(verts, x, y)
+        return (
+            f'<polygon points="{pts}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        # SVG border overlay derived from outline_path (not external border)
+        verts = self.outline_path(w, h)
+        clip_path = _verts_to_clip_path(verts, w, h)
+        if border_css:
+            # External node: use CSS border, no SVG overlay
+            shape_border_svg = ""
+        else:
+            pts = _svg_border_pts(verts, w, h)
+            shape_border_svg = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;"'
+                f' width="{int(w)}" height="{int(h)}">'
+                f'<polygon points="{pts}"'
+                f' fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'{shape_border_svg}'
+            f'<div style="position:absolute; inset:0; clip-path:{clip_path}; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:center; justify-content:center; '
+            f'text-align:center; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class CircleGeometry:
@@ -373,10 +550,37 @@ class CircleGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        cx, cy = x + w / 2, y + h / 2
+        r = min(w, h) / 2
+        return (
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; height:{w}px; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; overflow:hidden; '
+            f'{border_css} '
+            f'{shape_css} '
+            f'{bg_css} '
+            f'box-shadow:{box_shadow}; '
+            f'display:flex; flex-direction:column; align-items:center; justify-content:center; '
+            f'text-align:center;">'
+            f'{inner_html}</div>'
+        )
 
 
 class DoubleCircleGeometry:
@@ -408,10 +612,38 @@ class DoubleCircleGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        cx, cy = x + w / 2, y + h / 2
+        r_outer = min(w, h) / 2
+        r_inner = max(r_outer - 6, 1.0)
+        return (
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r_outer:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r_inner:.1f}"'
+            f' fill="none" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{h}px; height:{h}px; '
+            f'border-radius:50%; box-sizing:border-box; overflow:visible; '
+            f'border:2px solid {accent}; '
+            f'{bg_css} '
+            f'box-shadow:{box_shadow}; '
+            f'display:flex; align-items:center; justify-content:center;">'
+            f'<div style="position:absolute; inset:5px; border-radius:50%; '
+            f'background:{accent}; pointer-events:none;"></div>'
+            f'{inner_html}</div>'
+        )
 
 
 class CylinderGeometry:
@@ -440,10 +672,68 @@ class CylinderGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        cap_ry = max(8.0, h * 0.12)
+        cap_rx = w / 2
+        cx = x + w / 2
+        body_top = y + cap_ry
+        body_bot = y + h - cap_ry
+        return (
+            # Body rect
+            f'<rect x="{x:.1f}" y="{body_top:.1f}" width="{w:.1f}" height="{body_bot - body_top:.1f}"'
+            f' fill="{fill}" stroke="none"/>'
+            # Bottom cap
+            f'<ellipse cx="{cx:.1f}" cy="{y + h - cap_ry:.1f}"'
+            f' rx="{cap_rx:.1f}" ry="{cap_ry:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+            # Top cap
+            f'<ellipse cx="{cx:.1f}" cy="{y + cap_ry:.1f}"'
+            f' rx="{cap_rx:.1f}" ry="{cap_ry:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+            # Side walls
+            f'<line x1="{x:.1f}" y1="{body_top:.1f}" x2="{x:.1f}" y2="{body_bot:.1f}"'
+            f' stroke="{stroke}" stroke-width="{stroke_w}"/>'
+            f'<line x1="{x + w:.1f}" y1="{body_top:.1f}" x2="{x + w:.1f}" y2="{body_bot:.1f}"'
+            f' stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        cyl_ry = int(min(10, h // 5))
+        cyl_rx = int(w // 2 - 2)
+        cyl_cx = int(w // 2)
+        cyl_svg = (
+            f'<svg style="position:absolute;inset:0;width:{int(w)}px;height:{int(h)}px;'
+            f'pointer-events:none;overflow:visible;">'
+            f'<line x1="2" y1="{cyl_ry}" x2="2" y2="{int(h) - cyl_ry}"'
+            f' stroke="{accent}" stroke-width="1.5"/>'
+            f'<line x1="{int(w) - 2}" y1="{cyl_ry}" x2="{int(w) - 2}" y2="{int(h) - cyl_ry}"'
+            f' stroke="{accent}" stroke-width="1.5"/>'
+            f'<ellipse cx="{cyl_cx}" cy="{int(h) - cyl_ry}" rx="{cyl_rx}" ry="{cyl_ry}"'
+            f' fill="none" stroke="{accent}" stroke-width="1.5" opacity="0.6"/>'
+            f'<ellipse cx="{cyl_cx}" cy="{cyl_ry}" rx="{cyl_rx}" ry="{cyl_ry}"'
+            f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent}" stroke-width="1.5"/>'
+            f'</svg>'
+        )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{int(w)}px; min-height:{int(h)}px; '
+            f'padding:{12 + cyl_ry}px 12px 12px 12px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'border:none; '
+            f'{bg_css} '
+            f'box-shadow:{box_shadow}; '
+            f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+            f'text-align:left;">'
+            f'{inner_html}{cyl_svg}</div>'
+        )
 
 
 class HexagonGeometry:
@@ -477,10 +767,54 @@ class HexagonGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        verts = self.outline_path(w, h)
+        pts = _verts_to_points(verts, x, y)
+        return (
+            f'<polygon points="{pts}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        verts = self.outline_path(w, h)
+        clip_path = _verts_to_clip_path(verts, w, h)
+        if border_css:
+            shape_border_svg = ""
+        else:
+            pts = _svg_border_pts(verts, w, h)
+            shape_border_svg = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;"'
+                f' width="{int(w)}" height="{int(h)}">'
+                f'<polygon points="{pts}"'
+                f' fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'{shape_border_svg}'
+            f'<div style="position:absolute; inset:0; clip-path:{clip_path}; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:center; justify-content:center; '
+            f'text-align:center; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class TrapezoidGeometry:
@@ -509,10 +843,54 @@ class TrapezoidGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        verts = self.outline_path(w, h)
+        pts = _verts_to_points(verts, x, y)
+        return (
+            f'<polygon points="{pts}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        verts = self.outline_path(w, h)
+        clip_path = _verts_to_clip_path(verts, w, h)
+        if border_css:
+            shape_border_svg = ""
+        else:
+            pts = _svg_border_pts(verts, w, h)
+            shape_border_svg = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;"'
+                f' width="{int(w)}" height="{int(h)}">'
+                f'<polygon points="{pts}"'
+                f' fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'{shape_border_svg}'
+            f'<div style="position:absolute; inset:0; clip-path:{clip_path}; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:center; justify-content:center; '
+            f'text-align:center; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class TrapezoidAltGeometry:
@@ -541,10 +919,54 @@ class TrapezoidAltGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        verts = self.outline_path(w, h)
+        pts = _verts_to_points(verts, x, y)
+        return (
+            f'<polygon points="{pts}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        verts = self.outline_path(w, h)
+        clip_path = _verts_to_clip_path(verts, w, h)
+        if border_css:
+            shape_border_svg = ""
+        else:
+            pts = _svg_border_pts(verts, w, h)
+            shape_border_svg = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;"'
+                f' width="{int(w)}" height="{int(h)}">'
+                f'<polygon points="{pts}"'
+                f' fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'{shape_border_svg}'
+            f'<div style="position:absolute; inset:0; clip-path:{clip_path}; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:center; justify-content:center; '
+            f'text-align:center; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class SubroutineGeometry:
@@ -572,10 +994,52 @@ class SubroutineGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        inset = 8.0
+        return (
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+            f'<line x1="{x + inset:.1f}" y1="{y:.1f}" x2="{x + inset:.1f}" y2="{y + h:.1f}"'
+            f' stroke="{stroke}" stroke-width="{stroke_w}"/>'
+            f'<line x1="{x + w - inset:.1f}" y1="{y:.1f}" x2="{x + w - inset:.1f}" y2="{y + h:.1f}"'
+            f' stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        nw = int(w)
+        nh = int(h)
+        lines_svg = (
+            f'<svg style="position:absolute;inset:0;width:{nw}px;height:{nh}px;'
+            f'pointer-events:none;overflow:visible;">'
+            f'<line x1="8" y1="2" x2="8" y2="{nh - 2}" stroke="{accent}" stroke-width="1.5"/>'
+            f'<line x1="{nw - 8}" y1="2" x2="{nw - 8}" y2="{nh - 2}" stroke="{accent}" stroke-width="1.5"/>'
+            f'</svg>'
+        )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{nw}px; min-height:{nh}px; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css} '
+            f'{bg_css} '
+            f'box-shadow:{box_shadow}; '
+            f'display:flex; flex-direction:column; align-items:flex-start; justify-content:center; '
+            f'text-align:left;">'
+            f'{inner_html}'
+            f'{lines_svg}'
+            f'</div>'
+        )
 
 
 class FlagGeometry:
@@ -603,10 +1067,54 @@ class FlagGeometry:
         return _DEFAULT_MARKER_CLEARANCE
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        verts = self.outline_path(w, h)
+        pts = _verts_to_points(verts, x, y)
+        return (
+            f'<polygon points="{pts}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        inner_html = str(kw.get("inner_html", ""))
+        border_css = str(kw.get("border_css", ""))
+        shape_css = str(kw.get("shape_css", ""))
+        bg_css = str(kw.get("bg_css", ""))
+        box_shadow = str(kw.get("box_shadow", ""))
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        accent = str(kw.get("accent", "var(--node-title-fg,var(--accent-1,#60a5fa))"))
+        verts = self.outline_path(w, h)
+        clip_path = _verts_to_clip_path(verts, w, h)
+        if border_css:
+            shape_border_svg = ""
+        else:
+            pts = _svg_border_pts(verts, w, h)
+            shape_border_svg = (
+                f'<svg style="position:absolute;inset:0;overflow:visible;pointer-events:none;"'
+                f' width="{int(w)}" height="{int(h)}">'
+                f'<polygon points="{pts}"'
+                f' fill="none" stroke="{accent}" stroke-width="2"/></svg>'
+            )
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{w}px; min-height:{h}px; '
+            f'box-sizing:border-box; overflow:visible; '
+            f'{border_css} '
+            f'{shape_css}">'
+            f'{shape_border_svg}'
+            f'<div style="position:absolute; inset:0; clip-path:{clip_path}; {bg_css} '
+            f'box-shadow:{box_shadow};"></div>'
+            f'<div style="position:absolute; inset:0; '
+            f'padding:var(--node-pad-v,12px) var(--node-pad-h,12px); '
+            f'box-sizing:border-box; display:flex; flex-direction:column; '
+            f'align-items:center; justify-content:center; '
+            f'text-align:center; overflow:visible;">'
+            f'{inner_html}</div>'
+            f'</div>'
+        )
 
 
 class BarGeometry:
@@ -633,10 +1141,38 @@ class BarGeometry:
         return 4.0
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        fill = str(kw.get("fill", "none"))
+        stroke = str(kw.get("stroke", "none"))
+        stroke_w = float(kw.get("stroke_w", 1.5))  # type: ignore[arg-type]
+        bar_h = 8.0
+        bar_y = y + (h - bar_h) / 2
+        return (
+            f'<rect x="{x:.1f}" y="{bar_y:.1f}" width="{w:.1f}" height="{bar_h:.1f}"'
+            f' fill="{fill}" stroke="{stroke}" stroke-width="{stroke_w}" rx="2" ry="2"/>'
+        )
 
     def paint_html(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
-        return None
+        data_attrs_html = str(kw.get("data_attrs_html", ""))
+        bar_label_html = str(kw.get("bar_label_html", ""))
+        bar_h = 8
+        bar_top = int((h - bar_h) // 2)
+        return (
+            f'<div {data_attrs_html} style="'
+            f'position:absolute; left:{x}px; top:{y}px; '
+            f'width:{int(w)}px; height:{int(h)}px; '
+            f'box-sizing:border-box; overflow:visible;">'
+            f'<div style="position:absolute; left:0; top:{bar_top}px; '
+            f'width:{int(w)}px; height:{bar_h}px; '
+            f'background:var(--node-fg,var(--text-primary,#191A17)); '
+            f'border-radius:2px;"></div>'
+            f'<span class="node-label" style="'
+            f'position:absolute; left:0; top:{bar_top + bar_h + 2}px; '
+            f'width:{int(w)}px; font-size:9px; text-align:center; '
+            f'color:var(--node-fg-dim,var(--text-secondary,#75736C)); '
+            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
+            f'">{bar_label_html}</span>'
+            f'</div>'
+        )
 
 
 # ── registry ──────────────────────────────────────────────────────────────────

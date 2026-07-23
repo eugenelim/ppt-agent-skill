@@ -395,3 +395,128 @@ def test_polygon_routing_clip_lr_endpoint_on_outline():
         f"LR diamond source endpoint ({px:.1f},{py:.1f}) not on diamond outline "
         f"(center=({cx:.1f},{cy:.1f}), verts={canvas_verts})"
     )
+
+
+# ── AC-N: paint_svg / paint_html painter tests ───────────────────────────────
+
+_ALL_SHAPES = list(SHAPE_REGISTRY.keys())
+
+_COMMON_PAINT_KW = {
+    "inner_html": "<span>Label</span>",
+    "border_css": "",
+    "shape_css": "",
+    "bg_css": "background:#fff;",
+    "box_shadow": "0 1px 2px rgba(0,0,0,0.06)",
+    "data_attrs_html": 'class="node node-test"',
+    "accent": "#60a5fa",
+}
+
+
+@pytest.mark.parametrize("shape_name", _ALL_SHAPES)
+def test_paint_svg_not_none(shape_name):
+    """paint_svg() must return a non-empty string for every registered shape."""
+    geom = SHAPE_REGISTRY[shape_name]
+    result = geom.paint_svg(10.0, 20.0, 120.0, 60.0, fill="#eee", stroke="#333", stroke_w=1.5)
+    assert result is not None, f"{shape_name}: paint_svg returned None"
+    assert isinstance(result, str), f"{shape_name}: paint_svg returned non-string"
+    assert len(result) > 0, f"{shape_name}: paint_svg returned empty string"
+
+
+@pytest.mark.parametrize("shape_name", _ALL_SHAPES)
+def test_paint_html_not_none(shape_name):
+    """paint_html() must return a non-empty HTML string for every registered shape."""
+    geom = SHAPE_REGISTRY[shape_name]
+    kw = dict(_COMMON_PAINT_KW)
+    if shape_name == "bar":
+        kw["bar_label_html"] = "Sync"
+    result = geom.paint_html(10.0, 20.0, 120.0, 60.0, **kw)
+    assert result is not None, f"{shape_name}: paint_html returned None"
+    assert isinstance(result, str), f"{shape_name}: paint_html returned non-string"
+    assert "<div" in result, f"{shape_name}: paint_html missing <div"
+
+
+# Shapes that render with a visual polygon (clip-path or SVG overlay)
+_VISUAL_POLYGON_SHAPES = ["diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag"]
+
+
+@pytest.mark.parametrize("shape_name", _VISUAL_POLYGON_SHAPES)
+def test_painter_vertex_parity(shape_name):
+    """Polygon shapes must embed their clip-path or SVG border polygon
+    in paint_html output, verifying painter and geometry are wired together."""
+    geom = SHAPE_REGISTRY[shape_name]
+    outline = geom.outline_path(120.0, 60.0)
+    assert outline is not None, f"{shape_name}: outline_path returned None"
+    html = geom.paint_html(10.0, 20.0, 120.0, 60.0, **_COMMON_PAINT_KW)
+    assert html is not None
+    # Must contain either clip-path polygon or SVG polygon border
+    assert ("clip-path" in html or "<polygon" in html), (
+        f"{shape_name}: paint_html has outline_path but no clip-path or <polygon in output"
+    )
+
+
+def test_flag_svg_polygon_5_vertices():
+    """FlagGeometry paint_html must produce an SVG <polygon> with exactly 5 vertex pairs."""
+    from scripts.mermaid_render.layout.shape_geometry import FlagGeometry
+    geom = FlagGeometry()
+    html = geom.paint_html(0.0, 0.0, 160.0, 48.0, **_COMMON_PAINT_KW)
+    assert html is not None
+    polys = re.findall(r'<polygon[^>]+points="([^"]+)"', html)
+    assert polys, "FlagGeometry paint_html missing SVG <polygon>"
+    pts = polys[0].strip().split()
+    assert len(pts) == 5, (
+        f"Flag SVG polygon should have 5 vertices, got {len(pts)}: {pts}"
+    )
+
+
+def test_subroutine_svg_vertical_rules():
+    """SubroutineGeometry paint_html must include two SVG <line> elements with y1='2'."""
+    from scripts.mermaid_render.layout.shape_geometry import SubroutineGeometry
+    geom = SubroutineGeometry()
+    html = geom.paint_html(0.0, 0.0, 140.0, 48.0, **_COMMON_PAINT_KW)
+    assert html is not None
+    lines = re.findall(r'<line[^>]+/>', html)
+    assert len(lines) >= 2, f"SubroutineGeometry should produce 2 SVG lines, got {len(lines)}"
+    # Both lines must have y1="2" (inside the border, not at 0)
+    for ln in lines[:2]:
+        assert 'y1="2"' in ln, (
+            f"Subroutine vertical rule should have y1='2', got: {ln}"
+        )
+
+
+def test_doublecircle_ring_semantics_svg():
+    """DoubleCircleGeometry paint_svg must output exactly 2 <circle> elements."""
+    geom = SHAPE_REGISTRY["doublecircle"]
+    svg = geom.paint_svg(0.0, 0.0, 80.0, 80.0, fill="#eee", stroke="#333", stroke_w=1.5)
+    assert svg is not None
+    circles = re.findall(r'<circle[^>]+/>', svg)
+    assert len(circles) == 2, (
+        f"DoubleCircle paint_svg should have 2 circles, got {len(circles)}: {circles}"
+    )
+
+
+def test_doublecircle_ring_semantics_html():
+    """DoubleCircleGeometry paint_html inner ring must use background (filled disc)."""
+    geom = SHAPE_REGISTRY["doublecircle"]
+    html = geom.paint_html(0.0, 0.0, 80.0, 80.0, **_COMMON_PAINT_KW)
+    assert html is not None
+    inner_divs = re.findall(r'<div style="[^"]*inset:5px[^"]*"', html)
+    assert inner_divs, "DoubleCircle paint_html missing inner inset div"
+    assert any("background:" in d for d in inner_divs), (
+        f"DoubleCircle inner ring should use background (filled disc), got: {inner_divs}"
+    )
+
+
+def test_cylinder_outline_full_height():
+    """CylinderGeometry outline_path must span the full height (0..h) on the y axis."""
+    from scripts.mermaid_render.layout.shape_geometry import CylinderGeometry
+    geom = CylinderGeometry()
+    w, h = 100.0, 80.0
+    verts = geom.outline_path(w, h)
+    assert verts is not None, "CylinderGeometry outline_path should not be None"
+    ys = [vy for _, vy in verts]
+    assert min(ys) == pytest.approx(0.0, abs=0.1), (
+        f"Cylinder outline_path min y should be 0, got {min(ys)}"
+    )
+    assert max(ys) == pytest.approx(h, abs=0.1), (
+        f"Cylinder outline_path max y should be {h}, got {max(ys)}"
+    )
