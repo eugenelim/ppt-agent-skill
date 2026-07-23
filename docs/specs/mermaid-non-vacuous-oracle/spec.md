@@ -2,7 +2,7 @@
 
 Mode: full (structural change, multi-feature)
 
-- **Status:** Draft
+- **Status:** Implementing
 
 ## Objective
 
@@ -51,40 +51,40 @@ diagrams produce failures on type mismatches, not just missing edges.
 
 ## Acceptance Criteria
 
-- [ ] AC1: `checks_run == 0` on any `OracleResult` → status is `unvalidated`;
+- [x] AC1: `checks_run == 0` on any `OracleResult` → status is `unvalidated`;
   status `pass` requires `checks_run >= 1`.
-- [ ] AC2: Zero common entities when either side contains entities →
+- [x] AC2: Zero common entities when either side contains entities →
   `extractor_gap`, not a pass.
-- [ ] AC3: Zero common entities when both sides are empty, but the fixture declares
+- [x] AC3: Zero common entities when both sides are empty, but the fixture declares
   a nonzero entity minimum → `extractor_gap`.
-- [ ] AC4: Each fixture in the differential suite declares expected minimum counts
+- [x] AC4: Each fixture in the differential suite declares expected minimum counts
   for entities/nodes, groups, relations, labels, and (where applicable) markers;
   the oracle raises `ManifestError` when a differential fixture has no declaration.
-- [ ] AC5: The oracle reports a non-vacuous status for all fixtures in the
+- [x] AC5: The oracle reports a non-vacuous status for all fixtures in the
   differential suite — either `pass`, `fail`, `extractor_gap`, or
   `unsupported_reference_feature` — with `checks_run` recorded in every case;
   15/15 comparable cases produce an explicit outcome rather than a silent skip.
-- [ ] AC6: Arrow/marker type field is included in the relation multiset comparison
+- [x] AC6: Arrow/marker type field is included in the relation multiset comparison
   key; a fixture where two edges have the same endpoints but different arrow types
   is not reported as a full match.
-- [ ] AC7: ER endpoint cardinalities (e.g. `one`, `many`, `zero_or_one`) are
+- [x] AC7: ER endpoint cardinalities (e.g. `one`, `many`, `zero_or_one`) are
   included in the semantic comparison for ER fixtures; a cardinality mismatch
   produces a `fail`, not a pass.
-- [ ] AC8: Semantic endpoints (declared entity ids) are compared separately from
+- [x] AC8: Semantic endpoints (declared entity ids) are compared separately from
   internal routing proxy pseudo-nodes (e.g. `_sm_start_` / `_sm_end_`); proxy
   nodes are exempt from the missing-entity error path.
-- [ ] AC9: The mmdc SVG extractors are extended to capture edge source/destination
+- [x] AC9: The mmdc SVG extractors are extended to capture edge source/destination
   identifiers, parent-child containment structure, source and destination marker
   types, edge style, and ER endpoint cardinalities from SVG text patterns (no
   browser session required); geometry bounds and route path samples remain deferred
   (deferred: mmdc-geometry-capture).
-- [ ] AC10: Exact pixel comparison is retained as a scored metric only; hard gates
+- [x] AC10: Exact pixel comparison is retained as a scored metric only; hard gates
   cover semantic identity, containment, endpoint resolution, markers, and
   non-overlap — not pixel error thresholds.
-- [ ] AC11: CI fails when a fixture that previously had `checks_run >= 1` regresses
+- [x] AC11: CI fails when a fixture that previously had `checks_run >= 1` regresses
   to `checks_run == 0`; the baseline is stored as a committed fixture sidecar or
   inline in the minimum-count declaration.
-- [ ] AC12: All existing tests (`pytest tests/`) continue to pass after these
+- [x] AC12: All existing tests (`pytest tests/`) continue to pass after these
   changes.
 
 ## Testing Strategy
