@@ -6999,25 +6999,25 @@ class TestArrowSemantics:
         assert edge.target_marker == MarkerKind.NONE
 
     def test_legacy_arrow_bool_consistent_with_target_marker(self):
-        """AC-IR-2: parser sets legacy .arrow consistent with target_marker on the same _Edge."""
+        """AC-IR-2: _Edge.target_marker.kind consistent with .arrow flag."""
         from mermaid_render.layout._parser import _parse_graph_source
         from mermaid_render.layout._geometry import MarkerKind
         _nodes, edges, _groups = _parse_graph_source(["A --> B", "A --- C"])
         arrow_edge = next(e for e in edges if e.dst == "B")
         plain_edge = next(e for e in edges if e.dst == "C")
-        assert arrow_edge.target_marker == MarkerKind.ARROW
+        assert arrow_edge.target_marker.kind == MarkerKind.ARROW
         assert arrow_edge.arrow is True
-        assert plain_edge.target_marker == MarkerKind.NONE
+        assert plain_edge.target_marker.kind == MarkerKind.NONE
         assert plain_edge.arrow is False
 
     def test_legacy_bidir_bool_consistent_with_source_marker(self):
-        """AC-IR-2: parser sets legacy .bidir consistent with source_marker on the same _Edge."""
+        """AC-IR-2: _Edge.source_marker.kind consistent with .bidir flag."""
         from mermaid_render.layout._parser import _parse_graph_source
         from mermaid_render.layout._geometry import MarkerKind
         _nodes, edges, _groups = _parse_graph_source(["A <--> B"])
         edge = edges[0]
-        assert edge.source_marker == MarkerKind.ARROW
-        assert edge.target_marker == MarkerKind.ARROW
+        assert edge.source_marker.kind == MarkerKind.ARROW
+        assert edge.target_marker.kind == MarkerKind.ARROW
         assert edge.bidir is True
 
 
