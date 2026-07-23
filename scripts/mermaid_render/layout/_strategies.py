@@ -5359,6 +5359,12 @@ def _compile_flowchart(
             canvas_pad=_init_cfg.get("diagram_padding"),
         )
 
+        # TB only: center any sole-occupant rank at its predecessor barycenter
+        # so fan-in nodes (e.g. B & C & D → E) are not pinned to column 0.
+        if direction.upper() not in ("LR", "RL"):
+            from ._layout import _center_isolated_nodes  # noqa: PLC0415
+            _center_isolated_nodes(nodes, edges)
+
         if groups:
             _recursive_group_layout(
                 nodes, edges, groups, direction,
