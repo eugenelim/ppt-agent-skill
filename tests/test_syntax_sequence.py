@@ -365,7 +365,7 @@ class TestSequenceSequencing:
         assert "data-node-id=\"autonumber\"" not in html
 
     def test_box_grouping_renders_and_emits_diagnostic(self):
-        """`box Title … end` renders participants and emits a Diagnostic."""
+        """`box Title … end` renders participants and box group backgrounds (no Diagnostic)."""
         src = _seq(
             "  box Frontend\n"
             "    participant Browser\n"
@@ -381,9 +381,11 @@ class TestSequenceSequencing:
         assert html
         assert "Browser" in html
         assert "API" in html
+        # box directive is now supported: no box Diagnostics, two group backgrounds rendered
         vr = validate(src)
         box_diags = [d for d in vr.diagnostics if d.feature == "box"]
-        assert len(box_diags) == 2, f"Expected 2 box diagnostics, got {box_diags}"
+        assert len(box_diags) == 0, f"Expected 0 box diagnostics (box is now supported), got {box_diags}"
+        assert html.count('data-box-group="true"') == 2, "Expected 2 box group backgrounds"
 
     def test_box_single_participant(self):
         """`box` with a single participant renders the participant."""

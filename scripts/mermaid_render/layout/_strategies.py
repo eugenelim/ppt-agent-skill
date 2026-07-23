@@ -244,7 +244,7 @@ _SEQ_BLOCK_RE = re.compile(r'^(alt|loop|opt|par|critical|break|rect)\s*(.*)', re
 _SEQ_END_RE = re.compile(r'^end\s*$', re.I)
 _SEQ_ACTIVATE_RE = re.compile(r'^(activate|deactivate)\s+(\S+)', re.I)
 _SEQ_SKIP_RE = re.compile(
-    r'^(autonumber|create\s+actor|box|par_over)\b', re.I
+    r'^(autonumber|create\s+actor|par_over)\b', re.I
 )
 _SEQ_CREATE_RE = re.compile(r'^create\s+participant\s+(\S+)', re.I)
 _SEQ_DESTROY_RE = re.compile(r'^destroy\s+(\S+)', re.I)
@@ -255,6 +255,64 @@ _SEQ_NOTE_RE = re.compile(
     r'^[Nn]ote\s+(over|left\s+of|right\s+of)\s+([^:]+):\s*(.+)', re.I
 )
 _SEQ_ELSE_RE = re.compile(r'^(else|and|option)\s*(.*)', re.I)
+
+# ── Box directive helpers ─────────────────────────────────────────────────────
+_BOX_FUNC_COLOR_RE = re.compile(
+    r'^box\s+(?P<color>rgba?\([0-9,.%\s]+\)|hsla?\([0-9,.%\s]+\))\s*(?P<label>.*)$', re.I
+)
+_BOX_SIMPLE_RE = re.compile(r'^box(?:\s+(?P<first>\S+))?(?:\s+(?P<rest>.*))?$', re.I)
+_CSS_NAMED_COLORS = frozenset({
+    "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige", "bisque",
+    "black", "blanchedalmond", "blue", "blueviolet", "brown", "burlywood", "cadetblue",
+    "chartreuse", "chocolate", "coral", "cornflowerblue", "cornsilk", "crimson", "cyan",
+    "darkblue", "darkcyan", "darkgoldenrod", "darkgray", "darkgreen", "darkgrey",
+    "darkkhaki", "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred",
+    "darksalmon", "darkseagreen", "darkslateblue", "darkslategray", "darkslategrey",
+    "darkturquoise", "darkviolet", "deeppink", "deepskyblue", "dimgray", "dimgrey",
+    "dodgerblue", "firebrick", "floralwhite", "forestgreen", "fuchsia", "gainsboro",
+    "ghostwhite", "gold", "goldenrod", "gray", "green", "greenyellow", "grey",
+    "honeydew", "hotpink", "indianred", "indigo", "ivory", "khaki", "lavender",
+    "lavenderblush", "lawngreen", "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
+    "lightgoldenrodyellow", "lightgray", "lightgreen", "lightgrey", "lightpink",
+    "lightsalmon", "lightseagreen", "lightskyblue", "lightslategray", "lightslategrey",
+    "lightsteelblue", "lightyellow", "lime", "limegreen", "linen", "magenta", "maroon",
+    "mediumaquamarine", "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen",
+    "mediumslateblue", "mediumspringgreen", "mediumturquoise", "mediumvioletred",
+    "midnightblue", "mintcream", "mistyrose", "moccasin", "navajowhite", "navy",
+    "oldlace", "olive", "olivedrab", "orange", "orangered", "orchid", "palegoldenrod",
+    "palegreen", "paleturquoise", "palevioletred", "papayawhip", "peachpuff", "peru",
+    "pink", "plum", "powderblue", "purple", "red", "rosybrown", "royalblue",
+    "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna", "silver",
+    "skyblue", "slateblue", "slategray", "slategrey", "snow", "springgreen",
+    "steelblue", "tan", "teal", "thistle", "tomato", "turquoise", "violet", "wheat",
+    "white", "whitesmoke", "yellow", "yellowgreen", "transparent",
+})
+
+
+def _parse_box_color_label(line: str) -> "tuple[str, str]":
+    """Parse 'box [color] [label]' → (color_css, label_text).
+
+    Color token is accepted when it matches #hex, rgb/rgba/hsl/hsla(...), or a
+    CSS named color.  Otherwise the entire remainder is treated as the label and
+    color defaults to rgba(200,200,200,0.3).  This prevents arbitrary first-word
+    labels (e.g. 'box Frontend') from being misread as an invalid color.
+    """
+    _default_color = "rgba(200,200,200,0.3)"
+    # Functional colors may contain spaces inside parens; match them first.
+    m = _BOX_FUNC_COLOR_RE.match(line)
+    if m:
+        return m.group("color").strip(), m.group("label").strip()
+    m = _BOX_SIMPLE_RE.match(line)
+    if not m:
+        return _default_color, ""
+    first = (m.group("first") or "").strip()
+    rest = (m.group("rest") or "").strip()
+    if not first:
+        return _default_color, ""
+    if re.match(r'^#[0-9A-Fa-f]{3,8}$', first) or first.lower() in _CSS_NAMED_COLORS:
+        return first, rest
+    # Not a recognizable color — whole remainder is the label
+    return _default_color, (first + (" " + rest if rest else "")).strip()
 
 
 def _layout_lifeline(
@@ -272,12 +330,18 @@ def _layout_lifeline(
     participants: list[str] = []
     p_label: dict[str, str] = {}
     _diagnostics: list[Diagnostic] = []
+    _all_box_groups: "list[dict]" = []
+    _open_box_stack: "list[dict]" = []
+    # "box" | "block" — tracks what each block_depth level is for end-handling
+    _block_type_stack: "list[str]" = []
 
     def _ensure_p(name: str) -> None:
         n = name.strip()
         if n and n not in participants:
             participants.append(n)
             p_label.setdefault(n, n)
+            if _open_box_stack and n not in _open_box_stack[-1]["members"]:
+                _open_box_stack[-1]["members"].append(n)
 
     # ── Arrow spec table (SEQ-012) ────────────────────────────────────────────
     _ARROW_SPECS: "dict[str, dict]" = {
@@ -303,6 +367,16 @@ def _layout_lifeline(
         line = raw.strip()
         if not line or line.startswith(("%%", "//")):
             continue
+        # Box directive — parse color/label/membership (must precede _SEQ_SKIP_RE which also matches 'box').
+        # Guard against participant named "Box" (e.g. "Box ->> Alice: hi"): skip if _SEQ_MSG_RE matches.
+        if re.match(r'^box(?:\s|$)', line, re.I) and not _SEQ_MSG_RE.match(line):
+            _box_color, _box_label = _parse_box_color_label(line)
+            _new_box: "dict" = {"color": _box_color, "label": _box_label, "members": []}
+            _open_box_stack.append(_new_box)
+            _all_box_groups.append(_new_box)
+            _block_type_stack.append("box")
+            block_depth += 1
+            continue
         m_create = _SEQ_CREATE_RE.match(line)
         if m_create:
             _cpid = m_create.group(1).strip()
@@ -319,8 +393,9 @@ def _layout_lifeline(
         if m_skip:
             kw = m_skip.group(1).lower().replace(" ", "_")
             _diagnostics.append(Diagnostic(feature=kw, line_number=lineno, source_text=line))
-            if re.match(r'^(box|par_over)\b', line, re.I):
+            if re.match(r'^par_over\b', line, re.I):
                 block_depth += 1
+                _block_type_stack.append("block")  # keep block_depth ↔ _block_type_stack in sync
             continue
         m = _SEQ_PART_RE.match(line)
         if m:
@@ -377,10 +452,16 @@ def _layout_lifeline(
             items.append({"type": item_type, "kw": m.group(1), "label": m.group(2).strip()})
             _parse_row_ctr += 1
             block_depth += 1
+            _block_type_stack.append("block")
             continue
         if _SEQ_END_RE.match(line) and block_depth > 0:
             block_depth -= 1
-            items.append({"type": "block_end"})
+            _closed = _block_type_stack.pop() if _block_type_stack else "block"
+            if _closed == "box":
+                if _open_box_stack:
+                    _open_box_stack.pop()
+            else:
+                items.append({"type": "block_end"})
         else:
             _diagnostics.append(
                 Diagnostic(feature="unrecognized_line", line_number=lineno, source_text=line)
@@ -837,6 +918,31 @@ def _layout_lifeline(
         f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));'
     )
     _x_markers: "list[tuple[float, float]]" = []  # (cx, y) for destroyed participants
+    # ── Box group backgrounds (lowest z-order, render before participants) ─────
+    for _bg in _all_box_groups:
+        _bm = [p for p in _bg["members"] if p in _p_index]
+        if not _bm:
+            continue
+        _lo_p = min(_bm, key=lambda p: _p_index[p])
+        _hi_p = max(_bm, key=lambda p: _p_index[p])
+        _bx0 = float(_cx(_lo_p)) - _box_hw(_lo_p) - PAD_H / 2 - 4
+        _bx1 = float(_cx(_hi_p)) + _box_hw(_hi_p) + PAD_H / 2 + 4
+        _bcolor = _h(_bg["color"])
+        _blabel = _h(_bg["label"])
+        parts.append(
+            f'<div style="position:absolute;left:{_bx0:.1f}px;top:0px;'
+            f'width:{_bx1 - _bx0:.1f}px;height:{canvas_h}px;'
+            f'background:{_bcolor};opacity:0.2;border:1px solid {_bcolor};'
+            f'box-sizing:border-box;" data-box-group="true"></div>'
+        )
+        if _blabel:
+            parts.append(
+                f'<span style="position:absolute;left:{_bx0:.1f}px;top:4px;'
+                f'width:{_bx1 - _bx0:.1f}px;text-align:center;'
+                f'font-size:10px;font-weight:700;color:var(--node-fg-dim,var(--text-secondary,#75736C));'
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                f'{_blabel}</span>'
+            )
     for pid in participants:
         _bw = int(round(_box_hw(pid) * 2))
         lx = int(round(_cx(pid) - _box_hw(pid)))
