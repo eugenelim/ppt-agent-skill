@@ -25,6 +25,9 @@ _CLS_KIND_TO_MARKER_ID = {
     _MarkerKind.OPEN_ARROW:      "cls-dep",
 }
 
+# Shapes whose connectors must be clipped to the polygon outline (not the AABB).
+_POLY_CLIP_SHAPES = frozenset({"diamond", "hexagon", "trapezoid", "trapezoid-alt", "flag"})
+
 
 @dataclass(frozen=True)
 class LabelPlacement:
@@ -1097,6 +1100,25 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if _dst_port:
                 x2, y2 = _dst_port
 
+            # Clip LR endpoints to polygon outline for non-rectangular shapes.
+            # Guard each endpoint independently: a pinned src port must not suppress dest clipping.
+            if s.shape in _POLY_CLIP_SHAPES and _src_port is None:
+                _lsw, _lsh = _node_render_w(s), _node_render_h(s)
+                _lsx, _lsy = s.x + _lsw // 2, s.y + _lsh // 2
+                x1, y1 = SHAPE_REGISTRY[s.shape].boundary_intersection(
+                    float(_lsx), float(_lsy),
+                    float(_lsw), float(_lsh),
+                    float(x1) - float(_lsx), float(y1) - float(_lsy),
+                )
+            if d.shape in _POLY_CLIP_SHAPES and _dst_port is None:
+                _ldw, _ldh = _node_render_w(d), _node_render_h(d)
+                _ldx2, _ldy2 = d.x + _ldw // 2, d.y + _ldh // 2
+                x2, y2 = SHAPE_REGISTRY[d.shape].boundary_intersection(
+                    float(_ldx2), float(_ldy2),
+                    float(_ldw), float(_ldh),
+                    float(x2) - float(_ldx2), float(y2) - float(_ldy2),
+                )
+
             # 3-segment fast path (right → vertical → right); fall back to A* if blocked.
             # Skip fast path when ports are pinned to non-standard faces.
             _cross_row = abs(y1 - y2) > _node_render_h(s) // 2 and rank_gap == 1
@@ -1185,22 +1207,23 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if _dst_port_tb:
             x2, y2 = _dst_port_tb
 
-        # Clip connector endpoints to the shape outline via SHAPE_REGISTRY.
-        # Only diamond needs clipping; rect-like shapes use port coordinates directly.
-        if s.shape == "diamond":
-            _sh = _node_render_h(s)
-            _sx, _sy = s.x + _node_render_w(s) // 2, s.y + _sh // 2
-            x1, y1 = SHAPE_REGISTRY["diamond"].boundary_intersection(
+        # Clip connector endpoints to the polygon outline for shapes that use
+        # non-rectangular outlines (diamond, hexagon, trapezoid, flag).
+        # Guard each endpoint independently so a pinned src port never suppresses dest clipping.
+        if s.shape in _POLY_CLIP_SHAPES and _src_port_tb is None:
+            _sw, _sh = _node_render_w(s), _node_render_h(s)
+            _sx, _sy = s.x + _sw // 2, s.y + _sh // 2
+            x1, y1 = SHAPE_REGISTRY[s.shape].boundary_intersection(
                 float(_sx), float(_sy),
-                float(_node_render_w(s)), float(_sh),
+                float(_sw), float(_sh),
                 float(x1) - float(_sx), float(y1) - float(_sy),
             )
-        if d.shape == "diamond":
-            _dh = _node_render_h(d)
-            _dx2, _dy2 = d.x + _node_render_w(d) // 2, d.y + _dh // 2
-            x2, y2 = SHAPE_REGISTRY["diamond"].boundary_intersection(
+        if d.shape in _POLY_CLIP_SHAPES and _dst_port_tb is None:
+            _dw2, _dh2 = _node_render_w(d), _node_render_h(d)
+            _dx2, _dy2 = d.x + _dw2 // 2, d.y + _dh2 // 2
+            x2, y2 = SHAPE_REGISTRY[d.shape].boundary_intersection(
                 float(_dx2), float(_dy2),
-                float(_node_render_w(d)), float(_dh),
+                float(_dw2), float(_dh2),
                 float(x2) - float(_dx2), float(y2) - float(_dy2),
             )
 
