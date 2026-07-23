@@ -19,6 +19,7 @@ from ..models import (
     BoundingBox, EntityGeometry, GeometryObservation,
     GroupGeometry, RelationGeometry,
 )
+from ..oracle_contract import OracleCheck, OracleResult, OracleStatus
 
 PRECISION = 4
 SAMPLE_COUNT = 32  # number of sampled connector points for path comparison
@@ -294,3 +295,34 @@ def score_layout_metrics(
         crossing_count_delta=cross_delta,
         bend_count_delta=bend_delta,
     )
+
+
+
+
+def compare_geometry_oracle(
+    native_obs: "GeometryObservation | None",
+    ref_obs: "GeometryObservation | None",
+) -> OracleResult:
+    """Oracle-aware geometry comparison with status rules."""
+    if ref_obs is None and native_obs is None:
+        return OracleResult(status=OracleStatus.UNVALIDATED, diagnostics=("no observations on either side",))
+    if ref_obs is None or (
+        ref_obs.entities is not None
+        and len(ref_obs.entities) == 0
+        and native_obs is not None
+        and native_obs.entities
+    ):
+        return OracleResult(status=OracleStatus.EXTRACTOR_GAP, diagnostics=("reference side empty",))
+    if native_obs is None or (
+        native_obs.entities is not None
+        and len(native_obs.entities) == 0
+        and ref_obs is not None
+        and ref_obs.entities
+    ):
+        return OracleResult(status=OracleStatus.FAIL, diagnostics=("native side empty",))
+    result = compare_relative_layout(native_obs, ref_obs, strict_fields=[])
+    checks = tuple(OracleCheck(name=c, passed=result.passed) for c in result.checks_run)
+    if not checks:
+        return OracleResult(status=OracleStatus.UNVALIDATED, diagnostics=("no checks executed",))
+    status = OracleStatus.PASS if result.passed else OracleStatus.FAIL
+    return OracleResult(status=status, checks=checks)

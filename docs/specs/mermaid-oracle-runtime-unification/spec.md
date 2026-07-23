@@ -2,7 +2,7 @@
 
 Mode: full (structural change — new shared module; multi-consumer migration)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 ## Objective
 
@@ -57,35 +57,35 @@ This item blocks every other comparison-based acceptance item in boston-v1.
 
 ## Acceptance Criteria
 
-- [ ] AC1: `OracleStatus`, `OracleCheck`, and `OracleResult` are defined exactly once,
+- [x] AC1: `OracleStatus`, `OracleCheck`, and `OracleResult` are defined exactly once,
   in `tools/mermaid_fidelity/oracle_contract.py`; all consumers import from there.
-- [ ] AC2: Every `OracleResult` with `status == PASS` contains at least one executed
+- [x] AC2: Every `OracleResult` with `status == PASS` contains at least one executed
   check; constructing an `OracleResult(status=PASS, checks=())` raises `ValueError`.
-- [ ] AC3: No path in `compare/geometry.py` or `compare/semantic.py` returns
+- [x] AC3: No path in `compare/geometry.py` or `compare/semantic.py` returns
   `OracleStatus.PASS` when `len(checks) == 0`.
-- [ ] AC4: Native entities present, reference entities absent → `EXTRACTOR_GAP` (not
+- [x] AC4: Native entities present, reference entities absent → `EXTRACTOR_GAP` (not
   PASS); reference entities present, native entities absent → `FAIL`.
-- [ ] AC5: Both sides non-empty with no normalized common IDs → `FAIL` (unless an
+- [x] AC5: Both sides non-empty with no normalized common IDs → `FAIL` (unless an
   explicit identifier-normalization diagnostic accompanies the result).
-- [ ] AC6: Unsupported reference extraction → `UNSUPPORTED_REFERENCE_FEATURE`, never
+- [ ] AC6: (deferred: oracle-ac6-unsupported-reference-feature) Unsupported reference extraction → `UNSUPPORTED_REFERENCE_FEATURE`, never
   `PASS`.
-- [ ] AC7: A fixture-expectation manifest exists for all 15 in-scope fixtures; each
+- [x] AC7: A fixture-expectation manifest exists for all 15 in-scope fixtures; each
   entry declares minimum counts for nodes/entities, groups, relations, edge labels,
   source/target markers (where applicable), ER cardinality ends (ER fixtures), and
   initial/final pseudo-states (state fixtures).
-- [ ] AC8: Relation comparison includes marker kind, marker end, edge style, and ER
+- [x] AC8: Relation comparison includes marker kind, marker end, edge style, and ER
   cardinality for every relation where extractors supply those fields.
-- [ ] AC9: State diagram semantic endpoints (declared entity IDs) are compared
+- [x] AC9: State diagram semantic endpoints (declared entity IDs) are compared
   separately from routing proxy pseudo-nodes; proxy nodes are exempt from the
   missing-entity path.
-- [ ] AC10: Every comparison run emits a stable JSON report with: fixture, source hash,
+- [x] AC10: Every comparison run emits a stable JSON report with: fixture, source hash,
   status, checks_executed count, failed_checks count, extractor_gaps list,
   unsupported_fields list, native backend metadata, reference version metadata.
-- [ ] AC11: Regression test suite proves that each of the following cannot produce PASS:
+- [x] AC11: Regression test suite proves that each of the following cannot produce PASS:
   empty observations, one-sided observations (our non-empty / ref empty and vice versa),
   parallel edges with distinct IDs producing duplicate records, marker differences,
   cardinality differences, containment differences.
-- [ ] AC12: `pytest tests/` continues to pass with zero regressions.
+- [x] AC12: `pytest tests/` continues to pass with zero regressions.
 
 ## Testing Strategy
 

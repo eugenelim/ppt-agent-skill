@@ -20,6 +20,7 @@ from ..canonical import canonical_label, sort_entities, sort_relations, sort_ord
 from ..models import (
     Entity, Group, OrderedEvent, ParseObservation, Relation, SemanticDiagram,
 )
+from ..oracle_contract import OracleCheck, OracleResult, OracleStatus
 
 
 # ── diff items ────────────────────────────────────────────────────────────────
@@ -449,3 +450,32 @@ def compare_semantic(
         strict_fields_checked=checked,
         skipped_fields=skipped,
     )
+
+
+
+
+def compare_semantic_oracle(
+    native_diag: "SemanticDiagram | None",
+    ref_diag: "SemanticDiagram | None",
+) -> OracleResult:
+    """Oracle-aware semantic comparison with status rules."""
+    if ref_diag is None and native_diag is None:
+        return OracleResult(status=OracleStatus.UNVALIDATED, diagnostics=("no diagrams on either side",))
+    if ref_diag is None:
+        return OracleResult(status=OracleStatus.EXTRACTOR_GAP, diagnostics=("reference side empty",))
+    if native_diag is None:
+        return OracleResult(status=OracleStatus.FAIL, diagnostics=("native side empty",))
+    comparison = compare_semantic(ref_diag, native_diag, strict_fields=["entities", "relations"])
+    lines = comparison.diff.to_lines()
+    checks = (
+        OracleCheck(
+            name="entity_topology",
+            passed=not comparison.diff.missing_entities and not comparison.diff.extra_entities,
+        ),
+        OracleCheck(
+            name="relation_topology",
+            passed=not comparison.diff.missing_relations and not comparison.diff.extra_relations,
+        ),
+    )
+    status = OracleStatus.PASS if not lines else OracleStatus.FAIL
+    return OracleResult(status=status, checks=checks, diagnostics=tuple(lines))

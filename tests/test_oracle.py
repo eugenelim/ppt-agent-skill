@@ -42,12 +42,18 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import pytest
+
+from tools.mermaid_fidelity.oracle_contract import (
+    OracleStatus,
+    OracleCheck,
+    OracleResult,
+    FixtureMinimums,
+    ManifestError,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures"
@@ -59,27 +65,7 @@ _ALL_FIXTURES = sorted(FIXTURES_DIR.glob("*.mmd"))
 _HAVE_MMDC = shutil.which("mmdc") is not None
 
 
-# ── T1: Oracle result types ──────────────────────────────────────────────────
-
-class OracleStatus(Enum):
-    pass_ = "pass"
-    fail = "fail"
-    extractor_gap = "extractor_gap"
-    unsupported_reference_feature = "unsupported_reference_feature"
-    unvalidated = "unvalidated"
-
-
-@dataclass
-class OracleResult:
-    fixture_stem: str
-    status: OracleStatus
-    checks_run: int
-    notes: list[str] = field(default_factory=list)
-
-    def __post_init__(self) -> None:
-        if self.status == OracleStatus.pass_ and self.checks_run == 0:
-            raise ValueError("pass requires checks_run >= 1")
-
+# ── T1: Oracle result helper ──────────────────────────────────────────────────
 
 def _make_result(
     stem: str,
@@ -87,28 +73,20 @@ def _make_result(
     checks_run: int,
     notes: list[str] | None = None,
 ) -> OracleResult:
+    notes = notes or []
+    checks = tuple(
+        OracleCheck(name=f"check_{i}", passed=(status == OracleStatus.PASS))
+        for i in range(checks_run)
+    )
     return OracleResult(
-        fixture_stem=stem,
         status=status,
-        checks_run=checks_run,
-        notes=notes or [],
+        checks=checks,
+        diagnostics=tuple(notes),
+        fixture_stem=stem,
     )
 
 
 # ── T3: Fixture minimum-count manifest ───────────────────────────────────────
-
-@dataclass
-class FixtureMinimums:
-    min_entities: int = 0
-    min_groups: int = 0
-    min_relations: int = 0
-    min_labels: int = 0
-    min_markers: int = 0
-
-
-class ManifestError(ValueError):
-    pass
-
 
 _FIXTURE_MINIMUMS: dict[str, FixtureMinimums] = {
     # architecture
@@ -124,6 +102,7 @@ _FIXTURE_MINIMUMS: dict[str, FixtureMinimums] = {
     "flowchart-arrows-defs":      FixtureMinimums(min_entities=2),
     "flowchart-bidirectional":    FixtureMinimums(min_entities=2),
     "flowchart-br-variants":      FixtureMinimums(min_entities=2),
+    "flowchart-cross-scope-edge": FixtureMinimums(min_entities=2),
     "flowchart-deep-nesting":     FixtureMinimums(min_entities=2),
     "flowchart-diamond-branch":   FixtureMinimums(min_entities=2),
     "flowchart-diamond-clipping": FixtureMinimums(min_entities=2),
@@ -328,14 +307,10 @@ def _mm_requirement(svg: str) -> tuple:
     return frozenset(node_set), edges, frozenset(), {}
 
 
-
-
 _MM_CLASS_GROUP_RE = re.compile(
-    r'<g[^>]*class="[^"]*classGroup[^"]*"[^>]*>\s*<g[^>]*id="([^"]+)"'
-)
+    r'<g[^>]*class="[^"]*classGroup[^"]*"[^>]*>\s*<g[^>]*id="([^"]+)"')
 _MM_CLASS_EDGE_RE  = re.compile(
-    r'<(?:path|line)[^>]*id="([A-Za-z0-9_]+)-([A-Za-z0-9_]+)(?:-\d+)?"'
-)
+    r'<(?:path|line)[^>]*id="([A-Za-z0-9_]+)-([A-Za-z0-9_]+)(?:-\d+)?"')
 
 
 def _mm_class(svg: str) -> tuple:
@@ -351,7 +326,6 @@ def _mm_class(svg: str) -> tuple:
     """
     nodes  = frozenset(_MM_CLASS_GROUP_RE.findall(svg))
     raw_edges = _MM_CLASS_EDGE_RE.findall(svg)
-    # Filter out self-loops and entries where both ids look like class names
     edges = frozenset(
         (src, dst) for src, dst in raw_edges if src != dst
     )
@@ -396,7 +370,7 @@ def _compare_topology(
         mins = _minimums
     if len(ref_nodes) < mins.min_entities:
         return _make_result(
-            fixture_stem, OracleStatus.extractor_gap, 0,
+            fixture_stem, OracleStatus.EXTRACTOR_GAP, 0,
             [
                 f"ref returned {len(ref_nodes)} entities but manifest "
                 f"declares min_entities={mins.min_entities}"
@@ -404,7 +378,7 @@ def _compare_topology(
         )
     if mins.min_relations > 0 and len(ref_edges) < mins.min_relations:
         return _make_result(
-            fixture_stem, OracleStatus.extractor_gap, 0,
+            fixture_stem, OracleStatus.EXTRACTOR_GAP, 0,
             [
                 f"ref returned {len(ref_edges)} edges but manifest "
                 f"declares min_relations={mins.min_relations}"
@@ -413,20 +387,27 @@ def _compare_topology(
     if not ref_nodes and not our_semantic:
         if mins.min_entities > 0:
             return _make_result(
-                fixture_stem, OracleStatus.extractor_gap, 0,
+                fixture_stem, OracleStatus.EXTRACTOR_GAP, 0,
                 [f"both sides empty but fixture declares min_entities={mins.min_entities}"],
             )
         return _make_result(
-            fixture_stem, OracleStatus.unvalidated, 0, ["no entities on either side"]
+            fixture_stem, OracleStatus.UNVALIDATED, 0, ["no entities on either side"]
         )
-    if not ref_nodes or not our_semantic:
+    # AC4: native present + ref absent → EXTRACTOR_GAP; ref present + native absent → FAIL
+    if our_semantic and not ref_nodes:
         return _make_result(
-            fixture_stem, OracleStatus.extractor_gap, 0,
-            [f"one side empty: ref_nodes={len(ref_nodes)}, our_semantic={len(our_semantic)}"],
+            fixture_stem, OracleStatus.EXTRACTOR_GAP, 0,
+            [f"reference side empty (native has {len(our_semantic)} entities)"],
         )
+    if ref_nodes and not our_semantic:
+        return _make_result(
+            fixture_stem, OracleStatus.FAIL, 0,
+            [f"native side empty (ref has {len(ref_nodes)} entities)"],
+        )
+    # AC5: both non-empty with no common IDs → FAIL
     if not (ref_nodes & our_semantic):
         return _make_result(
-            fixture_stem, OracleStatus.extractor_gap, 0,
+            fixture_stem, OracleStatus.FAIL, 0,
             [
                 f"zero common entities: "
                 f"ref={sorted(ref_nodes)[:5]}, ours={sorted(our_semantic)[:5]}"
@@ -478,9 +459,33 @@ def _compare_topology(
                     f"extra={sorted(str(c) for c in extra_cards)}"
                 )
             checks_run += len(ref_cards)
+    ref_markers = (ref_extra or {}).get("markers", frozenset())
+    our_markers = (our_extra or {}).get("markers", frozenset())
+    if ref_markers:
+        missing_markers = ref_markers - our_markers
+        extra_markers   = our_markers - ref_markers
+        if missing_markers or extra_markers:
+            errors.append(
+                f"marker mismatch: "
+                f"missing={sorted(str(m) for m in missing_markers)}, "
+                f"extra={sorted(str(m) for m in extra_markers)}"
+            )
+        checks_run += len(ref_markers)
+    ref_containment = (ref_extra or {}).get("containment", frozenset())
+    our_containment = (our_extra or {}).get("containment", frozenset())
+    if ref_containment:
+        missing_cont = ref_containment - our_containment
+        extra_cont   = our_containment - ref_containment
+        if missing_cont or extra_cont:
+            errors.append(
+                f"containment mismatch: "
+                f"missing={sorted(str(c) for c in missing_cont)}, "
+                f"extra={sorted(str(c) for c in extra_cont)}"
+            )
+        checks_run += len(ref_containment)
     if errors:
-        return _make_result(fixture_stem, OracleStatus.fail, max(checks_run, 1), errors)
-    return _make_result(fixture_stem, OracleStatus.pass_, max(checks_run, 1))
+        return _make_result(fixture_stem, OracleStatus.FAIL, max(checks_run, 1), errors)
+    return _make_result(fixture_stem, OracleStatus.PASS, max(checks_run, 1))
 
 
 # ── T8: CI checks_run regression gate ────────────────────────────────────────
@@ -491,7 +496,7 @@ _CHECKS_RUN_BASELINE: dict[str, int] = {}
 def _assert_no_checks_run_regression(results: list) -> None:
     for result in results:
         baseline = _CHECKS_RUN_BASELINE.get(result.fixture_stem)
-        if baseline is not None and result.checks_run == 0:
+        if baseline is not None and len(result.checks) == 0:
             raise AssertionError(
                 f"{result.fixture_stem}: checks_run regressed to 0 "
                 f"(baseline had {baseline})"
@@ -556,13 +561,13 @@ def test_topology_matches_reference(fixture: Path) -> None:
 
     _assert_no_checks_run_regression([result])
 
-    if result.status == OracleStatus.pass_:
+    if result.status == OracleStatus.PASS:
         return
-    if result.status == OracleStatus.fail:
-        pytest.fail(f"{stem}:\n" + "\n".join(f"  {n}" for n in result.notes))
+    if result.status == OracleStatus.FAIL:
+        pytest.fail(f"{stem}:\n" + "\n".join(f"  {n}" for n in result.diagnostics))
     pytest.skip(
         f"[{result.status.value.upper()}] {stem}: "
-        + ("; ".join(result.notes) if result.notes else "no detail")
+        + ("; ".join(result.diagnostics) if result.diagnostics else "no detail")
     )
 
 
@@ -573,19 +578,19 @@ def test_topology_matches_reference(fixture: Path) -> None:
 # T1
 
 def test_oracle_result_pass_requires_nonzero_checks() -> None:
-    with pytest.raises(ValueError, match="checks_run >= 1"):
-        OracleResult(fixture_stem="x", status=OracleStatus.pass_, checks_run=0)
+    with pytest.raises(ValueError, match="PASS requires at least one check"):
+        OracleResult(status=OracleStatus.PASS, checks=(), fixture_stem="x")
 
 
 def test_oracle_result_unvalidated_on_zero_checks() -> None:
-    r = _make_result("x", OracleStatus.unvalidated, 0)
-    assert r.checks_run == 0
-    assert r.status == OracleStatus.unvalidated
+    r = _make_result("x", OracleStatus.UNVALIDATED, 0)
+    assert len(r.checks) == 0
+    assert r.status == OracleStatus.UNVALIDATED
 
 
 def test_oracle_status_values_exhaustive() -> None:
     assert {s.name for s in OracleStatus} == {
-        "pass_", "fail", "extractor_gap", "unsupported_reference_feature", "unvalidated"
+        "PASS", "FAIL", "EXTRACTOR_GAP", "UNSUPPORTED_REFERENCE_FEATURE", "UNVALIDATED"
     }
 
 
@@ -608,7 +613,7 @@ def test_manifest_minimum_below_actual_yields_extractor_gap() -> None:
         frozenset(["A", "B", "C"]), frozenset(), frozenset(),
         _minimums=FixtureMinimums(min_entities=10),
     )
-    assert result.status == OracleStatus.extractor_gap
+    assert result.status == OracleStatus.EXTRACTOR_GAP
 
 
 # T4
@@ -631,7 +636,7 @@ def test_er_cardinality_mismatch_yields_fail() -> None:
         our_extra={"cardinalities": frozenset([("A", "B", "one", "zero_or_one")])},
         ref_extra={"cardinalities": frozenset([("A", "B", "one", "many")])},
     )
-    assert result.status == OracleStatus.fail
+    assert result.status == OracleStatus.FAIL
 
 
 def test_er_cardinality_match_passes() -> None:
@@ -642,7 +647,7 @@ def test_er_cardinality_match_passes() -> None:
         our_extra={"cardinalities": frozenset([("A", "B", "one", "many")])},
         ref_extra={"cardinalities": frozenset([("A", "B", "one", "many")])},
     )
-    assert result.status != OracleStatus.fail
+    assert result.status != OracleStatus.FAIL
 
 
 # T6
@@ -653,7 +658,7 @@ def test_proxy_node_not_missing_entity_error() -> None:
         frozenset(["A", "B", "_sm_start_"]), frozenset(), frozenset(),
         frozenset(["A", "B"]), frozenset(), frozenset(),
     )
-    assert result.status == OracleStatus.pass_
+    assert result.status == OracleStatus.PASS
 
 
 def test_real_node_still_missing_error() -> None:
@@ -662,19 +667,20 @@ def test_real_node_still_missing_error() -> None:
         frozenset(["A"]), frozenset(), frozenset(),
         frozenset(["A", "B"]), frozenset(), frozenset(),
     )
-    assert result.status == OracleStatus.fail
-    assert any("missing nodes" in n for n in result.notes)
+    assert result.status == OracleStatus.FAIL
+    assert any("missing nodes" in n for n in result.diagnostics)
 
 
 # T2
 
-def test_extractor_gap_when_ref_has_entities_our_empty() -> None:
+def test_fail_when_ref_has_entities_our_empty() -> None:
+    # AC4: reference has entities, native side empty → FAIL (our renderer failed)
     result = _compare_topology(
         "flowchart-diamond-branch", "flowchart",
         frozenset(), frozenset(), frozenset(),
         frozenset(["A", "B"]), frozenset(), frozenset(),
     )
-    assert result.status == OracleStatus.extractor_gap
+    assert result.status == OracleStatus.FAIL
 
 
 def test_extractor_gap_when_our_has_entities_ref_empty() -> None:
@@ -684,7 +690,7 @@ def test_extractor_gap_when_our_has_entities_ref_empty() -> None:
         frozenset(), frozenset(), frozenset(),
         _minimums=FixtureMinimums(min_entities=0),
     )
-    assert result.status == OracleStatus.extractor_gap
+    assert result.status == OracleStatus.EXTRACTOR_GAP
 
 
 def test_extractor_gap_when_both_empty_min_declared() -> None:
@@ -694,7 +700,7 @@ def test_extractor_gap_when_both_empty_min_declared() -> None:
         frozenset(), frozenset(), frozenset(),
         _minimums=FixtureMinimums(min_entities=2),
     )
-    assert result.status == OracleStatus.extractor_gap
+    assert result.status == OracleStatus.EXTRACTOR_GAP
 
 
 def test_pass_allowed_when_both_empty_min_zero() -> None:
@@ -704,7 +710,7 @@ def test_pass_allowed_when_both_empty_min_zero() -> None:
         frozenset(), frozenset(), frozenset(),
         _minimums=FixtureMinimums(min_entities=0),
     )
-    assert result.status != OracleStatus.extractor_gap
+    assert result.status != OracleStatus.EXTRACTOR_GAP
 
 
 # T7
@@ -761,7 +767,7 @@ def test_ci_gate_fails_on_zero_regression() -> None:
     original = dict(_CHECKS_RUN_BASELINE)
     _CHECKS_RUN_BASELINE["flowchart-diamond-branch"] = 5
     try:
-        result = _make_result("flowchart-diamond-branch", OracleStatus.unvalidated, 0)
+        result = _make_result("flowchart-diamond-branch", OracleStatus.UNVALIDATED, 0)
         with pytest.raises(AssertionError, match="regressed to 0"):
             _assert_no_checks_run_regression([result])
     finally:
@@ -773,7 +779,7 @@ def test_ci_gate_passes_on_nonzero() -> None:
     original = dict(_CHECKS_RUN_BASELINE)
     _CHECKS_RUN_BASELINE["flowchart-diamond-branch"] = 5
     try:
-        result = _make_result("flowchart-diamond-branch", OracleStatus.pass_, 3)
+        result = _make_result("flowchart-diamond-branch", OracleStatus.PASS, 3)
         _assert_no_checks_run_regression([result])
     finally:
         _CHECKS_RUN_BASELINE.clear()
@@ -781,5 +787,155 @@ def test_ci_gate_passes_on_nonzero() -> None:
 
 
 def test_ci_gate_new_fixture_exempt() -> None:
-    result = _make_result("brand-new-fixture", OracleStatus.unvalidated, 0)
+    result = _make_result("brand-new-fixture", OracleStatus.UNVALIDATED, 0)
     _assert_no_checks_run_regression([result])
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Regression tests
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestOracleRegressions:
+    """Regression guard: pathological cases that must never silently produce PASS."""
+
+    # oracle_contract type tests
+
+    def test_oracle_status_vocabulary(self) -> None:
+        assert {s.name for s in OracleStatus} == {
+            "PASS", "FAIL", "EXTRACTOR_GAP", "UNSUPPORTED_REFERENCE_FEATURE", "UNVALIDATED"
+        }
+
+    def test_oracle_result_pass_requires_checks(self) -> None:
+        with pytest.raises(ValueError):
+            OracleResult(status=OracleStatus.PASS, checks=())
+
+    def test_oracle_check_fields(self) -> None:
+        c = OracleCheck(name="x", passed=True, expected=1, actual=1)
+        assert c.name == "x"
+        assert c.passed is True
+        assert c.expected == 1
+        assert c.actual == 1
+        assert c.diagnostic == ""
+
+    # import-shared-status tests
+
+    def test_geometry_compare_imports_shared_status(self) -> None:
+        from tools.mermaid_fidelity.compare.geometry import OracleStatus as GeoStatus
+        from tools.mermaid_fidelity.oracle_contract import OracleStatus as ContractStatus
+        assert GeoStatus is ContractStatus
+
+    def test_semantic_compare_imports_shared_status(self) -> None:
+        from tools.mermaid_fidelity.compare.semantic import OracleStatus as SemStatus
+        from tools.mermaid_fidelity.oracle_contract import OracleStatus as ContractStatus
+        assert SemStatus is ContractStatus
+
+    # zero-check oracle wrapper tests
+
+    def test_geometry_oracle_none_none_unvalidated(self) -> None:
+        from tools.mermaid_fidelity.compare.geometry import compare_geometry_oracle
+        result = compare_geometry_oracle(None, None)
+        assert result.status == OracleStatus.UNVALIDATED
+
+    def test_semantic_oracle_none_none_unvalidated(self) -> None:
+        from tools.mermaid_fidelity.compare.semantic import compare_semantic_oracle
+        result = compare_semantic_oracle(None, None)
+        assert result.status == OracleStatus.UNVALIDATED
+
+    # emit_oracle_report test
+
+    def test_emit_oracle_report_has_required_keys(self) -> None:
+        from tools.mermaid_fidelity.report import emit_oracle_report
+        result = OracleResult(
+            status=OracleStatus.UNVALIDATED,
+            fixture_stem="test-fixture",
+        )
+        provenance = {"source_hash": "abc123"}
+        report = emit_oracle_report(result, provenance)
+        required_keys = {
+            "fixture", "source_hash", "status", "checks_executed", "failed_checks",
+            "extractor_gaps", "unsupported_fields", "native_backend_metadata",
+            "reference_version_metadata",
+        }
+        assert required_keys.issubset(set(report.keys()))
+
+    # topology regression tests
+
+    def test_regression_empty_both_sides_no_pass(self) -> None:
+        result = _compare_topology(
+            "flowchart-diamond-branch", "flowchart",
+            frozenset(), frozenset(), frozenset(),
+            frozenset(), frozenset(), frozenset(),
+            _minimums=FixtureMinimums(min_entities=1),
+        )
+        assert result.status != OracleStatus.PASS
+
+    def test_regression_one_sided_native_not_pass(self) -> None:
+        result = _compare_topology(
+            "flowchart-diamond-branch", "flowchart",
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            frozenset(), frozenset(), frozenset(),
+            _minimums=FixtureMinimums(min_entities=0),
+        )
+        assert result.status != OracleStatus.PASS
+
+    def test_regression_one_sided_ref_not_pass(self) -> None:
+        result = _compare_topology(
+            "flowchart-diamond-branch", "flowchart",
+            frozenset(), frozenset(), frozenset(),
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+        )
+        assert result.status != OracleStatus.PASS
+
+    def test_regression_parallel_edges_distinct(self) -> None:
+        # Parallel edges with distinct labels are treated as separate comparison keys
+        result = _compare_topology(
+            "flowchart-parallel-links", "flowchart",
+            frozenset(["A", "B"]),
+            frozenset([("A", "B", "label1"), ("A", "B", "label2")]),
+            frozenset(),
+            frozenset(["A", "B"]),
+            frozenset([("A", "B", "label1"), ("A", "B", "label2")]),
+            frozenset(),
+        )
+        assert result.status == OracleStatus.PASS
+        # Missing one parallel edge is caught as FAIL
+        result2 = _compare_topology(
+            "flowchart-parallel-links", "flowchart",
+            frozenset(["A", "B"]),
+            frozenset([("A", "B", "label1")]),
+            frozenset(),
+            frozenset(["A", "B"]),
+            frozenset([("A", "B", "label1"), ("A", "B", "label2")]),
+            frozenset(),
+        )
+        assert result2.status == OracleStatus.FAIL
+
+    def test_regression_marker_difference_fails(self) -> None:
+        result = _compare_topology(
+            "flowchart-diamond-branch", "flowchart",
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            our_extra={"markers": frozenset([("A", "B", "circle")])},
+            ref_extra={"markers": frozenset([("A", "B", "cross")])},
+        )
+        assert result.status == OracleStatus.FAIL
+
+    def test_regression_cardinality_difference_fails(self) -> None:
+        result = _compare_topology(
+            "er-basic", "er",
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            our_extra={"cardinalities": frozenset([("A", "B", "one", "many")])},
+            ref_extra={"cardinalities": frozenset([("A", "B", "one", "zero_or_more")])},
+        )
+        assert result.status == OracleStatus.FAIL
+
+    def test_regression_containment_difference_fails(self) -> None:
+        result = _compare_topology(
+            "flowchart-diamond-branch", "flowchart",
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            frozenset(["A", "B"]), frozenset(), frozenset(),
+            our_extra={"containment": frozenset()},
+            ref_extra={"containment": frozenset([("subGraph0", "A")])},
+        )
+        assert result.status == OracleStatus.FAIL

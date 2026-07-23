@@ -204,3 +204,18 @@ def _fmt(v: float | None) -> str:
     if v is None:
         return "—"
     return f"{v:.4f}"
+
+
+def emit_oracle_report(result: "OracleResult", provenance: dict) -> dict:
+    """Emit a stable JSON-serializable oracle report dict."""
+    return {
+        "fixture": result.fixture_stem,
+        "source_hash": provenance.get("source_hash", ""),
+        "status": result.status.value,
+        "checks_executed": len(result.checks),
+        "failed_checks": sum(1 for c in result.checks if not c.passed),
+        "extractor_gaps": [d for d in result.diagnostics if "extractor" in d.lower()],
+        "unsupported_fields": [d for d in result.diagnostics if "unsupported" in d.lower()],
+        "native_backend_metadata": provenance.get("native_backend_metadata", {}),
+        "reference_version_metadata": provenance.get("reference_version_metadata", {}),
+    }
