@@ -328,32 +328,6 @@ def build_content_page_fixture(
     return payload
 
 
-def chart_free(page_payload: dict[str, object]) -> dict[str, object]:
-    """Drop card `chart` blocks, `resource_ref.chart`, and `chart_refs`.
-
-    Chart recipes live in grouped files (`references/charts/{basic,advanced,complex}.md`),
-    not per-`chart_type` files, so `chart_refs` never resolve under the current
-    resource lookup — an issue orthogonal to this test. Stripping charts isolates the
-    archetype/streak behavior under test so a passing fixture proves the branch, not
-    resource plumbing.
-
-    TODO: drop chart_free once chart_refs resolve against the grouped chart recipe
-    files (references/charts/{basic,advanced,complex}.md); until then it is applied
-    symmetrically to paired arms, so it cannot mask a persuasive/reference divergence.
-    """
-    page = page_payload["page"]
-    assert isinstance(page, dict)
-    for card in page.get("cards", []):
-        if isinstance(card, dict):
-            card.pop("chart", None)
-            resource_ref = card.get("resource_ref")
-            if isinstance(resource_ref, dict):
-                resource_ref.pop("chart", None)
-    resources = page.get("resources")
-    if isinstance(resources, dict):
-        resources["chart_refs"] = []
-    return page_payload
-
 
 def build_outline_fixture(density_bias: str, argument_strategy: str = "data_driven") -> str:
     if density_bias == "relaxed":
@@ -1071,10 +1045,10 @@ def run_smoke() -> SmokeResult:
             write_text(
                 ref_plan_dir / f"planning{slide_no}.json",
                 json.dumps(
-                    chart_free(build_content_page_fixture(
+                    build_content_page_fixture(
                         slide_number=slide_no, deck_bias="ultra_dense", density_label="high",
                         layout_hint=layout, narrative_archetype="reference_runbook",
-                    )),
+                    ),
                     ensure_ascii=False, indent=2,
                 ),
             )
@@ -1091,10 +1065,10 @@ def run_smoke() -> SmokeResult:
             write_text(
                 persuasive_plan_dir / f"planning{slide_no}.json",
                 json.dumps(
-                    chart_free(build_content_page_fixture(
+                    build_content_page_fixture(
                         slide_number=slide_no, deck_bias="ultra_dense", density_label="high",
                         layout_hint=layout,
-                    )),
+                    ),
                     ensure_ascii=False, indent=2,
                 ),
             )
@@ -1109,10 +1083,10 @@ def run_smoke() -> SmokeResult:
         write_text(
             bad_arch_dir / "planning1.json",
             json.dumps(
-                chart_free(build_content_page_fixture(
+                build_content_page_fixture(
                     slide_number=1, deck_bias="balanced", density_label="medium",
                     narrative_archetype="bogus",
-                )),
+                ),
                 ensure_ascii=False, indent=2,
             ),
         )
