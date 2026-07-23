@@ -479,3 +479,105 @@ def compare_semantic_oracle(
     )
     status = OracleStatus.PASS if not lines else OracleStatus.FAIL
     return OracleResult(status=status, checks=checks, diagnostics=tuple(lines))
+
+
+# ── Class diagram marker oracle ───────────────────────────────────────────────
+
+def compare_class_diagram_markers(
+    expected_markers: "list[tuple]",
+    actual_edges: "list",
+) -> "OracleResult":
+    """Compare expected class-diagram marker semantics against actual RoutedEdge objects.
+
+    Parameters
+    ----------
+    expected_markers:
+        List of ``(edge_id, src_marker_kind_str, dst_marker_kind_str)`` tuples
+        where marker kind strings match ``MarkerKind`` lowercase values
+        (e.g. ``"none"``, ``"hollow_triangle"``, ``"filled_diamond"``).
+    actual_edges:
+        Sequence of ``RoutedEdge`` objects from a compiled ``FinalizedLayout``.
+
+    Returns
+    -------
+    OracleResult
+        PASS when every expected marker assertion matches the actual
+        RoutedEdge.  FAIL when any marker mismatches.  EXTRACTOR_GAP when
+        ``actual_edges`` is empty.  The result always carries at least one
+        ``OracleCheck`` per expected marker end so callers can assert
+        ``len(oracle_result.checks) > 0`` for diagrams that have markers.
+    """
+    if not actual_edges:
+        return OracleResult(
+            status=OracleStatus.EXTRACTOR_GAP,
+            diagnostics=("no actual edges provided",),
+        )
+
+    # Build lookup by edge_id
+    actual_by_id: dict = {re_obj.edge_id: re_obj for re_obj in actual_edges}
+
+    checks: list[OracleCheck] = []
+    diagnostics: list[str] = []
+
+    for edge_id, exp_src_str, exp_dst_str in expected_markers:
+        actual = actual_by_id.get(edge_id)
+        if actual is None:
+            # Edge not found in compiled layout
+            diagnostics.append(f"edge_id {edge_id!r} not found in actual layout")
+            checks.append(OracleCheck(
+                name=f"{edge_id}:source_marker",
+                passed=False,
+                expected=exp_src_str,
+                actual=None,
+                diagnostic=f"edge_id {edge_id!r} missing from layout",
+            ))
+            checks.append(OracleCheck(
+                name=f"{edge_id}:target_marker",
+                passed=False,
+                expected=exp_dst_str,
+                actual=None,
+                diagnostic=f"edge_id {edge_id!r} missing from layout",
+            ))
+            continue
+
+        # Compare source marker
+        actual_src = actual.source_marker.value if hasattr(actual.source_marker, "value") else str(actual.source_marker)
+        src_ok = actual_src == exp_src_str
+        checks.append(OracleCheck(
+            name=f"{edge_id}:source_marker",
+            passed=src_ok,
+            expected=exp_src_str,
+            actual=actual_src,
+        ))
+        if not src_ok:
+            diagnostics.append(
+                f"edge {edge_id!r} source_marker: expected {exp_src_str!r}, got {actual_src!r}"
+            )
+
+        # Compare target marker
+        actual_dst = actual.target_marker.value if hasattr(actual.target_marker, "value") else str(actual.target_marker)
+        dst_ok = actual_dst == exp_dst_str
+        checks.append(OracleCheck(
+            name=f"{edge_id}:target_marker",
+            passed=dst_ok,
+            expected=exp_dst_str,
+            actual=actual_dst,
+        ))
+        if not dst_ok:
+            diagnostics.append(
+                f"edge {edge_id!r} target_marker: expected {exp_dst_str!r}, got {actual_dst!r}"
+            )
+
+    if not checks:
+        return OracleResult(
+            status=OracleStatus.EXTRACTOR_GAP,
+            diagnostics=("no marker expectations provided",),
+        )
+
+    all_passed = all(c.passed for c in checks)
+    status = OracleStatus.PASS if all_passed else OracleStatus.FAIL
+    return OracleResult(
+        status=status,
+        checks=tuple(checks),
+        diagnostics=tuple(diagnostics),
+    )
