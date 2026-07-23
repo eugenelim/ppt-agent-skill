@@ -644,6 +644,18 @@ in `docs/specs/mermaid-native-p0/spec.md`.
 
 ---
 
+### backlog-compound-elk-ac1-ac3
+
+**Deferred from `compound-layout-elk-first-class` AC1–AC3:** AC1 (empty subgraph non-origin
+placement), AC2 (groups-complex member containment), and AC3 (inner-direction LR ordering) require
+ELK (Node.js + elkjs 0.12.0) to verify. The implementation code (`elk_adapter.py` per-group
+`elk.direction`, empty-group minimum size, `_strategies.py` `_elk_grp_bboxes` population) is
+shipped; the tests are written and marked `@requires_elk`. Unblocked by installing elkjs:
+`npm ci --prefix scripts/mermaid_render/layout` and re-running
+`pytest tests/test_compound_layout.py -m requires_elk`.
+
+---
+
 ### arrow-semantics-cleanup
 
 **Deferred from `mermaid-unified-layout-pipeline` T3:** `_Edge` in `layout/_constants.py` retains

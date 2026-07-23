@@ -30,6 +30,9 @@ _GROUP_PAD_Y_TOP = 36   # title strip reserved height (px)
 _GROUP_PAD_X = 28       # horizontal inner padding (px)
 _GROUP_PAD_Y_BOT = 28   # bottom inner padding (px)
 
+# Mermaid direction → ELK direction string
+_ELK_DIR = {"TB": "DOWN", "TD": "DOWN", "BT": "UP", "LR": "RIGHT", "RL": "LEFT"}
+
 
 class ElkUnavailable(RuntimeError):
     """Raised when ELK layout cannot run (Node absent, elkjs missing, env opt-out, or subprocess failure)."""
@@ -52,9 +55,7 @@ def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
     (FIXED_SIDE) are added when PortSpec objects are present. All edges are
     placed at root level so ELK handles cross-compound routing.
     """
-    elk_direction = {
-        "TB": "DOWN", "BT": "UP", "LR": "RIGHT", "RL": "LEFT",
-    }.get(graph.direction, "DOWN")
+    elk_direction = _ELK_DIR.get(graph.direction.upper(), "DOWN")
     _sp = spacing or {}
     node_node = str(_sp.get("col_gap", 40))
     node_layers = str(_sp.get("rank_gap", 60))
@@ -95,20 +96,34 @@ def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
         pad_top = _GROUP_PAD_Y_TOP
         if g.label_height > 0:
             pad_top = max(pad_top, int(g.label_height) + 8)
+
+        # Per-group direction so `direction LR` inside a subgraph is honoured by ELK.
+        elk_group_dir = _ELK_DIR.get((g.local_direction or graph.direction).upper(), "DOWN")
+
+        group_children = children_by_parent.setdefault(g.id, [])
         g_node: dict = {
             "id": g.id,
-            "children": children_by_parent.setdefault(g.id, []),
+            "children": group_children,
             "layoutOptions": dict(shared_layout_opts, **{
+                "elk.direction": elk_group_dir,
                 "elk.padding": (
                     f"[top={pad_top},right={_GROUP_PAD_X},"
                     f"bottom={_GROUP_PAD_Y_BOT},left={_GROUP_PAD_X}]"
                 ),
             }),
         }
-        if g.minimum_width > 0:
-            g_node["width"] = g.minimum_width
-        if g.minimum_height > 0:
-            g_node["height"] = g.minimum_height
+        if not group_children:
+            # Empty compound node: give it a deterministic minimum size so ELK
+            # positions it as a visible labeled box rather than collapsing to zero.
+            min_w = max(float(_GROUP_PAD_X * 2 + 80), g.label_width + float(_GROUP_PAD_X * 2))
+            min_h = float(pad_top + _GROUP_PAD_Y_BOT)
+            g_node["width"] = min_w
+            g_node["height"] = min_h
+        else:
+            if g.minimum_width > 0:
+                g_node["width"] = g.minimum_width
+            if g.minimum_height > 0:
+                g_node["height"] = g.minimum_height
         children_by_parent.setdefault(g.parent_id or "", []).append(g_node)
 
     # Edges at root level; port IDs are referenced directly (globally unique)
