@@ -361,7 +361,7 @@ class TestMultiplicitySlots:
         )
         src_spec, tgt_spec, line_style = _class_rel_markers(op)
         edge = _Edge(src=c1, dst=c2, label=lbl.strip(),
-                     style=line_style, arrow=True,
+                     style=line_style,
                      source_marker=src_spec, target_marker=tgt_spec,
                      src_label=mul_src, dst_label=mul_dst)
         assert edge.src_label == "1"
@@ -393,7 +393,7 @@ class TestDirectionPreservation:
                 )
                 src_spec, tgt_spec, line_style = _class_rel_markers(op)
                 edges.append(_Edge(src=c1, dst=c2, label=lbl.strip(),
-                                   style=line_style, arrow=True,
+                                   style=line_style,
                                    source_marker=src_spec, target_marker=tgt_spec))
         return edges
 

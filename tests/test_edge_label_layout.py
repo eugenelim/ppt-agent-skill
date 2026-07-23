@@ -135,6 +135,24 @@ class TestEstLabelWidth:
                 f"Width mismatch at n={n}: _est_label_w={routing_w} vs _make_text_layout_ir={layout_w}"
             )
 
+    def test_alignment_with_make_text_layout_ir_for_long_labels(self):
+        """Long labels stay aligned between the routing and layout paths, both
+        capped at 450px (backlog-mermaid-p0-label-width-cap)."""
+        import sys, os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+        from mermaid_render.layout._strategies import _make_text_layout_ir
+        for n in (60, 80, 120, 200):
+            text = "x" * n
+            routing_w = _est_label_w(text)
+            layout_w = int(_make_text_layout_ir(text).width)
+            assert routing_w == layout_w, (
+                f"Divergence at n={n}: _est_label_w={routing_w} vs "
+                f"_make_text_layout_ir={layout_w}"
+            )
+            assert layout_w <= 450, f"_make_text_layout_ir exceeds cap at n={n}: {layout_w}"
+        # The cap must actually engage at the extreme (else the test proves nothing).
+        assert int(_make_text_layout_ir("x" * 200).width) == 450
+
 
 # ── Route failure diagnostics ─────────────────────────────────────────────────
 

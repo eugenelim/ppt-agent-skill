@@ -322,7 +322,7 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
                     _nid = f"_note_{_note_counter}"
                     _note_counter += 1
                     _ensure(_nid, _note_text, "rect", "state-note")
-                    edges.append(_Edge(src=_note_target, dst=_nid, label="", style="dotted", arrow=False))
+                    edges.append(_Edge(src=_note_target, dst=_nid, label="", style="dotted"))
                 _note_target = ""
                 _note_lines = []
             else:
@@ -336,7 +336,7 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             _ensure(_nid, _ni_text, "rect", "state-note")
             # Ensure target node exists (may be forward-referenced)
             _ensure(_ni_target, _ni_target, "rect", "")
-            edges.append(_Edge(src=_ni_target, dst=_nid, label="", style="dotted", arrow=False))
+            edges.append(_Edge(src=_ni_target, dst=_nid, label="", style="dotted"))
             continue
         _note_open = _STATE_NOTE_OPEN.match(line)
         if _note_open:
@@ -442,7 +442,7 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             _ensure(_note_target, _note_target, "rect", "")
             _nid = f"_note_{_note_counter}"
             _ensure(_nid, _note_text, "rect", "state-note")
-            edges.append(_Edge(src=_note_target, dst=_nid, label="", style="dotted", arrow=False))
+            edges.append(_Edge(src=_note_target, dst=_nid, label="", style="dotted"))
 
     # Apply deferred linkStyle overrides (linkStyle appears after edges in source)
     for _lidx, _lcss in _pending_link_styles:
@@ -565,7 +565,7 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
         if not re.match(r'[A-Za-z_]', dst_id):
             return
         ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
-        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir,
+        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style,
                    source_marker=_src_mk, target_marker=_dst_mk))
         _parse_line(dst_raw, edges, ensure_fn)
     else:
@@ -573,7 +573,7 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
         if not re.match(r'[A-Za-z_]', dst_id):
             return
         ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
-        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir,
+        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style,
                    source_marker=_src_mk, target_marker=_dst_mk))
 
 

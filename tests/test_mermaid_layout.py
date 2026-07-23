@@ -15,6 +15,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mermaid_layout._strategies import _infer_label_icons
+from mermaid_render.layout._geometry import MarkerKind, MarkerSpec
+
+_ARROW_TGT = MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")
 
 from mermaid_layout import (
     _strip_frontmatter,
@@ -433,7 +436,7 @@ class TestRenderGraphFragment:
     def _make_simple_graph(self):
         nodes = {"A": _Node(id="A", label="Alpha", x=40, y=40),
                  "B": _Node(id="B", label="Beta", x=40, y=160)}
-        edges = [_Edge("A", "B")]
+        edges = [_Edge("A", "B", target_marker=_ARROW_TGT)]
         return nodes, edges, {}, 240, 280
 
     def test_has_node_divs(self):
@@ -1376,7 +1379,7 @@ class TestEdgeLabelRotation:
             "A": _Node(id="A", label="A", x=48, y=48, rank=0, col=0),
             "B": _Node(id="B", label="B", x=48, y=200, rank=1, col=0),
         }
-        edges = [_Edge(src="A", dst="B", label="my label", style="solid", arrow=True)]
+        edges = [_Edge(src="A", dst="B", label="my label", style="solid", target_marker=_ARROW_TGT)]
         return _route_edges(nodes, edges, 400, direction)
 
     def test_edge_label_rot_always_zero_lr(self):
@@ -1420,8 +1423,8 @@ class TestLRCrossRowRouting:
             "dst":      _Node(id="dst",      label="DB",   x=320 + NODE_W + RANK_GAP, y=CANVAS_PAD, rank=2, col=0),
         }
         edges = [
-            _Edge(src="src_row0", dst="dst", label="reads", style="solid", arrow=True),
-            _Edge(src="src_row1", dst="dst", label="writes", style="solid", arrow=True),
+            _Edge(src="src_row0", dst="dst", label="reads", style="solid", target_marker=_ARROW_TGT),
+            _Edge(src="src_row1", dst="dst", label="writes", style="solid", target_marker=_ARROW_TGT),
         ]
         return _route_edges(nodes, edges, 900, "LR")
 
@@ -1756,8 +1759,8 @@ class TestLRLabelCentering:
         C = _Node(id="C", label="Dest",    x=CANVAS_PAD + 2 * rank_pitch,  y=CANVAS_PAD, rank=2, col=0)
         nodes = {"A": A, "B": B, "C": C}
         edges = [
-            _Edge(src="A", dst="B", label="step one", style="solid", arrow=True),
-            _Edge(src="B", dst="C", label="step two", style="solid", arrow=True),
+            _Edge(src="A", dst="B", label="step one", style="solid", target_marker=_ARROW_TGT),
+            _Edge(src="B", dst="C", label="step two", style="solid", target_marker=_ARROW_TGT),
         ]
         return _route_edges(nodes, edges, 900, "LR"), A, B, C
 
@@ -2020,7 +2023,7 @@ class TestShortGapLabelPlacement:
         A = _Node(id="A", label="Src", x=CANVAS_PAD,              y=CANVAS_PAD, rank=0, col=0)
         B = _Node(id="B", label="Dst", x=CANVAS_PAD + rank_pitch,  y=CANVAS_PAD, rank=1, col=0)
         nodes = {"A": A, "B": B}
-        edges = [_Edge(src="A", dst="B", label=label, style="solid", arrow=True)]
+        edges = [_Edge(src="A", dst="B", label=label, style="solid", target_marker=_ARROW_TGT)]
         w = _est_label_w(label)
         x1 = A.x + NODE_W   # right edge of source
         gap = B.x - x1      # RANK_GAP
@@ -2058,8 +2061,8 @@ class TestShortGapLabelPlacement:
         C = _Node(id="C", label="C", x=CANVAS_PAD + rank_pitch,   y=CANVAS_PAD,           rank=1, col=0)
         nodes = {"A": A, "B": B, "C": C}
         edges = [
-            _Edge(src="A", dst="C", label=label, style="solid", arrow=True),
-            _Edge(src="B", dst="C", label=label, style="solid", arrow=True),
+            _Edge(src="A", dst="C", label=label, style="solid", target_marker=_ARROW_TGT),
+            _Edge(src="B", dst="C", label=label, style="solid", target_marker=_ARROW_TGT),
         ]
         specs = _route_edges(nodes, edges, 900, "LR")
         labeled = [s for s in specs if s.get("label")]

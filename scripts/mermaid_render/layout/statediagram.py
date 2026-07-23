@@ -462,6 +462,7 @@ def state_model_to_graph(
       AtomicState        → rect
     """
     from ._constants import _Node, _Edge, _Group  # avoid circular at module level
+    from ._geometry import MarkerKind, MarkerSpec
 
     nodes: dict[str, _Node] = {}
     edges: list[_Edge] = []
@@ -518,7 +519,8 @@ def state_model_to_graph(
                     nodes[src] = _Node(id=src, label=src, shape="rect")
                 if dst not in nodes:
                     nodes[dst] = _Node(id=dst, label=dst, shape="rect")
-                edges.append(_Edge(src=src, dst=dst, label=tr.label, arrow=True))
+                edges.append(_Edge(src=src, dst=dst, label=tr.label,
+                                   target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")))
 
     for s in model.states:
         _emit(s, None)
@@ -537,7 +539,8 @@ def state_model_to_graph(
         _n = _id_counts.get(_base, 0)
         _id_counts[_base] = _n + 1
         eid = _base if _n == 0 else f"{_base}#{_n}"
-        e = _Edge(src=src, dst=dst, label=label, arrow=True, edge_id=eid)
+        e = _Edge(src=src, dst=dst, label=label,
+                  target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET"), edge_id=eid)
         if src_group is not None:
             e.src_group = src_group  # type: ignore[attr-defined]
         edges.append(e)
@@ -588,7 +591,7 @@ def state_model_to_graph(
         nodes[_nid] = _Node(id=_nid, label=note.text, shape="rect", css_class="state-note")
         if note.target_id not in nodes:
             nodes[note.target_id] = _Node(id=note.target_id, label=note.target_id, shape="rect")
-        edges.append(_Edge(src=note.target_id, dst=_nid, label="", style="dotted", arrow=False))
+        edges.append(_Edge(src=note.target_id, dst=_nid, label="", style="dotted"))
 
     # Assign stable edge IDs to internal (composite-transition) edges added by _emit
     for _e in edges:

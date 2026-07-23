@@ -200,14 +200,6 @@ requires Playwright + Chromium in CI (add to `render-scripts` job or a new
 
 -->
 
-## c4-layout-engine
-
-### c4-icon-map-orphan
-
-`_C4_ICON_MAP` in `scripts/mermaid_render/layout/_constants.py` is now dead —
-`_strategies.py` no longer imports it after the C4 renderer was decoupled. Remove
-it in a future `_constants.py`-touching pass.
-
 ## seq-geometry-fix
 
 Deferred items from the sequenceDiagram geometry fix spec
@@ -352,17 +344,6 @@ and writing a subprocess test that asserts `rc != 0` and `"not xdist-safe"` in s
 
 ---
 
-### backlog-mermaid-p0-label-width-cap
-
-**Deferred from `mermaid-native-p0`:** `_est_label_w` in `layout/_routing.py` caps at 450px while
-`_make_text_layout_ir` in `layout/_strategies.py` has no upper cap. For edge labels >56 chars the
-routing placement width (450px) diverges from the stored `label_layout.bounds.w` (`len*8`). Apply
-the 450px cap to `_make_text_layout_ir` too (affects node-width calculation for long labels — needs
-snapshot recapture), or add a separate cap in the label-layout path. Reference: `spec.md` item 3
-in `docs/specs/mermaid-native-p0/spec.md`.
-
----
-
 ### backlog-compound-elk-ac1-ac3
 
 **Deferred from `compound-layout-elk-first-class` AC1–AC3:** AC1 (empty subgraph non-origin
@@ -372,18 +353,6 @@ ELK (Node.js + elkjs 0.12.0) to verify. The implementation code (`elk_adapter.py
 shipped; the tests are written and marked `@requires_elk`. Unblocked by installing elkjs:
 `npm ci --prefix scripts/mermaid_render/layout` and re-running
 `pytest tests/test_compound_layout.py -m requires_elk`.
-
----
-
-### arrow-semantics-cleanup
-
-**Deferred from `mermaid-unified-layout-pipeline` T3:** `_Edge` in `layout/_constants.py` retains
-legacy `arrow: bool`, `bidir: bool`, and `arrow_src: bool` fields for backward compatibility. These
-are now derived from `source_marker` and `target_marker` (the canonical representation). The
-deferred work is to remove the three boolean fields, migrate every consumer that reads them, and
-update paint.py and svg_serializer.py to use only the `MarkerKind` enum values. Unblocked after
-all callers are confirmed to use the new fields (grep for `.arrow`, `.bidir`, `.arrow_src` outside
-`_constants.py`).
 
 ---
 
