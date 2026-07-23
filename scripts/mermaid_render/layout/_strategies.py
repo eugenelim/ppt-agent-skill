@@ -1641,6 +1641,14 @@ def _layout_class(src: str, direction: str, width_hint: int) -> str:
             _class_members.setdefault(m2.group(1), [])
     if not nodes:
         raise ValueError("No classes found in classDiagram.")
+    # Assign stable parse-time edge IDs. Parallel relations (same src→dst) get
+    # a #N suffix so every edge has a unique ID that is stable across runs.
+    _cls_eid_counts: dict[str, int] = {}
+    for _ce in edges:
+        _base = f"{_ce.src}->{_ce.dst}"
+        _n = _cls_eid_counts.get(_base, 0)
+        _cls_eid_counts[_base] = _n + 1
+        _ce.edge_id = _base if _n == 0 else f"{_base}#{_n}"
     # Encode members into label as pipe-separated multi-line tech section.
     # Attributes (no parens) come first, then a "---" divider, then methods.
     for cid, members in _class_members.items():
@@ -1722,6 +1730,15 @@ def _compile_classdiagram(
         raise ValueError("No classes found in classDiagram.")
     if len(nodes) > NODE_CAP:
         raise ValueError(f"Cap exceeded: {len(nodes)} nodes (cap {NODE_CAP}).")
+
+    # Assign stable parse-time edge IDs. Parallel relations (same src→dst) get
+    # a #N suffix so every edge has a unique ID that is stable across runs.
+    _cls_eid_counts: dict[str, int] = {}
+    for _ce in edges:
+        _base = f"{_ce.src}->{_ce.dst}"
+        _n = _cls_eid_counts.get(_base, 0)
+        _cls_eid_counts[_base] = _n + 1
+        _ce.edge_id = _base if _n == 0 else f"{_base}#{_n}"
 
     # Encode members into labels for height computation (pipe-separated multi-row label).
     for cid, members in class_members.items():
