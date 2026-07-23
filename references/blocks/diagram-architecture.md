@@ -149,6 +149,57 @@
 
 **管线安全**：分组标签未用 `::before`/`content`；无 SVG `<text>`；无 `mask-image`。
 
+#### 外部节点 (`:::external`) 与技术注解 (`|`) 用法
+
+两个附加惯例适用于所有架构配方（组件图、部署图、画布）：
+
+**`:::external` — 外部系统节点**：凡不属于本系统边界的节点（第三方服务、外部
+CDN、合作方 API）将 `"external": true` 写入数据格式，HTML 渲染时用 dim 虚线描边
++ dim 文字，与内部节点形成灰化对比。
+
+```json
+{
+  "card_type": "diagram", "diagram_type": "architecture-deployment",
+  "groups": [
+    {"label": "AWS · ap-southeast-1", "nodes": [
+      {"id":"alb","label":"ALB"}, {"id":"ecs","label":"ECS|Java","desc":"2× task"}, {"id":"rds","label":"RDS","desc":"Multi-AZ"}]}
+  ],
+  "links": [{"from":"alb","to":"ecs"},{"from":"ecs","to":"rds"},{"from":"alb","to":"cdn"}],
+  "external": [{"id":"cdn","label":"CloudFront|CDN","external":true}]
+}
+```
+
+对应 HTML（外部节点卡：`dashed` 描边 + `--node-fg-dim` 文字，与内部节点并排）：
+
+```html
+<!-- 外部节点卡：dashed dim 描边，灰化文字 -->
+<div style="min-width:120px; min-height:52px; display:flex; flex-direction:column; justify-content:center; gap:2px;
+  padding:10px 14px; box-sizing:border-box;
+  background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
+  border:1px dashed var(--node-fg-dim); border-radius:var(--node-radius); color:var(--node-fg-dim);">
+  <span style="font-weight:700; font-size:14px; color:var(--node-fg-dim);">CloudFront</span>
+  <span style="font-size:12px; color:var(--node-fg-dim);">CDN</span>
+</div>
+```
+
+**`|` 分隔符 — 技术注解**：节点标签用 `label|tech` 格式，渲染时 `|` 前为主标签
+（正常颜色），`|` 后为技术副标签（`--node-fg-dim`，字号减小）。示例见上方数据格式
+中 `"ECS|Java"`、`"CloudFront|CDN"`。HTML 渲染：
+
+```html
+<!-- 技术注解节点：label|tech 拆分为两行 -->
+<div style="min-width:120px; min-height:52px; display:flex; flex-direction:column; justify-content:center; gap:2px;
+  padding:10px 14px; box-sizing:border-box;
+  background:linear-gradient(180deg,var(--node-bg-from),var(--node-bg-to));
+  border:1px solid var(--node-border); border-radius:var(--node-radius); color:var(--node-fg);">
+  <span style="font-weight:700; font-size:14px;">ECS</span>
+  <span style="font-size:12px; color:var(--node-fg-dim);">Java · 2× task</span>
+</div>
+```
+
+**规则**：`|` 后的文字始终用 `--node-fg-dim`；外部节点整体（含主标签）都用
+`--node-fg-dim` + `dashed` 描边；内部节点不加 `dashed`。
+
 ---
 
 ### 数据模型/ER 图 (er-data-model)

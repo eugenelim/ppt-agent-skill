@@ -94,16 +94,6 @@ sample sequence diagram and inspecting the SVG.
 
 ## diagram-consistency-system
 
-- **Discovered (not an AC deferral): style-gallery mock HTML variable-naming drift.**
-  The mock decks under `ppt-output/style-gallery/*.html` use an ad-hoc CSS-variable
-  vocabulary (`--accent`, `--bg-base`, `--line-soft`, `--display-font`) instead of
-  the canonical set the real pipeline injects from `style.json`
-  (`--accent-1..4`, `--card-bg-from/to`, `--font-primary`; see
-  `page-html-playbook.md` Phase 6). Diagram recipes correctly target the canonical
-  set, so they theme correctly under the real pipeline but render low-contrast if
-  fed a gallery mock's `:root`. Out of scope for this spec (diagrams + QA + §E
-  contradiction). Unblocked by a follow-up that regenerates the gallery mocks
-  against the canonical variable set, or documents the mocks as non-canonical.
 - **Discovered (not an AC deferral): planning `chart_refs` never resolve, so planning
   smoke fixtures fail at baseline.** `planning_validator.resource_exists` looks up a
   `chart_refs` value as a per-name file (`references/charts/<chart_type>.md`), but chart
@@ -228,15 +218,6 @@ on `diagram-consistency-system` shipping its recipe family CSS overrides (the th
 `diagram-consistency-system` spec status reaches `Implementing` and its styled output
 is available in the repo.
 
-## diagram-polish
-
-### recipe-example-updates
-
-- **AC-9 (deferred: recipe-example-updates):** Update `references/blocks/diagram-architecture.md`
-  recipe examples to use `:::external` on external system nodes and `|` separator on
-  tech-annotated nodes. Not blocking — conventions are documented in `diagram.md`; recipe
-  examples are illustrative. Unblocked anytime; low-risk recipe-only edit.
-
 ## fragment-to-slide-assembler
 
 - **Discovered (not an AC deferral): no reusable script to assemble a `mermaid_layout.py` fragment into a full slide HTML page.** An ad-hoc `gen_slides.py` was written on the fly during a diagram session to: read fragment files, inject the deck's `:root` CSS variables, create a `1280×720` slide body with title bar, two-column content grid (diagram + annotation cards), and `transform:scale(N)` wrapper. `mermaid_layout.py` emits fragments only; `html_packager.py` consumes complete slide HTML and cannot wrap a fragment. Unblocked by creating `scripts/assemble_diagram_slide.py [--fragment path] [--style style.json] [--title "..."] [--annotation annotation.md] [--output slide.html]` — a repeatable, tested script that replaces the ad-hoc approach. Also: `gen_slides.py` hardcoded `frag_h=344` which diverged from actual fragment dimensions after group/canvas height fixes; the assembler should auto-read `width/height` from the fragment's outermost div style.
@@ -261,13 +242,6 @@ pre-rearchitecture `html2svg.py` pipeline. Guards against silent behavioral
 regression in the adapter wiring. Unblocked by establishing a golden baseline;
 requires Playwright + Chromium in CI (add to `render-scripts` job or a new
 `render-parity` job).
-
-### lift-seam-adr
-
-**Deferred (not an AC deferral):** Write an ADR documenting the lift seam: what
-`mermaid_render/` depends on (stdlib + playwright, nothing else), how a consumer
-would move the package to a standalone repo, and what the shim compatibility
-contract guarantees. Unblocked anytime; editorial only.
 
 <!-- Add one section per spec with open work, e.g.:
 
@@ -300,17 +274,6 @@ before rendering. Until the finalization pass exists, removing the clamping
 produces negative SVG path coordinates that overflow the canvas left edge.
 Unblocked by adding a finalization pass after `_assign_coordinates` that
 offsets the entire layout so all coordinates are ≥ `CANVAS_PAD`.
-
-### adt-pure-python-layout
-
-**Deferred from `flowchart-pipeline-finish` spec:** Record the decision to use
-only pure-Python algorithms for graph layout (no Dagre, ELK, NetworkX, Graphviz,
-PyGraphviz, pydot, subprocess-based layout engines) as a formal Architecture
-Decision Record in `docs/adr/`. The constraint itself is enforced in the spec
-and by AST import tests (Task 12); this item tracks creating the accompanying
-rationale document (tradeoffs: portability vs algorithm maturity, no Node.js
-runtime dependency, deterministic output). Unblocked when `docs/adr/` has an
-ADR-format record titled "Pure-Python Layout Engine".
 
 ### strategies-module-split
 
