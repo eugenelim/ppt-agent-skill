@@ -31,6 +31,7 @@ from ._constants import (
     GROUP_PAD_X, GROUP_PAD_Y_TOP, GROUP_PAD_Y_BOT,
     _ARCH_ICON_MAP, _LABEL_ICON_KEYWORDS,
     _KNOWN_DIRECTIVES, _GRAPH_DIRECTIVES,
+    CardinalityEnd, Maximum, Minimum,
     _node_render_h, _load_icon,
     _TERMINAL_NODE_SIZE, _is_terminal_circle,
     _measure_text_width,
@@ -1182,13 +1183,32 @@ _ER_ATTR_RE = re.compile(
     r'(?:\s+"(?P<comment>[^"]*)")?'
     r'\s*$'
 )
-_ER_CARD_SRC_MAP = {"||": "one", "|o": "zero-one", "}|": "many", "}o": "zero-many"}
-_ER_CARD_DST_MAP = {"||": "one", "|o": "zero-one", "|{": "many", "o{": "zero-many"}
+# Token → CardinalityEnd (character-set rule, side-independent)
+def _to_cardinality_end(tok: str) -> CardinalityEnd:
+    """Parse a cardinality token using the character-set rule.
+
+    ``{`` or ``}`` → maximum=MANY; else maximum=ONE.
+    ``o``           → minimum=ZERO; else minimum=ONE.
+
+    This rule is symmetric for left-side and right-side tokens.
+    """
+    maximum = Maximum.MANY if any(c in tok for c in "{}") else Maximum.ONE
+    minimum = Minimum.ZERO if "o" in tok else Minimum.ONE
+    return CardinalityEnd(minimum=minimum, maximum=maximum)
+
 
 # Entity box geometry constants (px)
 _ER_HDR_H = 34    # entity name header height
 _ER_ROW_H = 22    # attribute row height
 _ER_BOT_PAD = 8   # bottom padding below last attribute row
+
+# Glyph geometry constants (px)
+_ER_GLYPH_HW = 10.0    # half-width of bars / crow's foot spread
+_ER_GLYPH_CIRC_R = 4.5  # radius of the zero-cardinality circle
+_ER_FOOT_CONV = 12.0    # crow's foot convergence offset from boundary
+_ER_BAR1 = 6.0          # first bar offset (max=ONE)
+_ER_BAR2_DELTA = 6.0    # second bar offset past max symbol
+_ER_CIRC_DELTA = 8.0    # circle offset past max symbol
 
 
 def _er_entity_h(n_attrs: int) -> int:
@@ -1220,53 +1240,79 @@ def _er_rect_edge_pt(
     return cx + vx * t, cy + vy * t
 
 
-def _render_crow_foot(x: float, y: float, dx: float, dy: float, kind: str, color: str) -> list[str]:
-    """Return SVG strings for a crow's foot marker at (x, y) with edge direction (dx, dy).
+def _er_glyph_reserve(end: CardinalityEnd) -> float:
+    """Pixels to reserve at the card boundary for the cardinality glyph."""
+    max_ext = _ER_FOOT_CONV if end.maximum == Maximum.MANY else _ER_BAR1
+    if end.minimum == Minimum.ONE:
+        return max_ext + _ER_BAR2_DELTA + 2.0
+    else:
+        return max_ext + _ER_CIRC_DELTA + _ER_GLYPH_CIRC_R + 2.0
 
-    (dx, dy) points from the entity boundary outward along the edge (toward the
-    other entity).  Markers are drawn in that outward direction.
+
+def _render_crow_foot(
+    x: float, y: float, dx: float, dy: float, end: CardinalityEnd, color: str
+) -> list[str]:
+    """SVG strings for the cardinality glyph at card boundary point (x, y).
+
+    ``(dx, dy)`` is the outward direction from entity toward the other entity.
+
+    Glyph structure (from entity boundary outward along the edge):
+      1. Maximum symbol: crow's foot (MANY) or bar (ONE) — closest to entity.
+      2. Minimum symbol: bar (ONE) or circle (ZERO) — further along the edge.
+
+    Crow's foot orientation: tines at the entity boundary, convergence on the
+    line (standard Crow's Foot notation — feet touch the entity).
     """
     import math as _math
-    px, py = -dy, dx  # perpendicular to edge direction
-    HALF_W = 10.0
+    L = _math.hypot(dx, dy)
+    if L < 1e-9:
+        return []
+    tx, ty = dx / L, dy / L   # outward tangent
+    nx, ny = -ty, tx            # normal (perpendicular)
+    hw = _ER_GLYPH_HW
     parts: list[str] = []
-    if kind in ("one", "zero-one"):
-        bx, by = x + dx * 8, y + dy * 8
+
+    # Maximum symbol
+    if end.maximum == Maximum.MANY:
+        # Crow's foot: three lines spread at entity boundary → convergence outward
+        conv_x = x + tx * _ER_FOOT_CONV
+        conv_y = y + ty * _ER_FOOT_CONV
+        for spread in (-hw, 0.0, hw):
+            toe_x = x + nx * spread
+            toe_y = y + ny * spread
+            parts.append(
+                f'<line x1="{toe_x:.1f}" y1="{toe_y:.1f}" '
+                f'x2="{conv_x:.1f}" y2="{conv_y:.1f}" '
+                f'stroke="{color}" stroke-width="1.5"/>'
+            )
+        max_ext = _ER_FOOT_CONV
+    else:
+        # Single bar perpendicular to edge at _ER_BAR1 from boundary
+        bx = x + tx * _ER_BAR1
+        by = y + ty * _ER_BAR1
         parts.append(
-            f'<line x1="{bx - px * HALF_W:.1f}" y1="{by - py * HALF_W:.1f}" '
-            f'x2="{bx + px * HALF_W:.1f}" y2="{by + py * HALF_W:.1f}" '
+            f'<line x1="{bx - nx * hw:.1f}" y1="{by - ny * hw:.1f}" '
+            f'x2="{bx + nx * hw:.1f}" y2="{by + ny * hw:.1f}" '
             f'stroke="{color}" stroke-width="1.5"/>'
         )
-        if kind == "one":
-            bx2, by2 = x + dx * 14, y + dy * 14
-            parts.append(
-                f'<line x1="{bx2 - px * HALF_W:.1f}" y1="{by2 - py * HALF_W:.1f}" '
-                f'x2="{bx2 + px * HALF_W:.1f}" y2="{by2 + py * HALF_W:.1f}" '
-                f'stroke="{color}" stroke-width="1.5"/>'
-            )
-        else:
-            cx_, cy_ = x + dx * 20, y + dy * 20
-            parts.append(
-                f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="4" '
-                f'fill="none" stroke="{color}" stroke-width="1.5"/>'
-            )
-    elif kind in ("many", "zero-many"):
-        bx, by = x + dx * 8, y + dy * 8
-        edge_angle = _math.atan2(dy, dx)
-        for ang in (-12, 0, 12):
-            fa = edge_angle + _math.radians(ang)
-            ex_ = bx + _math.cos(fa) * 12
-            ey_ = by + _math.sin(fa) * 12
-            parts.append(
-                f'<line x1="{bx:.1f}" y1="{by:.1f}" x2="{ex_:.1f}" y2="{ey_:.1f}" '
-                f'stroke="{color}" stroke-width="1.5"/>'
-            )
-        if kind == "zero-many":
-            cx_, cy_ = x + dx * 24, y + dy * 24
-            parts.append(
-                f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="4" '
-                f'fill="none" stroke="{color}" stroke-width="1.5"/>'
-            )
+        max_ext = _ER_BAR1
+
+    # Minimum symbol (further from entity than maximum)
+    if end.minimum == Minimum.ONE:
+        b2x = x + tx * (max_ext + _ER_BAR2_DELTA)
+        b2y = y + ty * (max_ext + _ER_BAR2_DELTA)
+        parts.append(
+            f'<line x1="{b2x - nx * hw:.1f}" y1="{b2y - ny * hw:.1f}" '
+            f'x2="{b2x + nx * hw:.1f}" y2="{b2y + ny * hw:.1f}" '
+            f'stroke="{color}" stroke-width="1.5"/>'
+        )
+    else:
+        cx_ = x + tx * (max_ext + _ER_CIRC_DELTA)
+        cy_ = y + ty * (max_ext + _ER_CIRC_DELTA)
+        parts.append(
+            f'<circle cx="{cx_:.1f}" cy="{cy_:.1f}" r="{_ER_GLYPH_CIRC_R:.1f}" '
+            f'fill="none" stroke="{color}" stroke-width="1.5"/>'
+        )
     return parts
 
 
@@ -1328,8 +1374,8 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
             er_style = "dotted" if m.group("line").startswith(".") else "solid"
             edges.append(_Edge(
                 src=e1, dst=e2, label=lbl, style=er_style, arrow=False,
-                cardinality_src=_ER_CARD_SRC_MAP.get(m.group("card_src")),
-                cardinality_dst=_ER_CARD_DST_MAP.get(m.group("card_dst")),
+                cardinality_src=m.group("card_src") or None,
+                cardinality_dst=m.group("card_dst") or None,
             ))
 
     if not nodes:
@@ -1341,8 +1387,8 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
         {
             "src": e.src, "dst": e.dst, "label": e.label,
             "style": e.style,
-            "card_src": e.cardinality_src,
-            "card_dst": e.cardinality_dst,
+            "card_src": _to_cardinality_end(e.cardinality_src) if e.cardinality_src else None,
+            "card_dst": _to_cardinality_end(e.cardinality_dst) if e.cardinality_dst else None,
         }
         for e in edges
     ]
@@ -1351,6 +1397,12 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
+    # Set real card dimensions before coordinate assignment so column pitch
+    # accounts for the full card width (not just the measured label text width).
+    for n in nodes.values():
+        if not n.is_dummy and n.width == 0:
+            n.width = NODE_W
+            n.height = _er_entity_h(len(entity_attrs.get(n.id, [])))
     canvas_w, _ = _assign_coordinates(nodes)
 
     # Override y-positions with attribute-aware entity heights
@@ -1370,14 +1422,10 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
             nodes[nid].y = y_cursor + (rank_h - eh) // 2
         y_cursor += rank_h + RANK_GAP
 
-    # Scale x-positions to fit width_hint
-    if width_hint and canvas_w > 0 and abs(width_hint / canvas_w - 1.0) > 0.05:
-        scale = width_hint / canvas_w
-        for n in nodes.values():
-            n.x = int(n.x * scale)
-        canvas_w = width_hint
-
-    # Recompute canvas dimensions from actual node positions
+    # Recompute canvas dimensions from actual node positions (natural, no x-scaling).
+    # Downscaling is applied as a uniform CSS zoom on the container so card widths
+    # and x-positions remain consistent — scaling only n.x would shrink gaps while
+    # leaving NODE_W fixed, causing same-rank cards to overlap.
     real_nids = [(nid, n) for nid, n in nodes.items() if not n.is_dummy]
     if real_nids:
         canvas_w = max(n.x + NODE_W for _, n in real_nids) + CANVAS_PAD
@@ -1389,6 +1437,13 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
     else:
         canvas_h = y_cursor - RANK_GAP + CANVAS_PAD
 
+    # Uniform CSS zoom when diagram is wider than width_hint. Applied on the
+    # container so entity boxes AND the SVG overlay scale together.
+    _zoom = 1.0
+    if width_hint and canvas_w > 0 and width_hint < canvas_w:
+        _zoom = width_hint / canvas_w
+    _zoom_css = f"zoom:{_zoom:.4f};" if abs(_zoom - 1.0) > 0.005 else ""
+
     _edge_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
     _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
     _er_accent = "var(--node-title-fg,var(--accent-1,#60a5fa))"
@@ -1396,7 +1451,7 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
-        f'position:relative;width:{canvas_w}px;height:{canvas_h}px;">'
+        f'position:relative;width:{canvas_w}px;height:{canvas_h}px;{_zoom_css}">'
     )
 
     # Entity boxes
@@ -1524,28 +1579,44 @@ def _layout_er(src: str, direction: str, width_hint: int) -> str:
         src_ex, src_ey = _er_rect_edge_pt(src_cx, src_cy, float(NODE_W), sh, uvx, uvy)
         dst_ex, dst_ey = _er_rect_edge_pt(dst_cx, dst_cy, float(NODE_W), dh, -uvx, -uvy)
 
-        dash = ' stroke-dasharray="6 4"' if rel["style"] == "dotted" else ""
-        parts.append(
-            f'<line x1="{src_ex:.1f}" y1="{src_ey:.1f}" '
-            f'x2="{dst_ex:.1f}" y2="{dst_ey:.1f}" '
-            f'stroke="{_edge_color}" stroke-width="1.5"{dash}'
-            f' data-src="{_h(e_src)}" data-dst="{_h(e_dst)}"/>'
-        )
+        # Reserve space for cardinality glyphs before drawing the main line
+        card_src = rel["card_src"]
+        card_dst = rel["card_dst"]
+        src_r = _er_glyph_reserve(card_src) if card_src else 4.0
+        dst_r = _er_glyph_reserve(card_dst) if card_dst else 4.0
+        lx1 = src_ex + uvx * src_r
+        ly1 = src_ey + uvy * src_r
+        lx2 = dst_ex - uvx * dst_r
+        ly2 = dst_ey - uvy * dst_r
 
-        # Crow's feet: direction from boundary outward toward the other entity
-        if rel["card_src"]:
-            parts.extend(_render_crow_foot(
-                src_ex, src_ey, uvx, uvy, rel["card_src"], _edge_color
-            ))
-        if rel["card_dst"]:
-            parts.extend(_render_crow_foot(
-                dst_ex, dst_ey, -uvx, -uvy, rel["card_dst"], _edge_color
-            ))
+        dash = ' stroke-dasharray="6 4"' if rel["style"] == "dotted" else ""
+        if _math.hypot(lx2 - lx1, ly2 - ly1) > 1.0:
+            parts.append(
+                f'<line x1="{lx1:.1f}" y1="{ly1:.1f}" '
+                f'x2="{lx2:.1f}" y2="{ly2:.1f}" '
+                f'stroke="{_edge_color}" stroke-width="1.5"{dash}'
+                f' data-src="{_h(e_src)}" data-dst="{_h(e_dst)}"/>'
+            )
+        else:
+            # Entities very close: fall back to full boundary-to-boundary line
+            parts.append(
+                f'<line x1="{src_ex:.1f}" y1="{src_ey:.1f}" '
+                f'x2="{dst_ex:.1f}" y2="{dst_ey:.1f}" '
+                f'stroke="{_edge_color}" stroke-width="1.5"{dash}'
+                f' data-src="{_h(e_src)}" data-dst="{_h(e_dst)}"/>'
+            )
+
+        # Cardinality glyphs: direction from boundary outward toward the other entity
+        if card_src:
+            parts.extend(_render_crow_foot(src_ex, src_ey, uvx, uvy, card_src, _edge_color))
+        if card_dst:
+            parts.extend(_render_crow_foot(dst_ex, dst_ey, -uvx, -uvy, card_dst, _edge_color))
 
         if rel["label"]:
+            # Label on the longest (only) segment: trimmed midpoint
             edge_labels.append((
-                (src_ex + dst_ex) / 2.0,
-                (src_ey + dst_ey) / 2.0,
+                (lx1 + lx2) / 2.0,
+                (ly1 + ly2) / 2.0,
                 rel["label"],
             ))
 
