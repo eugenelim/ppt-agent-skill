@@ -4596,7 +4596,7 @@ def _infer_port_side(pts: "tuple | list", at_start: bool) -> "PortSide":
 
 def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, ...]":
     """Convert _route_edges() result dicts to typed RoutedEdge IR objects."""
-    from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect
+    from ._geometry import RoutedEdge, PortLayout, PortSide, Point, EdgeLabelLayout, Rect, MarkerKind
     results: list = []
     for spec in route_results:
         src = spec.get("src", "")
@@ -4645,6 +4645,15 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
         has_marker_end = bool(mid) and not mid.endswith("-rev")
         has_marker_start = bool(spec.get("bidir")) or (bool(mid) and mid.endswith("-rev"))
 
+        _raw_src_mk = spec.get("source_marker")
+        _raw_dst_mk = spec.get("target_marker")
+        _source_marker = (MarkerKind(_raw_src_mk) if isinstance(_raw_src_mk, str)
+                          else (_raw_src_mk if isinstance(_raw_src_mk, MarkerKind)
+                                else (MarkerKind.ARROW if has_marker_start else MarkerKind.NONE)))
+        _target_marker = (MarkerKind(_raw_dst_mk) if isinstance(_raw_dst_mk, str)
+                          else (_raw_dst_mk if isinstance(_raw_dst_mk, MarkerKind)
+                                else (MarkerKind.ARROW if has_marker_end else MarkerKind.NONE)))
+
         label_text = spec.get("label", "") or ""
         if label_text:
             lx, ly = float(spec.get("lx", 0)), float(spec.get("ly", 0))
@@ -4671,6 +4680,8 @@ def _build_routed_edges_ir(route_results: "tuple | list") -> "tuple[RoutedEdge, 
             label_layout=label_layout,
             src_label_layout=None,
             dst_label_layout=None,
+            source_marker=_source_marker,
+            target_marker=_target_marker,
         ))
     return tuple(results)
 
@@ -4892,6 +4903,81 @@ def _recursive_group_layout(
                         cur_y += (y1 - y0) + _col_gap
 
 
+def _build_layout_graph(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    groups: "dict[str, _Group]",
+    direction: str,
+) -> "LayoutGraph":
+    """Build a pre-layout IR LayoutGraph from the parsed mutable structures.
+
+    Node sizes come from _node_render_h / _node_render_w (the same metrics the
+    Python pipeline uses), so ELK receives accurate measured bounds.
+    """
+    from ._geometry import LayoutGraph, LayoutNode, LayoutGroup, LayoutEdge, MarkerKind
+    from ._routing import _node_render_w
+
+    layout_nodes = []
+    for nid, n in nodes.items():
+        if n.is_dummy:
+            continue
+        layout_nodes.append(LayoutNode(
+            id=nid,
+            measured_width=float(_node_render_w(n)),
+            measured_height=float(_node_render_h(n)),
+            shape_id=n.shape or "rect",
+            parent_id=n.group if n.group else None,
+            ports=[],
+            labels=[n.label or nid],
+            semantic_data={},
+        ))
+
+    layout_groups = []
+    for gid, g in groups.items():
+        layout_groups.append(LayoutGroup(
+            id=gid,
+            parent_id=g.parent_group if g.parent_group else None,
+            label=g.label or "",
+            label_width=float(max(80, len(g.label or "") * 8)),
+            label_height=20.0,
+            padding=16.0,
+            local_direction=g.direction.upper() if g.direction else direction,
+            minimum_width=0.0,
+            minimum_height=0.0,
+        ))
+
+    seen_edge_ids: dict[str, int] = {}
+    layout_edges = []
+    for e in edges:
+        if e.reversed_:
+            continue
+        base_id = f"{e.orig_src or e.src}->{e.orig_dst or e.dst}"
+        n = seen_edge_ids.get(base_id, 0)
+        seen_edge_ids[base_id] = n + 1
+        eid = base_id if n == 0 else f"{base_id}#{n}"
+        src_mk = getattr(e, "source_marker", MarkerKind.NONE)
+        dst_mk = getattr(e, "target_marker", MarkerKind.ARROW if e.arrow else MarkerKind.NONE)
+        layout_edges.append(LayoutEdge(
+            id=eid,
+            sources=[e.orig_src or e.src],
+            targets=[e.orig_dst or e.dst],
+            source_port=None,
+            target_port=None,
+            source_marker=src_mk,
+            target_marker=dst_mk,
+            line_style=e.style,
+            label=e.label or "",
+            semantic_data={},
+        ))
+
+    return LayoutGraph(
+        nodes=layout_nodes,
+        groups=layout_groups,
+        edges=layout_edges,
+        direction=direction,
+    )
+
+
 def _compile_flowchart(
     src: str,
     width_hint: int,
@@ -4940,104 +5026,296 @@ def _compile_flowchart(
     if not nodes:
         raise ValueError("No nodes found in diagram source.")
 
+    _init_cfg = _parse_init_config(src)
+
+    # ── ELK layout path ──────────────────────────────────────────────────────
+    # Try ELK for positions and edge waypoints. On success, we still run the
+    # existing IR builders (_build_node_layouts_ir, _build_routed_edges_ir)
+    # so that text layout, icons, and other visual properties are computed
+    # identically to the Python path. ELK only provides x/y/w/h and waypoints.
+    # On ElkUnavailable: fall through to Python Sugiyama + A* below.
+    # Limitation: fall back to Python when any group has an inner direction
+    # constraint (hierarchical ELK direction support deferred to a later pass).
+    _has_inner_direction = any(
+        g.direction and g.direction.upper() not in ("", direction.upper())
+        for g in groups.values()
+    )
+    # Limitation: state diagrams use terminal circles ([*]) that require
+    # column-centering post-processing the Python path applies but ELK does not.
+    _has_terminal_circles = any(
+        _is_terminal_circle(n) for n in nodes.values()
+    )
+    # Limitation: ELK self-loop routing produces coordinates relative to node,
+    # not canvas — fall back to Python A* which handles self-loops correctly.
+    _has_self_loops = any(e.src == e.dst for e in edges)
+    _elk_routed: "list | None" = None
+    _elk_grp_bboxes: "dict | None" = None
+    _use_elk = False
+    try:
+        if _has_inner_direction:
+            raise Exception("inner-direction fallback to Python")
+        if _has_terminal_circles:
+            raise Exception("terminal-circle fallback to Python")
+        if _has_self_loops:
+            raise Exception("self-loop fallback to Python")
+        from .elk_adapter import (
+            _to_elk_json, _run_elk, _find_node, _find_elkjs,
+            ElkUnavailable as _ElkUnavailable,
+        )
+        import os as _os
+        if _os.environ.get("MERMAID_LAYOUT_ENGINE", "").lower() == "python":
+            raise _ElkUnavailable("env var")
+        if _find_node() is None:
+            raise _ElkUnavailable("no node")
+        if _find_elkjs() is None:
+            raise _ElkUnavailable("no elkjs")
+        # Set node widths/heights via Python layout before giving ELK the graph.
+        # ELK needs correct measured bounds; it will replace x/y but not w/h.
+        _assign_coordinates(
+            nodes, direction,
+            col_gap=_init_cfg.get("col_gap"),
+            rank_gap=_init_cfg.get("rank_gap"),
+            canvas_pad=_init_cfg.get("diagram_padding"),
+        )
+        _layout_graph = _build_layout_graph(nodes, edges, groups, direction)
+        _elk_json = _to_elk_json(_layout_graph, spacing=_init_cfg)
+        _elk_out = _run_elk(_elk_json)
+        # Apply ELK positions to _Node objects so IR builders work correctly.
+        for _child in _elk_out.get("children", []):
+            _nid = _child.get("id", "")
+            if _nid in nodes:
+                nodes[_nid].x = int(float(_child.get("x", nodes[_nid].x)))
+                nodes[_nid].y = int(float(_child.get("y", nodes[_nid].y)))
+        # Collect ELK edge waypoints for use after IR build.
+        _elk_routed = []
+        for _ee in _elk_out.get("edges", []):
+            _wp: list = []
+            for _sec in _ee.get("sections", []):
+                _sp2 = _sec.get("startPoint", {})
+                if _sp2:
+                    _wp.append((float(_sp2["x"]), float(_sp2["y"])))
+                for _bp in _sec.get("bendPoints", []):
+                    _wp.append((float(_bp["x"]), float(_bp["y"])))
+                _ep = _sec.get("endPoint", {})
+                if _ep:
+                    _wp.append((float(_ep["x"]), float(_ep["y"])))
+            _edge_obj = next(
+                (e for e in edges if (e.edge_id or f"{e.src}->{e.dst}") == _ee.get("id", "")),
+                None,
+            )
+            _elk_routed.append({
+                "id": _ee.get("id", ""),
+                "waypoints": _wp,
+                "edge": _edge_obj,
+            })
+        _use_elk = True
+        _elk_metadata_algo = "ELK-layered"
+    except Exception:  # includes ElkUnavailable and the inner-direction guard
+        pass  # fall through to Python Sugiyama pipeline
+
+    # Always run topology passes: needed for widths/heights (via _assign_coordinates)
+    # even when ELK supplies x/y. ELK positions overwrite Python positions after.
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
 
-    # Auto-select direction (TB vs LR) when both size hints are given
-    if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
-        from collections import Counter
-        max_rank = max((n.rank for n in nodes.values()), default=0)
-        rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
-        max_cols = max(rank_counts.values(), default=1)
-        real_ns = [n for n in nodes.values() if not n.is_dummy]
-        avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
-        lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
-        lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
-        tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
-        tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
-        lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
-        tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
-        if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
-            direction = "TB"
-        elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
-            direction = "LR"
+    if _use_elk:
+        # ELK positions already applied to _Node.x/_Node.y above.
+        # n.rank is set by _assign_ranks (always runs now), so depth-tint works.
+        # Compute canvas from ELK-positioned node bounds.
+        _elk_pad = _init_cfg.get("diagram_padding", CANVAS_PAD)
+        real_nodes = [n for n in nodes.values() if not n.is_dummy]
+        if real_nodes:
+            canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + _elk_pad
+            canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + _elk_pad
+        else:
+            canvas_w, canvas_h = _elk_pad * 2, _elk_pad * 2
+        _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+        if _grp_bboxes:
+            _max_right = max(b[2] for b in _grp_bboxes.values())
+            _max_bot = max(b[3] for b in _grp_bboxes.values())
+            if _max_right > canvas_w - _elk_pad:
+                canvas_w = int(_max_right) + _elk_pad
+                _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+            if _max_bot > canvas_h - _elk_pad:
+                canvas_h = int(_max_bot) + _elk_pad
+            # ELK-path member containment guarantee: re-expand any group bbox
+            # shrunk past its members by overlap resolution (step 3 of
+            # _compute_group_bboxes). Overlap between sibling groups is
+            # accepted; containment violation is not.
+            # Includes recursive members so parent groups with no direct nodes
+            # (all children in sub-groups) are also expanded to cover children.
+            from ._renderer import GROUP_PAD_X as _GX, GROUP_PAD_Y_TOP as _GYT, GROUP_PAD_Y_BOT as _GYB  # noqa: PLC0415
+            def _recursive_group_members(gid: str) -> "list":
+                _result = [nodes[m] for m in groups[gid].members
+                           if m in nodes and not nodes[m].is_dummy]
+                for _cg, _cgrp in groups.items():
+                    if _cgrp.parent_group == gid:
+                        _result.extend(_recursive_group_members(_cg))
+                return _result
+            for _gid in groups:
+                if _gid not in _grp_bboxes:
+                    continue
+                _mbrs = _recursive_group_members(_gid)
+                if not _mbrs:
+                    continue
+                _b = _grp_bboxes[_gid]
+                _need_x0 = min(m.x for m in _mbrs) - _GX
+                _need_x1 = max(m.x + (_node_render_w(m) or NODE_W) for m in _mbrs) + _GX
+                _need_y0 = min(m.y for m in _mbrs) - _GYT
+                _need_y1 = max(m.y + _node_render_h(m) for m in _mbrs) + _GYB
+                if _b[0] > _need_x0:
+                    _b[0] = _need_x0
+                if _b[2] < _need_x1:
+                    _b[2] = _need_x1
+                if _b[1] > _need_y0:
+                    _b[1] = _need_y0
+                if _b[3] < _need_y1:
+                    _b[3] = _need_y1
+        # Build RoutedEdge dicts from ELK waypoints.
+        _elk_route_dicts = []
+        for _er in (_elk_routed or []):
+            _e_obj = _er.get("edge")
+            # Prefer matched edge's src/dst to avoid misparse of "A->B#1" id suffixes.
+            if _e_obj is not None:
+                _src_node_id = _e_obj.src
+                _dst_node_id = _e_obj.dst
+            elif "->" in _er["id"]:
+                _parts = _er["id"].split("->", 1)
+                _src_node_id = _parts[0]
+                _dst_node_id = _parts[1].split("#")[0]  # strip duplicate-edge suffix
+            else:
+                _src_node_id = ""
+                _dst_node_id = ""
+            _mk_id = None
+            if _e_obj is not None and _e_obj.arrow:
+                _mk_id = "arrow-normal"
+            # Label centered on geometric midpoint of waypoints.
+            # Avoids origin-overlap validation failures; uses top-left anchor convention.
+            _wps = _er["waypoints"]
+            if _wps:
+                from ._routing import _est_label_w as _elk_est_lw
+                def _wp_x(w): return w[0] if isinstance(w, (tuple, list)) else getattr(w, "x", 0)
+                def _wp_y(w): return w[1] if isinstance(w, (tuple, list)) else getattr(w, "y", 0)
+                _cx = sum(_wp_x(w) for w in _wps) / len(_wps)
+                _cy = sum(_wp_y(w) for w in _wps) / len(_wps)
+                _lbl_txt = _e_obj.label if _e_obj else ""
+                _est_lh = 18  # single-line edge label height
+                _lx = _cx - _elk_est_lw(_lbl_txt) / 2
+                _ly = _cy - _est_lh / 2
+            else:
+                _lx, _ly = 0, 0
+            _elk_route_dicts.append({
+                "d": "", "waypoints": _er["waypoints"], "ah": None,
+                "label": _e_obj.label if _e_obj else "",
+                "style": _e_obj.style if _e_obj else "solid",
+                "lx": _lx, "ly": _ly, "rot": 0,
+                "marker_id": _mk_id,
+                "src": _src_node_id, "dst": _dst_node_id,
+                "extra_css": _e_obj.extra_css if _e_obj else "",
+                "src_label": _e_obj.src_label if _e_obj else "",
+                "dst_label": _e_obj.dst_label if _e_obj else "",
+                "bidir": _e_obj.bidir if _e_obj else False,
+                "source_marker": _e_obj.source_marker if _e_obj else None,
+                "target_marker": _e_obj.target_marker if _e_obj else None,
+                "edge_id": _er["id"],
+            })
+        from ._routing import RouteBatch as _RouteBatch
+        route_batch = _RouteBatch(routed=_elk_route_dicts, failures=())
+    else:
+        # Python Sugiyama + A* path.
+        # Auto-select direction (TB vs LR) when both size hints are given
+        if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
+            from collections import Counter
+            max_rank = max((n.rank for n in nodes.values()), default=0)
+            rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy)
+            max_cols = max(rank_counts.values(), default=1)
+            real_ns = [n for n in nodes.values() if not n.is_dummy]
+            avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
+            lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
+            lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
+            tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
+            tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
+            lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
+            tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
+            if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
+                direction = "TB"
+            elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
+                direction = "LR"
 
-    _init_cfg = _parse_init_config(src)
+        if groups:
+            _group_coherent_cols(nodes, groups)
+            _compact_group_columns(nodes, groups)
 
-    if groups:
-        _group_coherent_cols(nodes, groups)
-        _compact_group_columns(nodes, groups)
-
-    canvas_w, canvas_h = _assign_coordinates(
-        nodes, direction,
-        col_gap=_init_cfg.get("col_gap"),
-        rank_gap=_init_cfg.get("rank_gap"),
-        canvas_pad=_init_cfg.get("diagram_padding"),
-    )
-
-    if groups:
-        _recursive_group_layout(
-            nodes, edges, groups, direction,
+        canvas_w, canvas_h = _assign_coordinates(
+            nodes, direction,
             col_gap=_init_cfg.get("col_gap"),
+            rank_gap=_init_cfg.get("rank_gap"),
+            canvas_pad=_init_cfg.get("diagram_padding"),
         )
 
-    if direction.upper() in ("LR", "RL") and groups:
-        _separate_groups_lr(nodes, groups)
-        _pred: dict[str, str] = {}
-        for _e in edges:
-            if _e.src in nodes and _e.dst in nodes:
-                _pred[_e.dst] = _e.src
+        if groups:
+            _recursive_group_layout(
+                nodes, edges, groups, direction,
+                col_gap=_init_cfg.get("col_gap"),
+            )
 
-        def _chain_src_y(nid: str) -> int:
-            visited: set[str] = set()
-            cur = nid
-            while cur in _pred and nodes.get(cur) is not None:
-                cur = _pred[cur]
-                if cur in visited:
-                    break
-                visited.add(cur)
-                if not nodes[cur].is_dummy:
-                    return nodes[cur].y
-            return nodes[nid].y
+        if direction.upper() in ("LR", "RL") and groups:
+            _separate_groups_lr(nodes, groups)
+            _pred: dict[str, str] = {}
+            for _e in edges:
+                if _e.src in nodes and _e.dst in nodes:
+                    _pred[_e.dst] = _e.src
 
-        for _nid, _n in nodes.items():
-            if _n.is_dummy:
-                _n.y = _chain_src_y(_nid)
-        _push_nonmembers_out_of_groups_lr(nodes, groups)
-    elif direction.upper() in ("TB", "TD") and groups:
-        canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
+            def _chain_src_y(nid: str) -> int:
+                visited: set[str] = set()
+                cur = nid
+                while cur in _pred and nodes.get(cur) is not None:
+                    cur = _pred[cur]
+                    if cur in visited:
+                        break
+                    visited.add(cur)
+                    if not nodes[cur].is_dummy:
+                        return nodes[cur].y
+                return nodes[nid].y
 
-    # Recompute canvas after group adjustments
-    real_nodes = [n for n in nodes.values() if not n.is_dummy]
-    if real_nodes:
-        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
-        canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
+            for _nid, _n in nodes.items():
+                if _n.is_dummy:
+                    _n.y = _chain_src_y(_nid)
+            _push_nonmembers_out_of_groups_lr(nodes, groups)
+        elif direction.upper() in ("TB", "TD") and groups:
+            canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
 
-    # Terminal circle centering
-    if direction.upper() not in ("LR", "RL"):
-        _eff_nw = max(
-            (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
-            default=NODE_W,
-        )
-        _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
-        for _n in nodes.values():
-            if not _n.is_dummy and _is_terminal_circle(_n):
-                _n.x += _circ_shift
+        # Recompute canvas after group adjustments
+        real_nodes = [n for n in nodes.values() if not n.is_dummy]
+        if real_nodes:
+            canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+            canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
 
-    # Group bboxes
-    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-    if _grp_bboxes:
-        _max_right = max(b[2] for b in _grp_bboxes.values())
-        _max_bot = max(b[3] for b in _grp_bboxes.values())
-        if _max_right > canvas_w - CANVAS_PAD:
-            canvas_w = int(_max_right) + CANVAS_PAD
-            _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-        if _max_bot > canvas_h - CANVAS_PAD:
-            canvas_h = int(_max_bot) + CANVAS_PAD
+        # Terminal circle centering
+        if direction.upper() not in ("LR", "RL"):
+            _eff_nw = max(
+                (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
+                default=NODE_W,
+            )
+            _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
+            for _n in nodes.values():
+                if not _n.is_dummy and _is_terminal_circle(_n):
+                    _n.x += _circ_shift
 
-    # Route edges
-    route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
+        # Group bboxes
+        _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+        if _grp_bboxes:
+            _max_right = max(b[2] for b in _grp_bboxes.values())
+            _max_bot = max(b[3] for b in _grp_bboxes.values())
+            if _max_right > canvas_w - CANVAS_PAD:
+                canvas_w = int(_max_right) + CANVAS_PAD
+                _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+            if _max_bot > canvas_h - CANVAS_PAD:
+                canvas_h = int(_max_bot) + CANVAS_PAD
+
+        # Route edges
+        route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes)
 
     # Build typed IR
     node_layouts = _build_node_layouts_ir(nodes, groups)
@@ -5058,12 +5336,14 @@ def _compile_flowchart(
         diagnostics=_empty_diagnostics(),
     )
 
+    _algo = "ELK-layered" if _use_elk else "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
+    _real_nodes_count = len([n for n in nodes.values() if not n.is_dummy])
     metadata = LayoutMetadata(
         direction=direction,
-        node_count=len(real_nodes),
+        node_count=_real_nodes_count,
         group_count=len(groups),
         edge_count=parsed_edge_count,
-        algorithm="LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner",
+        algorithm=_algo,
     )
 
     validation = validate_finalized_layout(finalized, metadata=metadata)

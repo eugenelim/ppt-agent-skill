@@ -22,6 +22,7 @@ from .scene import (
     LAYER_BACKGROUND, LAYER_BOUNDARIES, LAYER_EDGES, LAYER_NODES,
     LAYER_LABELS, LAYER_NOTES, LAYER_OVERLAYS, LAYER_ORDER,
 )
+from .layout._geometry import MarkerKind as _MarkerKind
 
 
 # ── Default paint tokens ──────────────────────────────────────────────────────
@@ -995,7 +996,7 @@ def finalized_layout_to_scene(
 
         marker_end_id = ""
         marker_start_id = ""
-        if re_obj.has_marker_end:
+        if re_obj.target_marker != _MarkerKind.NONE:
             mid = _EDGE_MARKER_STYLE.get(re_obj.edge_style, "arrow-normal")
             marker_end_id = f"{mid}-{scene_id_hash}"
             if marker_end_id not in seen_markers:
@@ -1008,7 +1009,7 @@ def finalized_layout_to_scene(
                     refX=t.marker_size,
                     refY=t.marker_size / 2,
                 ))
-        if re_obj.has_marker_start:
+        if re_obj.source_marker != _MarkerKind.NONE:
             marker_start_id = f"arrow-bidir-start-{scene_id_hash}"
             if marker_start_id not in seen_markers:
                 seen_markers.add(marker_start_id)

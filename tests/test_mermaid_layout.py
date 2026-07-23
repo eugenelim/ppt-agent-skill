@@ -6966,3 +6966,203 @@ class TestP0GeometryFixes:
             f"rank-1 node x={b.x} should equal CANVAS_PAD+a.width+RANK_GAP={expected_b_x}; "
             f"a.width={a.width}, b.width={b.width}"
         )
+
+
+# ── T3: Arrow semantics — source_marker + target_marker ─────────────────────
+
+class TestArrowSemantics:
+    """AC-IR-2: RoutedEdge carries independent source_marker/target_marker."""
+
+    def _compile(self, src: str):
+        from mermaid_render.layout._strategies import _compile_flowchart, RenderOptions
+        return _compile_flowchart(src, None, RenderOptions())
+
+    def test_arrow_edge_target_only(self):
+        from mermaid_render.layout._geometry import MarkerKind
+        compiled = self._compile("flowchart LR\n  A --> B")
+        edge = compiled.layout.routed_edges[0]
+        assert edge.target_marker == MarkerKind.ARROW
+        assert edge.source_marker == MarkerKind.NONE
+
+    def test_bidir_edge_both_markers(self):
+        from mermaid_render.layout._geometry import MarkerKind
+        compiled = self._compile("flowchart LR\n  A <--> B")
+        edge = compiled.layout.routed_edges[0]
+        assert edge.source_marker == MarkerKind.ARROW
+        assert edge.target_marker == MarkerKind.ARROW
+
+    def test_plain_edge_no_markers(self):
+        from mermaid_render.layout._geometry import MarkerKind
+        compiled = self._compile("flowchart LR\n  A --- B")
+        edge = compiled.layout.routed_edges[0]
+        assert edge.source_marker == MarkerKind.NONE
+        assert edge.target_marker == MarkerKind.NONE
+
+    def test_legacy_arrow_bool_consistent_with_target_marker(self):
+        """AC-IR-2: parser sets legacy .arrow consistent with target_marker on the same _Edge."""
+        from mermaid_render.layout._parser import _parse_graph_source
+        from mermaid_render.layout._geometry import MarkerKind
+        _nodes, edges, _groups = _parse_graph_source(["A --> B", "A --- C"])
+        arrow_edge = next(e for e in edges if e.dst == "B")
+        plain_edge = next(e for e in edges if e.dst == "C")
+        assert arrow_edge.target_marker == MarkerKind.ARROW
+        assert arrow_edge.arrow is True
+        assert plain_edge.target_marker == MarkerKind.NONE
+        assert plain_edge.arrow is False
+
+    def test_legacy_bidir_bool_consistent_with_source_marker(self):
+        """AC-IR-2: parser sets legacy .bidir consistent with source_marker on the same _Edge."""
+        from mermaid_render.layout._parser import _parse_graph_source
+        from mermaid_render.layout._geometry import MarkerKind
+        _nodes, edges, _groups = _parse_graph_source(["A <--> B"])
+        edge = edges[0]
+        assert edge.source_marker == MarkerKind.ARROW
+        assert edge.target_marker == MarkerKind.ARROW
+        assert edge.bidir is True
+
+
+# ── T7 validation (AC-VAL) ────────────────────────────────────────────────────
+
+def _make_overlapping_layout():
+    """Two nodes overlapping by 182px horizontally — used by AC-VAL tests."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    from mermaid_render.layout._geometry import (
+        NodeLayout, FinalizedLayout, Rect, _empty_diagnostics,
+    )
+
+    def _nl(nid, x):
+        r = Rect(x, 0, 192, 42)
+        return NodeLayout(
+            node_id=nid, semantic_shape="rect",
+            outer_bounds=r, content_bounds=r,
+            title_layout=None, subtitle_layout=None,
+            member_layouts=(), icon_bounds=None, ports=(),
+            css_classes=(), extra_css="",
+        )
+
+    return FinalizedLayout(
+        node_layouts={"A": _nl("A", 0), "B": _nl("B", 10)},
+        group_layouts={},
+        routed_edges=(),
+        visible_bounds=Rect(0, 0, 300, 100),
+        diagram_padding=0.0,
+        canvas_bounds=Rect(0, 0, 300, 100),
+        direction="TB",
+        diagnostics=_empty_diagnostics(),
+    )
+
+
+def _make_containment_violation():
+    """Child node rect outside parent group rect — used by AC-VAL tests."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+    from mermaid_render.layout._geometry import (
+        NodeLayout, GroupLayout, FinalizedLayout, Rect, TextLayout, _empty_diagnostics,
+    )
+
+    child_r = Rect(500, 500, 192, 42)
+    child = NodeLayout(
+        node_id="C", semantic_shape="rect",
+        outer_bounds=child_r, content_bounds=child_r,
+        title_layout=None, subtitle_layout=None,
+        member_layouts=(), icon_bounds=None, ports=(),
+        css_classes=(), extra_css="",
+    )
+    grp_r = Rect(0, 0, 300, 200)
+    title_tl = TextLayout(
+        lines=("G",), width=40.0, height=14.0,
+        line_height=14.0, min_content_width=0.0, max_content_width=40.0,
+        resolved_font_path=None, resolved_font_family="sans-serif",
+    )
+    group = GroupLayout(
+        group_id="G", parent_group_id=None,
+        boundary_bounds=grp_r,
+        label_layout=title_tl,
+        member_ids=("C",),
+        child_group_ids=(),
+        local_direction="TB",
+    )
+
+    return FinalizedLayout(
+        node_layouts={"C": child},
+        group_layouts={"G": group},
+        routed_edges=(),
+        visible_bounds=Rect(0, 0, 600, 600),
+        diagram_padding=0.0,
+        canvas_bounds=Rect(0, 0, 600, 600),
+        direction="TB",
+        diagnostics=_empty_diagnostics(),
+    )
+
+
+class TestValidateFinalizedLayoutStrict:
+    """AC-VAL-1/2/3: validate_finalized_layout strict parameter controls overlap detection."""
+
+    def test_strict_overlap_fails(self):
+        """AC-VAL-1: strict=True detects node overlaps → geometry='fail'."""
+        from mermaid_render.layout._geometry import validate_finalized_layout
+        result = validate_finalized_layout(_make_overlapping_layout(), strict=True)
+        assert result.geometry != "pass", f"geometry={result.geometry!r}"
+        assert "fail" in result.geometry.lower(), f"geometry={result.geometry!r}"
+
+    def test_non_strict_overlap_does_not_fail(self):
+        """AC-VAL-1: strict=False does not report overlaps in geometry."""
+        from mermaid_render.layout._geometry import validate_finalized_layout
+        result = validate_finalized_layout(_make_overlapping_layout(), strict=False)
+        assert "fail" not in (result.geometry or ""), f"geometry={result.geometry!r}"
+
+    def test_containment_violation_fails(self):
+        """AC-VAL-2: strict=True detects child outside parent → structural_geometry='fail'."""
+        from mermaid_render.layout._geometry import validate_finalized_layout
+        result = validate_finalized_layout(_make_containment_violation(), strict=True)
+        assert result.structural_geometry not in ("pass", "unvalidated"), (
+            f"structural_geometry={result.structural_geometry!r}"
+        )
+        assert "fail" in result.structural_geometry.lower(), (
+            f"structural_geometry={result.structural_geometry!r}"
+        )
+
+
+class TestOracleEntityMismatch:
+    """AC-VAL-3: runner reports SEMANTIC_MISMATCH when native semantic is absent but ref has entities."""
+
+    def test_oracle_entity_zero_fails(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+        from mermaid_fidelity.runner import FidelityRunner
+        from mermaid_fidelity.models import (
+            ComparisonStatus, Entity, FidelityCase, Observation, SemanticDiagram,
+        )
+        from unittest.mock import MagicMock
+
+        def _entity(eid):
+            return Entity(id=eid, kind="node", label=eid, shape="rect",
+                          parent_id=None, order=0)
+
+        ref_sem = SemanticDiagram(
+            diagram_type="flowchart", direction="LR",
+            entities=[_entity("A"), _entity("B")], relations=[], groups=[],
+        )
+        ref_obs = Observation(
+            schema_version=1, case_id="test", status=ComparisonStatus.PASS, reason=None,
+            implementation=MagicMock(), environment=MagicMock(),
+            parse_result=MagicMock(), semantic=ref_sem, geometry=None, quality=None,
+        )
+        native_obs = Observation(
+            schema_version=1, case_id="test", status=ComparisonStatus.PASS, reason=None,
+            implementation=MagicMock(), environment=MagicMock(),
+            parse_result=MagicMock(), semantic=None, geometry=None, quality=None,
+        )
+        case = FidelityCase(
+            id="test", source_path=Path("."), source="", diagram="flowchart",
+            strict=["entities"],
+        )
+        runner = FidelityRunner(native_adapter=MagicMock(), oracle_dir=Path("."))
+        result = runner._compare(case, native_obs, ref_obs)
+        assert result.final_status == ComparisonStatus.SEMANTIC_MISMATCH, (
+            f"Expected SEMANTIC_MISMATCH, got {result.final_status}"
+        )

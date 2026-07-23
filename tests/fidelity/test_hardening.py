@@ -694,7 +694,7 @@ class TestSemanticExtractorGap:
         )
 
     def test_native_semantic_none_with_strict_checks(self):
-        """native semantic=None + ref semantic present + strict checks → EXTRACTOR_GAP."""
+        """native semantic=None + ref has entities + strict checks → SEMANTIC_MISMATCH."""
         case = self._make_case()
         native_obs = _pass_obs(case.id)
         native_obs.semantic = None  # extractor produced nothing
@@ -710,7 +710,7 @@ class TestSemanticExtractorGap:
         runner = FidelityRunner(native_adapter=adapter, oracle_dir=Path("/nonexistent"))
 
         result = runner._compare(case, native_obs, ref_obs)
-        assert result.final_status == ComparisonStatus.EXTRACTOR_GAP
+        assert result.final_status == ComparisonStatus.SEMANTIC_MISMATCH
 
     def test_both_semantic_none_no_strict_checks(self):
         """Both semantic=None and no strict checks → PASS (nothing to check)."""

@@ -8,6 +8,7 @@ from ._constants import (
     _Node, _Edge, _Group,
     _GRAPH_DIRECTIVES,
 )
+from ._geometry import MarkerKind
 
 # ── source preprocessing ──────────────────────────────────────────────────────
 
@@ -548,6 +549,8 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
     style = "dotted" if "-.-" in arrow else ("thick" if "==" in arrow else "solid")
     is_bidir = arrow == "<-->"
     has_arrow = is_bidir or arrow.endswith(">")
+    _src_mk = MarkerKind.ARROW if is_bidir else MarkerKind.NONE
+    _dst_mk = MarkerKind.ARROW if has_arrow else MarkerKind.NONE
 
     src_id, src_lbl, src_shp, src_cls = _parse_spec_and_class(src_raw)
     if not re.match(r'[A-Za-z_]', src_id):
@@ -562,13 +565,15 @@ def _parse_line(line: str, edges: list[_Edge], ensure_fn) -> None:
         if not re.match(r'[A-Za-z_]', dst_id):
             return
         ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
-        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir))
+        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir,
+                   source_marker=_src_mk, target_marker=_dst_mk))
         _parse_line(dst_raw, edges, ensure_fn)
     else:
         dst_id, dst_lbl, dst_shp, dst_cls = _parse_spec_and_class(dst_raw)
         if not re.match(r'[A-Za-z_]', dst_id):
             return
         ensure_fn(dst_id, dst_lbl, dst_shp, dst_cls)
-        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir))
+        edges.append(_Edge(src=src_id, dst=dst_id, label=edge_label, style=style, arrow=has_arrow, bidir=is_bidir,
+                   source_marker=_src_mk, target_marker=_dst_mk))
 
 

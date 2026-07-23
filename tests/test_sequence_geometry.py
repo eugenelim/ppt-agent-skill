@@ -34,10 +34,12 @@ from mermaid_render.layout._geometry import (
     SequenceDiagnostic,
     SequenceGeometry,
     SequenceValidationResult,
-    MarkerKind,
+    SequenceMarkerKind,
     ArrowSpec,
     ARROW_SPECS,
 )
+
+MarkerKind = SequenceMarkerKind  # local alias: the sequence-diagram marker kind
 
 
 # ── T1: SequenceCompileResult + SequenceDiagnostic + compile_sequence() ───────

@@ -98,6 +98,7 @@ def _edge(
     edge_style: str = "solid",
     label: str = "",
 ) -> RoutedEdge:
+    from scripts.mermaid_render.layout._geometry import MarkerKind
     if waypoints is None:
         waypoints = (Point(10.0, 70.0), Point(10.0, 100.0), Point(130.0, 100.0))
     label_layout = None
@@ -120,6 +121,8 @@ def _edge(
         label_layout=label_layout,
         src_label_layout=None,
         dst_label_layout=None,
+        source_marker=MarkerKind.ARROW if has_marker_start else MarkerKind.NONE,
+        target_marker=MarkerKind.ARROW if has_marker_end else MarkerKind.NONE,
     )
 
 
@@ -564,6 +567,8 @@ def test_routed_edge_field_coverage_reflective():
     # - dst_label_layout: edge target multiplicity; deferred (backlog-mermaid-p3-type-migrations)
     # - is_reversed: back-edge flag; currently rendered identically to forward edges
     # - route_diagnostics: diagnostic string ("ok"/"fallback"/...); non-visual metadata
+    # - has_marker_end: legacy bool derived from target_marker; paint.py now uses target_marker directly
+    # - has_marker_start: legacy bool derived from source_marker; paint.py now uses source_marker directly
     _DECLARED_NON_CONSUMED: set[str] = {
         "src_port",
         "dst_port",
@@ -571,8 +576,11 @@ def test_routed_edge_field_coverage_reflective():
         "dst_label_layout",
         "is_reversed",
         "route_diagnostics",
+        "has_marker_end",
+        "has_marker_start",
     }
 
+    from scripts.mermaid_render.layout._geometry import MarkerKind as _MarkerKindT
     edge = RoutedEdge(
         edge_id="test-edge",
         src_node_id="src-node",
@@ -593,6 +601,8 @@ def test_routed_edge_field_coverage_reflective():
         dst_label_layout=None,
         is_reversed=False,
         route_diagnostics="ok",
+        source_marker=_MarkerKindT.ARROW,
+        target_marker=_MarkerKindT.ARROW,
     )
     layout = _layout(
         nodes={
@@ -622,8 +632,8 @@ def test_routed_edge_field_coverage_reflective():
         "edge_style": lambda: bool(paths) and bool(
             getattr(getattr(getattr(paths[0], "paint", None), "stroke", None), "dasharray", None)
         ),
-        "has_marker_end": lambda: bool(paths) and bool(paths[0].marker_end),
-        "has_marker_start": lambda: bool(paths) and bool(paths[0].marker_start),
+        "source_marker": lambda: bool(paths) and bool(paths[0].marker_start),
+        "target_marker": lambda: bool(paths) and bool(paths[0].marker_end),
         "label_layout": lambda: any("edge label text" in t for t in labels),
     }
 

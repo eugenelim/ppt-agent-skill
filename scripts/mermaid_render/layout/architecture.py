@@ -429,7 +429,7 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
     """Lower ArchitectureDiagramLayout to a FinalizedLayout for painting."""
     from ._geometry import (
         FinalizedLayout, NodeLayout, GroupLayout, RoutedEdge, Rect,
-        _empty_diagnostics,
+        _empty_diagnostics, MarkerKind,
     )
 
     node_layouts: dict = {}
@@ -508,6 +508,8 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
             label_layout=e.label_layout,
             src_label_layout=None,
             dst_label_layout=None,
+            source_marker=MarkerKind.ARROW if e.has_marker_start else MarkerKind.NONE,
+            target_marker=MarkerKind.ARROW if e.has_marker_end else MarkerKind.NONE,
         )
         for e in arch.edges
     )

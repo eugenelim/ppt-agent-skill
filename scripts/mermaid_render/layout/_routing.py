@@ -14,6 +14,7 @@ from ._constants import (
     _measure_text_width,
 )
 from ._geometry import Rect, RoutingFailure, RouteBatch
+from .shape_geometry import SHAPE_REGISTRY
 
 
 @dataclass(frozen=True)
@@ -888,7 +889,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             result.append({"d": path, "waypoints": _sl_pts, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             continue
 
         rank_gap = d.rank - s.rank
@@ -940,7 +943,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     result.append({"d": path, "waypoints": _be_pts, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                    "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
                 else:
                     lane_y = bottom_lane_y + 32 * be_lane
                     sx = s.x + _node_render_w(s) // 2
@@ -966,7 +971,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     result.append({"d": path, "waypoints": _be_pts, "ah": ah, "label": e.label, "style": e.style,
                                    "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                    "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             else:
                 lane_x = right_lane_x + 12 * be_lane
                 sx = s.x + _node_render_w(s)
@@ -992,7 +999,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                 result.append({"d": path, "waypoints": _be_pts, "ah": ah, "label": e.label, "style": e.style,
                                "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                                "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             continue
 
         # TB skip-rank forward edge: rank_gap > 1 means this edge bypasses intermediate
@@ -1029,7 +1038,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             result.append({"d": path, "waypoints": _sk_pts, "ah": ah, "label": e.label, "style": e.style,
                            "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             continue
 
         if is_lr:
@@ -1117,7 +1128,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             result.append({"d": path, "waypoints": _pts_lr, "ah": ah, "label": e.label, "style": e.style,
                            "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
                            "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             continue
 
         # TB adjacent-rank forward edge: orthogonal path bottom-centre to top-centre
@@ -1154,17 +1167,24 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if _dst_port_tb:
             x2, y2 = _dst_port_tb
 
-        # Clip to diamond face for diamond-shaped source/destination nodes
+        # Clip connector endpoints to the shape outline via SHAPE_REGISTRY.
+        # Only diamond needs clipping; rect-like shapes use port coordinates directly.
         if s.shape == "diamond":
             _sh = _node_render_h(s)
             _sx, _sy = s.x + _node_render_w(s) // 2, s.y + _sh // 2
-            x1, y1 = _clip_to_diamond(float(x1), float(y1), float(_sx), float(_sy),
-                                       float(_node_render_w(s)), float(_sh), 0, 0)
+            x1, y1 = SHAPE_REGISTRY["diamond"].boundary_intersection(
+                float(_sx), float(_sy),
+                float(_node_render_w(s)), float(_sh),
+                float(x1) - float(_sx), float(y1) - float(_sy),
+            )
         if d.shape == "diamond":
             _dh = _node_render_h(d)
             _dx2, _dy2 = d.x + _node_render_w(d) // 2, d.y + _dh // 2
-            x2, y2 = _clip_to_diamond(float(x2), float(y2), float(_dx2), float(_dy2),
-                                       float(_node_render_w(d)), float(_dh), 0, 0)
+            x2, y2 = SHAPE_REGISTRY["diamond"].boundary_intersection(
+                float(_dx2), float(_dy2),
+                float(_node_render_w(d)), float(_dh),
+                float(x2) - float(_dx2), float(y2) - float(_dy2),
+            )
 
         # Route: 3-segment fast path (down → across → down); fall back to A* if blocked.
         # Skip fast path when ports are pinned to non-standard faces.
@@ -1218,7 +1238,9 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         result.append({"d": path, "waypoints": list(_pts), "ah": ah, "label": e.label, "style": e.style,
                        "lx": lx, "ly": ly, "rot": 0, "marker_id": marker_id,
                        "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                       "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False), "edge_id": e.edge_id})
+                       "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
+                           "source_marker": getattr(e, "source_marker", None),
+                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
 
     return RouteBatch(routed=tuple(result), failures=tuple(failures))
 
