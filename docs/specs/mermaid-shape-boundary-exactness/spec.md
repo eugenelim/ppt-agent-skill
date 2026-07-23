@@ -2,7 +2,7 @@
 
 Mode: full (structural — extends ShapeGeometry protocol; mathematical precision; multi-file)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 ## Objective
 

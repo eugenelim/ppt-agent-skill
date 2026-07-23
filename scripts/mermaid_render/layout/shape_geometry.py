@@ -83,6 +83,41 @@ class ShapeGeometry(Protocol):
         so an arrowhead of type marker_kind doesn't overdraw the shape fill."""
         ...
 
+    def contains(
+        self,
+        px: float,
+        py: float,
+        w: float,
+        h: float,
+        inset: float = 0.0,
+    ) -> bool:
+        """True if (px, py) in shape-centered coords is inside the shape (with optional inset)."""
+        ...
+
+    def boundary_anchor(
+        self,
+        side: str,
+        offset: float,
+        w: float,
+        h: float,
+    ) -> Tuple[float, float]:
+        """Return node-local (x, y) on the actual outline for the named side.
+
+        Direct parameterization — does NOT use center-side intersection + perpendicular shift.
+        offset: 0=start, 0.5=center, 1=end along the face.
+        """
+        ...
+
+    def normal_at(
+        self,
+        px: float,
+        py: float,
+        w: float,
+        h: float,
+    ) -> Tuple[float, float]:
+        """Outward unit normal at boundary point (px, py) in shape-centered coords."""
+        ...
+
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         """Return an SVG fragment string for this shape, or None (stub)."""
         ...
@@ -215,6 +250,268 @@ def _default_anchor(geom: ShapeGeometry, side: str, offset: float,
     return bx, by
 
 
+# ── marker clearances ────────────────────────────────────────────────────────
+
+# Marker kind → how many px to pull back the connector tip.
+# Values approximate typical arrowhead bounding-box depths so the tip clears the fill.
+_MARKER_CLEARANCES: dict[str, float] = {
+    "filled_arrow":      10.0,
+    "open_arrow":        10.0,
+    "hollow_triangle":   18.0,
+    "filled_diamond":    20.0,
+    "hollow_diamond":    22.0,
+    "er_cardinality":    16.0,
+}
+
+
+def _marker_clearance_for(marker_kind: str) -> float:
+    """Return clearance for the named marker kind (falls back to filled_arrow)."""
+    return _MARKER_CLEARANCES.get(marker_kind, _MARKER_CLEARANCES["filled_arrow"])
+
+
+# ── analytic boundary helpers ─────────────────────────────────────────────────
+
+def _rounded_rect_boundary(cx: float, cy: float, w: float, h: float,
+                            dx: float, dy: float, r: float = 14.0) -> Tuple[float, float]:
+    """Analytic boundary intersection for a rounded rectangle with corner radius r.
+
+    Works for any r; r = h/2 gives a stadium/capsule.
+    Centered coords: shape spans [-hw, hw] × [-hh, hh].
+    """
+    r = min(r, min(w, h) / 2.0)
+    hw, hh = w / 2.0, h / 2.0
+    length = math.hypot(dx, dy)
+    if length < 1e-9:
+        return cx, cy - hh
+
+    ndx, ndy = dx / length, dy / length
+    best_t = math.inf
+
+    # Straight edges (in centered coords; ray starts at origin (0,0) in centered frame)
+    # Top: y = -hh, x in [-hw+r, hw-r]
+    if ndy < -1e-9:
+        t = -hh / ndy
+        if t > 1e-9 and -hw + r - 1e-9 <= ndx * t <= hw - r + 1e-9:
+            best_t = min(best_t, t)
+    # Bottom: y = hh
+    if ndy > 1e-9:
+        t = hh / ndy
+        if t > 1e-9 and -hw + r - 1e-9 <= ndx * t <= hw - r + 1e-9:
+            best_t = min(best_t, t)
+    # Left: x = -hw
+    if ndx < -1e-9:
+        t = -hw / ndx
+        if t > 1e-9 and -hh + r - 1e-9 <= ndy * t <= hh - r + 1e-9:
+            best_t = min(best_t, t)
+    # Right: x = hw
+    if ndx > 1e-9:
+        t = hw / ndx
+        if t > 1e-9 and -hh + r - 1e-9 <= ndy * t <= hh - r + 1e-9:
+            best_t = min(best_t, t)
+
+    # Quarter-circle corner arcs: (center_x, center_y, sign_x, sign_y)
+    # sign: the arc point is on the indicated half-plane of the corner center.
+    corners = [
+        (-hw + r, -hh + r, -1, -1),  # top-left arc
+        ( hw - r, -hh + r,  1, -1),  # top-right arc
+        ( hw - r,  hh - r,  1,  1),  # bottom-right arc
+        (-hw + r,  hh - r, -1,  1),  # bottom-left arc
+    ]
+    for acx, acy, sx, sy in corners:
+        # Circle radius r centered at (acx, acy); ray: (t*ndx, t*ndy)
+        # (t*ndx - acx)² + (t*ndy - acy)² = r²
+        # A=1 since |n|=1
+        B = -2.0 * (acx * ndx + acy * ndy)
+        C = acx * acx + acy * acy - r * r
+        disc = B * B - 4.0 * C
+        if disc < 0:
+            continue
+        sqrt_disc = math.sqrt(disc)
+        for t_cand in ((-B + sqrt_disc) / 2.0, (-B - sqrt_disc) / 2.0):
+            if t_cand <= 1e-9:
+                continue
+            # Point relative to corner center; must be in the correct quadrant.
+            rpx = t_cand * ndx - acx
+            rpy = t_cand * ndy - acy
+            if sx * rpx >= -1e-9 and sy * rpy >= -1e-9:
+                best_t = min(best_t, t_cand)
+
+    if math.isinf(best_t):
+        return _rect_boundary(cx, cy, w, h, dx, dy)
+    return cx + ndx * best_t, cy + ndy * best_t
+
+
+def _cylinder_silhouette_boundary(cx: float, cy: float, w: float, h: float,
+                                   dx: float, dy: float) -> Tuple[float, float]:
+    """Analytic intersection for the visible cylinder silhouette.
+
+    Silhouette = top half of top ellipse + left/right walls + bottom half of bottom ellipse.
+    cap_ry = max(8, h*0.12); cap_rx = w/2.
+    Centered coords: top of shape is y = -hh, bottom is y = hh.
+    """
+    hw, hh = w / 2.0, h / 2.0
+    cap_ry = max(8.0, h * 0.12)
+    cap_rx = hw
+
+    length = math.hypot(dx, dy)
+    if length < 1e-9:
+        return cx, cy - hh
+    ndx, ndy = dx / length, dy / length
+
+    best_t = math.inf
+
+    # Left wall: x = -hw, y in [cap_ry - hh, hh - cap_ry]
+    if ndx < -1e-9:
+        t = -hw / ndx
+        if t > 1e-9:
+            y_hit = t * ndy
+            if cap_ry - hh - 1e-9 <= y_hit <= hh - cap_ry + 1e-9:
+                best_t = min(best_t, t)
+
+    # Right wall: x = hw, y in [cap_ry - hh, hh - cap_ry]
+    if ndx > 1e-9:
+        t = hw / ndx
+        if t > 1e-9:
+            y_hit = t * ndy
+            if cap_ry - hh - 1e-9 <= y_hit <= hh - cap_ry + 1e-9:
+                best_t = min(best_t, t)
+
+    # Ellipse intersection helper: (t*ndx / cap_rx)² + ((t*ndy - ell_y) / cap_ry)² = 1
+    def _try_ellipse(ell_y: float, y_cond: "Callable[[float], bool]") -> None:
+        nonlocal best_t
+        A = (ndx / cap_rx) ** 2 + (ndy / cap_ry) ** 2
+        if A < 1e-18:
+            return
+        B = -2.0 * ell_y * ndy / (cap_ry ** 2)
+        C = (ell_y / cap_ry) ** 2 - 1.0
+        disc = B * B - 4.0 * A * C
+        if disc < 0:
+            return
+        sqrt_disc = math.sqrt(disc)
+        for t_cand in ((-B + sqrt_disc) / (2.0 * A), (-B - sqrt_disc) / (2.0 * A)):
+            if t_cand <= 1e-9:
+                continue
+            if y_cond(t_cand * ndy):
+                best_t = min(best_t, t_cand)
+
+    ell_top_y = cap_ry - hh   # centered y of top ellipse center (negative)
+    ell_bot_y = hh - cap_ry   # centered y of bottom ellipse center (positive)
+
+    # Top ellipse, top half only: y_hit <= ell_top_y
+    _try_ellipse(ell_top_y, lambda y: y <= ell_top_y + 1e-9)
+    # Bottom ellipse, bottom half only: y_hit >= ell_bot_y
+    _try_ellipse(ell_bot_y, lambda y: y >= ell_bot_y - 1e-9)
+
+    if math.isinf(best_t):
+        return _rect_boundary(cx, cy, w, h, dx, dy)
+    return cx + ndx * best_t, cy + ndy * best_t
+
+
+# ── generic protocol helpers ──────────────────────────────────────────────────
+
+def _contains_generic(geom: "ShapeGeometry", px: float, py: float,
+                       w: float, h: float, inset: float = 0.0) -> bool:
+    """Generic contains: True if (px,py) in shape-centered coords is inside the shape.
+
+    Uses boundary_intersection: the point is inside if its distance from the center
+    is ≤ the boundary distance in that direction, minus inset.
+    cx=w/2, cy=h/2 (center) → boundary_intersection called with canvas coords.
+    """
+    d = math.hypot(px, py)
+    if d < 1e-9:
+        return True
+    ndx, ndy = px / d, py / d
+    # boundary_intersection(cx, cy, w, h, dx, dy) with center at (w/2, h/2):
+    # in centered coords the center is at (0,0); we pass the canvas center.
+    bx, by = geom.boundary_intersection(w / 2.0, h / 2.0, w, h, ndx, ndy)
+    # Boundary point in centered coords = bx - w/2, by - h/2
+    d_bound = math.hypot(bx - w / 2.0, by - h / 2.0)
+    return d <= d_bound - inset + 1e-9
+
+
+def _angle_anchor(geom: "ShapeGeometry", side: str, offset: float,
+                  w: float, h: float) -> Tuple[float, float]:
+    """Generic boundary_anchor via direction interpolation from corner to corner.
+
+    Maps offset ∈ [0,1] to a direction that sweeps across the named face,
+    then calls boundary_intersection so the result always lies on the actual outline.
+    Returned coords are in node-local (top-left origin) space.
+    """
+    hw, hh = w / 2.0, h / 2.0
+    side_l = side.lower()
+    if side_l in ("top", "north"):
+        # offset 0 → upper-left corner dir, 0.5 → straight up, 1 → upper-right
+        dx = -hw + offset * 2.0 * hw
+        dy = -hh
+    elif side_l in ("bottom", "south"):
+        dx = -hw + offset * 2.0 * hw
+        dy = hh
+    elif side_l in ("left", "west"):
+        dx = -hw
+        dy = -hh + offset * 2.0 * hh
+    elif side_l in ("right", "east"):
+        dx = hw
+        dy = -hh + offset * 2.0 * hh
+    else:
+        sdx, sdy = _SIDE_DIRS.get(side_l, (0.0, -1.0))
+        dx, dy = sdx * hw, sdy * hh
+
+    # boundary_intersection(cx=hw, cy=hh, w, h, dx, dy) → local-coord result
+    return geom.boundary_intersection(hw, hh, w, h, dx, dy)
+
+
+def _normal_at_ellipse(px: float, py: float, a: float, b: float) -> Tuple[float, float]:
+    """Outward unit normal of ellipse (semi-axes a, b) at boundary point (px, py)."""
+    nx, ny = px / (a * a), py / (b * b)
+    length = math.hypot(nx, ny)
+    if length < 1e-12:
+        return 0.0, -1.0
+    return nx / length, ny / length
+
+
+def _normal_at_polygon_verts(verts_c: List[Tuple[float, float]],
+                              px: float, py: float) -> Tuple[float, float]:
+    """Outward unit normal of a polygon at boundary point (px, py) in centered coords.
+
+    verts_c: polygon vertices in centered coords (origin = shape center).
+    Finds the nearest edge and returns its outward-facing normal.
+    """
+    n = len(verts_c)
+    best_dist = math.inf
+    best_normal = (0.0, -1.0)
+
+    for i in range(n):
+        ax, ay = verts_c[i]
+        bx, by = verts_c[(i + 1) % n]
+        ex, ey = bx - ax, by - ay
+        edge_len = math.hypot(ex, ey)
+        if edge_len < 1e-9:
+            continue
+        # Projection of (px,py) onto edge
+        t = ((px - ax) * ex + (py - ay) * ey) / (edge_len ** 2)
+        t_clamped = max(0.0, min(1.0, t))
+        foot_x = ax + t_clamped * ex
+        foot_y = ay + t_clamped * ey
+        dist = math.hypot(px - foot_x, py - foot_y)
+        if dist < best_dist:
+            best_dist = dist
+            # Outward normal: rotate edge vector 90° toward exterior (left of forward)
+            # The polygon vertices are wound such that the outward normal is on the right.
+            # For a polygon wound counter-clockwise (y-down screen coords):
+            # outward = rotate edge direction by -90°: (ey/L, -ex/L)
+            # For clockwise wound (most shape_geometry polygons), it's: (-ey/L, ex/L)
+            # We determine orientation by checking which side of the edge the center is on.
+            nx0, ny0 = ey / edge_len, -ex / edge_len   # candidate normal A
+            # Check: does the normal point away from origin (0,0)?
+            mid_x, mid_y = (ax + bx) / 2.0, (ay + by) / 2.0
+            if nx0 * mid_x + ny0 * mid_y >= 0:
+                best_normal = (nx0, ny0)
+            else:
+                best_normal = (-nx0, -ny0)
+
+    return best_normal
+
+
 # ── paint helpers ─────────────────────────────────────────────────────────────
 
 def _verts_to_points(
@@ -282,7 +579,23 @@ class RectGeometry:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        hw, hh = w / 2.0, h / 2.0
+        return abs(px) <= hw - inset + 1e-9 and abs(py) <= hh - inset + 1e-9
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        if abs(py) >= abs(px) * hh / max(hw, 1e-9) - 1e-9:
+            return (0.0, -1.0) if py < 0 else (0.0, 1.0)
+        return (-1.0, 0.0) if px < 0 else (1.0, 0.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -331,16 +644,47 @@ class RoundGeometry:
 
     def boundary_intersection(self, cx: float, cy: float, w: float, h: float,
                                dx: float, dy: float) -> Tuple[float, float]:
-        return _rect_boundary(cx, cy, w, h, dx, dy)
+        return _rounded_rect_boundary(cx, cy, w, h, dx, dy, r=14.0)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        r = min(14.0, min(w, h) / 2.0)
+        hw, hh = w / 2.0, h / 2.0
+        # Identify if on a corner arc
+        corners = [
+            (-hw + r, -hh + r, -1, -1),
+            ( hw - r, -hh + r,  1, -1),
+            ( hw - r,  hh - r,  1,  1),
+            (-hw + r,  hh - r, -1,  1),
+        ]
+        for acx, acy, sx, sy in corners:
+            rpx, rpy = px - acx, py - acy
+            if sx * rpx >= -1e-6 and sy * rpy >= -1e-6 and abs(math.hypot(rpx, rpy) - r) < 2.0:
+                length = math.hypot(rpx, rpy)
+                if length < 1e-9:
+                    return 0.0, -1.0
+                return rpx / length, rpy / length
+        # On a straight face
+        if abs(py) >= abs(px) * hh / max(hw, 1e-9) - 1e-9:
+            return (0.0, -1.0) if py < 0 else (0.0, 1.0)
+        return (-1.0, 0.0) if px < 0 else (1.0, 0.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -391,16 +735,39 @@ class StadiumGeometry:
 
     def boundary_intersection(self, cx: float, cy: float, w: float, h: float,
                                dx: float, dy: float) -> Tuple[float, float]:
-        return _rect_boundary(cx, cy, w, h, dx, dy)
+        # Stadium = rounded rect with corner radius = h/2 (full semicircles)
+        return _rounded_rect_boundary(cx, cy, w, h, dx, dy, r=h / 2.0)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        r = h / 2.0
+        hw = w / 2.0
+        # Left semicircle center: (-hw + r, 0), right: (hw - r, 0)
+        for acx, acy in [(-hw + r, 0.0), (hw - r, 0.0)]:
+            rpx, rpy = px - acx, py - acy
+            if abs(math.hypot(rpx, rpy) - r) < 2.0:
+                length = math.hypot(rpx, rpy)
+                if length < 1e-9:
+                    return 0.0, -1.0
+                return rpx / length, rpy / length
+        return (0.0, -1.0) if py < 0 else (0.0, 1.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -464,13 +831,32 @@ class DiamondGeometry:
         return _diamond_boundary(cx, cy, w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        hw, hh = w / 2.0, h / 2.0
+        eff_hw = max(hw - inset, 0.0)
+        eff_hh = max(hh - inset, 0.0)
+        if eff_hw < 1e-9 or eff_hh < 1e-9:
+            return False
+        return abs(px) / eff_hw + abs(py) / eff_hh <= 1.0 + 1e-9
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        verts_c = [(0.0, -hh), (hw, 0.0), (0.0, hh), (-hw, 0.0)]
+        return _normal_at_polygon_verts(verts_c, px, py)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -541,13 +927,28 @@ class CircleGeometry:
         return _ellipse_boundary(cx, cy, w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        a, b = w / 2.0 - inset, h / 2.0 - inset
+        if a <= 0 or b <= 0:
+            return False
+        return (px / a) ** 2 + (py / b) ** 2 <= 1.0 + 1e-9
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        return _normal_at_ellipse(px, py, w / 2.0, h / 2.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -603,13 +1004,28 @@ class DoubleCircleGeometry:
         return _ellipse_boundary(cx, cy, w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        a, b = w / 2.0 - inset, h / 2.0 - inset
+        if a <= 0 or b <= 0:
+            return False
+        return (px / a) ** 2 + (py / b) ** 2 <= 1.0 + 1e-9
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        return _normal_at_ellipse(px, py, w / 2.0, h / 2.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -631,18 +1047,22 @@ class DoubleCircleGeometry:
         bg_css = str(kw.get("bg_css", ""))
         box_shadow = str(kw.get("box_shadow", ""))
         data_attrs_html = str(kw.get("data_attrs_html", ""))
+        ring_inset = int(self._RING_GAP)
         return (
             f'<div {data_attrs_html} style="'
             f'position:absolute; left:{x}px; top:{y}px; '
             f'width:{h}px; height:{h}px; '
             f'border-radius:50%; box-sizing:border-box; overflow:visible; '
-            f'border:2px solid {accent}; '
+            f'border:2px solid {accent}; background:transparent; '
             f'{bg_css} '
             f'box-shadow:{box_shadow}; '
             f'display:flex; align-items:center; justify-content:center;">'
-            f'<div style="position:absolute; inset:5px; border-radius:50%; '
-            f'background:{accent}; pointer-events:none;"></div>'
+            f'<div style="position:absolute; inset:{ring_inset}px; border-radius:50%; '
+            f'border:2px solid {accent}; background:transparent; pointer-events:none;"></div>'
+            f'<div style="position:relative; z-index:1; padding:4px; '
+            f'text-align:center;">'
             f'{inner_html}</div>'
+            f'</div>'
         )
 
 
@@ -660,16 +1080,44 @@ class CylinderGeometry:
 
     def boundary_intersection(self, cx: float, cy: float, w: float, h: float,
                                dx: float, dy: float) -> Tuple[float, float]:
-        return _rect_boundary(cx, cy, w, h, dx, dy)
+        return _cylinder_silhouette_boundary(cx, cy, w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        cap_ry = max(8.0, h * 0.12)
+        cap_rx = hw
+        ell_top_y = cap_ry - hh
+        ell_bot_y = hh - cap_ry
+        # On left or right wall
+        if abs(abs(px) - hw) < 2.0:
+            return (-1.0, 0.0) if px < 0 else (1.0, 0.0)
+        # On top or bottom ellipse
+        if py < ell_top_y + 2.0:
+            nx, ny = px / (cap_rx * cap_rx), (py - ell_top_y) / (cap_ry * cap_ry)
+        else:
+            nx, ny = px / (cap_rx * cap_rx), (py - ell_bot_y) / (cap_ry * cap_ry)
+        length = math.hypot(nx, ny)
+        if length < 1e-12:
+            return 0.0, -1.0
+        return nx / length, ny / length
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -758,13 +1206,28 @@ class HexagonGeometry:
         return _polygon_boundary(cx, cy, self.outline_path(w, h), w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        verts = self.outline_path(w, h)
+        verts_c = [(vx - hw, vy - hh) for vx, vy in verts]
+        return _normal_at_polygon_verts(verts_c, px, py)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -834,13 +1297,28 @@ class TrapezoidGeometry:
         return _polygon_boundary(cx, cy, self.outline_path(w, h), w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        verts = self.outline_path(w, h)
+        verts_c = [(vx - hw, vy - hh) for vx, vy in verts]
+        return _normal_at_polygon_verts(verts_c, px, py)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -910,13 +1388,28 @@ class TrapezoidAltGeometry:
         return _polygon_boundary(cx, cy, self.outline_path(w, h), w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        verts = self.outline_path(w, h)
+        verts_c = [(vx - hw, vy - hh) for vx, vy in verts]
+        return _normal_at_polygon_verts(verts_c, px, py)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -985,13 +1478,29 @@ class SubroutineGeometry:
         return _rect_boundary(cx, cy, w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        hw, hh = w / 2.0, h / 2.0
+        return abs(px) <= hw - inset + 1e-9 and abs(py) <= hh - inset + 1e-9
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        if abs(py) >= abs(px) * hh / max(hw, 1e-9) - 1e-9:
+            return (0.0, -1.0) if py < 0 else (0.0, 1.0)
+        return (-1.0, 0.0) if px < 0 else (1.0, 0.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -1058,13 +1567,28 @@ class FlagGeometry:
         return _polygon_boundary(cx, cy, self.outline_path(w, h), w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return _ALL_PORTS
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return _DEFAULT_MARKER_CLEARANCE
+        return _marker_clearance_for(marker_kind)
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        return _contains_generic(self, px, py, w, h, inset)
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        verts = self.outline_path(w, h)
+        verts_c = [(vx - hw, vy - hh) for vx, vy in verts]
+        return _normal_at_polygon_verts(verts_c, px, py)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
@@ -1132,13 +1656,30 @@ class BarGeometry:
         return _rect_boundary(cx, cy, w, h, dx, dy)
 
     def anchor(self, side: str, offset: float, w: float, h: float) -> Tuple[float, float]:
-        return _default_anchor(self, side, offset, w, h)
+        return _angle_anchor(self, side, offset, w, h)
 
     def available_ports(self, w: float, h: float) -> Sequence[str]:
         return ("NORTH", "SOUTH")
 
     def marker_clearance(self, marker_kind: str) -> float:
-        return 4.0
+        # Bar uses a smaller clearance regardless of marker kind
+        return min(4.0, _marker_clearance_for(marker_kind))
+
+    def contains(self, px: float, py: float, w: float, h: float,
+                 inset: float = 0.0) -> bool:
+        hw, hh = w / 2.0, h / 2.0
+        return abs(px) <= hw - inset + 1e-9 and abs(py) <= hh - inset + 1e-9
+
+    def boundary_anchor(self, side: str, offset: float,
+                        w: float, h: float) -> Tuple[float, float]:
+        return _angle_anchor(self, side, offset, w, h)
+
+    def normal_at(self, px: float, py: float,
+                  w: float, h: float) -> Tuple[float, float]:
+        hw, hh = w / 2.0, h / 2.0
+        if abs(py) >= abs(px) * hh / max(hw, 1e-9) - 1e-9:
+            return (0.0, -1.0) if py < 0 else (0.0, 1.0)
+        return (-1.0, 0.0) if px < 0 else (1.0, 0.0)
 
     def paint_svg(self, x: float, y: float, w: float, h: float, **kw: object) -> Optional[str]:
         fill = str(kw.get("fill", "none"))
