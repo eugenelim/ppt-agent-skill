@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import math
 import re
 import types as _types
@@ -1017,26 +1018,51 @@ def _build_layout_graph(
     )
 
 
-def _compile_flowchart(
+
+# ── FlowchartSemantics and the 6 composable pipeline functions ───────────────
+
+@dataclass
+class FlowchartSemantics:
+    """Parsed state of a flowchart/stateDiagram before layout is applied.
+
+    Produced by parse_flowchart_semantics(); consumed by the build/layout/enrich
+    functions. Carries mutable _Node/_Edge/_Group objects — layout functions may
+    mutate them as a side-effect (setting n.width, n.height, n.x, n.y).
+    Contains no layout coordinates — those come from ELK or the Python pipeline.
+    """
+    nodes: "dict[str, _Node]"
+    edges: "list[_Edge]"
+    groups: "dict[str, _Group]"
+    direction: str
+    is_state_diagram: bool
+    parsed_edge_count: int
+    has_inner_dir: bool
+    gate_to_orig: "dict[str, _Edge]"
+    sm_edge_semantic: dict
+    sm_composite_gates: dict
+    opts: "RenderOptions"
+    init_cfg: dict
+    width_hint: int
+    height_hint: int
+
+
+def parse_flowchart_semantics(
     src: str,
-    width_hint: int,
-    options: "RenderOptions | None",
+    options: "RenderOptions | None" = None,
     *,
     direction_override: "Optional[str]" = None,
+    width_hint: int = 0,
     height_hint: int = 0,
-    style_overrides: str = "",
-) -> "CompiledFlowchart":
-    """Run the full flowchart layout pipeline and return a CompiledFlowchart.
+) -> FlowchartSemantics:
+    """Parse a flowchart/stateDiagram source into a FlowchartSemantics object.
 
-    This is the single authoritative entry point for flowchart/graph/stateDiagram
-    geometry. All layout, routing, IR construction, and validation happen here.
+    Handles both flowchart (via _parse_graph_source) and stateDiagram
+    (via compile_state_machine) branches. The returned object carries parsed
+    nodes, edges, groups, and semantic metadata but no layout coordinates.
+
+    Gate injection for inner-direction compound layouts is performed here so
+    the semantics object is always self-consistent.
     """
-    from ._geometry import (
-        CompiledFlowchart, FinalizedLayout, LayoutMetadata,
-        NodeLayout, GroupLayout, RoutedEdge,
-        validate_finalized_layout, _empty_diagnostics, Rect, Point,
-    )
-
     _opts = options if options is not None else RenderOptions()
     clean = _strip_frontmatter(src)
     _, auto_direction = _detect_directive(clean)
@@ -1053,25 +1079,28 @@ def _compile_flowchart(
 
     _state_directives = frozenset({"statediagram-v2", "statediagram"})
     _top_directive = lines[directive_index].strip().split()[0].lower() if lines else ""
-    _sm_edge_semantic: "dict" = {}    # (src, dst) → _Edge with semantic info
-    _sm_composite_gates: "dict" = {}  # composite_id → (entry_gate_id, exit_gate_id)
-    if _top_directive in _state_directives:
-        from .statediagram import compile_state_machine as _compile_sm, state_model_to_graph as _sm_to_graph, CompositeState as _CompositeState
+    _sm_edge_semantic: dict = {}
+    _sm_composite_gates: dict = {}
+    is_state_diagram = _top_directive in _state_directives
+
+    if is_state_diagram:
+        from .statediagram import (  # noqa: PLC0415
+            compile_state_machine as _compile_sm,
+            state_model_to_graph as _sm_to_graph,
+            CompositeState as _CompositeState,
+        )
         _sm_model = _compile_sm(content_lines)
         nodes, edges, groups = _sm_to_graph(_sm_model)
-        # Capture edge semantic info BEFORE _break_cycles() modifies the edge list
         for _se in edges:
-            _sm_src = getattr(_se, 'semantic_src', '')
-            _sm_sc = getattr(_se, 'source_scope', '')
-            _sm_sg = getattr(_se, 'target_scope', '')
+            _sm_src = getattr(_se, "semantic_src", "")
+            _sm_sc = getattr(_se, "source_scope", "")
+            _sm_sg = getattr(_se, "target_scope", "")
             if _sm_src or _sm_sc or _sm_sg:
                 _sm_edge_semantic[(_se.src, _se.dst)] = _se
-        # AC3: collect composite gates from the compiled model
         for _cs in _sm_model.states:
             if isinstance(_cs, _CompositeState) and _cs.entry_gate and _cs.exit_gate:
                 _sm_composite_gates[_cs.id] = (_cs.entry_gate.id, _cs.exit_gate.id)
-        # Assign stable edge IDs to any not already set by state_model_to_graph
-        _eid_counts: dict[str, int] = {}
+        _eid_counts: "dict[str, int]" = {}
         for _e in edges:
             if not _e.edge_id:
                 _base = f"{_e.src}->{_e.dst}"
@@ -1080,7 +1109,9 @@ def _compile_flowchart(
                 _e.edge_id = _base if _n == 0 else f"{_base}#{_n}"
     else:
         nodes, edges, groups = _parse_graph_source(content_lines)
-    parsed_edge_count = len(edges)  # count before _break_cycles adds dummy edges
+
+    parsed_edge_count = len(edges)
+
     if not _opts.faithful_mermaid and _opts.infer_icons:
         _infer_label_icons(nodes)
 
@@ -1095,306 +1126,364 @@ def _compile_flowchart(
 
     _init_cfg = _parse_init_config(src)
 
-    # ── Gate injection for inner-direction cross-boundary edges ──────────────────
-    # Only inject when groups exist, this is a flowchart (not statediagram), and at
-    # least one group declares a direction that differs from the outer layout direction.
-    # Gate nodes are invisible (extra_css="opacity:0;pointer-events:none;") and are
-    # removed from nodes by _restore_gate_edges before IR construction.
+    # Gate injection for inner-direction cross-boundary edges.
+    # Only flowcharts (not stateDiagrams) use gate nodes.
     _gate_to_orig: "dict[str, _Edge]" = {}
-    if groups and _top_directive not in _state_directives:
-        _has_inner_dir_pre = any(
+    _has_inner_dir = False
+    if groups and not is_state_diagram:
+        _has_inner_dir = any(
             grp.direction and grp.direction.upper() != direction.upper()
             for grp in groups.values()
         )
-        if _has_inner_dir_pre:
+        if _has_inner_dir:
             edges, _gate_to_orig = _expand_boundary_gates(nodes, edges, groups)
 
-    # ── ELK layout path ──────────────────────────────────────────────────────
-    # Try ELK for positions and edge waypoints. On success, we still run the
-    # existing IR builders (_build_node_layouts_ir, _build_routed_edges_ir)
-    # so that text layout, icons, and other visual properties are computed
-    # identically to the Python path. ELK only provides x/y/w/h and waypoints.
-    # On ElkUnavailable: fall through to Python Sugiyama + A* below.
-    # Limitation: state diagrams use terminal circles ([*]) that require
-    # column-centering post-processing the Python path applies but ELK does not.
-    _has_terminal_circles = any(
-        _is_terminal_circle(n) for n in nodes.values()
+    return FlowchartSemantics(
+        nodes=nodes,
+        edges=edges,
+        groups=groups,
+        direction=direction,
+        is_state_diagram=is_state_diagram,
+        parsed_edge_count=parsed_edge_count,
+        has_inner_dir=_has_inner_dir,
+        gate_to_orig=_gate_to_orig,
+        sm_edge_semantic=_sm_edge_semantic,
+        sm_composite_gates=_sm_composite_gates,
+        opts=_opts,
+        init_cfg=_init_cfg,
+        width_hint=width_hint,
+        height_hint=height_hint,
     )
-    # Limitation: ELK self-loop routing produces coordinates relative to node,
-    # not canvas — fall back to Python A* which handles self-loops correctly.
-    _has_self_loops = any(e.src == e.dst for e in edges)
-    _elk_routed: "list | None" = None
-    _elk_grp_bboxes: "dict | None" = None
-    _use_elk = False
-    _has_inner_dir = False
-    try:
-        if _has_terminal_circles:
-            raise Exception("terminal-circle fallback to Python")
-        if _has_self_loops:
-            raise Exception("self-loop fallback to Python")
-        from .elk_adapter import layout_with_elk as _layout_with_elk  # noqa: PLC0415
-        # ELK needs correct measured bounds; _assign_coordinates initialises w/h.
-        _assign_coordinates(
-            nodes, direction,
-            col_gap=_init_cfg.get("col_gap"),
-            rank_gap=_init_cfg.get("rank_gap"),
-            canvas_pad=_init_cfg.get("diagram_padding"),
-        )
-        _layout_graph = _build_layout_graph(nodes, edges, groups, direction)
-        _orig_edge_map = _elk_edge_id_map(edges)
-        _elk_result, _elk_meta = _layout_with_elk(_layout_graph, spacing=_init_cfg)
-        for _nid_elk, _nl_elk in _elk_result.node_layouts.items():
-            if _nid_elk in nodes:
-                nodes[_nid_elk].x = int(_nl_elk.outer_bounds.x)
-                nodes[_nid_elk].y = int(_nl_elk.outer_bounds.y)
-        # Fix inner-direction groups after ELK: ELK with INCLUDE_CHILDREN uses
-        # outer direction for all nodes; re-apply per-group inner direction post-hoc.
-        _has_inner_dir = any(
-            g.local_direction and g.local_direction.upper() != direction.upper()
-            for g in _layout_graph.groups
-        )
-        if _has_inner_dir and groups:
-            _recursive_group_layout(nodes, edges, groups, direction,
-                                    col_gap=_init_cfg.get("col_gap"))
-            # Clear ELK bboxes — _py_grp_bboxes (padded, recursive) is computed
-            # from the new node positions downstream and takes precedence.
-            _elk_grp_bboxes = None
-        else:
-            # Capture ELK compound-node bounds directly — authoritative when
-            # all groups share the outer direction.
-            _elk_grp_bboxes = {
-                gid: [
-                    gl.boundary_bounds.x,
-                    gl.boundary_bounds.y,
-                    gl.boundary_bounds.x + gl.boundary_bounds.w,
-                    gl.boundary_bounds.y + gl.boundary_bounds.h,
-                ]
-                for gid, gl in _elk_result.group_layouts.items()
-            }
-        _elk_routed = [
-            {
-                "id": _re.edge_id,
-                "waypoints": [(p.x, p.y) for p in _re.waypoints],
-                "edge": _orig_edge_map.get(_re.edge_id),
-            }
-            for _re in _elk_result.routed_edges
-        ]
-        _use_elk = True
-        _elk_metadata_algo = "ELK-layered+python-routed" if _has_inner_dir else "ELK-layered"
-    except Exception:  # includes ElkUnavailable
-        pass  # fall through to Python Sugiyama pipeline
 
-    # Always run topology passes: needed for widths/heights (via _assign_coordinates)
-    # even when ELK supplies x/y. ELK positions overwrite Python positions after.
+
+def build_flowchart_layout_graph(
+    semantics: FlowchartSemantics,
+) -> "LayoutGraph":
+    """Build a LayoutGraph for ELK from parsed semantics.
+
+    Calls _assign_coordinates to measure node widths/heights before building
+    the graph — ELK requires accurate bounds for placement. The x/y coordinates
+    set by _assign_coordinates are discarded (ELK recomputes positions).
+    """
+    # Side-effect: sets n.width and n.height based on text measurement.
+    # n.x and n.y are also set but will be ignored — ELK recomputes them.
+    _assign_coordinates(
+        semantics.nodes,
+        semantics.direction,
+        col_gap=semantics.init_cfg.get("col_gap"),
+        rank_gap=semantics.init_cfg.get("rank_gap"),
+        canvas_pad=semantics.init_cfg.get("diagram_padding"),
+    )
+    return _build_layout_graph(
+        semantics.nodes,
+        semantics.edges,
+        semantics.groups,
+        semantics.direction,
+    )
+
+
+def layout_flowchart_with_elk(
+    graph: "LayoutGraph",
+    spacing: "dict | None" = None,
+) -> "FinalizedLayout":
+    """Invoke ELK layout on a LayoutGraph; return the raw FinalizedLayout.
+
+    Raises:
+        ElkUnavailable: when ELK cannot run (no Node, no elkjs, env opt-out).
+    """
+    from .elk_adapter import layout_with_elk as _layout_with_elk  # noqa: PLC0415
+    finalized, _meta = _layout_with_elk(graph, spacing=spacing)
+    return finalized
+
+
+def _is_degenerate_self_loop(edge: "RoutedEdge") -> bool:
+    """True if a self-loop edge has fewer than 3 distinct waypoints."""
+    wps = edge.waypoints
+    if len(wps) < 3:
+        return True
+    unique = {(p.x, p.y) for p in wps}
+    return len(unique) < 2
+
+
+def _repair_elk_self_loop(
+    edge: "RoutedEdge",
+    node_layout: "NodeLayout",
+) -> "RoutedEdge":
+    """Create synthetic rectangular waypoints for a degenerate ELK self-loop.
+
+    The repaired loop exits the node's top-left face, arcs above the node,
+    and re-enters at the top-right face. All other edge properties are preserved.
+    """
+    from ._geometry import PortLayout, PortSide, Point  # noqa: PLC0415
+    bounds = node_layout.outer_bounds
+    cx = bounds.x + bounds.w / 2
+    top_y = bounds.y
+    loop_h = 24.0
+    loop_w = min(bounds.w * 0.6, 40.0)
+    p_exit = Point(cx - loop_w / 2, top_y)
+    p_tl = Point(cx - loop_w / 2, top_y - loop_h)
+    p_tr = Point(cx + loop_w / 2, top_y - loop_h)
+    p_enter = Point(cx + loop_w / 2, top_y)
+    src_dir = Point(0.0, -1.0)
+    dst_dir = Point(0.0, -1.0)
+    src_port = PortLayout(
+        node_id=edge.src_node_id, side=PortSide.TOP,
+        position=p_exit, direction=src_dir,
+    )
+    dst_port = PortLayout(
+        node_id=edge.dst_node_id, side=PortSide.TOP,
+        position=p_enter, direction=dst_dir,
+    )
+    return dataclasses.replace(
+        edge,
+        waypoints=(p_exit, p_tl, p_tr, p_enter),
+        src_port=src_port,
+        dst_port=dst_port,
+    )
+
+
+def enrich_flowchart_finalized_layout(
+    layout: "FinalizedLayout",
+    semantics: FlowchartSemantics,
+) -> "FinalizedLayout":
+    """Enrich an ELK-produced FinalizedLayout with visual properties.
+
+    The raw ELK FinalizedLayout carries accurate position/routing data but has
+    minimal NodeLayout visual properties. This function adds CSS classes, icons,
+    accent colors, and proper text layouts immutably — without modifying _Node
+    objects, without calling _route_edges, and without writing back to _Node.x/_Node.y.
+
+    AC6: routed_edges from ELK are returned unchanged except for degenerate
+    self-loops, which receive a local geometry repair (only the affected edge).
+    """
+    from ._geometry import FinalizedLayout as _FL, NodeLayout, Rect, _empty_diagnostics  # noqa: PLC0415
+
+    nodes = semantics.nodes
+    groups = semantics.groups
+
+    # Build node→group-index and parent-group-id maps for accent coloring
+    _node_grp_idx: dict[str, int] = {}
+    _nid_parent_gid: dict[str, str] = {}
+    if groups:
+        for _gi, gid in enumerate(groups.keys()):
+            for _nid in groups[gid].members:
+                _node_grp_idx[_nid] = _gi
+                _nid_parent_gid[_nid] = gid
+
+    # Enrich each NodeLayout with visual props from the corresponding _Node
+    enriched_node_layouts: dict[str, NodeLayout] = {}
+    for nid, elk_nl in layout.node_layouts.items():
+        n = nodes.get(nid)
+        if n is None:
+            enriched_node_layouts[nid] = elk_nl
+            continue
+        outer = elk_nl.outer_bounds
+        content = Rect(
+            x=outer.x + 8, y=outer.y + 4,
+            w=max(outer.w - 16, 20.0), h=max(outer.h - 8, 10.0),
+        )
+        title = _make_text_layout_ir(n.label) if not n.is_dummy else None
+        shape = n.shape or "rect"
+        is_ext = getattr(n, "css_class", "") == "external"
+        css_cls_list = [f"node-{shape}"]
+        if is_ext:
+            css_cls_list.append("node-external")
+        icon_svg = (
+            _load_icon(n.icon) if getattr(n, "icon", "") else
+            (_load_icon(n.css_class) if getattr(n, "css_class", "") else "")
+        )
+        if is_ext:
+            accent = "var(--node-fg-dim,var(--text-secondary,#75736C))"
+        elif nid in _node_grp_idx:
+            accent = _ACCENT_CYCLE[_node_grp_idx[nid] % len(_ACCENT_CYCLE)]
+        else:
+            accent = "var(--node-title-fg,var(--accent-1,#60a5fa))"
+        enriched_node_layouts[nid] = NodeLayout(
+            node_id=nid,
+            semantic_shape=shape,
+            outer_bounds=outer,
+            content_bounds=content,
+            title_layout=title,
+            subtitle_layout=None,
+            member_layouts=(),
+            icon_bounds=None,
+            ports=elk_nl.ports,       # AC6: preserve ELK port geometry
+            css_classes=tuple(css_cls_list),
+            extra_css="",
+            is_dummy=n.is_dummy,
+            rank=elk_nl.rank,          # AC6: preserve ELK-computed rank
+            is_external=is_ext,
+            icon_svg=icon_svg,
+            accent_color=accent,
+            parent_group_id=elk_nl.parent_group_id,
+        )
+
+    # AC6: use ELK routed_edges directly; repair only degenerate self-loops
+    repaired_edges = []
+    for edge in layout.routed_edges:
+        if edge.src_node_id == edge.dst_node_id and _is_degenerate_self_loop(edge):
+            nl = enriched_node_layouts.get(edge.src_node_id)
+            if nl is not None:
+                edge = _repair_elk_self_loop(edge, nl)
+        repaired_edges.append(edge)
+
+    return _FL(
+        node_layouts=_types.MappingProxyType(enriched_node_layouts),
+        group_layouts=layout.group_layouts,   # ELK group layout is authoritative
+        routed_edges=tuple(repaired_edges),
+        routing_failures=layout.routing_failures,
+        visible_bounds=layout.visible_bounds,
+        diagram_padding=float(semantics.init_cfg.get("diagram_padding") or 48.0),
+        canvas_bounds=layout.canvas_bounds,
+        direction=layout.direction,
+        diagnostics=_empty_diagnostics(),
+        composite_gates=_types.MappingProxyType(semantics.sm_composite_gates),
+    )
+
+
+def layout_flowchart_with_python_fallback(
+    semantics: FlowchartSemantics,
+) -> "tuple[FinalizedLayout, LayoutMetadata]":
+    """Run the Python Sugiyama + A* layout pipeline.
+
+    This is the reference implementation used when ELK is unavailable or
+    the diagram has inner-direction compound subgraphs that ELK cannot handle
+    while preserving per-group direction semantics.
+
+    Returns (FinalizedLayout, LayoutMetadata). The caller is responsible for
+    setting metadata.fallback_reason.
+    """
+    from ._geometry import (  # noqa: PLC0415
+        FinalizedLayout as _FL, LayoutMetadata, _empty_diagnostics, Rect,
+    )
+
+    nodes = semantics.nodes
+    edges = semantics.edges
+    groups = semantics.groups
+    direction = semantics.direction
+    _opts = semantics.opts
+    _init_cfg = semantics.init_cfg
+    _gate_to_orig = semantics.gate_to_orig
+    _sm_edge_semantic = semantics.sm_edge_semantic
+    _sm_composite_gates = semantics.sm_composite_gates
+    parsed_edge_count = semantics.parsed_edge_count
+    width_hint = semantics.width_hint
+    height_hint = semantics.height_hint
+
     _break_cycles(nodes, edges)
     _assign_ranks(nodes, edges)
     _minimize_crossings(nodes, edges)
 
-    if _use_elk:
-        # ELK positions already applied to _Node.x/_Node.y above.
-        # n.rank is set by _assign_ranks (always runs now), so depth-tint works.
-        # Use ELK compound-node bounds directly as group bboxes. Fall back to
-        # Python-computed bounds only for any group ELK did not return (rare).
-        _elk_pad = int(_init_cfg.get("diagram_padding", CANVAS_PAD))
-        _py_grp_bboxes = _compute_group_bboxes(nodes, groups, 99999, 99999) if groups else {}
-        _grp_bboxes = {**_py_grp_bboxes, **(_elk_grp_bboxes or {})}
-        # Canvas from union of ELK-positioned nodes and group boundaries.
-        _all_x1: "list[float]" = [
-            float(n.x + (n.width or NODE_W)) for n in nodes.values()
+    # Auto-select direction (TB vs LR) when both size hints are given
+    if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
+        from collections import Counter  # noqa: PLC0415
+        max_rank = max((n.rank for n in nodes.values()), default=0)
+        rank_counts = Counter(
+            n.rank for n in nodes.values()
+            if not n.is_dummy and n.id not in _gate_to_orig
+        )
+        max_cols = max(rank_counts.values(), default=1)
+        real_ns = [
+            n for n in nodes.values()
             if not n.is_dummy and n.id not in _gate_to_orig
         ]
-        _all_y1: "list[float]" = [
-            float(n.y + _node_render_h(n)) for n in nodes.values()
-            if not n.is_dummy and n.id not in _gate_to_orig
-        ]
-        for _b in _grp_bboxes.values():
-            _all_x1.append(float(_b[2]))
-            _all_y1.append(float(_b[3]))
-        canvas_w = (int(max(_all_x1)) + _elk_pad) if _all_x1 else _elk_pad * 2
-        canvas_h = (int(max(_all_y1)) + _elk_pad) if _all_y1 else _elk_pad * 2
-        if _has_inner_dir:
-            # Nodes were repositioned by _recursive_group_layout;
-            # ELK waypoints are stale. Re-route with Python A*.
-            route_batch = _route_edges(nodes, edges, canvas_w, direction,
-                                       group_bboxes=_grp_bboxes)
-        else:
-            # Build RoutedEdge dicts from ELK waypoints.
-            _elk_route_dicts = []
-            for _er in (_elk_routed or []):
-                _e_obj = _er.get("edge")
-                # Prefer matched edge's src/dst to avoid misparse of "A->B#1" id suffixes.
-                if _e_obj is not None:
-                    _src_node_id = _e_obj.src
-                    _dst_node_id = _e_obj.dst
-                elif "->" in _er["id"]:
-                    _parts = _er["id"].split("->", 1)
-                    _src_node_id = _parts[0]
-                    _dst_node_id = _parts[1].split("#")[0]  # strip duplicate-edge suffix
-                else:
-                    _src_node_id = ""
-                    _dst_node_id = ""
-                _mk_id = None
-                if _e_obj is not None and _e_obj.arrow:
-                    _mk_id = "arrow-normal"
-                # Label centered on geometric midpoint of waypoints.
-                # Avoids origin-overlap validation failures; uses top-left anchor convention.
-                _wps = _er["waypoints"]
-                if _wps:
-                    from ._routing import _est_label_w as _elk_est_lw
-                    def _wp_x(w): return w[0] if isinstance(w, (tuple, list)) else getattr(w, "x", 0)
-                    def _wp_y(w): return w[1] if isinstance(w, (tuple, list)) else getattr(w, "y", 0)
-                    _cx = sum(_wp_x(w) for w in _wps) / len(_wps)
-                    _cy = sum(_wp_y(w) for w in _wps) / len(_wps)
-                    _lbl_txt = _e_obj.label if _e_obj else ""
-                    _est_lh = 18  # single-line edge label height
-                    _lx = _cx - _elk_est_lw(_lbl_txt) / 2
-                    _ly = _cy - _est_lh / 2
-                else:
-                    _lx, _ly = 0, 0
-                _elk_route_dicts.append({
-                    "d": "", "waypoints": _er["waypoints"], "ah": None,
-                    "label": _e_obj.label if _e_obj else "",
-                    "style": _e_obj.style if _e_obj else "solid",
-                    "lx": _lx, "ly": _ly, "rot": 0,
-                    "marker_id": _mk_id,
-                    "src": _src_node_id, "dst": _dst_node_id,
-                    "extra_css": _e_obj.extra_css if _e_obj else "",
-                    "src_label": _e_obj.src_label if _e_obj else "",
-                    "dst_label": _e_obj.dst_label if _e_obj else "",
-                    "bidir": _e_obj.bidir if _e_obj else False,
-                    "source_marker": (_e_obj.source_marker.kind if hasattr(_e_obj.source_marker, "kind") else _e_obj.source_marker) if _e_obj else None,
-                    "target_marker": (_e_obj.target_marker.kind if hasattr(_e_obj.target_marker, "kind") else _e_obj.target_marker) if _e_obj else None,
-                    "edge_id": _er["id"],
-                })
-            from ._routing import RouteBatch as _RouteBatch
-            route_batch = _RouteBatch(routed=tuple(_elk_route_dicts), failures=())
-    else:
-        # Python Sugiyama + A* path.
-        # Auto-select direction (TB vs LR) when both size hints are given
-        if width_hint and height_hint and not _opts.faithful_mermaid and _opts.auto_direction:
-            from collections import Counter
-            max_rank = max((n.rank for n in nodes.values()), default=0)
-            rank_counts = Counter(n.rank for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig)
-            max_cols = max(rank_counts.values(), default=1)
-            real_ns = [n for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig]
-            avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
-            lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
-            lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
-            tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
-            tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
-            lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
-            tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
-            if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
-                direction = "TB"
-            elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
-                direction = "LR"
+        avg_h = int(sum(_node_render_h(n) for n in real_ns) / len(real_ns)) if real_ns else NODE_H
+        lr_w = CANVAS_PAD * 2 + (max_rank + 1) * (NODE_W + RANK_GAP)
+        lr_h = CANVAS_PAD * 2 + max_cols * (avg_h + COL_GAP)
+        tb_w = CANVAS_PAD * 2 + max_cols * (NODE_W + COL_GAP)
+        tb_h = CANVAS_PAD * 2 + (max_rank + 1) * (avg_h + RANK_GAP)
+        lr_zoom = min(width_hint / lr_w, height_hint / lr_h) if lr_w and lr_h else 0.0
+        tb_zoom = min(width_hint / tb_w, height_hint / tb_h) if tb_w and tb_h else 0.0
+        if tb_zoom > lr_zoom * 1.15 and direction.upper() in ("LR", "RL"):
+            direction = "TB"
+        elif lr_zoom > tb_zoom * 1.15 and direction.upper() in ("TB", "TD"):
+            direction = "LR"
 
-        if groups:
-            _group_coherent_cols(nodes, groups)
-            _compact_group_columns(nodes, groups)
+    if groups:
+        _group_coherent_cols(nodes, groups)
+        _compact_group_columns(nodes, groups)
 
-        canvas_w, canvas_h = _assign_coordinates(
-            nodes, direction,
+    canvas_w, canvas_h = _assign_coordinates(
+        nodes, direction,
+        col_gap=_init_cfg.get("col_gap"),
+        rank_gap=_init_cfg.get("rank_gap"),
+        canvas_pad=_init_cfg.get("diagram_padding"),
+    )
+
+    # TB only: center any sole-occupant rank at its predecessor barycenter
+    if direction.upper() not in ("LR", "RL"):
+        from ._layout import _center_isolated_nodes  # noqa: PLC0415
+        _center_isolated_nodes(nodes, edges)
+
+    # Recursive compound layout (replaces _recursive_group_layout + post-layout
+    # coordinate corrections). Returns boundary_gates for cross-boundary edges.
+    _boundary_gates: tuple = ()
+    if groups:
+        _, _boundary_gates = recursive_compound_layout(
+            nodes, edges, groups, direction, canvas_w, canvas_h,
             col_gap=_init_cfg.get("col_gap"),
-            rank_gap=_init_cfg.get("rank_gap"),
-            canvas_pad=_init_cfg.get("diagram_padding"),
         )
 
-        # TB only: center any sole-occupant rank at its predecessor barycenter
-        # so fan-in nodes (e.g. B & C & D → E) are not pinned to column 0.
-        if direction.upper() not in ("LR", "RL"):
-            from ._layout import _center_isolated_nodes  # noqa: PLC0415
-            _center_isolated_nodes(nodes, edges)
+    # Recompute canvas after group adjustments (exclude gate proxy nodes)
+    real_nodes = [n for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig]
+    if real_nodes:
+        canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
+        canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
 
-        if groups:
-            _recursive_group_layout(
-                nodes, edges, groups, direction,
-                col_gap=_init_cfg.get("col_gap"),
-            )
+    # Terminal circle centering
+    if direction.upper() not in ("LR", "RL"):
+        _eff_nw = max(
+            (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
+            default=NODE_W,
+        )
+        _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
+        for _n in nodes.values():
+            if not _n.is_dummy and _is_terminal_circle(_n):
+                _n.x += _circ_shift
 
-        if direction.upper() in ("LR", "RL") and groups:
-            _separate_groups_lr(nodes, groups)
-            _pred: dict[str, str] = {}
-            for _e in edges:
-                if _e.src in nodes and _e.dst in nodes:
-                    _pred[_e.dst] = _e.src
+    # Group bboxes
+    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+    if _grp_bboxes:
+        _max_right = max(b[2] for b in _grp_bboxes.values())
+        _max_bot = max(b[3] for b in _grp_bboxes.values())
+        if _max_right > canvas_w - CANVAS_PAD:
+            canvas_w = int(_max_right) + CANVAS_PAD
+            _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+        if _max_bot > canvas_h - CANVAS_PAD:
+            canvas_h = int(_max_bot) + CANVAS_PAD
 
-            def _chain_src_y(nid: str) -> int:
-                visited: set[str] = set()
-                cur = nid
-                while cur in _pred and nodes.get(cur) is not None:
-                    cur = _pred[cur]
-                    if cur in visited:
-                        break
-                    visited.add(cur)
-                    if not nodes[cur].is_dummy:
-                        return nodes[cur].y
-                return nodes[nid].y
-
-            for _nid, _n in nodes.items():
-                if _n.is_dummy:
-                    _n.y = _chain_src_y(_nid)
-            _push_nonmembers_out_of_groups_lr(nodes, groups)
-        elif direction.upper() in ("TB", "TD") and groups:
-            canvas_w = _separate_groups_tb(nodes, groups, canvas_w)
-
-        # Recompute canvas after group adjustments (exclude gate proxy nodes)
-        real_nodes = [n for n in nodes.values() if not n.is_dummy and n.id not in _gate_to_orig]
-        if real_nodes:
-            canvas_h = max(n.y + _node_render_h(n) for n in real_nodes) + CANVAS_PAD
-            canvas_w = max(n.x + (n.width or NODE_W) for n in real_nodes) + CANVAS_PAD
-
-        # Terminal circle centering
-        if direction.upper() not in ("LR", "RL"):
-            _eff_nw = max(
-                (n.width for n in nodes.values() if n.width > 0 and not n.is_dummy),
-                default=NODE_W,
-            )
-            _circ_shift = (_eff_nw - _TERMINAL_NODE_SIZE) // 2
+    # Self-loop finalization: offset all nodes so left-face/top-face loops
+    # stay >= CANVAS_PAD.
+    _cp = int(_init_cfg.get("diagram_padding", CANVAS_PAD))
+    if any(e.src == e.dst for e in edges):
+        _sl_dx, _sl_dy = _finalize_self_loop_offsets(nodes, edges, direction, canvas_pad=_cp)
+        if _sl_dx or _sl_dy:
             for _n in nodes.values():
-                if not _n.is_dummy and _is_terminal_circle(_n):
-                    _n.x += _circ_shift
-
-        # Group bboxes
-        _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-        if _grp_bboxes:
-            _max_right = max(b[2] for b in _grp_bboxes.values())
-            _max_bot = max(b[3] for b in _grp_bboxes.values())
-            if _max_right > canvas_w - CANVAS_PAD:
-                canvas_w = int(_max_right) + CANVAS_PAD
+                _n.x += _sl_dx
+                _n.y += _sl_dy
+            canvas_w += _sl_dx
+            canvas_h += _sl_dy
+            if _grp_bboxes:
                 _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-            if _max_bot > canvas_h - CANVAS_PAD:
-                canvas_h = int(_max_bot) + CANVAS_PAD
 
-        # Self-loop finalization: offset all nodes so left-face/top-face loops
-        # stay ≥ CANVAS_PAD (eliminates the old provisional coordinate clamps).
-        _cp = int(_init_cfg.get("diagram_padding", CANVAS_PAD))
-        if any(e.src == e.dst for e in edges):
-            _sl_dx, _sl_dy = _finalize_self_loop_offsets(nodes, edges, direction, canvas_pad=_cp)
-            if _sl_dx or _sl_dy:
-                for _n in nodes.values():
-                    _n.x += _sl_dx
-                    _n.y += _sl_dy
-                canvas_w += _sl_dx
-                canvas_h += _sl_dy
-                if _grp_bboxes:
-                    _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
-
-        # Build scope_bbox_map for state-diagram composite back-edge routing (AC5/AC6/AC7)
-        # Maps composite_id → (x0, y0, x1, y1) from group_bboxes using "_g_" prefix convention
-        _scope_bbox_map: "dict" = {
+    # Build scope_bbox_map for state-diagram composite back-edge routing
+    _scope_bbox_map: "dict" = (
+        {
             gid[3:]: bbox
             for gid, bbox in (_grp_bboxes or {}).items()
             if gid.startswith("_g_")
-        } if _sm_composite_gates else {}
+        }
+        if _sm_composite_gates else {}
+    )
 
-        # Route edges
-        route_batch = _route_edges(nodes, edges, canvas_w, direction, group_bboxes=_grp_bboxes,
-                                   scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None)
+    # Route edges via Python A*
+    route_batch = _route_edges(
+        nodes, edges, canvas_w, direction,
+        group_bboxes=_grp_bboxes,
+        scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None,
+    )
 
-    # ── Gate restoration: merge split route-dicts before IR construction ────────
-    # _restore_gate_edges removes gate nodes from the `nodes` dict so they
-    # are not included in node_layouts (keeps the IR clean).
+    # Gate restoration: merge split route-dicts back into single route-dicts
     if _gate_to_orig:
         _restored_routes: "list[dict]" = _restore_gate_edges(
             list(route_batch.routed), _gate_to_orig, nodes
@@ -1405,10 +1494,8 @@ def _compile_flowchart(
     # Build typed IR
     node_layouts = _build_node_layouts_ir(nodes, groups)
     group_layouts = _build_group_layouts_ir(groups, _grp_bboxes)
-    # Clip cross-scope exit routes (state-diagram composite exits) so the path
-    # originates from the source group's boundary rather than from the internal
-    # scoped-final-state node inside the box. src_group is set only by
-    # state_model_to_graph(); the map is empty (and this is a no-op) otherwise.
+
+    # Clip cross-scope exit routes (state-diagram composite exits)
     _src_group_map = {
         e.edge_id: e.src_group
         for e in edges
@@ -1424,8 +1511,9 @@ def _compile_flowchart(
     )
 
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
+    _real_nodes_count = len([n for n in nodes.values() if not n.is_dummy])
 
-    finalized = FinalizedLayout(
+    finalized = _FL(
         node_layouts=_types.MappingProxyType(node_layouts),
         group_layouts=_types.MappingProxyType(group_layouts),
         routed_edges=routed_edges_ir,
@@ -1436,21 +1524,471 @@ def _compile_flowchart(
         direction=direction,
         diagnostics=_empty_diagnostics(),
         composite_gates=_types.MappingProxyType(_sm_composite_gates),
+        boundary_gates=_boundary_gates,
     )
 
-    _algo = "ELK-layered" if _use_elk else "LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner"
-    _real_nodes_count = len([n for n in nodes.values() if not n.is_dummy])
+    from ._geometry import LayoutMetadata  # noqa: PLC0415
     metadata = LayoutMetadata(
         direction=direction,
         node_count=_real_nodes_count,
         group_count=len(groups),
         edge_count=parsed_edge_count,
-        algorithm=_algo,
-        backend="elkjs" if _use_elk else "python",
+        algorithm="LongestPathRanker+BarycentricOrderer+SimpleCoordinateAssigner",
+        backend="python",
+    )
+    return finalized, metadata
+
+
+def validate_flowchart_layout(
+    layout: "FinalizedLayout",
+    metadata: "LayoutMetadata | None" = None,
+) -> "ValidationResult":
+    """Validate a FinalizedLayout against geometry invariants.
+
+    Thin wrapper around validate_finalized_layout() that centralises
+    post-layout assertion logic. Callers may replace ad-hoc assertion
+    blocks with this function.
+    """
+    from ._geometry import validate_finalized_layout  # noqa: PLC0415
+    return validate_finalized_layout(layout, metadata=metadata)
+
+
+def _compile_flowchart(
+    src: str,
+    width_hint: int,
+    options: "RenderOptions | None",
+    *,
+    direction_override: "Optional[str]" = None,
+    height_hint: int = 0,
+    style_overrides: str = "",
+) -> "CompiledFlowchart":
+    """Orchestrate the full flowchart layout pipeline using composable functions.
+
+    Parse → build graph → ELK layout → enrich (or Python fallback) → validate.
+    Inner-direction compound layouts are routed to the Python path directly.
+    Only ElkUnavailable and ElkInvalidResult trigger a typed Python fallback;
+    all other exceptions propagate with context.
+    """
+    from ._geometry import CompiledFlowchart, LayoutMetadata  # noqa: PLC0415
+    from .elk_adapter import ElkUnavailable, ElkInvalidResult  # noqa: PLC0415
+
+    semantics = parse_flowchart_semantics(
+        src, options,
+        direction_override=direction_override,
+        width_hint=width_hint,
+        height_hint=height_hint,
     )
 
-    validation = validate_finalized_layout(finalized, metadata=metadata)
+    # AC1: inner-direction compound layout → Python path.
+    # ELK + re-route would violate the prohibition on calling _route_edges
+    # after a successful ELK result.  Compound layout improvement is out of scope.
+    if semantics.has_inner_dir:
+        finalized, py_metadata = layout_flowchart_with_python_fallback(semantics)
+        metadata = dataclasses.replace(py_metadata, fallback_reason="inner-direction")
+    else:
+        try:
+            graph = build_flowchart_layout_graph(semantics)
+            elk_raw = layout_flowchart_with_elk(graph, spacing=semantics.init_cfg)
+            finalized = enrich_flowchart_finalized_layout(elk_raw, semantics)
+            _real_nodes_count = len(
+                [n for n in semantics.nodes.values() if not n.is_dummy]
+            )
+            metadata = LayoutMetadata(
+                direction=semantics.direction,
+                node_count=_real_nodes_count,
+                group_count=len(semantics.groups),
+                edge_count=semantics.parsed_edge_count,
+                algorithm="ELK-layered",
+                backend="elkjs",
+                fallback_reason=None,
+            )
+        except (ElkUnavailable, ElkInvalidResult):
+            finalized, py_metadata = layout_flowchart_with_python_fallback(semantics)
+            metadata = dataclasses.replace(py_metadata, fallback_reason="elk-unavailable")
 
+    validation = validate_flowchart_layout(finalized, metadata)
     return CompiledFlowchart(layout=finalized, validation=validation, metadata=metadata)
 
+# ── Compound layout: build_compound_tree ─────────────────────────────────────
+
+
+def build_compound_tree(graph: "LayoutGraph") -> "list[CompoundNode]":
+    """Build a CompoundNode tree from a LayoutGraph.
+
+    Traverses the group hierarchy and constructs frozen CompoundNode objects
+    bottom-up.  Returns the list of root-level CompoundNode objects (those
+    whose parent_id is absent or not present in the graph's groups).
+
+    Each CompoundNode captures:
+      - group_id: the group's ID
+      - label_layout: a TextLayout built from the group's label (or None)
+      - local_direction: from LayoutGroup.local_direction (defaulting to graph.direction)
+      - child_node_ids: direct member nodes (parent_id == group_id)
+      - child_groups: recursive CompoundNode objects for child groups
+      - padding: from LayoutGroup.padding
+      - minimum_size: (minimum_width, minimum_height) from LayoutGroup
+    """
+    from ._geometry import CompoundNode  # noqa: PLC0415
+
+    group_map = {g.id: g for g in graph.groups}
+
+    # children_map[gid] = list of direct child group IDs
+    children_map: "dict[str, list[str]]" = {g.id: [] for g in graph.groups}
+    for g in graph.groups:
+        if g.parent_id and g.parent_id in children_map:
+            children_map[g.parent_id].append(g.id)
+
+    # direct_nodes[gid] = list of direct (non-group) member node IDs
+    direct_nodes: "dict[str, list[str]]" = {g.id: [] for g in graph.groups}
+    for node in graph.nodes:
+        if node.parent_id and node.parent_id in direct_nodes:
+            direct_nodes[node.parent_id].append(node.id)
+
+    def _build(gid: str) -> "CompoundNode":
+        g = group_map[gid]
+        child_compounds = tuple(_build(cgid) for cgid in children_map[gid])
+        label_layout = _make_text_layout_ir(g.label) if g.label else None
+        return CompoundNode(
+            group_id=gid,
+            label_layout=label_layout,
+            local_direction=g.local_direction or graph.direction,
+            child_node_ids=tuple(direct_nodes[gid]),
+            child_groups=child_compounds,
+            padding=g.padding,
+            minimum_size=(g.minimum_width, g.minimum_height),
+        )
+
+    # Root groups: no parent, or parent not among the groups
+    root_gids = [
+        g.id for g in graph.groups
+        if not g.parent_id or g.parent_id not in group_map
+    ]
+    return [_build(gid) for gid in root_gids]
+
+
+# ── Compound layout: EdgePartition ───────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class EdgePartition:
+    """Typed result of classifying graph edges by compound scope.
+
+    free:  edges where neither endpoint is in any group.
+    intra: edges where both endpoints share the same direct-parent group.
+    cross: edges where endpoints are in different groups (or one is ungrouped).
+
+    The three sets are mutually exclusive and exhaustive over the input edges.
+    """
+    free: tuple   # tuple[_Edge, ...]
+    intra: tuple  # tuple[_Edge, ...]
+    cross: tuple  # tuple[_Edge, ...]
+
+
+def make_edge_partition(
+    edges: "list[_Edge]",
+    nodes: "dict[str, _Node]",
+    groups: "dict[str, _Group]",
+) -> EdgePartition:
+    """Classify edges into free/intra/cross using _partition_edges."""
+    free, intra, cross = _partition_edges(edges, nodes, groups)
+    return EdgePartition(free=tuple(free), intra=tuple(intra), cross=tuple(cross))
+
+
+# ── Compound layout: recursive_compound_layout ───────────────────────────────
+
+# Title band height reserved at the top of each compound group (px)
+_TITLE_BAND_H: float = 28.0
+# Minimum content area for an empty compound group (px)
+_EMPTY_CONTENT_H: float = 24.0
+_EMPTY_CONTENT_W: float = 80.0
+
+
+def recursive_compound_layout(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    groups: "dict[str, _Group]",
+    outer_direction: str,
+    canvas_w: int,
+    canvas_h: int,
+    col_gap: "int | None" = None,
+) -> "tuple[dict[str, tuple[int, int, int, int]], tuple]":
+    """Bottom-up recursive compound layout algorithm (Python fallback path).
+
+    Replaces the post-layout coordinate-correction sequence
+    (_recursive_group_layout + _separate_groups_lr/tb + _push_nonmembers) with
+    a single bottom-up pass that:
+
+      1. Processes groups in DFS post-order (innermost first).
+      2. For each group: re-positions direct members in the group's local
+         direction using topological order; treats child groups as fixed-size
+         units and places them alongside direct members.
+      3. At root level, separates sibling groups to prevent overlap.
+      4. Computes the final group bounding boxes.
+      5. Creates BoundaryGate objects for each cross-boundary edge.
+
+    Returns:
+        (group_bboxes, boundary_gates)
+
+    where group_bboxes maps group_id → (x0, y0, x1, y1) and boundary_gates
+    is a tuple of BoundaryGate objects (one EXIT + one ENTRY per cross-boundary
+    edge where gate geometry can be computed).
+
+    No coordinate mutation happens after this function returns — AC8.
+    """
+    from ._geometry import BoundaryGate, BoundaryGateKind, PortSide, Point  # noqa: PLC0415
+
+    _col_gap = col_gap if col_gap is not None else COL_GAP
+
+    # ── Build group tree ─────────────────────────────────────────────────────
+    children, post_order = _build_group_tree(groups)
+
+    # ── Helper: recursively collect all member nodes (direct + nested) ───────
+    def _all_members(gid: str, _seen: "set[str] | None" = None) -> "list[_Node]":
+        if _seen is None:
+            _seen = set()
+        if gid in _seen:
+            return []
+        _seen.add(gid)
+        result = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        for c in children[gid]:
+            result.extend(_all_members(c, _seen))
+        return result
+
+    # ── Helper: bounding box of a group's contents ──────────────────────────
+    def _group_content_bounds(gid: str) -> "tuple[float, float, float, float] | None":
+        mbrs = _all_members(gid)
+        if not mbrs:
+            return None
+        return (
+            float(min(n.x for n in mbrs)),
+            float(min(n.y for n in mbrs)),
+            float(max(n.x + (_node_render_w(n)) for n in mbrs)),
+            float(max(n.y + _node_render_h(n) for n in mbrs)),
+        )
+
+    # ── Helper: shift all nodes in a group by (dx, dy) ───────────────────────
+    def _shift_group(gid: str, dx: float, dy: float, _seen: "set[str] | None" = None) -> None:
+        if _seen is None:
+            _seen = set()
+        if gid in _seen:
+            return
+        _seen.add(gid)
+        for m in groups[gid].members:
+            if m in nodes:
+                nodes[m].x += dx  # type: ignore[assignment]
+                nodes[m].y += dy  # type: ignore[assignment]
+        for c in children[gid]:
+            _shift_group(c, dx, dy, _seen)
+
+    # ── Helper: topological order for direct members ──────────────────────────
+    def _topo_members(member_ids: "list[str]", intra_edges: "list", sort_key: "Callable") -> "list[str]":
+        in_deg: "dict[str, int]" = {m: 0 for m in member_ids}
+        adj: "dict[str, list[str]]" = {m: [] for m in member_ids}
+        for e in intra_edges:
+            if e.src in adj and e.dst in in_deg and not e.reversed_:
+                adj[e.src].append(e.dst)
+                in_deg[e.dst] += 1
+        queue = sorted([m for m in member_ids if in_deg[m] == 0], key=sort_key)
+        result: "list[str]" = []
+        while queue:
+            cur = queue.pop(0)
+            result.append(cur)
+            nexts = sorted(adj[cur], key=sort_key)
+            for nb in nexts:
+                in_deg[nb] -= 1
+                if in_deg[nb] == 0:
+                    queue.append(nb)
+            queue.sort(key=sort_key)
+        for m in member_ids:
+            if m not in result:
+                result.append(m)
+        return result
+
+    # ── Step 1: process groups innermost-first ───────────────────────────────
+    is_outer_tb = outer_direction.upper() not in ("LR", "RL")
+
+    for gid in post_order:
+        grp = groups[gid]
+        if not grp.direction:
+            continue
+        inner_dir = grp.direction.upper()
+        # Only fixup groups whose direction differs from the outer direction
+        if is_outer_tb and inner_dir not in ("LR", "RL"):
+            continue
+        if not is_outer_tb and inner_dir not in ("TB", "TD"):
+            continue
+
+        direct_members = [m for m in grp.members if m in nodes and not nodes[m].is_dummy]
+        child_gids = children[gid]
+
+        # Build item list: (kind, id, x, y, w, h)
+        items: "list[tuple]" = []
+        for m in direct_members:
+            n = nodes[m]
+            items.append(("node", m, float(n.x), float(n.y),
+                          float(_node_render_w(n)), float(_node_render_h(n))))
+        for c in child_gids:
+            bounds = _group_content_bounds(c)
+            if bounds:
+                x0, y0, x1, y1 = bounds
+                items.append(("group", c, x0, y0, x1 - x0, y1 - y0))
+
+        if not items:
+            continue
+
+        member_set = set(direct_members)
+        intra = [e for e in edges if e.src in member_set and e.dst in member_set]
+
+        if inner_dir in ("LR", "RL"):
+            ordered = _topo_members(direct_members, intra, lambda m: nodes[m].x)
+            if inner_dir == "RL":
+                ordered = list(reversed(ordered))
+            node_rank = {m: i for i, m in enumerate(ordered)}
+            rl_sign = -1 if inner_dir == "RL" else 1
+            if child_gids:
+                items.sort(key=lambda it: (
+                    rl_sign * it[2],
+                    node_rank.get(it[1], float("inf")) if it[0] == "node" else float("inf"),
+                ))
+            else:
+                items.sort(key=lambda it: node_rank.get(it[1], float("inf")))
+
+            target_y = min(it[3] for it in items)
+            cur_x = min(it[2] for it in items)
+            for kind, item_id, _, _, w, h in items:
+                if kind == "node":
+                    n = nodes[item_id]
+                    n.x = cur_x
+                    n.y = target_y
+                    cur_x += _node_render_w(n) + _col_gap
+                else:
+                    bounds = _group_content_bounds(item_id)
+                    if bounds:
+                        x0, y0, x1, y1 = bounds
+                        _shift_group(item_id, cur_x - x0, target_y - y0)
+                        cur_x += (x1 - x0) + _col_gap
+        else:
+            # TB inner in LR outer
+            ordered = _topo_members(direct_members, intra, lambda m: nodes[m].y)
+            node_rank = {m: i for i, m in enumerate(ordered)}
+            if child_gids:
+                items.sort(key=lambda it: (
+                    it[3],
+                    node_rank.get(it[1], float("inf")) if it[0] == "node" else float("inf"),
+                ))
+            else:
+                items.sort(key=lambda it: node_rank.get(it[1], float("inf")))
+
+            target_x = min(it[2] for it in items)
+            cur_y = min(it[3] for it in items)
+            for kind, item_id, _, _, w, h in items:
+                if kind == "node":
+                    n = nodes[item_id]
+                    n.x = target_x
+                    n.y = cur_y
+                    cur_y += _node_render_h(n) + _col_gap
+                else:
+                    bounds = _group_content_bounds(item_id)
+                    if bounds:
+                        x0, y0, x1, y1 = bounds
+                        _shift_group(item_id, target_x - x0, cur_y - y0)
+                        cur_y += (y1 - y0) + _col_gap
+
+    # ── Step 2: handle empty groups (AC1) ────────────────────────────────────
+    # Empty groups get a deterministic minimum size based on label width + padding
+    for gid in post_order:
+        grp = groups[gid]
+        mbrs = _all_members(gid)
+        if mbrs:
+            continue  # non-empty: bounds already determined by members
+        # Find a location near any existing content or default to canvas edge
+        # Use label width for minimum; if no label, use _EMPTY_CONTENT_W
+        label_w = max(len(grp.label) * 8.0, _EMPTY_CONTENT_W) if grp.label else _EMPTY_CONTENT_W
+
+    # ── Step 3: root-level group separation ──────────────────────────────────
+    if outer_direction.upper() in ("LR", "RL"):
+        _separate_groups_lr(nodes, groups)
+        # Chain-src y alignment for dummies
+        _pred: "dict[str, str]" = {}
+        for _e in edges:
+            if _e.src in nodes and _e.dst in nodes:
+                _pred[_e.dst] = _e.src
+
+        def _chain_src_y(nid: str) -> int:
+            visited: "set[str]" = set()
+            cur = nid
+            while cur in _pred and nodes.get(cur) is not None:
+                cur = _pred[cur]
+                if cur in visited:
+                    break
+                visited.add(cur)
+                if not nodes[cur].is_dummy:
+                    return nodes[cur].y
+            return nodes[nid].y
+
+        for _nid, _n in nodes.items():
+            if _n.is_dummy:
+                _n.y = _chain_src_y(_nid)
+        _push_nonmembers_out_of_groups_lr(nodes, groups)
+    elif outer_direction.upper() in ("TB", "TD"):
+        _updated_cw = _separate_groups_tb(nodes, groups, canvas_w)
+        canvas_w = _updated_cw
+
+    # ── Step 4: compute group bboxes ─────────────────────────────────────────
+    grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
+
+    # ── Step 5: create BoundaryGate objects for cross-boundary edges (AC5) ───
+    _, _, cross_edges = _partition_edges(edges, nodes, groups)
+    boundary_gates: "list[BoundaryGate]" = []
+    _gate_ctr = 0
+    for e in cross_edges:
+        src_node = nodes.get(e.src)
+        dst_node = nodes.get(e.dst)
+        src_grp = src_node.group if src_node is not None else None
+        dst_grp = dst_node.group if dst_node is not None else None
+
+        eid = e.edge_id or f"{e.src}->{e.dst}"
+
+        # EXIT gate on source compound boundary
+        if src_grp and src_grp in grp_bboxes:
+            bx0, by0, bx1, by1 = grp_bboxes[src_grp]
+            # Place gate on the right edge for LR, bottom edge for TB
+            if outer_direction.upper() in ("LR", "RL"):
+                gp = Point(float(bx1), float((by0 + by1) / 2))
+                side = PortSide.RIGHT
+            else:
+                gp = Point(float((bx0 + bx1) / 2), float(by1))
+                side = PortSide.BOTTOM
+            boundary_gates.append(BoundaryGate(
+                gate_id=f"_bgate_{_gate_ctr}_exit",
+                group_id=src_grp,
+                side=side,
+                point=gp,
+                semantic_node_id=e.src,
+                edge_id=eid,
+                kind=BoundaryGateKind.EXIT,
+            ))
+            _gate_ctr += 1
+
+        # ENTRY gate on destination compound boundary
+        if dst_grp and dst_grp in grp_bboxes:
+            bx0, by0, bx1, by1 = grp_bboxes[dst_grp]
+            if outer_direction.upper() in ("LR", "RL"):
+                gp = Point(float(bx0), float((by0 + by1) / 2))
+                side = PortSide.LEFT
+            else:
+                gp = Point(float((bx0 + bx1) / 2), float(by0))
+                side = PortSide.TOP
+            boundary_gates.append(BoundaryGate(
+                gate_id=f"_bgate_{_gate_ctr}_entry",
+                group_id=dst_grp,
+                side=side,
+                point=gp,
+                semantic_node_id=e.dst,
+                edge_id=eid,
+                kind=BoundaryGateKind.ENTRY,
+            ))
+            _gate_ctr += 1
+
+    return grp_bboxes, tuple(boundary_gates)
 

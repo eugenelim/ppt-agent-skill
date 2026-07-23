@@ -2,7 +2,7 @@
 
 Mode: full (structural — new abstraction layer; new dataclasses; multi-file)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 Merges: backlog-mermaid-p3-compound-layout, backlog-compound-elk-ac1-ac3
 

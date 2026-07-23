@@ -2,7 +2,7 @@
 
 Mode: full (structural — core layout pipeline; multi-file; touches fallback behavior)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 ## Objective
 
