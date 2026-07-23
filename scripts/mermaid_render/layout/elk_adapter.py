@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+import types as _types
 from ._geometry import (
     FinalizedLayout, LayoutGraph, LayoutNode, LayoutGroup, LayoutEdge,
     NodeLayout, GroupLayout, RoutedEdge, PortLayout, PortSide, Point, Rect,
@@ -286,8 +287,8 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
         canvas = fallback.inflate(96)
 
     return FinalizedLayout(
-        node_layouts=node_layouts,
-        group_layouts=group_layouts,
+        node_layouts=_types.MappingProxyType(node_layouts),
+        group_layouts=_types.MappingProxyType(group_layouts),
         routed_edges=tuple(routed_edges),
         visible_bounds=visible,
         diagram_padding=48.0,

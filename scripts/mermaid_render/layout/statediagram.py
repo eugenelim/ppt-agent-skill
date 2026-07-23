@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Union, cast
 
 
 # ── Immutable state model types ────────────────────────────────────────────────
@@ -336,7 +336,7 @@ def compile_state_machine(lines: list[str]) -> StateMachineModel:
         if m:
             _cur_notes().append(StateNote(
                 target_id=m.group(2),
-                position=m.group(1).lower(),
+                position=cast(Literal["right", "left"], m.group(1).lower()),
                 text=m.group(3).strip(),
             ))
             continue

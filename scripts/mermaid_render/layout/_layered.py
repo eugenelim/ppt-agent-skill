@@ -617,7 +617,7 @@ def _bk_layout(
     # Build predecessor/successor adjacency (ignoring reversed edges)
     succ: dict[str, list[str]] = {nid: [] for nid in nodes}
     pred: dict[str, list[str]] = {nid: [] for nid in nodes}
-    for e in []:  # edges not passed in; use col ordering as proxy
+    for e in []:  # type: ignore[var-annotated]  # edges not passed in; use col ordering as proxy
         pass
 
     # Without edges passed in, we compute alignment purely from col positions.

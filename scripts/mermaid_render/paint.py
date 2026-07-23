@@ -181,7 +181,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens, order: int = 0) -> list:
     label = node.label or ""
     paint = _make_node_paint(tokens.node_stroke, tokens.node_fill, tokens.node_stroke_w)
 
-    elements = []
+    elements: list = []
     eid = f"node-{node.id}"
     import re as _re
     parent_id = getattr(node, "group", None) or ""
@@ -247,7 +247,7 @@ def _node_scene_elements(node: Any, tokens: _Tokens, order: int = 0) -> list:
 
     elif shape == "hexagon":
         hw = nw * 0.25
-        pts = (
+        pts = (  # type: ignore[assignment]
             (x + hw, y), (x + nw - hw, y),
             (x + nw, y + nh/2), (x + nw - hw, y + nh),
             (x + hw, y + nh), (x, y + nh/2),
@@ -392,7 +392,7 @@ def _marker_id_for_edge(route: dict, scene_id_hash: str) -> tuple[str, str]:
 
 def _edge_scene_elements(route: dict, tokens: _Tokens, scene_id_hash: str, edge_idx: int = 0) -> list:
     """Convert a route dict to scene elements (path + arrowhead + label)."""
-    elements = []
+    elements: list = []
 
     path_d = route.get("d") or ""
     if not path_d:

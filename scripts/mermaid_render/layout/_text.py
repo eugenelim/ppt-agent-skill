@@ -567,8 +567,8 @@ class HeuristicTextMeasurer:
             else:
                 words = raw.split(" ") if raw else [""]
                 cur = ""
-                for w in words:
-                    test = (cur + " " + w).strip() if cur else w
+                for word in words:
+                    test = (cur + " " + word).strip() if cur else word
                     if self._width(test, style) <= max_width:
                         cur = test
                     else:
@@ -578,7 +578,7 @@ class HeuristicTextMeasurer:
                             text_lines.append(TextLine(
                                 runs=(tr,), width=cw, height=lh, baseline=lh * 0.8
                             ))
-                        cur = w
+                        cur = word
                 if cur:
                     cw = self._width(cur, style)
                     tr = TextRun(text=cur, style=style, width=cw, height=lh)

@@ -575,7 +575,7 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                 paint=PaintStyle(
                     stroke=StrokeStyle(
                         color=_REL_STROKE, width=1.5,
-                        dasharray=dash,
+                        dasharray=dash or "",
                     )
                 ),
                 semantic_role="relation",

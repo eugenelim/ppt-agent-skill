@@ -61,7 +61,7 @@ _POINT_R = 6
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 
-def _parse_quadrant_source(src: str) -> tuple[str, str, str, str, str, str, str, list[tuple[str, float, float]]]:
+def _parse_quadrant_source(src: str) -> tuple[str, str, str, str, str, list[str], list[tuple[str, float, float]]]:
     """Return (title, x_low, x_high, y_low, y_high, q1, q2, q3, q4, points).
 
     Actually returns (title, x_low, x_high, y_low, y_high, q_labels[4], points).

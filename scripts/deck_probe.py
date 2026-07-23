@@ -47,11 +47,11 @@ def probe_pptx(path: Path, show_labels: bool) -> None:
     prs = Presentation(str(path))
     W, H = prs.slide_width, prs.slide_height
     print(f"SOURCE type=pptx slides={len(prs.slides)} "
-          f"size={Emu(W).inches:.2f}x{Emu(H).inches:.2f}in")
+          f"size={Emu(W).inches:.2f}x{Emu(H).inches:.2f}in")  # type: ignore[arg-type]
 
-    fonts = collections.Counter()
-    fill_colors = collections.Counter()
-    font_colors = collections.Counter()
+    fonts: collections.Counter = collections.Counter()
+    fill_colors: collections.Counter = collections.Counter()
+    font_colors: collections.Counter = collections.Counter()
     dense, discard = [], []
 
     for i, slide in enumerate(prs.slides, 1):

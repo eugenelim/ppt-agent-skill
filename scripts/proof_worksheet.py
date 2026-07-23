@@ -215,8 +215,8 @@ def render_card_row(card: dict) -> str:
 
 def render_meta(page: dict, n_cards: int, n_charts: int) -> str:
     dc = page.get("density_contract") if isinstance(page.get("density_contract"), dict) else {}
-    max_cards = dc.get("max_cards")
-    max_charts = dc.get("max_charts")
+    max_cards = dc.get("max_cards")  # type: ignore[union-attr]
+    max_charts = dc.get("max_charts")  # type: ignore[union-attr]
     cards_flag = isinstance(max_cards, int) and n_cards == max_cards
     charts_flag = isinstance(max_charts, int) and n_charts == max_charts
     density = esc(page.get("density_label"))
@@ -307,8 +307,8 @@ def render_index(pages: list[dict]) -> str:
         n_charts = sum(1 for c in cards if is_chart(c))
         unsourced = sum(1 for c in cards if source_marker(c) == "none")
         dc = page.get("density_contract") if isinstance(page.get("density_contract"), dict) else {}
-        at_budget = (isinstance(dc.get("max_cards"), int) and n_cards == dc["max_cards"]) or (
-            isinstance(dc.get("max_charts"), int) and n_charts == dc["max_charts"]
+        at_budget = (isinstance(dc.get("max_cards"), int) and n_cards == dc["max_cards"]) or (  # type: ignore[union-attr,index]
+            isinstance(dc.get("max_charts"), int) and n_charts == dc["max_charts"]  # type: ignore[union-attr,index]
         )
         flags = []
         if unsourced:

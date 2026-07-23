@@ -4,7 +4,10 @@ from __future__ import annotations
 import dataclasses
 import re
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from ._geometry import TextLayout
 
 from ..scene import SvgScene
 
@@ -96,7 +99,7 @@ class ArchitectureDiagramLayout:
 
 # ── Text layout helper ─────────────────────────────────────────────────────────
 
-def _arch_text_layout(label: str, font_size: float = 15.0, font_weight: int = 700) -> object:
+def _arch_text_layout(label: str, font_size: float = 15.0, font_weight: int = 700) -> "TextLayout":  # type: ignore[return-value]
     """Single-line TextLayout with bucketed width estimate."""
     from ._geometry import TextLayout, TextLine, TextRun, TextStyle
     from ._constants import _measure_text_width
@@ -536,7 +539,7 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
                        direction=Point(0.0, 1.0)),
         )
 
-        gi = node_grp_idx.get(nid)
+        gi = node_grp_idx.get(nid)  # type: ignore[assignment]
         accent = (
             _ARCH_ACCENT_CYCLE[gi % len(_ARCH_ACCENT_CYCLE)]
             if gi is not None else _ARCH_ACCENT_DEFAULT
@@ -566,7 +569,7 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
             w=float(bx2 - bx1), h=float(by2 - by1),
         )
         lbl = grp.label or ""
-        label_layout = _arch_text_layout(lbl, font_size=12.0, font_weight=600) if lbl else None
+        label_layout = _arch_text_layout(lbl, font_size=12.0, font_weight=600) if lbl else None  # type: ignore[assignment]
         arch_groups.append(ArchGroupBoundary(
             group_id=gid,
             parent_group_id=getattr(grp, "parent_group", None),
@@ -732,13 +735,14 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
         for e in arch.edges
     )
 
+    import types as _types
     return FinalizedLayout(
-        node_layouts=node_layouts,
-        group_layouts=group_layouts,
+        node_layouts=_types.MappingProxyType(node_layouts),
+        group_layouts=_types.MappingProxyType(group_layouts),
         routed_edges=routed_edges,
-        visible_bounds=arch.canvas_bounds,
+        visible_bounds=arch.canvas_bounds,  # type: ignore[arg-type]
         diagram_padding=48.0,
-        canvas_bounds=arch.canvas_bounds,
+        canvas_bounds=arch.canvas_bounds,  # type: ignore[arg-type]
         direction=arch.direction,
         diagnostics=_empty_diagnostics(),
     )

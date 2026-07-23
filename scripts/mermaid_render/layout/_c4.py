@@ -520,7 +520,7 @@ def _render_c4_fragment(
 
     # Nodes (in original insertion order for stable data-node-id ordering)
     for item in packing_order:
-        box = box_map.get(item.alias)
+        box = box_map.get(item.alias)  # type: ignore[assignment]
         if box:
             parts.append(_render_c4_node(item, box))
 

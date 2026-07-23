@@ -20,7 +20,7 @@ import re
 import sys
 from pathlib import Path
 
-from _browser import get_browser, new_page
+from _browser import get_browser, new_page  # type: ignore[attr-defined]
 
 ROOT = Path(__file__).resolve().parent.parent
 STYLES_DIR = ROOT / "references" / "styles"
@@ -104,7 +104,7 @@ def collect_all_styles() -> list:
 
 def group_by_category(styles: list) -> dict:
     """按 category 分组。"""
-    groups = {cat: [] for cat in CATEGORY_ORDER}
+    groups: dict = {cat: [] for cat in CATEGORY_ORDER}
     for s in styles:
         cat = s.get("category", "uncategorized")
         if cat in groups:

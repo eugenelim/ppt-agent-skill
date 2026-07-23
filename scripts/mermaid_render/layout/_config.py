@@ -200,7 +200,7 @@ def parse_render_config(src: str) -> RenderConfig:
     """Parse all init config from diagram source into a RenderConfig."""
     return RenderConfig(
         flowchart=parse_flowchart_config(src),
-        graph=parse_flowchart_config(src),   # graph uses same config schema
+        graph=parse_flowchart_config(src),   # type: ignore[arg-type]  # graph uses same config schema
         c4=parse_c4_config(src),
     )
 

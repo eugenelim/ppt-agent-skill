@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generator
 
 if TYPE_CHECKING:
-    from playwright.sync_api import Browser, Page
+    from playwright.sync_api import Browser, Page, Playwright as SyncPlaywright
 
 try:
     from playwright.sync_api import sync_playwright
@@ -113,8 +113,8 @@ class BrowserSession:
     """
 
     def __init__(self) -> None:
-        self._pw = None
-        self._browser = None
+        self._pw: "SyncPlaywright | None" = None
+        self._browser: "Browser | None" = None
 
     def __enter__(self) -> "BrowserSession":
         if not _PLAYWRIGHT_AVAILABLE:
@@ -153,7 +153,7 @@ class BrowserSession:
         Page and context are closed in finally blocks after every render,
         including on exception.
         """
-        context = self._browser.new_context(
+        context = self._browser.new_context(  # type: ignore[union-attr]
             viewport={"width": 1280, "height": 720},
             device_scale_factor=scale,
         )
@@ -237,7 +237,7 @@ def get_browser() -> "Generator[Browser, None, None]":
     Chromium is NOT installed automatically; run: playwright install chromium
     """
     with BrowserSession() as session:
-        yield session._browser
+        yield session._browser  # type: ignore[misc]
 
 
 def _setup_page(

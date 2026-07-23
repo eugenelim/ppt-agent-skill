@@ -453,7 +453,7 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         for ci, n in enumerate(row_nodes):
             node_pos[n] = (row_start_x + ci * (_NODE_W + _COL_GAP), cumulative_y)
             col_of[n] = ci
-        cumulative_y += row_h[r] + _ROW_GAP
+        cumulative_y += row_h[r] + _ROW_GAP  # type: ignore[assignment]
 
     canvas_h = float(cumulative_y - _ROW_GAP + _PAD_V)
 

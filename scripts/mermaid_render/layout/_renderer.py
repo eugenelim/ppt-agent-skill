@@ -1152,7 +1152,7 @@ def _separate_groups_lr(
         if not boxes:
             break
 
-        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gy"])
+        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gy"])  # type: ignore[index]
         moved = False
         for i, gid1 in enumerate(sorted_gids):
             b1 = boxes[gid1]
@@ -1160,10 +1160,10 @@ def _separate_groups_lr(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
-                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]  # type: ignore[index]
+                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
                 if x_overlap and y_overlap:
-                    shift = b1["gy_bot"] - b2["gy"] + COL_GAP
+                    shift = b1["gy_bot"] - b2["gy"] + COL_GAP  # type: ignore[index]
                     for nid in groups[gid2].members:
                         if nid in nodes:
                             nodes[nid].y += shift
@@ -1202,7 +1202,7 @@ def _separate_groups_tb(
         boxes = {gid: b for gid, b in boxes.items() if b is not None}
         if not boxes:
             break
-        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gx"])
+        sorted_gids = sorted(boxes, key=lambda g: boxes[g]["gx"])  # type: ignore[index]
         moved = False
         for i, gid1 in enumerate(sorted_gids):
             b1 = boxes[gid1]
@@ -1210,10 +1210,10 @@ def _separate_groups_tb(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]
-                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]  # type: ignore[index]
+                y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
                 if x_overlap and y_overlap:
-                    shift = int(b1["gx_right"] - b2["gx"] + COL_GAP)
+                    shift = int(b1["gx_right"] - b2["gx"] + COL_GAP)  # type: ignore[index]
                     for nid in groups[gid2].members:
                         if nid in nodes:
                             nodes[nid].x += shift
@@ -1272,10 +1272,10 @@ def _push_nonmembers_out_of_groups_lr(
             nx0, ny0 = nd.x, nd.y
             nx1, ny1 = nd.x + NODE_W, nd.y + _node_render_h(nd)
             for gid, b in bboxes.items():
-                if not (b["x0"] < nx1 and nx0 < b["x1"] and b["y0"] < ny1 and ny0 < b["y1"]):
+                if not (b["x0"] < nx1 and nx0 < b["x1"] and b["y0"] < ny1 and ny0 < b["y1"]):  # type: ignore[index]
                     continue
                 # Non-member overlaps group bbox — push it below the group
-                nd.y = int(b["y1"] + COL_GAP)
+                nd.y = int(b["y1"] + COL_GAP)  # type: ignore[index]
                 moved = True
                 # Recompute this group's bbox since nd.y changed (nd is non-member, no effect)
                 break

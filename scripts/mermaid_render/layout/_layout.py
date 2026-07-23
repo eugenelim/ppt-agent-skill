@@ -457,14 +457,14 @@ def _compact_group_columns(
         rng = {gid: r for gid, r in rng.items() if r is not None}
         if not rng:
             break
-        sorted_gids = sorted(rng, key=lambda g: rng[g][0])  # by col_min
+        sorted_gids = sorted(rng, key=lambda g: rng[g][0])  # type: ignore[index]  # by col_min
         moved = False
         for i, g1 in enumerate(sorted_gids):
-            c1_lo, c1_hi, r1_lo, r1_hi = rng[g1]
+            c1_lo, c1_hi, r1_lo, r1_hi = rng[g1]  # type: ignore[misc]
             for g2 in sorted_gids[i + 1:]:
                 if _is_nested(g1, g2):
                     continue
-                c2_lo, c2_hi, r2_lo, r2_hi = rng[g2]
+                c2_lo, c2_hi, r2_lo, r2_hi = rng[g2]  # type: ignore[misc]
                 col_overlap = c1_lo <= c2_hi and c2_lo <= c1_hi
                 rank_overlap = r1_lo <= r2_hi and r2_lo <= r1_hi
                 if col_overlap and rank_overlap:
