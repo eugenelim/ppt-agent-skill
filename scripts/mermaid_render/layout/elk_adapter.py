@@ -1,7 +1,7 @@
 """ELK layout adapter — calls elkjs 0.12.0 via a pinned Node.js subprocess.
 
 Public API:
-    layout_with_elk(graph: LayoutGraph) -> FinalizedLayout
+    layout_with_elk(graph: LayoutGraph, spacing=None) -> FinalizedLayout
     class ElkUnavailable(RuntimeError)
 
 Exempted from tests/test_dependencies.py::TestNoSubprocess via _SUBPROCESS_EXEMPTIONS.
@@ -10,7 +10,6 @@ See docs/adr/001-elk-layout-engine.md for the ADR that governs this dependency.
 from __future__ import annotations
 
 import json
-import math
 import os
 import shutil
 import subprocess
@@ -41,8 +40,18 @@ def _find_elkjs() -> Optional[str]:
 
 
 def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
-    """Serialize LayoutGraph to an ELK JSON input dict."""
-    children = []
+    """Serialize LayoutGraph to an ELK JSON input dict.
+
+    When graph.groups is non-empty, emits ELK container nodes for each group
+    and sets elk.hierarchyHandling=INCLUDE_CHILDREN so ELK enforces group
+    separation natively (Item 2).
+    """
+    group_ids = {g.id for g in graph.groups}
+
+    # ── Organise nodes by parent group ──────────────────────────────────────
+    group_direct_nodes: dict[str, list] = {g.id: [] for g in graph.groups}
+    root_nodes: list = []
+
     for node in graph.nodes:
         child: dict = {
             "id": node.id,
@@ -60,12 +69,33 @@ def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
                 }
                 for p in node.ports
             ]
-        children.append(child)
+        if node.parent_id and node.parent_id in group_ids:
+            group_direct_nodes[node.parent_id].append(child)
+        else:
+            root_nodes.append(child)
 
-    # Groups become ELK children with their own children
-    # (nested hierarchy handled by parent_id on LayoutNode)
-    # For now, groups are flattened — ELK receives all nodes at root level
-    # when no group hierarchy is set. This is refined in T5 wire-up.
+    # ── Organise child groups by parent group ────────────────────────────────
+    group_child_groups: dict[str, list] = {}
+    for g in graph.groups:
+        if g.parent_id and g.parent_id in group_ids:
+            group_child_groups.setdefault(g.parent_id, []).append(g.id)
+
+    # ── Build nested ELK container nodes recursively ────────────────────────
+    def _build_group_container(gid: str) -> dict:
+        children: list = list(group_direct_nodes.get(gid, []))
+        for child_gid in group_child_groups.get(gid, []):
+            children.append(_build_group_container(child_gid))
+        container: dict = {"id": gid}
+        if children:
+            container["children"] = children
+        return container
+
+    # Root-level items: plain nodes + root group containers
+    root_group_ids = {g.id for g in graph.groups if not g.parent_id}
+    children: list = list(root_nodes)
+    for g in graph.groups:
+        if g.id in root_group_ids:
+            children.append(_build_group_container(g.id))
 
     edges = []
     for edge in graph.edges:
@@ -87,18 +117,83 @@ def _to_elk_json(graph: LayoutGraph, spacing: "dict | None" = None) -> dict:
     _sp = spacing or {}
     node_node = str(_sp.get("col_gap", 40))
     node_layers = str(_sp.get("rank_gap", 60))
+
+    layout_options: dict = {
+        "elk.algorithm": "layered",
+        "elk.direction": elk_direction,
+        "elk.edgeRouting": "ORTHOGONAL",
+        # Item 3(a): improved obstacle-avoidance routing
+        "elk.layered.unnecessaryBendpoints": "false",
+        "elk.layered.nodePlacementStrategy": "BRANDES_KOEPF",
+        "elk.layered.spacing.nodeNodeBetweenLayers": node_layers,
+        "elk.spacing.nodeNode": node_node,
+    }
+    # Item 2: enable hierarchy handling when groups are present so ELK enforces
+    # group-member locality natively.
+    if graph.groups:
+        layout_options["elk.hierarchyHandling"] = "INCLUDE_CHILDREN"
+
     return {
         "id": "root",
-        "layoutOptions": {
-            "elk.algorithm": "layered",
-            "elk.direction": elk_direction,
-            "elk.edgeRouting": "ORTHOGONAL",
-            "elk.layered.spacing.nodeNodeBetweenLayers": node_layers,
-            "elk.spacing.nodeNode": node_node,
-        },
+        "layoutOptions": layout_options,
         "children": children,
         "edges": edges,
     }
+
+
+def _collect_positioned_nodes(
+    children: list,
+    offset_x: float,
+    offset_y: float,
+    node_map: dict,
+    node_layouts: dict,
+) -> None:
+    """Recursively collect absolute-coordinate node positions from ELK output.
+
+    ELK returns child positions relative to their parent container; this
+    accumulates offsets so all NodeLayout objects use canvas-absolute coords.
+    """
+    for child in children:
+        cid = child["id"]
+        cx = offset_x + float(child.get("x", 0))
+        cy = offset_y + float(child.get("y", 0))
+        cw = float(child.get("width", 0))
+        ch = float(child.get("height", 0))
+
+        if cid in node_map:
+            orig = node_map[cid]
+            w = cw if cw > 0 else orig.measured_width
+            h = ch if ch > 0 else orig.measured_height
+            outer = Rect(x=cx, y=cy, w=w, h=h)
+            node_layouts[cid] = NodeLayout(
+                node_id=cid,
+                semantic_shape=orig.shape_id,
+                outer_bounds=outer,
+                content_bounds=outer,
+                title_layout=TextLayout(
+                    lines=(), width=w, height=h,
+                    line_height=14.0, min_content_width=0.0, max_content_width=w,
+                    resolved_font_path=None, resolved_font_family="sans-serif",
+                ),
+                subtitle_layout=None,
+                member_layouts=(),
+                icon_bounds=None,
+                ports=(),
+                css_classes=(),
+                extra_css="",
+                is_dummy=False,
+                rank=0,
+                is_external=False,
+                icon_svg="",
+                accent_color="",
+                parent_group_id=orig.parent_id,
+            )
+
+        # Recurse into group containers and nested groups (with accumulated offset).
+        if "children" in child:
+            _collect_positioned_nodes(
+                child["children"], cx, cy, node_map, node_layouts
+            )
 
 
 def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
@@ -106,38 +201,13 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
     node_map = {n.id: n for n in graph.nodes}
 
     node_layouts: dict[str, NodeLayout] = {}
-    for child in out.get("children", []):
-        nid = child["id"]
-        orig = node_map.get(nid)
-        if orig is None:
-            continue
-        x, y = float(child.get("x", 0)), float(child.get("y", 0))
-        w, h = float(child.get("width", orig.measured_width)), float(child.get("height", orig.measured_height))
-        outer = Rect(x=x, y=y, w=w, h=h)
-        label = orig.labels[0] if orig.labels else nid
-        node_layouts[nid] = NodeLayout(
-            node_id=nid,
-            semantic_shape=orig.shape_id,
-            outer_bounds=outer,
-            content_bounds=outer,
-            title_layout=TextLayout(
-                lines=(), width=w, height=h,
-                line_height=14.0, min_content_width=0.0, max_content_width=w,
-                resolved_font_path=None, resolved_font_family="sans-serif",
-            ),
-            subtitle_layout=None,
-            member_layouts=(),
-            icon_bounds=None,
-            ports=(),
-            css_classes=(),
-            extra_css="",
-            is_dummy=False,
-            rank=0,
-            is_external=False,
-            icon_svg="",
-            accent_color="",
-            parent_group_id=orig.parent_id,
-        )
+    _collect_positioned_nodes(
+        out.get("children", []),
+        offset_x=0.0,
+        offset_y=0.0,
+        node_map=node_map,
+        node_layouts=node_layouts,
+    )
 
     edge_map = {e.id: e for e in graph.edges}
     routed_edges: list[RoutedEdge] = []
@@ -198,10 +268,12 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
 
     if node_layouts:
         all_rects = [nl.outer_bounds for nl in node_layouts.values()]
-        visible = Rect.union_all(all_rects).inflate(48)
+        node_union = Rect.union_all(all_rects)
+        visible = node_union.inflate(48)
     else:
-        visible = Rect(0.0, 0.0, float(out.get("width", 500)), float(out.get("height", 300)))
-    canvas = visible.inflate(48)
+        node_union = Rect(0.0, 0.0, float(out.get("width", 500)), float(out.get("height", 300)))
+        visible = node_union.inflate(48)
+    canvas = node_union.inflate(96)
 
     return FinalizedLayout(
         node_layouts=node_layouts,
@@ -238,7 +310,7 @@ def _run_elk(elk_json: dict) -> dict:
         raise ElkUnavailable(f"elk_runner.js returned malformed JSON: {exc}") from exc
 
 
-def layout_with_elk(graph: LayoutGraph) -> FinalizedLayout:
+def layout_with_elk(graph: LayoutGraph, spacing: "dict | None" = None) -> FinalizedLayout:
     """Run ELK layout on graph; raise ElkUnavailable when ELK cannot be used.
 
     Triggers:
@@ -246,6 +318,10 @@ def layout_with_elk(graph: LayoutGraph) -> FinalizedLayout:
     - Node runtime absent → raises ElkUnavailable
     - elkjs node_modules missing → raises ElkUnavailable
     - Subprocess non-zero exit, malformed JSON, or timeout → raises ElkUnavailable
+
+    spacing: optional dict with col_gap / rank_gap / diagram_padding to pass to
+    _to_elk_json.  _compile_flowchart passes _init_cfg here so both code paths
+    use identical spacing — the unification point for Item 1.
     """
     if os.environ.get("MERMAID_LAYOUT_ENGINE", "").lower() == "python":
         raise ElkUnavailable("MERMAID_LAYOUT_ENGINE=python: ELK disabled by env var")
@@ -255,7 +331,7 @@ def layout_with_elk(graph: LayoutGraph) -> FinalizedLayout:
         raise ElkUnavailable(
             "elkjs not installed; run: npm ci --prefix scripts/mermaid_render/layout"
         )
-    elk_json = _to_elk_json(graph)
+    elk_json = _to_elk_json(graph, spacing=spacing)
     try:
         out = _run_elk(elk_json)
     except subprocess.TimeoutExpired as exc:
