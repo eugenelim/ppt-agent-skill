@@ -54,6 +54,7 @@ _EIGHT_DIRS = [
 ]
 
 # Polygon shapes that have an outline_path
+# Note: cylinder is excluded — it uses silhouette boundary intersection, not polygon math
 _POLYGON_SHAPES = [
     "rect",
     "diamond",
@@ -62,7 +63,6 @@ _POLYGON_SHAPES = [
     "trapezoid-alt",
     "flag",
     "subroutine",
-    "cylinder",
     "bar",
 ]
 
@@ -495,14 +495,24 @@ def test_doublecircle_ring_semantics_svg():
 
 
 def test_doublecircle_ring_semantics_html():
-    """DoubleCircleGeometry paint_html inner ring must use background (filled disc)."""
+    """DoubleCircleGeometry paint_html inner ring must use two stroked rings (no filled disc).
+
+    AC5: double-circle HTML/SVG equivalence — two concentric rings, no background fill.
+    The outer ring is the main container border; the inner ring is an inset div with
+    border:2px solid and background:transparent.
+    """
     geom = SHAPE_REGISTRY["doublecircle"]
     html = geom.paint_html(0.0, 0.0, 80.0, 80.0, **_COMMON_PAINT_KW)
     assert html is not None
-    inner_divs = re.findall(r'<div style="[^"]*inset:5px[^"]*"', html)
+    # Inner ring: must have an inset div with a stroked border, no fill
+    inner_divs = re.findall(r'<div style="[^"]*inset:[0-9]+px[^"]*"', html)
     assert inner_divs, "DoubleCircle paint_html missing inner inset div"
-    assert any("background:" in d for d in inner_divs), (
-        f"DoubleCircle inner ring should use background (filled disc), got: {inner_divs}"
+    assert any("border:" in d for d in inner_divs), (
+        f"DoubleCircle inner ring should have border: (stroked ring), got: {inner_divs}"
+    )
+    assert all("background:transparent" in d or "background:" not in d.replace("background:transparent","")
+               for d in inner_divs), (
+        f"DoubleCircle inner ring must use background:transparent (no filled disc), got: {inner_divs}"
     )
 
 

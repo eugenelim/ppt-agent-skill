@@ -394,7 +394,7 @@ def _render_graph_fragment(
         if _is_terminal_doublecircle(n):
             # UML final state: fixed-size outer ring + inner filled disc
             parts.append(
-                f'<div class="node node-doublecircle{extra_cls}" {_node_data_attrs(nid, n)} style="'
+                f'<div class="node node-doublecircle node-state-final{extra_cls}" {_node_data_attrs(nid, n)} style="'
                 f'position:absolute; left:{n.x}px; top:{n.y}px; '
                 f'width:{_TERMINAL_NODE_SIZE}px; height:{_TERMINAL_NODE_SIZE}px; '
                 f'border-radius:50%; box-sizing:border-box; '
@@ -1571,6 +1571,9 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         else:
             # Delegate all shape-specific HTML to the authoritative ShapeGeometry painter.
             from .shape_geometry import SHAPE_REGISTRY as _SR
+            # UML final pseudo-state: add node-state-final to distinguish from regular doublecircle
+            if nid.endswith("_sm_end_") and shape == "doublecircle":
+                extra_cls = " node-state-final" + extra_cls
             if is_ext:
                 _border_css = f'border:1.5px dashed {border_var};'
             elif shape == "stadium":

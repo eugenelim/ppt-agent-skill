@@ -120,7 +120,7 @@ status = "active"
 queue = [
     {path = "docs/specs/mermaid-text-measurement-adoption", needs = ["work:docs/specs/mermaid-oracle-runtime-unification"]},
     {path = "docs/specs/mermaid-recursive-compound-layout", needs = ["work:docs/specs/flowchart-elk-finalized-layout-consumption"]},
-    {path = "docs/specs/mermaid-shape-boundary-exactness", needs = ["work:docs/specs/mermaid-text-measurement-adoption"]},
+
     {path = "docs/specs/mermaid-flowchart-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness"]},
     {path = "docs/specs/mermaid-state-conformance", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness", "work:docs/specs/mermaid-flowchart-conformance"]},
     {path = "docs/specs/mermaid-architecture-metadata-preservation", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/mermaid-recursive-compound-layout"]},
@@ -130,4 +130,4 @@ queue = [
     {path = "docs/specs/mermaid-parity-ci-and-maintainability-cleanup", needs = ["work:docs/specs/mermaid-oracle-runtime-unification", "work:docs/specs/mmdc-browser-geometry-capture", "work:docs/specs/mermaid-text-measurement-adoption", "work:docs/specs/flowchart-elk-finalized-layout-consumption", "work:docs/specs/mermaid-recursive-compound-layout", "work:docs/specs/mermaid-shape-boundary-exactness", "work:docs/specs/mermaid-flowchart-conformance", "work:docs/specs/mermaid-state-conformance", "work:docs/specs/mermaid-architecture-metadata-preservation", "work:docs/specs/mermaid-er-compiler-consolidation-and-routing", "work:docs/specs/mermaid-requirement-text-layout-conformance", "work:docs/specs/mermaid-class-semantic-conformance"]},
 ]
 active = []
-shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-browser-geometry-capture", "docs/specs/flowchart-elk-finalized-layout-consumption"]
+shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-browser-geometry-capture", "docs/specs/flowchart-elk-finalized-layout-consumption", "docs/specs/mermaid-shape-boundary-exactness"]
