@@ -77,12 +77,6 @@ or disappears mid-diagram). Deferred to a dedicated lifecycle spec.
 single-participant override for fragment headers wider than the natural canvas. Blocked
 on investigation of the exact layout rule in mmdc.
 
-### seq-corr-note-only-implicit-participant-fixture
-
-**Deferred from AC-R.2:** `sequence-note-only-implicit-participant.mmd` — covered by
-existing `SEQ-014` regression test in `test_fix_sequence.py`; a new fixture is
-redundant unless SEQ-014 is removed.
-
 ### seq-corr-height-hint-gallery-metadata
 
 `height_hint` is tested in T2 (AC-2.5) but is not tracked per-fixture in
@@ -247,19 +241,6 @@ is available in the repo.
 
 - **Discovered (not an AC deferral): no reusable script to assemble a `mermaid_layout.py` fragment into a full slide HTML page.** An ad-hoc `gen_slides.py` was written on the fly during a diagram session to: read fragment files, inject the deck's `:root` CSS variables, create a `1280×720` slide body with title bar, two-column content grid (diagram + annotation cards), and `transform:scale(N)` wrapper. `mermaid_layout.py` emits fragments only; `html_packager.py` consumes complete slide HTML and cannot wrap a fragment. Unblocked by creating `scripts/assemble_diagram_slide.py [--fragment path] [--style style.json] [--title "..."] [--annotation annotation.md] [--output slide.html]` — a repeatable, tested script that replaces the ad-hoc approach. Also: `gen_slides.py` hardcoded `frag_h=344` which diverged from actual fragment dimensions after group/canvas height fixes; the assembler should auto-read `width/height` from the fragment's outermost div style.
 
-## mermaid-layout-refactor
-
-### mermaid-layout-package-split
-
-**Deferred from spec mermaid-layout-refactor (not an AC deferral):** Split
-`scripts/mermaid_layout.py` (2,476 lines) into a `scripts/mermaid_layout/` package with
-sub-modules (`_constants.py`, `_parser.py`, `_layout.py`, `_routing.py`, `_renderer.py`,
-`_strategies.py`). Deferred because it requires careful handling of `python3
-scripts/mermaid_layout.py` CLI invocation (package `__main__.py`) and the direct-import
-contract used by `scripts/test_diagram_qa.py` (`from mermaid_layout import _dispatch, ...`).
-Unblocked after the test suite (AC-TEST) is established — the tests act as the safety net
-for a structural split that cannot easily be undone.
-
 ## mermaid-render-rearchitecture
 
 ### vendor-bundle-checksum-gate
@@ -298,34 +279,6 @@ contract guarantees. Unblocked anytime; editorial only.
 
 ## c4-layout-engine
 
-### c4-boundary-visual-rendering
-
-C4 boundary/group boxes (`Enterprise_Boundary`, `System_Boundary`, etc.) are
-currently parsed (member tracking only) but not rendered as visual containers.
-The `groups` dict is threaded through to `_render_c4_fragment` for future use.
-
-Also: the current parser closes boundary stacks on `)`, but Mermaid C4 closes
-with `}`. This latent bug has no output effect today (boundaries not rendered),
-but must be fixed before visual boundary rendering ships.
-
-### c4-boundary-closing-syntax
-
-The `_layout_c4` parser pops the `boundary_stack` on a line starting with `)`.
-Mermaid's C4 syntax closes boundaries with `}`. This produces wrong
-`item.boundary` attribution for elements inside boundaries in diagrams that use
-the correct `}` closing syntax. Fix together with `c4-boundary-visual-rendering`.
-
-### c4-edge-geometry-parity
-
-Current edge rendering uses a conventional center-ray rectangle intersection.
-Mermaid 11.15's `getIntersectPoint()` computes slope using the rectangle's
-top-left corner, but places the resulting intersection point at the center —
-producing slightly different edge attachment points from a mathematically
-conventional center-ray approach. The first relationship renders as a straight
-line; subsequent ones use a quadratic Bézier with control point
-`(sx + (ex-sx)/4, sy + (ey-sy)/2)`. Exact pixel parity with mmdc screenshots
-requires porting the Mermaid algorithm directly.
-
 ### c4-icon-map-orphan
 
 `_C4_ICON_MAP` in `scripts/mermaid_render/layout/_constants.py` is now dead —
@@ -336,33 +289,6 @@ it in a future `_constants.py`-touching pass.
 
 Deferred items from the sequenceDiagram geometry fix spec
 (`docs/specs/seq-geometry-fix/spec.md`).
-
-### seq-activation-y-tracking
-
-**Implemented** in `docs/specs/seq-geometry-fix-p2/spec.md` (SEQ-006/007).
-Two-pass approach: `_event_y` assigns exact y per message; `_act_spans_v2`
-computes activation spans from `_last_msg_y` at activate/deactivate events.
-Activation-aware message endpoints via `_msg_endpoints` / `_act_bounds_at`.
-
-### seq-message-endpoint-activation
-
-**Implemented** in `docs/specs/seq-geometry-fix-p2/spec.md` (SEQ-007).
-See `seq-activation-y-tracking` above.
-
-### seq-per-fragment-bounds
-
-**Implemented** in `docs/specs/seq-geometry-fix-p2/spec.md` (SEQ-008).
-`_frag_parts` tracks msg src/dst, note pids, and activate/deactivate pids
-during block-span prepass. `_frag_x_bounds()` uses per-fragment participant set.
-
-### seq-variable-height-rows
-
-**Implemented** in `docs/specs/seq-variable-height-rows/spec.md`. Two-pass
-heuristic accumulator: note row heights are estimated from character count ×
-5.5 px / note width; all downstream y-positions (messages, activation bars,
-fragment rects, canvas height) use per-row prefix sums. Pixel-accurate
-Playwright text measurement was declined (browser startup cost in the hot
-path) and is tracked below.
 
 ### self-loop-finalization-pass
 
@@ -398,12 +324,12 @@ Unblocked by any future PR that needs to modify `_strategies.py`.
 
 ### seq-variable-height-rows-playwright
 
-**Deferred from `seq-variable-height-rows`:** Replace the character-count
-heuristic in `_note_row_h()` with a Playwright text-measurement call that
-returns the actual rendered line count at the exact note width. The
-accumulator architecture (`_row_h_list` / `_row_top_list`) is already in
-place; only `_note_row_h` needs to call `page.evaluate()` and return the
-measured height. Unblocked by adding a shared Playwright page handle to
+**Deferred from `seq-variable-height-rows`:** Replace the Pillow font-metrics
+measurement in `_note_row_h()` (`_MEASURER.layout(...)`) with a Playwright
+text-measurement call that returns the actual rendered line count at the exact
+note width. The accumulator architecture (`_row_h_list` / `_row_top_list`) is
+already in place; only `_note_row_h` needs to call `page.evaluate()` and return
+the measured height. Unblocked by adding a shared Playwright page handle to
 `_layout_lifeline`'s call site (or a separate pre-render measurement pass).
 
 
@@ -431,47 +357,18 @@ cross-boundary edges through gates only, deterministic output.
 
 ### backlog-mermaid-p3-scene-bounds
 
-**Deferred from `mermaid-p3` Stage 5:** Add visible-geometry ownership to SvgScene IR. Either
-`bounds` on every element or `element_visible_bounds(element, definitions) -> Rect`. Derive
-`SvgScene.view_box/width/height` from union of visible bounds. Validate: negative geometry,
-unresolved references, duplicate IDs, elements outside viewBox, marker tips outside viewBox.
-Replace raw transform strings with typed `Translate/Scale/Rotate/Matrix`.
-
-### backlog-mermaid-p3-type-migrations
-
-~~**COMPLETED in Stage 6 (PR #93).**~~ All twelve types shipped as PARTIAL native scene builders:
-sequenceDiagram, erDiagram, gantt, quadrantChart, pie, xychart-beta, block-beta, packet-beta,
-kanban, journey, requirementDiagram, gitGraph. Each parses Mermaid source and produces a real
-SvgScene. 206 tests pass. Registry updated from `legacy-only` → `experimental`.
-
-### backlog-mermaid-p3-timeline
-
-**Deferred from `mermaid-p3` Stage 8:** Timeline completion — replace fixed text assumptions with
-TextLayout for period/event/section labels, derive all heights from measured text, implement
-activity-line end marker, `disableMulticolor` config, content-tight bounds, theme tokens.
-`width_hint` must be output maximum not minimum canvas width.
-
-### backlog-mermaid-p3-c4
-
-**Resolved in `eugene/mermaid-p3-c4-painters`.** Distinct painters (Person stick-figure,
-SystemDb cylinder, SystemQueue double-bar), nested boundaries, BiRel two-marker paths, direction
-hints with Bézier bias, technology `c4-technology` text role. Fixed perpendicular label offset
-(10px); true obstacle-avoidance against node/boundary bounding boxes remains open — file a new
-backlog item if needed.
-
-### backlog-mermaid-p3-state
-
-**Deferred from `mermaid-p3` Stage 11:** State diagram hierarchical semantics — dedicated immutable
-state model with AtomicState, CompositeState, InitialPseudoState, FinalPseudoState, Choice, Fork,
-Join, History, StateTransition, StateNote, StateGate. Composite algorithm with internal machine
-compilation, gate exposure, proxy-node expansion. Painter shapes for each pseudo-state type.
+**Deferred from `mermaid-p3` Stage 5 (partially shipped):** Visible-geometry ownership is done
+(`scene_bounds.py`: `element_visible_bounds`, `scene_visible_bounds`, `validate_scene`).
+Remaining: replace raw transform strings (`Element.transform: str`) with typed
+`Translate/Scale/Rotate/Matrix` classes.
 
 ### backlog-mermaid-p3-infra
 
-**Deferred from `mermaid-p3` Stage 12:** Theme token infrastructure (resolve PaintTokens once per
-RenderRequest, remove duplicate token sources), faithful-mode propagation, output-sizing function,
-`validate()` using compiled geometry, `to_png()` rasterizing native SVG. Also includes wiring
-`to_html()`, `to_png()`, `validate()` through `RenderRequest` (scoped out of Stage 2 in this loop).
+**Deferred from `mermaid-p3` Stage 12 (partially shipped):** Theme token infrastructure
+(`resolve_tokens()`), `to_png()` rasterizing native SVG, and `validate()` routing through
+`RenderRequest` are done. Remaining: wire `to_html()` and `to_svg()`/`to_png()` through
+`RenderRequest` — they currently call `_dispatch(...)` / `render_svg_result(...)` directly
+rather than through the request object. Also faithful-mode propagation and output-sizing polish.
 
 ### backlog-mermaid-p3-class-compiler
 
@@ -480,97 +377,7 @@ syntax and returns a `FinalizedLayout` with `NodeLayout.member_layouts` populate
 complete Stage 3 FinalizedLayout authority for classDiagram. Until this exists, classDiagram
 continues using `_class_topology_scene()` with mutable models.
 
-### ~~backlog-mermaid-p3-semantic-tests~~ *(shipped — mermaid-p3 Stage 13)*
-
-Task A: parametrized registry semantic assertions (source-label/node-count/shape-role) for all
-PARTIAL/FULL directives. Task B: fixture capability matrix (22 fixtures, 19 types). Task C:
-SVG-to-PowerPoint compat via SvgConverter for all PARTIAL/FULL types. Task D: gallery provenance
-metadata (diagram_type, renderer_backend, geometry, render, timestamp_utc) written to metadata.json.
-Task E: oracle source_sha256 added to all 24 case JSONs via capture-reference.
-
-### backlog-mindmap-tidy-tree
-
-**Deferred from `mermaid-p3` Stage 7 and `mermaid-p2`:** Implement Reingold-Tilford/Buchheim
-variable-size tidy-tree layout for Mind Map. Activated by `config: { layout: tidy-tree }` in
-frontmatter. Required algorithm phases: first walk, apportion, move subtree, execute shifts,
-second walk, normalization. Two-sided layout: root at center, split root children left/right
-deterministically. Mirror left side, align both sides to root, resolve vertical overlap.
-Radial mode remains unchanged when `layout: tidy-tree` is absent.
-
-### backlog-arch-bidir
-
-**Closed** (mermaid-p2 spec AC ticked 2026-07-22): The native SVG pipeline implements BiRel
-end-to-end. `compile_architecture()` detects `<-->` and produces a single `_Edge(bidir=True)`;
-`finalized_layout_to_scene()` emits two `MarkerDefinition` objects and applies both
-`marker-start` and `marker-end` to one `ScenePath`. Verified by `TestBiRelEdge` in
-`test_arch_compiled_model.py`. The `scene.py` registry was updated to move `"bidir-single-path"`,
-`"semantic-icons"`, and `"side-ports"` from `unsupported` to `supported`.
-
-**Remaining follow-up (HTML path):** `_strategies._layout_architecture` still emits two
-separate edges for `<-->` in the `to_html()` browser path; not addressed in this spec's scope.
-
-### backlog-c4-shapes
-
-**Closed** (mermaid-p2 spec AC ticked 2026-07-22): The native SVG path (`c4_layout.py`)
-implements distinct painters for all five stereotypes: `"person"` → `_make_person_elements()`,
-`"db"` → `_make_db_elements()`, `"queue"` → `_make_queue_elements()`, external → dashed
-`StrokeStyle`. Verified by `TestC4DistinctPainters` (124 tests) in `test_c4_painter.py`.
-The `scene.py` registry was updated to move `"distinct-shapes"` and `"birel-single-path"`
-from `unsupported` to `supported` for `c4context`/`c4container`/`c4component`.
-
-**Remaining follow-up (HTML path):** `_c4._render_c4_node` still renders all stereotypes as
-a generic `<div>` in the `to_html()` browser path; not addressed in this spec's scope.
-
-### backlog-c4-birel
-
-**Closed** (mermaid-p2 spec ACs ticked 2026-07-22): The native SVG path (`c4_layout.py`)
-handles both items in `_make_c4_edge_elements()`: `has_birel` enables `start_marker_id` on
-BiRel paths (one path, two markers); directional-type check applies a Bézier control-point
-bias. Verified by `test_c4_painter.py` (`test_birel_path_has_start_marker`,
-`test_birel_has_two_marker_definitions`, `test_rel_{d,u,l,r}_uses_bezier`).
-
-**Remaining follow-up (HTML path):** `_c4._render_c4_edges` always emits only `marker-end`
-and `_C4_REL_RE` drops `rel_type` in the `to_html()` browser path; not addressed here.
-
-### backlog-state-semantics
-
-**Closed** (mermaid-p2 spec ACs 95-100 ticked 2026-07-22): All six sub-items are done.
-
-**(1) Pseudo-state shapes** (spec AC 95): `_parser.py` and `statediagram.py` updated so
-`_sm_end_` nodes use `shape="doublecircle", label=""`. `_constants.py` (`_node_size_circle`,
-`_node_render_h`) and `_renderer.py` have ID-suffix checks for `_sm_end_` to render a
-fixed-size (32px) double-ring with inner filled disc. Verified by `TestStartEndSymbols`
-and `TestStateBasic.test_end_state_is_doublecircle`.
-
-**(2) Composite-state containment** (spec AC 96): `_parser.py` creates `_Group` containers
-for `state X { ... }` blocks. Leaf states appear inside the group; outer labels are visible
-as group headings. Verified by `TestStateComposite` (5 tests).
-
-**(3) No atomic+composite duplicate** (spec AC 97): `_parser.py` lines 413–437 delete the
-spurious atomic node for each composite state name after parsing. Verified by
-`TestStatePseudoStateInvariant.test_no_duplicate_atomic_composite`.
-
-**(4) Notes rendering** (spec AC 98, amended): `_parser.py` now parses `note right/left of X: text`
-and `note left/right of X … end note` blocks, emitting synthetic `_note_{n}` nodes (shape=rect,
-css_class=state-note) linked to their target state by a dashed edge. Notes are visible in
-rendered output. Verified by `TestStateNotes.test_inline_note_text_renders` and
-`test_multiline_note_text_renders`. Note: strict left/right side-anchoring is not guaranteed
-(graph layout places the note adjacent, not on a specific side). This sub-item is closed with
-the amended AC wording.
-
-**(5) External-transition gate ports** (spec AC 99): `_parser.py` rewires external transitions
-to composites through scoped `_sm_start_` proxy nodes. Verified by
-`TestStatePseudoStateInvariant.test_gate_port_proxy_for_external_transition`.
-
-**(6) Self-loops** (spec AC 100): `_routing.py` handles self-loop routing. Verified by
-`TestStatePseudoStateInvariant.test_self_loop_produces_path`.
-
 ## mermaid-fidelity-hardening
-
-### ~~mmdc-oracle-recapture~~ *(shipped — mermaid-p3 Stage 13 Task E)*
-
-24 case JSONs recaptured with mmdc 11.15.0; all include `source_sha256`.
-`mermaid-fidelity-hardening` ACs 18–19 marked `[x]`.
 
 ### mmdc-geometry-capture
 
