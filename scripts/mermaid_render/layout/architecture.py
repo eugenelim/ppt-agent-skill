@@ -748,6 +748,24 @@ def arch_to_finalized(arch: ArchitectureDiagramLayout) -> object:
     )
 
 
+# ── HTML renderer ─────────────────────────────────────────────────────────────
+
+def arch_to_html(src: str, *, width_hint: int = 0) -> str:
+    """Render architecture-beta source as a self-contained HTML div string."""
+    from ._renderer import render_finalized
+
+    arch = compile_architecture(src, width_hint=width_hint)
+    finalized = arch_to_finalized(arch)
+    html = render_finalized(finalized)
+    if abs(arch.zoom - 1.0) > 0.005:
+        html = (
+            f'<div class="diagram-zoom-wrapper"'
+            f' style="display:contents; zoom:{arch.zoom:.4f};">'
+            f"{html}</div>"
+        )
+    return html
+
+
 # ── Public entry point ─────────────────────────────────────────────────────────
 
 def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:

@@ -13,7 +13,11 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import defaultdict
-from typing import Optional
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from ._geometry import FinalizedLayout, RoutedEdge
 
 from ..scene import (
     AccessibilityMetadata,
@@ -390,14 +394,214 @@ def _label_point(waypoints: tuple[tuple[float, float], ...]) -> tuple[float, flo
     return ((x1 + x2) / 2, (y1 + y2) / 2)
 
 
+# ── Geometry compiler ─────────────────────────────────────────────────────────
+
+def compile_requirement(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
+    """Parse requirementDiagram source and return a FinalizedLayout IR.
+
+    Returns
+    -------
+    FinalizedLayout
+        node_layouts[nid].outer_bounds holds each card's bounding box;
+        routed_edges[i].waypoints holds the orthogonal route for relation i
+        (matching the order from _parse_requirement_source).
+        canvas_bounds is the natural (unscaled) canvas rectangle.
+    """
+    from ._geometry import (
+        FinalizedLayout,
+        MarkerKind,
+        NodeLayout,
+        Point,
+        PortLayout,
+        PortSide,
+        Rect,
+        RoutedEdge,
+        _empty_diagnostics,
+    )
+
+    nodes, relations = _parse_requirement_source(src)
+    node_names = list(nodes.keys())
+
+    _diag = _empty_diagnostics()
+
+    if not node_names:
+        w = float(max(width_hint or 400, 400))
+        _cr = Rect(0.0, 0.0, w, 160.0)
+        return FinalizedLayout(
+            node_layouts=MappingProxyType({}),
+            group_layouts=MappingProxyType({}),
+            routed_edges=(),
+            visible_bounds=_cr,
+            diagram_padding=float(_PAD_H),
+            canvas_bounds=_cr,
+            direction="TB",
+            diagnostics=_diag,
+            routing_failures=(),
+        )
+
+    heights: dict[str, float] = {n: _node_height(nodes[n]) for n in node_names}
+    ranks = _compute_ranks(node_names, relations)
+
+    rank_groups: dict[int, list[str]] = defaultdict(list)
+    for n in node_names:
+        rank_groups[ranks[n]].append(n)
+
+    ordered = _order_nodes_in_ranks(dict(rank_groups), relations, ranks)
+
+    max_cols = max((len(v) for v in ordered.values()), default=1)
+    canvas_w = float(_PAD_H * 2 + max_cols * _NODE_W + (max_cols - 1) * _COL_GAP)
+
+    n_ranks = max(ranks.values(), default=0) + 1
+    row_h: dict[int, float] = {
+        r: max((heights[n] for n in ordered.get(r, [])), default=64.0)
+        for r in range(n_ranks)
+    }
+
+    node_pos: dict[str, tuple[float, float]] = {}
+    col_of: dict[str, int] = {}
+    cumulative_y = float(_PAD_V)
+
+    for r in range(n_ranks):
+        row_nodes = ordered.get(r, [])
+        n_cols = len(row_nodes)
+        row_w = n_cols * _NODE_W + (n_cols - 1) * _COL_GAP
+        row_start_x = (canvas_w - row_w) / 2
+        for ci, n in enumerate(row_nodes):
+            node_pos[n] = (row_start_x + ci * (_NODE_W + _COL_GAP), cumulative_y)
+            col_of[n] = ci
+        cumulative_y += row_h[r] + _ROW_GAP
+
+    canvas_h = float(cumulative_y - _ROW_GAP + _PAD_V)
+
+    rank_bottom: dict[int, float] = {}
+    rank_top: dict[int, float] = {}
+    for n, (px, py) in node_pos.items():
+        r = ranks[n]
+        bottom = py + heights[n]
+        rank_bottom[r] = max(rank_bottom.get(r, bottom), bottom)
+        rank_top[r] = min(rank_top.get(r, py), py)
+
+    row_bands: dict[tuple[int, int], tuple[float, float]] = {}
+    for rel in relations:
+        fn, tn = rel["from"], rel["to"]
+        if fn not in ranks or tn not in ranks:
+            continue
+        sr, dr = ranks[fn], ranks[tn]
+        if sr == dr:
+            continue
+        upper, lower = (sr, dr) if sr < dr else (dr, sr)
+        row_bands[(sr, dr)] = (rank_bottom.get(upper, 0.0), rank_top.get(lower, 0.0))
+
+    def _side_from_vec(dx: float, dy: float) -> PortSide:
+        if dy > 0:
+            return PortSide.BOTTOM
+        if dy < 0:
+            return PortSide.TOP
+        if dx > 0:
+            return PortSide.RIGHT
+        return PortSide.LEFT
+
+    # Build NodeLayout objects
+    node_layouts: dict[str, NodeLayout] = {}
+    for nname, node in nodes.items():
+        if nname not in node_pos:
+            continue
+        px, py = node_pos[nname]
+        nh = heights[nname]
+        shape = "req-element" if node["kind"] == "element" else "req-requirement"
+        node_layouts[nname] = NodeLayout(
+            node_id=nname,
+            semantic_shape=shape,
+            outer_bounds=Rect(px, py, float(_NODE_W), nh),
+            content_bounds=Rect(px, py + _HEADER_H, float(_NODE_W), max(nh - _HEADER_H, 0.0)),
+            title_layout=None,
+            subtitle_layout=None,
+            member_layouts=(),
+            icon_bounds=None,
+            ports=(),
+            css_classes=(f"req-{node['kind']}",),
+            extra_css="",
+            is_dummy=False,
+            rank=ranks[nname],
+        )
+
+    # Build outgoing edge spread index
+    outgoing_idx: dict[str, list[int]] = defaultdict(list)
+    for ri, rel in enumerate(relations):
+        if rel["from"] in node_pos:
+            outgoing_idx[rel["from"]].append(ri)
+
+    # Build RoutedEdge objects
+    routed_edges_list: list[RoutedEdge] = []
+    for ri, rel in enumerate(relations):
+        fn, tn = rel["from"], rel["to"]
+        if fn not in node_pos or tn not in node_pos:
+            continue
+
+        src_edges = outgoing_idx[fn]
+        edge_rank = src_edges.index(ri)
+        n_src_edges = len(src_edges)
+        exit_fraction = (edge_rank + 1) / (n_src_edges + 1)
+
+        raw_wps = _route_edge(fn, tn, node_pos, heights, ranks, col_of, exit_fraction, row_bands)
+        waypoints = tuple(Point(float(x), float(y)) for x, y in raw_wps)
+
+        if len(waypoints) >= 2:
+            dx0 = waypoints[1].x - waypoints[0].x
+            dy0 = waypoints[1].y - waypoints[0].y
+            dxn = waypoints[-1].x - waypoints[-2].x
+            dyn = waypoints[-1].y - waypoints[-2].y
+        else:
+            dx0, dy0, dxn, dyn = 0.0, 1.0, 0.0, 1.0
+
+        routed_edges_list.append(RoutedEdge(
+            edge_id=f"req-rel-{ri}",
+            src_node_id=fn,
+            dst_node_id=tn,
+            src_port=PortLayout(
+                node_id=fn,
+                side=_side_from_vec(dx0, dy0),
+                position=waypoints[0],
+                direction=Point(float(dx0), float(dy0)),
+            ),
+            dst_port=PortLayout(
+                node_id=tn,
+                side=_side_from_vec(-dxn, -dyn),
+                position=waypoints[-1],
+                direction=Point(float(-dxn), float(-dyn)),
+            ),
+            waypoints=waypoints,
+            edge_style="dashed",
+            has_marker_end=False,
+            has_marker_start=False,
+            label_layout=None,
+            src_label_layout=None,
+            dst_label_layout=None,
+            source_marker=MarkerKind.NONE,
+            target_marker=MarkerKind.NONE,
+        ))
+
+    canvas_rect = Rect(0.0, 0.0, canvas_w, canvas_h)
+    return FinalizedLayout(
+        node_layouts=MappingProxyType(node_layouts),
+        group_layouts=MappingProxyType({}),
+        routed_edges=tuple(routed_edges_list),
+        visible_bounds=canvas_rect,
+        diagram_padding=float(_PAD_H),
+        canvas_bounds=canvas_rect,
+        direction="TB",
+        diagnostics=_diag,
+        routing_failures=(),
+    )
+
+
 # ── Scene builder ─────────────────────────────────────────────────────────────
 
 def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     """Parse requirementDiagram source and return an SvgScene.
 
-    Uses topological rank assignment so edges route between rows rather than
-    across a fixed grid.  Each edge exits the source card boundary and enters
-    the target card boundary via an orthogonal L-shaped route.
+    Delegates layout geometry to compile_requirement() and uses the resulting
+    FinalizedLayout for node positions and edge waypoints.
     """
     nodes, relations = _parse_requirement_source(src)
 
@@ -416,72 +620,19 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             layers=tuple((name, ()) for name in LAYER_ORDER),
         )
 
-    # Measure each card
-    heights: dict[str, float] = {n: _node_height(nodes[n]) for n in node_names}
+    fl = compile_requirement(src, width_hint=width_hint)
+    canvas_w = fl.canvas_bounds.w
+    canvas_h = fl.canvas_bounds.h
 
-    # Topological rank assignment
-    ranks = _compute_ranks(node_names, relations)
-
-    rank_groups: dict[int, list[str]] = defaultdict(list)
-    for n in node_names:
-        rank_groups[ranks[n]].append(n)
-
-    ordered = _order_nodes_in_ranks(dict(rank_groups), relations, ranks)
-
-    # Compute canvas width from the widest row
-    max_cols = max((len(v) for v in ordered.values()), default=1)
-    canvas_w = float(_PAD_H * 2 + max_cols * _NODE_W + (max_cols - 1) * _COL_GAP)
-
-    n_ranks = max(ranks.values(), default=0) + 1
-
-    # Compute row heights (tallest card in each rank)
-    row_h: dict[int, float] = {
-        r: max((heights[n] for n in ordered.get(r, [])), default=64.0)
-        for r in range(n_ranks)
-    }
-
-    # Assign positions: centre each row on the canvas
-    node_pos: dict[str, tuple[float, float]] = {}
-    col_of: dict[str, int] = {}
-    cumulative_y = _PAD_V
-
-    for r in range(n_ranks):
-        row_nodes = ordered.get(r, [])
-        n_cols = len(row_nodes)
-        row_w = n_cols * _NODE_W + (n_cols - 1) * _COL_GAP
-        row_start_x = (canvas_w - row_w) / 2
-        for ci, n in enumerate(row_nodes):
-            node_pos[n] = (row_start_x + ci * (_NODE_W + _COL_GAP), cumulative_y)
-            col_of[n] = ci
-        cumulative_y += row_h[r] + _ROW_GAP  # type: ignore[assignment]
-
-    canvas_h = float(cumulative_y - _ROW_GAP + _PAD_V)
-
-    # Per-rank extents: the lowest bottom edge and highest top edge of the cards
-    # in each rank.  Rows share a top (``cumulative_y``) but cards differ in
-    # height, so the bottom edge of a rank is that of its tallest card.
-    rank_bottom: dict[int, float] = {}
-    rank_top: dict[int, float] = {}
-    for n, (px, py) in node_pos.items():
-        r = ranks[n]
-        bottom = py + heights[n]
-        rank_bottom[r] = max(rank_bottom.get(r, bottom), bottom)
-        rank_top[r] = min(rank_top.get(r, py), py)
-
-    # Safe horizontal channel band per (src_rank, dst_rank) pair: from the
-    # lowest bottom edge of the upper rank to the highest top edge of the lower
-    # rank.  Keyed by the ordered pair so both forward and back edges resolve.
-    row_bands: dict[tuple[int, int], tuple[float, float]] = {}
-    for rel in relations:
-        fn, tn = rel["from"], rel["to"]
-        if fn not in ranks or tn not in ranks:
-            continue
-        sr, dr = ranks[fn], ranks[tn]
-        if sr == dr:
-            continue
-        upper, lower = (sr, dr) if sr < dr else (dr, sr)
-        band = (rank_bottom.get(upper, 0.0), rank_top.get(lower, 0.0))
-        row_bands[(sr, dr)] = band
+    # Index routed edges by relation index
+    routed_by_idx: dict[int, RoutedEdge] = {}
+    for _re in fl.routed_edges:
+        _eid = _re.edge_id
+        if _eid.startswith("req-rel-"):
+            try:
+                routed_by_idx[int(_eid[8:])] = _re
+            except ValueError:
+                pass
 
     bg_elements: list = []
     edge_elements: list = []
@@ -494,18 +645,19 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         paint=PaintStyle(fill=FillStyle(color=_BG_FILL)),
     ))
 
-    # Draw cards
+    # Draw cards using positions from FinalizedLayout
     for nname, node in nodes.items():
-        if nname not in node_pos:
+        if nname not in fl.node_layouts:
             continue
-        px, py = node_pos[nname]
-        nh = heights[nname]
+        _nl = fl.node_layouts[nname]
+        px = _nl.outer_bounds.x
+        py = _nl.outer_bounds.y
+        nh = _nl.outer_bounds.h
         is_element = node["kind"] == "element"
         hdr_fill = _ELEM_HEADER_FILL if is_element else _REQ_HEADER_FILL
         hdr_text_color = _ELEM_HEADER_TEXT if is_element else _REQ_HEADER_TEXT
         body_fill = _ELEM_BODY_FILL if is_element else _REQ_BODY_FILL
         stroke_color = _ELEM_STROKE if is_element else _REQ_STROKE
-        subtype = node.get("subtype", "requirement")
 
         node_elements.append(SceneRect(
             element_id=f"{scene_id}-node-hdr-{nname}",
@@ -539,9 +691,6 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             ),
         ))
 
-        # Attributes — every field word-wrapped so long values (a long text
-        # sentence, a long docref path) grow across lines instead of overflowing
-        # the card width.  Continuation lines are indented under the key.
         ay = float(py + _HEADER_H + _ATTR_PAD)
         for key, val in node.get("attrs", {}).items():
             wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
@@ -559,27 +708,15 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                 ))
                 ay += _ATTR_H
 
-    # Build per-source edge index so multiple outgoing edges spread across the
-    # source face rather than all leaving from the same centre point
-    outgoing_idx: dict[str, list[int]] = defaultdict(list)
-    for ri, rel in enumerate(relations):
-        if rel["from"] in node_pos:
-            outgoing_idx[rel["from"]].append(ri)
-
-    # Draw edges
+    # Draw edges using waypoints from FinalizedLayout
     for ri, rel in enumerate(relations):
         fn, tn = rel["from"], rel["to"]
-        if fn not in node_pos or tn not in node_pos:
+        if fn not in fl.node_layouts or tn not in fl.node_layouts:
             continue
-
-        src_edges = outgoing_idx[fn]
-        edge_rank = src_edges.index(ri)
-        n_src_edges = len(src_edges)
-        exit_fraction = (edge_rank + 1) / (n_src_edges + 1)
-
-        waypoints = _route_edge(
-            fn, tn, node_pos, heights, ranks, col_of, exit_fraction, row_bands
-        )
+        _edge = routed_by_idx.get(ri)
+        if _edge is None:
+            continue
+        waypoints = tuple((wp.x, wp.y) for wp in _edge.waypoints)
 
         edge_elements.append(ScenePolyline(
             element_id=f"{scene_id}-rel-{ri}",
@@ -635,3 +772,132 @@ def layout_requirement_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         ),
         layers=layers,
     )
+
+
+# ── HTML renderer ──────────────────────────────────────────────────────────────
+
+def requirement_to_html(src: str, *, width_hint: int = 0) -> str:
+    """Render requirementDiagram source as a self-contained HTML div string.
+
+    Uses compile_requirement() for all geometry, then re-calls
+    _parse_requirement_source() to obtain node attribute data for rendering.
+    """
+    import html as _html_req
+
+    _h = lambda s: _html_req.escape(str(s), quote=True)  # noqa: E731
+
+    fl = compile_requirement(src, width_hint=width_hint)
+    nodes, relations = _parse_requirement_source(src)
+
+    cw = fl.canvas_bounds.w
+    ch = fl.canvas_bounds.h
+
+    zoom = 1.0
+    if width_hint and cw > 0 and width_hint < cw:
+        zoom = width_hint / cw
+    zoom_css = f"zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
+
+    _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
+    _rel_stroke = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+
+    parts: list[str] = []
+    parts.append(
+        f'<div class="diagram mermaid-layout" style="'
+        f'position:relative; width:{int(cw)}px; height:{int(ch)}px; {zoom_css}">'
+    )
+
+    # Node cards
+    for nname, node in nodes.items():
+        if nname not in fl.node_layouts:
+            continue
+        _nl = fl.node_layouts[nname]
+        px = int(_nl.outer_bounds.x)
+        py = int(_nl.outer_bounds.y)
+        nh = int(_nl.outer_bounds.h)
+        nw = int(_NODE_W)
+        is_element = node["kind"] == "element"
+        hdr_fill = _ELEM_HEADER_FILL if is_element else _REQ_HEADER_FILL
+        hdr_text_color = _ELEM_HEADER_TEXT if is_element else _REQ_HEADER_TEXT
+        body_fill = _ELEM_BODY_FILL if is_element else _REQ_BODY_FILL
+        stroke_color = _ELEM_STROKE if is_element else _REQ_STROKE
+
+        parts.append(
+            f'<div class="node req-node" data-node-id="{_h(nname)}" style="'
+            f'position:absolute; left:{px}px; top:{py}px; '
+            f'width:{nw}px; height:{nh}px; '
+            f'box-sizing:border-box; overflow:hidden; '
+            f'border:1px solid {stroke_color}; '
+            f'font-family:{_lf};">'
+        )
+        parts.append(
+            f'<div style="'
+            f'background:{hdr_fill}; color:{hdr_text_color}; '
+            f'height:{_HEADER_H}px; '
+            f'display:flex; align-items:center; justify-content:center; '
+            f'font-size:{_FONT_HEADER}px; font-weight:700; '
+            f'padding:0 6px; overflow:hidden; white-space:nowrap;">'
+            f'{_h(nname)}</div>'
+        )
+        parts.append(
+            f'<div style="background:{body_fill}; padding:{_ATTR_PAD}px 6px; '
+            f'font-size:{_FONT_ATTR}px; color:{_TEXT_COLOR}; overflow:hidden;">'
+        )
+        for key, val in node.get("attrs", {}).items():
+            wrapped = _wrap_text(f"{key}: {val}", _TEXT_WRAP_CHARS)
+            for li, line_text in enumerate(wrapped):
+                display = line_text if li == 0 else f"  {line_text}"
+                parts.append(
+                    f'<div style="height:{_ATTR_H}px; overflow:hidden; white-space:nowrap;">'
+                    f'{_h(display)}</div>'
+                )
+        parts.append("</div>")  # body
+        parts.append("</div>")  # node card
+
+    # SVG overlay for edges
+    parts.append(
+        f'<svg style="position:absolute; top:0; left:0; overflow:visible; pointer-events:none;" '
+        f'width="{int(cw)}" height="{int(ch)}" viewBox="0 0 {int(cw)} {int(ch)}">'
+    )
+
+    routed_by_idx: dict[int, RoutedEdge] = {}
+    for _re in fl.routed_edges:
+        _eid = _re.edge_id
+        if _eid.startswith("req-rel-"):
+            try:
+                routed_by_idx[int(_eid[8:])] = _re
+            except ValueError:
+                pass
+
+    for ri, rel in enumerate(relations):
+        fn, tn = rel["from"], rel["to"]
+        if fn not in fl.node_layouts or tn not in fl.node_layouts:
+            continue
+        _edge = routed_by_idx.get(ri)
+        if _edge is None:
+            continue
+        pts = " ".join(
+            f"{wp.x:.1f},{wp.y:.1f}"
+            for wp in _edge.waypoints
+        )
+        parts.append(
+            f'<polyline points="{pts}" '
+            f'fill="none" stroke="{_rel_stroke}" stroke-width="1.5" '
+            f'stroke-dasharray="4 2"/>'
+        )
+        wps_tuple = tuple(
+            (wp.x, wp.y)
+            for wp in _edge.waypoints
+        )
+        lx, ly = _label_point(wps_tuple)
+        parts.append(
+            f'<text x="{lx:.1f}" y="{ly - 4:.1f}" '
+            f'text-anchor="middle" '
+            f'font-size="{_FONT_REL}px" '
+            f'fill="{_DIM_TEXT}" '
+            f'font-style="italic">'
+            f'{_h(rel["rel_type"])}</text>'
+        )
+
+    parts.append("</svg>")
+    parts.append("</div>")
+    return "".join(parts)
