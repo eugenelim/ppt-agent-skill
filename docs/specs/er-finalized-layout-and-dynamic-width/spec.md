@@ -2,7 +2,7 @@
 
 Mode: full (structural change, multi-feature, dependent tasks)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Depends on:** `elk-finalized-layout-roundtrip`, `mermaid-single-finalized-layout-pipeline`
 
 ## Objective
@@ -57,42 +57,42 @@ Target fixtures: `er-cardinality-all`, `er-ecommerce`.
 
 ## Acceptance Criteria
 
-- [ ] AC1: No entity cards overlap — verified on both `er-cardinality-all` (8 cards)
+- [x] AC1: No entity cards overlap — verified on both `er-cardinality-all` (8 cards)
   and `er-ecommerce` (5 cards) via `FinalizedLayout.node_layouts` outer-bounds
   overlap check, not HTML parsing.
-- [ ] AC2: No attribute text is clipped — for every entity, the measured card width
+- [x] AC2: No attribute text is clipped — for every entity, the measured card width
   covers badge column (22 px) + type column + name column + row padding (16 px);
   the rendered `NodeLayout.outer_bounds.w` equals the measured width, clamped
   between `_ER_MIN_CARD_W` and `_ER_MAX_CARD_W`.
-- [ ] AC3: All four cardinality combinations in `er-cardinality-all` render correct
+- [x] AC3: All four cardinality combinations in `er-cardinality-all` render correct
   glyphs — each of the eight relationship endpoints produces the expected
   `CardinalityEnd` (one of `ONE·ONE`, `ONE·MANY`, `ZERO·ONE`, `ZERO·MANY`) and the
   glyph elements match the prior `_er_glyph_elements()` contract.
-- [ ] AC4: `er-ecommerce` relationships avoid unrelated cards — no routed edge
+- [x] AC4: `er-ecommerce` relationships avoid unrelated cards — no routed edge
   waypoint intersects the bounding box of an entity it is not incident to
   (checked via `RoutedEdge.waypoints` vs `NodeLayout.outer_bounds`).
-- [ ] AC5: HTML and SVG have identical entity top-left coordinates and edge waypoints
+- [x] AC5: HTML and SVG have identical entity top-left coordinates and edge waypoints
   — for every node id, `html_left == svg_x` and `html_top == svg_y` within 1 px;
   for every relationship, the SVG line endpoints match the HTML SVG overlay within
   1 px.
-- [ ] AC6: `width_hint` scales or repacks the completed layout without compressing
+- [x] AC6: `width_hint` scales or repacks the completed layout without compressing
   only node positions — at `width_hint=600` on `er-ecommerce` (natural width ~1200),
   the zoom factor applied to the viewBox equals `600 / natural_width`, and the
   HTML container `width` attribute reports the scaled value.
-- [ ] AC7: Parallel or adjacent ER relationships receive separate ports — for any
+- [x] AC7: Parallel or adjacent ER relationships receive separate ports — for any
   two relationships sharing the same source–destination entity pair, their
   `RoutedEdge.src_port.position` values differ by at least 1 px.
-- [ ] AC8: Identifying (solid) and non-identifying (dotted) line styles are retained
+- [x] AC8: Identifying (solid) and non-identifying (dotted) line styles are retained
   in `RoutedEdge.edge_style` and rendered as `stroke-dasharray="6 4"` for dotted
   edges only.
-- [ ] AC9: Relationship labels appear on the longest clear route segment — the label
+- [x] AC9: Relationship labels appear on the longest clear route segment — the label
   anchor point lies on the longest `RoutedEdge.waypoints` segment; label bounds do
   not overlap any entity card bounding box.
-- [ ] AC10: Cardinality marks are drawn from the port tangent supplied by the layout
+- [x] AC10: Cardinality marks are drawn from the port tangent supplied by the layout
   engine, not from recomputed centre-to-centre vectors — `_er_glyph_elements` is
   called with `(dx, dy)` derived from `PortLayout.direction`, not from
   `dst_centre - src_centre`.
-- [ ] AC11: `pytest tests/` passes with zero new failures — existing `test_fix_er.py`,
+- [x] AC11: `pytest tests/` passes with zero new failures — existing `test_fix_er.py`,
   `test_er_cardinality.py`, `test_syntax_er.py` all green.
 
 ## Testing Strategy

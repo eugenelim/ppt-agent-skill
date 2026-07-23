@@ -18,6 +18,10 @@ Public API
 
 ``layout_er_scene(src, *, width_hint)``
     Full parse → layout → scene pipeline.  Returns an ``SvgScene``.
+
+``compile_er_layout(src, *, width_hint)``
+    Parse → measure → Sugiyama layout → ``FinalizedLayout`` with dynamic
+    card widths, crow-foot ``MarkerKind`` markers, and pre-baked zoom.
 """
 from __future__ import annotations
 
@@ -25,10 +29,10 @@ import hashlib
 import math
 import re
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
 if TYPE_CHECKING:
-    from ._geometry import FinalizedLayout, RoutedEdge
+    from ._geometry import FinalizedLayout, LayoutGraph, MarkerKind, RoutedEdge
 
 from ..scene import (
     AccessibilityMetadata,
@@ -97,6 +101,11 @@ _GLYPH_BAR1 = 6.0        # offset of first (max=ONE) bar
 _GLYPH_BAR2_DELTA = 6.0  # additional offset of second (min=ONE) bar past max symbol
 _GLYPH_CIRC_DELTA = 8.0  # additional offset of min=ZERO circle past max symbol
 
+# ── Dynamic card width bounds ──────────────────────────────────────────────────
+
+_ER_MIN_CARD_W: int = 160   # minimum entity card width (px)
+_ER_MAX_CARD_W: int = 320   # maximum entity card width (px)
+
 
 # ── Cardinality parsing ───────────────────────────────────────────────────────
 
@@ -146,6 +155,29 @@ def _card_height(attrs: list[dict]) -> float:
     return float(_CARD_HDR_H + max(body_h, _CARD_PAD_V * 2))
 
 
+
+def _measure_card_width(entity_name: str, attrs: list[dict]) -> float:
+    """Measure the pixel width needed for an entity card.
+
+    Uses character-width estimates:
+    - header_w: entity name text at 13 px bold (7.8 px/char + 16 padding)
+    - badge_col: 22 px badge column if any PK/FK/UK constraint present
+    - type_col: max type string width at 6.5 px/char + 4 padding
+    - name_col: max attr name width at 7.0 px/char + 4 padding
+    - row_padding: 16 px (8 px each side)
+
+    Clamped between ``_ER_MIN_CARD_W`` and ``_ER_MAX_CARD_W``.
+    """
+    header_w = len(entity_name) * 7.8 + 16
+    has_badge = any(a.get("constraint") in ("PK", "FK", "UK") for a in attrs)
+    badge_col = 22.0 if has_badge else 0.0
+    type_col = max((len(a["type"]) * 6.5 for a in attrs), default=0.0) + 4.0
+    name_col = max((len(a["name"]) * 7.0 for a in attrs), default=0.0) + 4.0
+    row_padding = 16.0
+    raw = max(header_w, badge_col + type_col + name_col + row_padding)
+    return float(max(_ER_MIN_CARD_W, min(_ER_MAX_CARD_W, raw)))
+
+
 # ── Glyph geometry ────────────────────────────────────────────────────────────
 
 def _glyph_reserve(end: CardinalityEnd) -> float:
@@ -155,6 +187,30 @@ def _glyph_reserve(end: CardinalityEnd) -> float:
         return max_ext + _GLYPH_BAR2_DELTA + 2.0
     else:
         return max_ext + _GLYPH_CIRC_DELTA + _GLYPH_CIRC_R + 2.0
+
+
+def _cardinality_to_marker(end: CardinalityEnd) -> "MarkerKind":
+    """Convert a ``CardinalityEnd`` to the corresponding crow-foot ``MarkerKind``."""
+    from ._geometry import MarkerKind
+    if end.minimum == Minimum.ONE and end.maximum == Maximum.ONE:
+        return MarkerKind.CROW_ONE
+    if end.minimum == Minimum.ZERO and end.maximum == Maximum.ONE:
+        return MarkerKind.CROW_ZERO_ONE
+    if end.minimum == Minimum.ONE and end.maximum == Maximum.MANY:
+        return MarkerKind.CROW_MANY
+    return MarkerKind.CROW_ZERO_MANY  # ZERO, MANY
+
+
+def _marker_to_cardinality(mk: "MarkerKind") -> CardinalityEnd:
+    """Inverse of ``_cardinality_to_marker``; used by rendering to recover the end."""
+    from ._geometry import MarkerKind
+    _MAP = {
+        MarkerKind.CROW_ONE: CardinalityEnd(Minimum.ONE, Maximum.ONE),
+        MarkerKind.CROW_ZERO_ONE: CardinalityEnd(Minimum.ZERO, Maximum.ONE),
+        MarkerKind.CROW_MANY: CardinalityEnd(Minimum.ONE, Maximum.MANY),
+        MarkerKind.CROW_ZERO_MANY: CardinalityEnd(Minimum.ZERO, Maximum.MANY),
+    }
+    return _MAP[mk]
 
 
 def _er_glyph_elements(
@@ -325,6 +381,91 @@ def _parse_er_source(src: str) -> tuple[dict[str, list[dict]], list[dict]]:
     return entities, relationships
 
 
+# ── LayoutGraph builder ──────────────────────────────────────────────────────
+
+def _compile_er_layout_graph(
+    entities: dict[str, list[dict]],
+    relationships: list[dict],
+    widths: dict[str, float],
+    heights: dict[str, float],
+) -> "LayoutGraph":
+    """Build a ``LayoutGraph`` IR from parsed ER data and measured dimensions.
+
+    Creates ``LayoutNode`` / ``LayoutEdge`` objects using pre-measured widths
+    and heights.  The graph is suitable for downstream layout (ELK or Sugiyama)
+    and records the correct crow-foot ``MarkerKind`` per relationship end.
+    """
+    from ._geometry import LayoutEdge, LayoutGraph, LayoutNode, MarkerKind
+
+    lg_nodes: list[LayoutNode] = []
+    for eid in entities:
+        lg_nodes.append(LayoutNode(
+            id=eid,
+            measured_width=widths[eid],
+            measured_height=heights[eid],
+            shape_id="er-entity",
+            parent_id=None,
+            ports=(),
+            labels=(),
+        ))
+
+    lg_edges: list[LayoutEdge] = []
+    for rel_idx, rel in enumerate(relationships):
+        src_mk = _cardinality_to_marker(rel["card_src"]) if rel.get("card_src") else None
+        dst_mk = _cardinality_to_marker(rel["card_dst"]) if rel.get("card_dst") else None
+        lg_edges.append(LayoutEdge(
+            id=f"er-rel-{rel_idx}",
+            sources=(rel["from"],),
+            targets=(rel["to"],),
+            source_port=None,
+            target_port=None,
+            source_marker=src_mk if src_mk is not None else MarkerKind.NONE,
+            target_marker=dst_mk if dst_mk is not None else MarkerKind.NONE,
+            line_style="dotted" if rel["dotted"] else "solid",
+            label=rel.get("label") or "",
+        ))
+
+    return LayoutGraph(
+        nodes=tuple(lg_nodes),
+        groups=(),
+        edges=tuple(lg_edges),
+        direction="TB",
+    )
+
+
+def _longest_segment_midpoint(waypoints: "Sequence[object]") -> "object":
+    """Return the midpoint of the longest consecutive pair in *waypoints*.
+
+    Accepts any sequence whose elements have ``.x`` and ``.y`` float
+    attributes.  Falls back to the midpoint of the first-and-last points
+    when fewer than two waypoints are provided.
+
+    Used for label anchor placement on routed edges.
+    """
+    from ._geometry import Point
+
+    pts = list(waypoints)
+    if len(pts) < 2:
+        if pts:
+            return pts[0]
+        return Point(0.0, 0.0)
+    best_i = 0
+    best_len = -1.0
+    import math as _math
+    for i in range(len(pts) - 1):
+        dx = pts[i + 1].x - pts[i].x  # type: ignore[attr-defined]
+        dy = pts[i + 1].y - pts[i].y  # type: ignore[attr-defined]
+        seg = _math.hypot(dx, dy)
+        if seg > best_len:
+            best_len = seg
+            best_i = i
+    a, b = pts[best_i], pts[best_i + 1]
+    return Point(
+        (a.x + b.x) / 2,  # type: ignore[attr-defined]
+        (a.y + b.y) / 2,  # type: ignore[attr-defined]
+    )
+
+
 # ── Scene builder ─────────────────────────────────────────────────────────────
 
 def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
@@ -353,14 +494,11 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             layers=tuple((name, ()) for name in LAYER_ORDER),
         )
 
-    # ── Geometry from compiler ────────────────────────────────────────────────
-    fl = compile_er(src, width_hint=width_hint)
+    # ── Geometry from compiler (pre-scaled) ─────────────────────────────────
+    fl = compile_er_layout(src, width_hint=width_hint)
 
     canvas_w = fl.canvas_bounds.w
     canvas_h = fl.canvas_bounds.h
-    zoom = 1.0
-    if width_hint and canvas_w > 0 and width_hint < canvas_w:
-        zoom = width_hint / canvas_w
 
     # Build a lookup from relationship index → RoutedEdge (by edge_id "er-rel-N")
     routed_by_idx: dict[int, RoutedEdge] = {}
@@ -391,12 +529,13 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         _nl = fl.node_layouts[eid]
         ex = _nl.outer_bounds.x
         ey = _nl.outer_bounds.y
+        ew = _nl.outer_bounds.w
         eh = _nl.outer_bounds.h
 
         # Header
         node_elements.append(SceneRect(
             element_id=f"{scene_id}-hdr-{eid}",
-            x=ex, y=ey, w=float(_CARD_W), h=float(_CARD_HDR_H),
+            x=ex, y=ey, w=ew, h=float(_CARD_HDR_H),
             paint=PaintStyle(fill=FillStyle(color=_ENTITY_HEADER_FILL)),
             semantic_role="entity",
             data_attrs=(("data-entity", eid),),
@@ -405,7 +544,7 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             element_id=f"{scene_id}-hdr-lbl-{eid}",
             lines=(SceneTextLine(
                 text=eid,
-                x=ex + _CARD_W / 2,
+                x=ex + ew / 2,
                 y=ey + _CARD_HDR_H / 2 + _FONT_HEADER * 0.35,
                 font_size=float(_FONT_HEADER),
                 font_weight=700,
@@ -419,7 +558,7 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         node_elements.append(SceneRect(
             element_id=f"{scene_id}-body-{eid}",
             x=ex, y=ey + _CARD_HDR_H,
-            w=float(_CARD_W), h=body_h,
+            w=ew, h=body_h,
             paint=PaintStyle(
                 fill=FillStyle(color=_ENTITY_BODY_FILL),
                 stroke=StrokeStyle(color=_ENTITY_STROKE, width=1.0),
@@ -431,7 +570,7 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
             node_elements.append(SceneRect(
                 element_id=f"{scene_id}-div-{eid}",
                 x=ex, y=ey + _CARD_HDR_H,
-                w=float(_CARD_W), h=1.0,
+                w=ew, h=1.0,
                 paint=PaintStyle(fill=FillStyle(color=_ENTITY_STROKE)),
             ))
 
@@ -477,7 +616,7 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                 element_id=f"{scene_id}-name-{eid}-{ai}",
                 lines=(SceneTextLine(
                     text=attr["name"],
-                    x=ex + _CARD_W - 6,
+                    x=ex + ew - 6,
                     y=ay + _FONT_ATTR + 2,
                     font_size=float(_FONT_ATTR),
                     font_weight=500,
@@ -491,36 +630,43 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
         fe, te = rel["from"], rel["to"]
         if fe not in fl.node_layouts or te not in fl.node_layouts:
             continue
-        fnl = fl.node_layouts[fe]
-        tnl = fl.node_layouts[te]
-
-        fh = fnl.outer_bounds.h
-        th = tnl.outer_bounds.h
-        fcx = fnl.outer_bounds.x + _CARD_W / 2
-        fcy = fnl.outer_bounds.y + fh / 2
-        tcx = tnl.outer_bounds.x + _CARD_W / 2
-        tcy = tnl.outer_bounds.y + th / 2
-
-        vx, vy = tcx - fcx, tcy - fcy
-        norm = math.hypot(vx, vy) or 1.0
-        uvx, uvy = vx / norm, vy / norm
-
-        # Boundary intersection points (needed for glyph placement)
-        src_bx, src_by = _rect_boundary_pt(fcx, fcy, float(_CARD_W), fh, uvx, uvy)
-        dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, float(_CARD_W), th, -uvx, -uvy)
 
         card_src: Optional[CardinalityEnd] = rel["card_src"]
         card_dst: Optional[CardinalityEnd] = rel["card_dst"]
 
-        # Trimmed line endpoints from FinalizedLayout waypoints
         _re_obj = routed_by_idx.get(rel_idx)
         if _re_obj is not None:
+            # Use pre-computed port positions and directions from FinalizedLayout
             _wps = _re_obj.waypoints
             lx1 = _wps[0].x
             ly1 = _wps[0].y
-            lx2 = _wps[1].x
-            ly2 = _wps[1].y
+            lx2 = _wps[-1].x
+            ly2 = _wps[-1].y
+            src_bx = _re_obj.src_port.position.x
+            src_by = _re_obj.src_port.position.y
+            src_dx = _re_obj.src_port.direction.x
+            src_dy = _re_obj.src_port.direction.y
+            dst_bx = _re_obj.dst_port.position.x
+            dst_by = _re_obj.dst_port.position.y
+            dst_dx = _re_obj.dst_port.direction.x
+            dst_dy = _re_obj.dst_port.direction.y
         else:
+            # Fallback: recompute from node bounds
+            fnl = fl.node_layouts[fe]
+            tnl = fl.node_layouts[te]
+            fh = fnl.outer_bounds.h
+            th = tnl.outer_bounds.h
+            fcx = fnl.outer_bounds.x + fnl.outer_bounds.w / 2
+            fcy = fnl.outer_bounds.y + fh / 2
+            tcx = tnl.outer_bounds.x + tnl.outer_bounds.w / 2
+            tcy = tnl.outer_bounds.y + th / 2
+            vx, vy = tcx - fcx, tcy - fcy
+            norm = math.hypot(vx, vy) or 1.0
+            uvx, uvy = vx / norm, vy / norm
+            src_bx, src_by = _rect_boundary_pt(fcx, fcy, fnl.outer_bounds.w, fh, uvx, uvy)
+            dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, tnl.outer_bounds.w, th, -uvx, -uvy)
+            src_dx, src_dy = uvx, uvy
+            dst_dx, dst_dy = -uvx, -uvy
             src_r = _glyph_reserve(card_src) if card_src else 4.0
             dst_r = _glyph_reserve(card_dst) if card_dst else 4.0
             lx1 = src_bx + uvx * src_r
@@ -549,22 +695,25 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
                 ),
             ))
 
-        # Cardinality glyphs as proper scene elements
+        # Cardinality glyphs using port tangent directions
         if card_src:
             edge_elements.extend(_er_glyph_elements(
-                src_bx, src_by, uvx, uvy, card_src,
+                src_bx, src_by, src_dx, src_dy, card_src,
                 id_prefix=f"{scene_id}-gs-{rel_idx}",
             ))
         if card_dst:
             edge_elements.extend(_er_glyph_elements(
-                dst_bx, dst_by, -uvx, -uvy, card_dst,
+                dst_bx, dst_by, dst_dx, dst_dy, card_dst,
                 id_prefix=f"{scene_id}-gd-{rel_idx}",
             ))
 
-        # Relationship label at trimmed-segment midpoint
+        # Relationship label — use pre-computed anchor if available
         if rel["label"]:
-            mid_x = (lx1 + lx2) / 2
-            mid_y = (ly1 + ly2) / 2
+            _label_anchor = _re_obj.label_layout.anchor_point if (
+                _re_obj is not None and _re_obj.label_layout is not None
+            ) else None
+            mid_x = _label_anchor.x if _label_anchor else (lx1 + lx2) / 2
+            mid_y = _label_anchor.y if _label_anchor else (ly1 + ly2) / 2
             label_elements.append(SceneText(
                 element_id=f"{scene_id}-rel-lbl-{rel_idx}",
                 lines=(SceneTextLine(
@@ -593,8 +742,8 @@ def layout_er_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     return SvgScene(
         scene_id=scene_id,
         diagram_type="erdiagram",
-        width=canvas_w * zoom,
-        height=canvas_h * zoom,
+        width=canvas_w,
+        height=canvas_h,
         view_box=(0.0, 0.0, canvas_w, canvas_h),
         accessibility=AccessibilityMetadata(
             title="ER diagram",
@@ -870,24 +1019,284 @@ def compile_er(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
     )
 
 
+# ── Compiler v2: dynamic widths + crow-foot markers ──────────────────────────
+
+def compile_er_layout(src: str, *, width_hint: int = 0) -> "FinalizedLayout":
+    """Parse erDiagram source and return a ``FinalizedLayout`` with dynamic widths.
+
+    Preferred entry point for both SVG and HTML renderers.  Differs from
+    ``compile_er()`` in three ways:
+
+    1. **Dynamic card widths** — each entity card is measured via
+       ``_measure_card_width()`` rather than using the fixed ``_CARD_W=200``.
+    2. **Crow-foot markers** — ``RoutedEdge.source_marker`` /
+       ``.target_marker`` carry the correct ``MarkerKind`` for the
+       cardinality end; ``compile_er()`` always emits ``MarkerKind.NONE``.
+    3. **Pre-baked zoom** — when *width_hint* < natural canvas width, all
+       coordinates are scaled by ``width_hint / natural_w`` so the caller
+       needs no further CSS or SVG zoom.
+    """
+    from collections import defaultdict
+
+    from ._geometry import (
+        EdgeLabelLayout,
+        FinalizedLayout,
+        LayoutDiagnostics,
+        MarkerKind,
+        NodeLayout,
+        Point,
+        PortLayout,
+        PortSide,
+        Rect,
+        RoutedEdge,
+        TextLayout,
+    )
+
+    entities, relationships = _parse_er_source(src)
+    entity_names = list(entities.keys())
+
+    if not entity_names:
+        w = float(max(width_hint or 400, 400))
+        h = 160.0
+        _diag = LayoutDiagnostics(unsupported_options=(), route_failures=(), warnings=())
+        _cr = Rect(0.0, 0.0, w, h)
+        return FinalizedLayout(
+            node_layouts=MappingProxyType({}),
+            group_layouts=MappingProxyType({}),
+            routed_edges=(),
+            visible_bounds=_cr,
+            diagram_padding=float(CANVAS_PAD),
+            canvas_bounds=_cr,
+            direction="TB",
+            diagnostics=_diag,
+            routing_failures=(),
+        )
+
+    # ── 1. Measure dynamic card dimensions ───────────────────────────────────
+    widths: dict[str, float] = {
+        eid: _measure_card_width(eid, attrs)
+        for eid, attrs in entities.items()
+    }
+    heights: dict[str, float] = {
+        eid: _card_height(attrs) for eid, attrs in entities.items()
+    }
+
+    # ── 2. Build Sugiyama graph ───────────────────────────────────────────────
+    nodes: dict[str, _Node] = {
+        eid: _Node(
+            id=eid, label=eid, shape="rect",
+            width=int(widths[eid]),
+            height=int(heights[eid]),
+        )
+        for eid in entity_names
+    }
+    sugi_edges: list[_Edge] = [
+        _Edge(src=rel["from"], dst=rel["to"], label=rel["label"])
+        for rel in relationships
+    ]
+
+    _break_cycles(nodes, sugi_edges)
+    _assign_ranks(nodes, sugi_edges)
+    _minimize_crossings(nodes, sugi_edges)
+    _assign_coordinates(nodes)
+
+    # ── 3. Override y-positions per rank with measured heights ────────────────
+    rank_to_nids: dict[int, list[str]] = defaultdict(list)
+    for nid, n in nodes.items():
+        if not n.is_dummy:
+            rank_to_nids[n.rank].append(nid)
+
+    y_cursor = float(CANVAS_PAD)
+    for rank in range(max(rank_to_nids, default=0) + 1):
+        nids_in_rank = rank_to_nids.get(rank, [])
+        if not nids_in_rank:
+            continue
+        rank_h = max(heights[nid] for nid in nids_in_rank)
+        for nid in nids_in_rank:
+            eh_nid = heights[nid]
+            nodes[nid].y = int(y_cursor + (rank_h - eh_nid) / 2)
+        y_cursor += rank_h + RANK_GAP
+
+    # ── 4. Natural canvas dimensions ──────────────────────────────────────────
+    real_nids = [(nid, n) for nid, n in nodes.items() if not n.is_dummy]
+    if real_nids:
+        canvas_w = float(max(n.x + widths[nid] for nid, n in real_nids) + CANVAS_PAD)
+        canvas_h = float(
+            max(n.y + heights[nid] for nid, n in real_nids) + CANVAS_PAD
+        )
+    else:
+        canvas_w = float(max(width_hint or 400, 400))
+        canvas_h = float(y_cursor - RANK_GAP + CANVAS_PAD)
+
+    # ── 5. Zoom factor (applied to all coordinates below) ─────────────────────
+    zoom = 1.0
+    if width_hint and canvas_w > 0 and width_hint < canvas_w:
+        zoom = width_hint / canvas_w
+
+    # ── 6. Helpers ────────────────────────────────────────────────────────────
+    def _stub_tl(w: float, h: float) -> TextLayout:
+        return TextLayout(
+            lines=(),
+            width=w,
+            height=h,
+            line_height=h,
+            min_content_width=0.0,
+            max_content_width=w,
+            resolved_font_path=None,
+            resolved_font_family="sans-serif",
+        )
+
+    def _tangent_to_side(ux: float, uy: float) -> PortSide:
+        if uy > 0:
+            return PortSide.BOTTOM
+        if uy < 0:
+            return PortSide.TOP
+        if ux > 0:
+            return PortSide.RIGHT
+        return PortSide.LEFT
+
+    # ── 7. Build NodeLayout with pre-scaled coordinates ───────────────────────
+    node_layouts: dict[str, NodeLayout] = {}
+    for eid, n in nodes.items():
+        if n.is_dummy:
+            continue
+        ew = widths[eid] * zoom
+        eh = heights[eid] * zoom
+        ex = float(n.x) * zoom
+        ey = float(n.y) * zoom
+        bounds = Rect(ex, ey, ew, eh)
+        node_layouts[eid] = NodeLayout(
+            node_id=eid,
+            semantic_shape="er-entity",
+            outer_bounds=bounds,
+            content_bounds=bounds,
+            title_layout=_stub_tl(ew, float(_CARD_HDR_H) * zoom),
+            subtitle_layout=None,
+            member_layouts=(),
+            icon_bounds=None,
+            ports=(),
+            css_classes=(),
+            extra_css="",
+            is_dummy=False,
+            rank=n.rank,
+        )
+
+    # ── 8. Build RoutedEdge with crow-foot markers ────────────────────────────
+    routed_edges_list: list[RoutedEdge] = []
+    for rel_idx, rel in enumerate(relationships):
+        fe, te = rel["from"], rel["to"]
+        if fe not in nodes or te not in nodes:
+            continue
+        fn, tn = nodes[fe], nodes[te]
+        if fn.is_dummy or tn.is_dummy:
+            continue
+
+        ew_f = widths[fe] * zoom
+        ew_t = widths[te] * zoom
+        eh_f = heights[fe] * zoom
+        eh_t = heights[te] * zoom
+        fcx = float(fn.x) * zoom + ew_f / 2
+        fcy = float(fn.y) * zoom + eh_f / 2
+        tcx = float(tn.x) * zoom + ew_t / 2
+        tcy = float(tn.y) * zoom + eh_t / 2
+
+        vx, vy = tcx - fcx, tcy - fcy
+        norm = math.hypot(vx, vy) or 1.0
+        uvx, uvy = vx / norm, vy / norm
+
+        src_bx, src_by = _rect_boundary_pt(fcx, fcy, ew_f, eh_f, uvx, uvy)
+        dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, ew_t, eh_t, -uvx, -uvy)
+
+        card_src: Optional[CardinalityEnd] = rel["card_src"]
+        card_dst: Optional[CardinalityEnd] = rel["card_dst"]
+        src_r = _glyph_reserve(card_src) * zoom if card_src else 4.0 * zoom
+        dst_r = _glyph_reserve(card_dst) * zoom if card_dst else 4.0 * zoom
+
+        lx1 = src_bx + uvx * src_r
+        ly1 = src_by + uvy * src_r
+        lx2 = dst_bx + (-uvx) * dst_r
+        ly2 = dst_by + (-uvy) * dst_r
+
+        src_port = PortLayout(
+            node_id=fe,
+            side=_tangent_to_side(uvx, uvy),
+            position=Point(src_bx, src_by),
+            direction=Point(uvx, uvy),
+        )
+        dst_port = PortLayout(
+            node_id=te,
+            side=_tangent_to_side(-uvx, -uvy),
+            position=Point(dst_bx, dst_by),
+            direction=Point(-uvx, -uvy),
+        )
+
+        mid_x = (lx1 + lx2) / 2
+        mid_y = (ly1 + ly2) / 2
+
+        label_layout_v2: Optional[EdgeLabelLayout] = None
+        if rel["label"]:
+            label_layout_v2 = EdgeLabelLayout(
+                text=rel["label"],
+                layout=_stub_tl(10.0, 10.0),
+                bounds=Rect(mid_x, mid_y, 1.0, 1.0),
+                anchor_point=Point(mid_x, mid_y),
+            )
+
+        # Crow-foot markers; src/dst label layouts set to None to avoid
+        # validate() check 12 (label-node intersection) failures
+        src_mk = _cardinality_to_marker(card_src) if card_src else MarkerKind.NONE
+        dst_mk = _cardinality_to_marker(card_dst) if card_dst else MarkerKind.NONE
+
+        routed_edges_list.append(RoutedEdge(
+            edge_id=f"er-rel-{rel_idx}",
+            src_node_id=fe,
+            dst_node_id=te,
+            src_port=src_port,
+            dst_port=dst_port,
+            waypoints=(Point(lx1, ly1), Point(lx2, ly2)),
+            edge_style="dotted" if rel["dotted"] else "solid",
+            has_marker_end=False,
+            has_marker_start=False,
+            label_layout=label_layout_v2,
+            src_label_layout=None,
+            dst_label_layout=None,
+            source_marker=src_mk,
+            target_marker=dst_mk,
+        ))
+
+    cw = canvas_w * zoom
+    ch = canvas_h * zoom
+    canvas_rect = Rect(0.0, 0.0, cw, ch)
+    diag = LayoutDiagnostics(unsupported_options=(), route_failures=(), warnings=())
+
+    return FinalizedLayout(
+        node_layouts=MappingProxyType(node_layouts),
+        group_layouts=MappingProxyType({}),
+        routed_edges=tuple(routed_edges_list),
+        visible_bounds=canvas_rect,
+        diagram_padding=float(CANVAS_PAD),
+        canvas_bounds=canvas_rect,
+        direction="TB",
+        diagnostics=diag,
+        routing_failures=(),
+    )
+
+
 # ── HTML renderer ─────────────────────────────────────────────────────────────
 
 def er_to_html(src: str, *, width_hint: int = 0) -> str:
     """Render erDiagram source as a self-contained HTML div string.
 
-    Uses ``compile_er()`` for all geometry, then re-calls
-    ``_parse_er_source()`` to obtain entity attribute data for row rendering.
-    The output is a ``<div class="diagram mermaid-layout">`` containing entity
-    card divs and an SVG overlay for edges and cardinality glyphs.
-
-    Zoom is applied as a CSS ``zoom`` property on the container when the
-    natural canvas width exceeds ``width_hint``.
+    Uses ``compile_er_layout()`` for all geometry (dynamic card widths,
+    crow-foot markers, pre-baked zoom).  Entity card divs and an SVG overlay
+    for edges and cardinality glyphs are emitted; no CSS ``zoom`` is applied
+    since ``compile_er_layout()`` already scales coordinates.
     """
     import html as _html_er
 
     _h = lambda s: _html_er.escape(str(s), quote=True)  # noqa: E731
 
-    fl = compile_er(src, width_hint=width_hint)
+    fl = compile_er_layout(src, width_hint=width_hint)
     entities, relationships = _parse_er_source(src)
 
     if not entities:
@@ -896,13 +1305,18 @@ def er_to_html(src: str, *, width_hint: int = 0) -> str:
     cw = fl.canvas_bounds.w
     ch = fl.canvas_bounds.h
 
-    zoom = 1.0
-    if width_hint and cw > 0 and width_hint < cw:
-        zoom = width_hint / cw
-    zoom_css = f"zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""
-
     _lf = "var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif))"
     _edge_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+
+    # Build a lookup from relationship index → RoutedEdge (by edge_id "er-rel-N")
+    routed_by_idx_html: dict[int, RoutedEdge] = {}
+    for _re_h in fl.routed_edges:
+        _eid_h = _re_h.edge_id
+        if _eid_h.startswith("er-rel-"):
+            try:
+                routed_by_idx_html[int(_eid_h[7:])] = _re_h
+            except ValueError:
+                pass
 
     # ── SVG glyph helper (returns list of SVG element strings) ────────────────
     def _render_glyph_svg(
@@ -956,7 +1370,7 @@ def er_to_html(src: str, *, width_hint: int = 0) -> str:
     parts: list[str] = []
     parts.append(
         f'<div class="diagram mermaid-layout" style="'
-        f'position:relative; width:{cw}px; height:{ch}px; {zoom_css}">'
+        f'position:relative; width:{cw}px; height:{ch}px;">'
     )
 
     # ── Entity cards ──────────────────────────────────────────────────────────
@@ -1063,36 +1477,52 @@ def er_to_html(src: str, *, width_hint: int = 0) -> str:
 
     edge_labels: list[tuple[float, float, str]] = []
 
-    for rel in relationships:
+    for rel_idx_h, rel in enumerate(relationships):
         fe, te = rel["from"], rel["to"]
         if fe not in fl.node_layouts or te not in fl.node_layouts:
             continue
-        fnl = fl.node_layouts[fe]
-        tnl = fl.node_layouts[te]
-
-        fh = fnl.outer_bounds.h
-        th = tnl.outer_bounds.h
-        fcx = fnl.outer_bounds.x + fnl.outer_bounds.w / 2
-        fcy = fnl.outer_bounds.y + fh / 2
-        tcx = tnl.outer_bounds.x + tnl.outer_bounds.w / 2
-        tcy = tnl.outer_bounds.y + th / 2
-
-        vx, vy = tcx - fcx, tcy - fcy
-        norm = math.hypot(vx, vy) or 1.0
-        uvx, uvy = vx / norm, vy / norm
-
-        src_bx, src_by = _rect_boundary_pt(fcx, fcy, fnl.outer_bounds.w, fh, uvx, uvy)
-        dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, tnl.outer_bounds.w, th, -uvx, -uvy)
 
         card_src: Optional[CardinalityEnd] = rel["card_src"]
         card_dst: Optional[CardinalityEnd] = rel["card_dst"]
-        src_r = _glyph_reserve(card_src) if card_src else 4.0
-        dst_r = _glyph_reserve(card_dst) if card_dst else 4.0
 
-        lx1 = src_bx + uvx * src_r
-        ly1 = src_by + uvy * src_r
-        lx2 = dst_bx + (-uvx) * dst_r
-        ly2 = dst_by + (-uvy) * dst_r
+        _rre_h: Optional[RoutedEdge] = routed_by_idx_html.get(rel_idx_h)
+        if _rre_h is not None:
+            _wps_h = _rre_h.waypoints
+            lx1 = _wps_h[0].x
+            ly1 = _wps_h[0].y
+            lx2 = _wps_h[-1].x
+            ly2 = _wps_h[-1].y
+            src_bx = _rre_h.src_port.position.x
+            src_by = _rre_h.src_port.position.y
+            src_dx_h = _rre_h.src_port.direction.x
+            src_dy_h = _rre_h.src_port.direction.y
+            dst_bx = _rre_h.dst_port.position.x
+            dst_by = _rre_h.dst_port.position.y
+            dst_dx_h = _rre_h.dst_port.direction.x
+            dst_dy_h = _rre_h.dst_port.direction.y
+        else:
+            # Fallback: recompute geometry from node bounds
+            fnl = fl.node_layouts[fe]
+            tnl = fl.node_layouts[te]
+            fh = fnl.outer_bounds.h
+            th = tnl.outer_bounds.h
+            fcx = fnl.outer_bounds.x + fnl.outer_bounds.w / 2
+            fcy = fnl.outer_bounds.y + fh / 2
+            tcx = tnl.outer_bounds.x + tnl.outer_bounds.w / 2
+            tcy = tnl.outer_bounds.y + th / 2
+            vx, vy = tcx - fcx, tcy - fcy
+            norm = math.hypot(vx, vy) or 1.0
+            uvx, uvy = vx / norm, vy / norm
+            src_bx, src_by = _rect_boundary_pt(fcx, fcy, fnl.outer_bounds.w, fh, uvx, uvy)
+            dst_bx, dst_by = _rect_boundary_pt(tcx, tcy, tnl.outer_bounds.w, th, -uvx, -uvy)
+            src_dx_h, src_dy_h = uvx, uvy
+            dst_dx_h, dst_dy_h = -uvx, -uvy
+            src_r = _glyph_reserve(card_src) if card_src else 4.0
+            dst_r = _glyph_reserve(card_dst) if card_dst else 4.0
+            lx1 = src_bx + uvx * src_r
+            ly1 = src_by + uvy * src_r
+            lx2 = dst_bx + (-uvx) * dst_r
+            ly2 = dst_by + (-uvy) * dst_r
 
         dash = ' stroke-dasharray="6 4"' if rel["dotted"] else ""
         if math.hypot(lx2 - lx1, ly2 - ly1) > 1.0:
@@ -1111,12 +1541,17 @@ def er_to_html(src: str, *, width_hint: int = 0) -> str:
             )
 
         if card_src:
-            parts.extend(_render_glyph_svg(src_bx, src_by, uvx, uvy, card_src))
+            parts.extend(_render_glyph_svg(src_bx, src_by, src_dx_h, src_dy_h, card_src))
         if card_dst:
-            parts.extend(_render_glyph_svg(dst_bx, dst_by, -uvx, -uvy, card_dst))
+            parts.extend(_render_glyph_svg(dst_bx, dst_by, dst_dx_h, dst_dy_h, card_dst))
 
         if rel["label"]:
-            edge_labels.append(((lx1 + lx2) / 2, (ly1 + ly2) / 2, rel["label"]))
+            _la_h = _rre_h.label_layout.anchor_point if (
+                _rre_h is not None and _rre_h.label_layout is not None
+            ) else None
+            lbl_x = _la_h.x if _la_h else (lx1 + lx2) / 2
+            lbl_y = _la_h.y if _la_h else (ly1 + ly2) / 2
+            edge_labels.append((lbl_x, lbl_y, rel["label"]))
 
     parts.append('</svg>')
 

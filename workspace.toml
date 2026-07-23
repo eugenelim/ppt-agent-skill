@@ -54,11 +54,10 @@ queue = [
   {path = "docs/specs/flowchart-elk-routing-regression-pack", needs = ["work:docs/specs/elk-finalized-layout-roundtrip"]},
   # 9 — State local cycles and semantic endpoints
   "docs/specs/state-diagram-local-cycle-routing",
-  # 10a — ER pipeline consolidation: measured dynamic width + single FinalizedLayout
-  {path = "docs/specs/er-finalized-layout-and-dynamic-width", needs = ["work:docs/specs/elk-finalized-layout-roundtrip", "work:docs/specs/mermaid-single-finalized-layout-pipeline"]},
 ]
 active = []
 shipped = [
+  "docs/specs/er-finalized-layout-and-dynamic-width",
   "docs/specs/requirement-finalized-layout-sizing",
 ]
 
