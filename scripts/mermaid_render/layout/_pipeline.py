@@ -30,7 +30,10 @@ from ._layout import (
     _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates,
     _compact_group_columns, _group_coherent_cols,
 )
-from ._routing import _route_edges, _node_render_w, _finalize_self_loop_offsets
+from ._routing import (
+    _route_edges, _node_render_w, _finalize_self_loop_offsets,
+    _astar_route, _blocked_segs, _ensure_orthogonal,
+)
 from ._renderer import (
     _render_legend,
     _separate_groups_lr,
@@ -460,15 +463,25 @@ def _build_routed_edges_ir(
         _m_bend_count: int = int(_metrics.get("bend_count") or 0)
         _m_canvas_area: int = int(_metrics.get("canvas_area") or 0)
         _m_max_ep_dist: float = float(_metrics.get("max_endpoint_distance") or 0.0)
-        # Semantic / routing / scope fields for state-diagram edges
+        # Semantic / routing / scope fields. State-diagram edges carry these on a
+        # semantic _Edge (joined by edge_id); flowchart cross-boundary edges carry
+        # them directly on the route dict (set by _reroute_cross_boundary_edges).
         _sem_e = (sm_edge_semantic or {}).get(spec.get("edge_id"))  # AC4: join on edge_id
-        _semantic_source_id = getattr(_sem_e, 'semantic_src', '') if _sem_e else ''
-        _semantic_target_id = getattr(_sem_e, 'semantic_dst', '') if _sem_e else ''
-        _source_scope = getattr(_sem_e, 'source_scope', '') if _sem_e else ''
-        _target_scope = getattr(_sem_e, 'target_scope', '') if _sem_e else ''
-        # routing_source_id / routing_target_id are the actual node IDs used for routing
-        _routing_source_id = src if (_source_scope or _semantic_source_id) else ''
-        _routing_target_id = dst if (_target_scope or _semantic_target_id) else ''
+        if spec.get("source_scope") or spec.get("target_scope"):
+            _semantic_source_id = spec.get("semantic_source_id", "")
+            _semantic_target_id = spec.get("semantic_target_id", "")
+            _source_scope = spec.get("source_scope", "")
+            _target_scope = spec.get("target_scope", "")
+            _routing_source_id = spec.get("routing_source_id", "")
+            _routing_target_id = spec.get("routing_target_id", "")
+        else:
+            _semantic_source_id = getattr(_sem_e, 'semantic_src', '') if _sem_e else ''
+            _semantic_target_id = getattr(_sem_e, 'semantic_dst', '') if _sem_e else ''
+            _source_scope = getattr(_sem_e, 'source_scope', '') if _sem_e else ''
+            _target_scope = getattr(_sem_e, 'target_scope', '') if _sem_e else ''
+            # routing_source_id / routing_target_id are the actual node IDs used for routing
+            _routing_source_id = src if (_source_scope or _semantic_source_id) else ''
+            _routing_target_id = dst if (_target_scope or _semantic_target_id) else ''
 
         results.append(RoutedEdge(
             edge_id=edge_id,
@@ -1466,6 +1479,13 @@ def layout_flowchart_with_python_fallback(
             if _grp_bboxes:
                 _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
 
+    # First-class empty groups (AC1): an empty subgraph is a measured proxy that
+    # must not sit at the origin or touch a sibling group. Place it in clear space.
+    if groups and not semantics.is_state_diagram and _grp_bboxes:
+        canvas_w, canvas_h = _place_empty_groups(
+            groups, _grp_bboxes, nodes, canvas_w, canvas_h
+        )
+
     # Build scope_bbox_map for state-diagram composite back-edge routing
     _scope_bbox_map: "dict" = (
         {
@@ -1503,6 +1523,40 @@ def layout_flowchart_with_python_fallback(
     }
     if _src_group_map:
         _clip_cross_scope_exit_waypoints(_restored_routes, _src_group_map, _grp_bboxes)
+
+    # Boundary-gate routing (Task 4/5): route cross-boundary flowchart edges
+    # through explicit gates on group boundaries, derive gate records from the
+    # real crossings, and keep the routes clear of unrelated groups/labels.
+    # State diagrams keep their own composite-gate machinery untouched.
+    if groups and not semantics.is_state_diagram and _grp_bboxes:
+        _cbe_gates = _reroute_cross_boundary_edges(
+            _restored_routes, nodes, _grp_bboxes, canvas_w, canvas_h,
+        )
+        if _cbe_gates:
+            # Merge, don't replace: the reroute emits gates only for edges it
+            # actually re-routed (A* may bail on an un-routable edge). Keep the
+            # recursive_compound_layout gate for any real routed edge the reroute
+            # did not cover, so AC7 ("a gate for every cross-scope edge") still
+            # holds. Filter to real routed edge_ids so stale gate-split records
+            # (e.g. "…_out" halves) never leak into the finalized layout.
+            _covered_edges = {g.edge_id for g in _cbe_gates}
+            _routed_edge_ids = {
+                (r.get("edge_id") or f"{r.get('src')}->{r.get('dst')}")
+                for r in _restored_routes
+            }
+            _boundary_gates = _cbe_gates + tuple(
+                g for g in _boundary_gates
+                if g.edge_id not in _covered_edges and g.edge_id in _routed_edge_ids
+            )
+        # Canvas is finalized AFTER route construction so every rerouted waypoint
+        # is inside it (spec AC2).
+        _pad = float(_init_cfg.get("diagram_padding") or CANVAS_PAD)
+        for _r in _restored_routes:
+            for _wx, _wy in (_r.get("waypoints") or []):
+                if _wx + _pad > canvas_w:
+                    canvas_w = _wx + _pad
+                if _wy + _pad > canvas_h:
+                    canvas_h = _wy + _pad
 
     routed_edges_ir = _build_routed_edges_ir(
         _restored_routes,
@@ -1565,9 +1619,15 @@ def _compile_flowchart(
     """Orchestrate the full flowchart layout pipeline using composable functions.
 
     Parse → build graph → ELK layout → enrich (or Python fallback) → validate.
-    Inner-direction compound layouts are routed to the Python path directly.
-    Only ElkUnavailable and ElkInvalidResult trigger a typed Python fallback;
-    all other exceptions propagate with context.
+
+    Inner-direction compound layouts are routed to the bottom-up Python compound
+    path directly. That path is the one that emits explicit ``BoundaryGate``
+    records for cross-scope edges (spec AC7) and honours the eight-case harness's
+    non-forced ``min_gates`` contract; ELK's native compound result carries no such
+    gate metadata, so consuming it directly (spec AC5) would leave cross-scope
+    edges gate-less. Non-compound flowcharts attempt ELK first and consume a
+    successful result directly. Only ElkUnavailable and ElkInvalidResult trigger a
+    typed Python fallback; all other exceptions propagate with context.
     """
     from ._geometry import CompiledFlowchart, LayoutMetadata  # noqa: PLC0415
     from .elk_adapter import ElkUnavailable, ElkInvalidResult  # noqa: PLC0415
@@ -1579,9 +1639,6 @@ def _compile_flowchart(
         height_hint=height_hint,
     )
 
-    # AC1: inner-direction compound layout → Python path.
-    # ELK + re-route would violate the prohibition on calling _route_edges
-    # after a successful ELK result.  Compound layout improvement is out of scope.
     if semantics.has_inner_dir:
         finalized, py_metadata = layout_flowchart_with_python_fallback(semantics)
         metadata = dataclasses.replace(py_metadata, fallback_reason="inner-direction")
@@ -1991,3 +2048,337 @@ def recursive_compound_layout(
 
     return grp_bboxes, tuple(boundary_gates)
 
+
+# ── Compound layout: boundary-gate routing (Task 4/5) ─────────────────────────
+
+# Title-band height (px) reserved at the top of every compound group. Boundary
+# gates never sit on the top edge and internal segments never enter this band.
+# Reuses the compound-layout title-band height (_TITLE_BAND_H) so the routing
+# band tracks the group chrome. It intentionally exceeds the obstruction
+# validator's DEFAULT_TITLE_BAND_H (24px) — routing conservatively avoids a band
+# at least as tall as the one the validator checks, so a route this pass accepts
+# can never be rejected by _layout_validation.validate_segment_obstruction.
+_GATE_TITLE_BAND_H: float = _TITLE_BAND_H
+
+# Clearance (px) placed around a first-class empty group so it never touches a
+# sibling group or node (spec AC1 forbids overlap *or* touch).
+_EMPTY_GROUP_GAP: float = 24.0
+
+
+def _place_empty_groups(
+    groups: "dict[str, _Group]",
+    grp_bboxes: "dict[str, list]",
+    nodes: "dict[str, _Node]",
+    canvas_w: float,
+    canvas_h: float,
+) -> "tuple[float, float]":
+    """Give every empty group a clear, non-origin slot (spec AC1 / Task 3).
+
+    ``_compute_group_bboxes`` sizes an empty group but parks it at ``(0, 0)`` with
+    no members to anchor it. Here each empty group is repositioned (keeping its
+    measured width/height) below all populated content, stacked with a fixed gap,
+    so it has nonzero bounds, is off the origin, and neither overlaps nor touches
+    any sibling group. Returns the (possibly grown) canvas size.
+    """
+    def _recursive_members(gid: str) -> "list[str]":
+        out = list(groups[gid].members)
+        for cgid, cgrp in groups.items():
+            if cgrp.parent_group == gid:
+                out.extend(_recursive_members(cgid))
+        return out
+
+    empty_gids = [
+        gid for gid, grp in groups.items()
+        # Only reposition *top-level* empty groups. A nested empty group is
+        # positioned within its parent's packing region by _compute_group_bboxes;
+        # relocating it below global content would break parent containment.
+        if (not grp.parent_group or grp.parent_group not in groups)
+        and not [m for m in _recursive_members(gid)
+                 if m in nodes and not nodes[m].is_dummy]
+    ]
+    if not empty_gids:
+        return canvas_w, canvas_h
+
+    # Bottom of all populated content (non-empty group boxes + real node cards).
+    content_bottom = 0.0
+    for gid, b in grp_bboxes.items():
+        if gid not in empty_gids:
+            content_bottom = max(content_bottom, b[3])
+    for n in nodes.values():
+        if not n.is_dummy:
+            content_bottom = max(content_bottom, n.y + _node_render_h(n))
+    if content_bottom <= 0.0:
+        content_bottom = float(CANVAS_PAD)
+
+    cursor_y = content_bottom + _EMPTY_GROUP_GAP
+    x0 = float(CANVAS_PAD)
+    for gid in empty_gids:
+        b = grp_bboxes[gid]
+        w = b[2] - b[0]
+        h = b[3] - b[1]
+        grp_bboxes[gid] = [x0, cursor_y, x0 + w, cursor_y + h]
+        cursor_y += h + _EMPTY_GROUP_GAP
+        canvas_w = max(canvas_w, x0 + w + CANVAS_PAD)
+    canvas_h = max(canvas_h, cursor_y + CANVAS_PAD - _EMPTY_GROUP_GAP)
+    return canvas_w, canvas_h
+
+
+def _cbe_node_face(n: "_Node", toward: "tuple[float, float]") -> "tuple[float, float]":
+    """Point on node ``n``'s outer boundary on the side facing ``toward``."""
+    w = _node_render_w(n)
+    h = _node_render_h(n)
+    cx = n.x + w / 2.0
+    cy = n.y + h / 2.0
+    dx = toward[0] - cx
+    dy = toward[1] - cy
+    if abs(dx) >= abs(dy):
+        return (cx + (w / 2.0 if dx > 0 else -w / 2.0), cy)
+    return (cx, cy + (h / 2.0 if dy > 0 else -h / 2.0))
+
+
+def _cbe_build_grid(
+    nodes: "dict[str, _Node]",
+    grp_bboxes: "dict[str, tuple]",
+    extra: "list[tuple[float, float]]",
+    canvas_w: float,
+    canvas_h: float,
+) -> "tuple[list[int], list[int]]":
+    """Sparse orthogonal routing grid: node edges, group boundaries, gate points."""
+    xs: "set[int]" = {0, int(canvas_w)}
+    ys: "set[int]" = {0, int(canvas_h)}
+    for n in nodes.values():
+        if n.is_dummy:
+            continue
+        w, h = _node_render_w(n), _node_render_h(n)
+        for off in (-9, 0, w, w + 9):
+            xs.add(int(n.x + off))
+        for off in (-9, 0, h, h + 9):
+            ys.add(int(n.y + off))
+    for (x0, y0, x1, y1) in grp_bboxes.values():
+        for off in (-9, 0, 9, int(_GATE_TITLE_BAND_H)):
+            xs.add(int(x0 + off))
+            xs.add(int(x1 + off))
+            ys.add(int(y0 + off))
+            ys.add(int(y1 + off))
+    for p in extra:
+        xs.add(int(p[0]))
+        ys.add(int(p[1]))
+    return sorted(x for x in xs if x >= -9), sorted(y for y in ys if y >= -9)
+
+
+def _cbe_boundary_crossings(
+    poly: "list[tuple[float, float]]", bbox: "tuple[float, float, float, float]"
+) -> "list[tuple[int, float, float]]":
+    """Boundary crossings of an orthogonal polyline against a rectangle.
+
+    A crossing is a segment whose endpoints straddle the interior/exterior of
+    ``bbox``; each result is ``(segment_index, x, y)`` with the point snapped onto
+    the rectangle edge that was crossed. Order follows the polyline direction.
+    """
+    x0, y0, x1, y1 = bbox
+
+    def _inside(p: "tuple[float, float]") -> bool:
+        return x0 < p[0] < x1 and y0 < p[1] < y1
+
+    res: "list[tuple[int, float, float]]" = []
+    for i in range(len(poly) - 1):
+        a, b = poly[i], poly[i + 1]
+        if _inside(a) == _inside(b):
+            continue
+        if a[0] == b[0]:  # vertical segment → crosses a horizontal edge
+            yb = y0 if abs(a[1] - y0) + abs(b[1] - y0) <= abs(a[1] - y1) + abs(b[1] - y1) else y1
+            res.append((i, float(a[0]), float(yb)))
+        else:             # horizontal segment → crosses a vertical edge
+            xb = x0 if abs(a[0] - x0) + abs(b[0] - x0) <= abs(a[0] - x1) + abs(b[0] - x1) else x1
+            res.append((i, float(xb), float(a[1])))
+    return res
+
+
+def _cbe_place_label(
+    waypoints: "list[tuple[float, float]]",
+    lw: float,
+    lh: float,
+    obstacles: "list[tuple[float, float, float, float]]",
+) -> "tuple[float, float] | None":
+    """Pick a label origin (x, y) on the route minimising obstacle overlap.
+
+    Samples points along each segment and four offset placements per point;
+    returns the first zero-overlap placement, else the minimum-overlap one.
+    """
+    best: "tuple[float, float] | None" = None
+    best_score = float("inf")
+    for i in range(len(waypoints) - 1):
+        a, b = waypoints[i], waypoints[i + 1]
+        for t in (0.5, 0.33, 0.66):
+            px = a[0] + (b[0] - a[0]) * t
+            py = a[1] + (b[1] - a[1]) * t
+            for ox, oy in ((-lw / 2, -lh - 3), (-lw / 2, 3), (3, -lh / 2), (-lw - 3, -lh / 2)):
+                rx, ry = px + ox, py + oy
+                score = sum(
+                    1
+                    for (kx0, ky0, kx1, ky1) in obstacles
+                    if not (rx + lw < kx0 or rx > kx1 or ry + lh < ky0 or ry > ky1)
+                )
+                if score < best_score:
+                    best_score = score
+                    best = (rx, ry)
+                if score == 0:
+                    return best
+    return best
+
+
+def _reroute_cross_boundary_edges(
+    routed: "list[dict]",
+    nodes: "dict[str, _Node]",
+    grp_bboxes: "dict[str, tuple]",
+    canvas_w: float,
+    canvas_h: float,
+) -> "tuple":
+    """Route every cross-boundary flowchart edge through explicit boundary gates.
+
+    For each edge whose endpoints live in different scopes (at least one grouped):
+
+    1. Route the whole edge with one obstacle-aware A* pass. Obstacles are every
+       unrelated node interior, every group title band, and every *unrelated*
+       group interior. The endpoint groups' interiors stay traversable so the
+       route can reach the node and cross the boundary exactly once.
+    2. Derive a ``BoundaryGate`` from the point where the finished route actually
+       crosses each endpoint group's boundary (EXIT at the source group, ENTRY at
+       the destination group) — the gate is on the boundary and on the route by
+       construction, so it survives the compound-gate validator.
+    3. Re-place the edge's label clear of other routes, nodes and title bands.
+
+    Mutates each rerouted dict's ``waypoints``/``lx``/``ly`` and stamps the scope
+    fields (``source_scope``/``target_scope`` plus semantic/routing endpoint ids)
+    so the harness's compound-gate validator engages. Returns the tuple of
+    ``BoundaryGate`` records.
+    """
+    from ._geometry import BoundaryGate, BoundaryGateKind, PortSide, Point  # noqa: PLC0415
+
+    band = _GATE_TITLE_BAND_H
+    real_ids = [nid for nid, n in nodes.items() if not n.is_dummy]
+    node_rects = {
+        nid: (nodes[nid].x, nodes[nid].y,
+              nodes[nid].x + _node_render_w(nodes[nid]),
+              nodes[nid].y + _node_render_h(nodes[nid]))
+        for nid in real_ids
+    }
+    band_rects = [(x0, y0, x1, y0 + band) for (x0, y0, x1, y1) in grp_bboxes.values()]
+
+    gates: "list[BoundaryGate]" = []
+    gate_ctr = 0
+
+    for r in routed:
+        s = r.get("src")
+        d = r.get("dst")
+        sn = nodes.get(s)
+        dn = nodes.get(d)
+        if sn is None or dn is None or sn.is_dummy or dn.is_dummy:
+            continue
+        sg = sn.group if sn.group in grp_bboxes else None
+        dg = dn.group if dn.group in grp_bboxes else None
+        # Cross-boundary iff endpoints differ in deepest scope and at least one
+        # is a laid-out group. Intra-group and fully free edges are untouched.
+        if sn.group == dn.group or (sg is None and dg is None):
+            continue
+
+        scx = sn.x + _node_render_w(sn) / 2.0
+        scy = sn.y + _node_render_h(sn) / 2.0
+        dcx = dn.x + _node_render_w(dn) / 2.0
+        dcy = dn.y + _node_render_h(dn) / 2.0
+        a = _cbe_node_face(sn, (dcx, dcy))
+        b = _cbe_node_face(dn, (scx, scy))
+
+        endpoint_groups = {sn.group, dn.group}
+        obstacles: "list[tuple]" = [
+            rect for nid, rect in node_rects.items() if nid not in (s, d)
+        ]
+        for gid, (x0, y0, x1, y1) in grp_bboxes.items():
+            obstacles.append((x0, y0, x1, y0 + band))       # title band
+            if gid not in endpoint_groups:
+                obstacles.append((x0, y0, x1, y1))           # unrelated interior
+
+        gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b], canvas_w, canvas_h)
+        blocked = _blocked_segs(gx, gy, obstacles)
+        path = _astar_route(int(a[0]), int(a[1]), int(b[0]), int(b[1]), gx, gy, blocked)
+        if not path or len(path) < 2:
+            continue  # keep the original route if A* cannot improve it
+
+        poly = [(float(x), float(y)) for x, y in path]
+        poly[0] = (float(a[0]), float(a[1]))
+        poly[-1] = (float(b[0]), float(b[1]))
+        # A* snaps the endpoints to grid rows/columns; substituting the exact node
+        # faces back can leave the first/last segment diagonal, so re-orthogonalize
+        # (same invariant the main router enforces) before deriving gates.
+        poly = _ensure_orthogonal(poly)
+        out = [poly[0]]
+        for p in poly[1:]:
+            if (round(p[0], 2), round(p[1], 2)) != (round(out[-1][0], 2), round(out[-1][1], 2)):
+                out.append(p)
+
+        eid = r.get("edge_id") or f"{s}->{d}"
+        # Pick the boundary crossing per endpoint group (EXIT = last time the route
+        # leaves the source group; ENTRY = first time it enters the destination),
+        # then insert each gate point into the route as an explicit waypoint (AC2).
+        inserts: "list[tuple[int, tuple[float, float], str, str]]" = []
+        if sg:
+            cs = _cbe_boundary_crossings(out, grp_bboxes[sg])
+            if cs:
+                seg, gx_, gy_ = cs[-1]
+                inserts.append((seg, (gx_, gy_), sg, "exit"))
+        if dg:
+            cs = _cbe_boundary_crossings(out, grp_bboxes[dg])
+            if cs:
+                seg, gx_, gy_ = cs[0]
+                inserts.append((seg, (gx_, gy_), dg, "entry"))
+        for seg, pt, gid, role in sorted(inserts, key=lambda t: -t[0]):
+            if (round(pt[0], 2), round(pt[1], 2)) not in {(round(w[0], 2), round(w[1], 2)) for w in out}:
+                out.insert(seg + 1, (float(pt[0]), float(pt[1])))
+        for seg, pt, gid, role in inserts:
+            is_exit = role == "exit"
+            gates.append(BoundaryGate(
+                gate_id=f"_bgate_{gate_ctr}_{role}", group_id=gid, side=PortSide.AUTO,
+                point=Point(float(pt[0]), float(pt[1])),
+                semantic_node_id=s if is_exit else d, edge_id=eid,
+                kind=BoundaryGateKind.EXIT if is_exit else BoundaryGateKind.ENTRY,
+            ))
+            gate_ctr += 1
+
+        r["waypoints"] = [(float(x), float(y)) for x, y in out]
+        r["_cbe_rerouted"] = True
+
+        # Scope tagging (harness compound-gate validator + AC11 in-pipeline check).
+        r["source_scope"] = sn.group if sg else ""
+        r["target_scope"] = dn.group if dg else ""
+        r["semantic_source_id"] = s
+        r["semantic_target_id"] = d
+        r["routing_source_id"] = s
+        r["routing_target_id"] = d
+
+    # Second pass: place labels of rerouted edges clear of every other route.
+    all_segs: "list[tuple]" = []
+    for r in routed:
+        wps = r.get("waypoints") or []
+        for i in range(len(wps) - 1):
+            all_segs.append((r.get("edge_id"), wps[i], wps[i + 1]))
+    for r in routed:
+        if not r.get("_cbe_rerouted") or not r.get("label"):
+            continue
+        wps = r["waypoints"]
+        eid = r.get("edge_id")
+        lw = max(30.0, len(str(r["label"])) * 7.0)
+        lh = 18.0
+        others = [
+            (min(x1[0], x2[0]) - 1, min(x1[1], x2[1]) - 1,
+             max(x1[0], x2[0]) + 1, max(x1[1], x2[1]) + 1)
+            for (oeid, x1, x2) in all_segs if oeid != eid
+        ]
+        obs = others + list(node_rects.values()) + band_rects
+        pos = _cbe_place_label(wps, lw, lh, obs)
+        if pos:
+            r["lx"], r["ly"] = pos
+
+    for r in routed:
+        r.pop("_cbe_rerouted", None)
+
+    return tuple(gates)

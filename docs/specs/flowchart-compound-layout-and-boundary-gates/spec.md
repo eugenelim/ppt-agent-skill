@@ -2,7 +2,7 @@
 
 Mode: full (layout algorithm — bottom-up compound; boundary gates; empty-group packing)
 
-- **Status:** Approved
+- **Status:** Shipped
 
 Dependencies: `docs/specs/eight-case-validation-and-provenance`
 
@@ -61,22 +61,22 @@ Fixtures in scope: `flowchart-cross-scope-edge`, `flowchart-empty-subgraph`,
 
 ## Acceptance Criteria
 
-- [ ] AC1: `flowchart-empty-subgraph` — both groups exist; Empty Group has nonzero
+- [x] AC1: `flowchart-empty-subgraph` — both groups exist; Empty Group has nonzero
   measured bounds; Empty Group does not overlap or touch Group With Node; Group With Node
   contains A; B is outside both groups; A→B route does not cross Empty Group; test fails
   (not skips) when empty group is absent.
-- [ ] AC2: `flowchart-cross-scope-edge` — every route point and segment is inside the
+- [x] AC2: `flowchart-cross-scope-edge` — every route point and segment is inside the
   finalized canvas; B→C enters Inner TB exactly once at a declared gate on the Inner TB
   boundary; C→D remains inside Inner TB; D→E exits Inner TB exactly once at a declared
   gate; neither cross-scope route crosses the group title band or leaves/re-enters the
   group; canvas is finalized after route construction.
-- [ ] AC3: `flowchart-groups-complex` — Frontend contains UI and Cache; Backend Services
+- [x] AC3: `flowchart-groups-complex` — Frontend contains UI and Cache; Backend Services
   contains API, Auth, Worker; Data Layer contains DB and Queue; sibling group bounds do
   not overlap; no relationship segment crosses an unrelated group interior or title band;
   Worker→Queue uses a local cross-group route; API→DB and Cache→DB do not route around
   the full canvas perimeter; routes to the same target use deterministic distinct channels
   or a modeled junction.
-- [ ] AC4: `flowchart-inner-direction` — Pipeline uses local LR layout; Ingest, Transform,
+- [x] AC4: `flowchart-inner-direction` — Pipeline uses local LR layout; Ingest, Transform,
   Load have monotonically increasing x coordinates; Source→Ingest enters through a
   Pipeline boundary gate; Load→Sink exits through a Pipeline boundary gate; neither
   external route uses x=0 or a global canvas-edge lane unless it is the shortest valid
@@ -84,10 +84,36 @@ Fixtures in scope: `flowchart-cross-scope-edge`, `flowchart-empty-subgraph`,
   identify the selected path; no post-finalization coordinate shuffle.
 - [ ] AC5: All four fixtures attempt ELK first and consume a successful ELK result
   directly without calling the Python router.
-- [ ] AC6: The Python compound fallback processes groups bottom-up with measured proxies;
+- [x] AC6: The Python compound fallback processes groups bottom-up with measured proxies;
   it does not use prior global placement coordinates.
-- [ ] AC7: `BoundaryGate` records exist for every cross-scope edge; each gate lies on the
+- [x] AC7: `BoundaryGate` records exist for every cross-scope edge; each gate lies on the
   corresponding group boundary within tolerance.
+
+## Deviations (as shipped)
+
+- **AC5, and AC4's "ELK is attempted first" clause, are met for the two
+  non-compound grouped fixtures only; the two inner-direction compound fixtures
+  ship on the bottom-up Python compound path (deferred, not infeasible).**
+  `BoundaryGate` records (AC7) are currently emitted only by the Python compound
+  path, and the item-1 harness's `_flowchart_counts` asserts
+  `flowchart-cross-scope-edge` carries ≥2 gates via a *non-forced* compile — so
+  consuming ELK's native compound result directly (AC5) would today leave
+  cross-scope edges gate-less. This is **not** an inherent AC5↔AC7 impossibility:
+  `_cbe_boundary_crossings` derives gates from finished route geometry and is
+  engine-agnostic, so a post-ELK gate-derivation pass over ELK-produced routes
+  would satisfy AC5 and AC7 jointly. That pass is **deferred** because `elkjs` is
+  unavailable in this environment to verify it (backlog:
+  `flowchart-compound-elk-gate-derivation`). **Resolution as shipped:** the two
+  non-compound grouped fixtures (`flowchart-empty-subgraph`,
+  `flowchart-groups-complex`) attempt ELK first and consume it directly on
+  success; the two compound fixtures (`flowchart-cross-scope-edge`,
+  `flowchart-inner-direction`) route through the gate-emitting Python compound
+  path, satisfying AC1–AC3 geometry, AC4 (minus the ELK-first clause), AC6, AC7.
+- **AC3 obstruction/local-route invariants are verified on the Python fallback
+  path.** The live-lane tests force `MERMAID_LAYOUT_ENGINE=python` for
+  determinism, so `flowchart-groups-complex`'s AC3 cleanliness is asserted on the
+  fallback engine. When `elkjs` is installed this fixture ships on ELK; verifying
+  AC3 on the ELK lane is folded into the deferred backlog item above.
 
 ## Testing Strategy
 
