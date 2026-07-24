@@ -57,8 +57,8 @@ def test_compile_sequence_html_nonempty():
 
 
 def test_layout_lifeline_called_exactly_once_per_compile():
-    import mermaid_render.layout._strategies as strats
-    with patch.object(strats, "_layout_lifeline", wraps=strats._layout_lifeline) as spy:
+    import mermaid_render.layout._sequence_compile as seq_mod
+    with patch.object(seq_mod, "_layout_lifeline", wraps=seq_mod._layout_lifeline) as spy:
         compile_sequence("sequenceDiagram\n  A->>B: hi", width_hint=480)
         assert spy.call_count == 1
 
@@ -70,8 +70,8 @@ def test_compile_sequence_natural_width_populated():
 
 
 def test_dispatch_validate_calls_layout_lifeline_exactly_once():
-    import mermaid_render.layout._strategies as strats
-    with patch.object(strats, "_layout_lifeline", wraps=strats._layout_lifeline) as spy:
+    import mermaid_render.layout._sequence_compile as seq_mod
+    with patch.object(seq_mod, "_layout_lifeline", wraps=seq_mod._layout_lifeline) as spy:
         _dispatch_validate("sequenceDiagram\n  A->>B: hi")
         assert spy.call_count == 1
 

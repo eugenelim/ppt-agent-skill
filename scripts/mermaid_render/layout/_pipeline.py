@@ -1902,8 +1902,7 @@ def recursive_compound_layout(
         if mbrs:
             continue  # non-empty: bounds already determined by members
         # Find a location near any existing content or default to canvas edge
-        # Use label width for minimum; if no label, use _EMPTY_CONTENT_W
-        label_w = max(len(grp.label) * 8.0, _EMPTY_CONTENT_W) if grp.label else _EMPTY_CONTENT_W
+        # Empty group: minimum size will be applied by the group-sizing pass below.
 
     # ── Step 3: root-level group separation ──────────────────────────────────
     if outer_direction.upper() in ("LR", "RL"):

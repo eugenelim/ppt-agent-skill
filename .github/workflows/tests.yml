@@ -169,3 +169,35 @@ jobs:
       - run: python tools/check_bundle_hash.py
       - run: pip install pytest
       - run: python3 -m pytest tests/test_bundle_hash.py -v
+
+  parity-fast:
+    name: mermaid parity fast (browser-free, < 60 s)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install -r requirements-dev.txt
+      # Browser-free parity checks: CI failure conditions, import boundaries,
+      # geometry invariants (overlap, containment, boundary-endpoint), determinism.
+      # Must complete in under 60 seconds. No Playwright required.
+      - run: python3 -m pytest tests/ -m parity_fast --timeout=60 -q
+
+  parity-browser:
+    name: mermaid parity browser suite (pinned, sequential)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - run: pip install pytest
+      - run: playwright install chromium --with-deps
+      # Pinned browser integration suite. Must NOT run in parallel xdist mode
+      # (-p no:xdist ensures sequential execution, protecting snapshot consistency).
+      # Raster similarity output is diagnostic only; not a hard gate.
+      - run: python3 -m pytest --run-browser tests/ -m browser -p no:xdist -q

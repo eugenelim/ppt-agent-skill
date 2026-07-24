@@ -149,21 +149,18 @@ class TestSuccessPathReturnsFinalizedLayout:
             f"Expected FinalizedLayout, got {type(result).__name__}"
         )
 
-    def test_success_path_does_not_call_elk_routes_to_specs(self):
-        """_elk_routes_to_specs must not be called on the ELK success path."""
-        mock_ret = self._make_complex_mock()
-        called = []
+    def test_elk_routes_to_specs_deleted(self):
+        """_elk_routes_to_specs must not exist — it is dead code deleted by AC7.
 
-        def _spy(*a, **kw):
-            called.append(True)
-            return []
-
-        with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
-                   return_value=mock_ret):
-            with patch("mermaid_render.layout.architecture._elk_routes_to_specs",
-                       side_effect=_spy):
-                compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert not called, "_elk_routes_to_specs was called on the ELK success path"
+        The function used a (src, dst) tuple identity map that silently dropped
+        duplicate edges (AC7 violation).  Verify it is gone entirely so it
+        cannot be re-introduced by accident.
+        """
+        import mermaid_render.layout.architecture as _arch_mod
+        assert not hasattr(_arch_mod, "_elk_routes_to_specs"), (
+            "_elk_routes_to_specs still exists in architecture.py — "
+            "delete it (AC7: dead code with tuple-identity map)."
+        )
 
     def test_elk_backend_stamped_in_diagnostics(self):
         """Successful ELK path must stamp 'elk-js' in diagnostics.warnings."""
@@ -233,17 +230,17 @@ architecture-beta
         assert len(result.routed_edges) == 2
 
     def test_no_src_dst_tuple_lookup_in_pipeline(self):
-        """_elk_routes_to_specs (which uses (src,dst) lookup) is not called."""
-        # Already covered by TestSuccessPathReturnsFinalizedLayout but repeated
-        # here as the edge-ID keying spec constraint.
-        mock_ret = self._make_dual_edge_mock()
-        called = []
-        with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
-                   return_value=mock_ret):
-            with patch("mermaid_render.layout.architecture._elk_routes_to_specs",
-                       side_effect=lambda *a, **kw: called.append(True) or []):
-                compile_architecture(self.DUAL_EDGE_SRC)
-        assert not called
+        """The (src,dst) tuple-identity map (_elk_routes_to_specs) must not exist.
+
+        The function was deleted (AC7).  This test is the companion to
+        test_elk_routes_to_specs_deleted in TestSuccessPathReturnsFinalizedLayout
+        and serves as the edge-ID keying spec constraint: duplicate edges with
+        identical (src, dst) must survive because routing is keyed by edge_id.
+        """
+        import mermaid_render.layout.architecture as _arch_mod
+        assert not hasattr(_arch_mod, "_elk_routes_to_specs"), (
+            "_elk_routes_to_specs re-introduced — duplicate (src,dst) edges would be dropped."
+        )
 
 
 # ── Task 3: fixed-side port preservation ─────────────────────────────────────
