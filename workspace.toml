@@ -129,3 +129,68 @@ status = "shipped"
 queue = []
 active = []
 shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-browser-geometry-capture", "docs/specs/mermaid-text-measurement-adoption", "docs/specs/flowchart-elk-finalized-layout-consumption", "docs/specs/mermaid-recursive-compound-layout", "docs/specs/mermaid-requirement-text-layout-conformance", "docs/specs/mermaid-shape-boundary-exactness", "docs/specs/mermaid-er-compiler-consolidation-and-routing", "docs/specs/mermaid-class-semantic-conformance", "docs/specs/mermaid-flowchart-conformance", "docs/specs/mermaid-architecture-metadata-preservation", "docs/specs/mermaid-state-conformance", "docs/specs/mermaid-parity-ci-and-maintainability-cleanup"]
+
+# ── Initiative: Eight-Case Mermaid Compound and Sequence Parity — davao-v1 ────
+#
+# 6-item closure initiative. Logical build queue execution order:
+#
+#   1. eight-case-validation-and-provenance   — gates every subsequent item
+#   2. sequence-shared-compiler-and-native-scene  — sequence only; safe after 1
+#   3. flowchart-compound-layout-and-boundary-gates — flowchart layout; safe after 1
+#      (sequential after 2 to avoid concurrent flowchart/sequence shared-code edits)
+#   4. flowchart-arrow-style-conformance      — flowchart edge parsing; sequential
+#      after 3 to prevent conflicts on shared _geometry.py / _parser.py edits
+#   5. architecture-fixed-port-integration   — architecture only; safe after 4
+#      (sequenced last of the 2–5 group to give a clean base for CI in item 6)
+#   6. eight-case-parity-ci-and-cleanup       — requires 2–5 all complete
+#
+# Items 2–5 are DAG-parallel (all depend only on item 1) but are sequenced
+# above for practical reasons: items 3 and 4 both touch flowchart code in
+# _geometry.py, _parser.py, and _pipeline.py, so concurrent edits would
+# conflict. The sequential order matches the source document's recommendation.
+#
+# Fixtures in scope:
+#   architecture-complex, flowchart-arrows-defs, flowchart-cross-scope-edge,
+#   flowchart-empty-subgraph, flowchart-groups-complex, flowchart-inner-direction,
+#   sequence-box-unsupported, sequence-nested-fragments
+
+["ini-003"]
+name = "Eight-Case Mermaid Compound and Sequence Parity"
+milestone = "davao-v1"
+status = "active"
+
+["ini-003".work]
+queue = [
+  # Item 1 — validation foundation; gates all other items
+  {path = "docs/specs/eight-case-validation-and-provenance", needs = []},
+  # Item 2 — sequence shared compiler; no flowchart code conflicts
+  {path = "docs/specs/sequence-shared-compiler-and-native-scene", needs = [
+    "work:docs/specs/eight-case-validation-and-provenance",
+  ]},
+  # Item 3 — flowchart compound layout; sequential after item 2 to avoid
+  #           concurrent edits to shared geometry modules
+  {path = "docs/specs/flowchart-compound-layout-and-boundary-gates", needs = [
+    "work:docs/specs/eight-case-validation-and-provenance",
+    "work:docs/specs/sequence-shared-compiler-and-native-scene",
+  ]},
+  # Item 4 — flowchart arrow style; sequential after item 3 to prevent
+  #           conflicts on _geometry.py / _parser.py
+  {path = "docs/specs/flowchart-arrow-style-conformance", needs = [
+    "work:docs/specs/eight-case-validation-and-provenance",
+    "work:docs/specs/flowchart-compound-layout-and-boundary-gates",
+  ]},
+  # Item 5 — architecture ports; sequential after item 4 for clean base
+  {path = "docs/specs/architecture-fixed-port-integration", needs = [
+    "work:docs/specs/eight-case-validation-and-provenance",
+    "work:docs/specs/flowchart-arrow-style-conformance",
+  ]},
+  # Item 6 — CI gate and cleanup; requires all of 2–5
+  {path = "docs/specs/eight-case-parity-ci-and-cleanup", needs = [
+    "work:docs/specs/sequence-shared-compiler-and-native-scene",
+    "work:docs/specs/flowchart-compound-layout-and-boundary-gates",
+    "work:docs/specs/flowchart-arrow-style-conformance",
+    "work:docs/specs/architecture-fixed-port-integration",
+  ]},
+]
+active = []
+shipped = []
