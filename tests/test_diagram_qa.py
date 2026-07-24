@@ -252,8 +252,8 @@ if __name__ == "__main__":
 
         # AC-3: COL_GAP and GROUP_PAD constants are at target values
         check("COL_GAP is 56px", COL_GAP == 56)
-        check("GROUP_PAD_X is 28px", GROUP_PAD_X == 28)
-        check("GROUP_PAD_Y_TOP is 36px", GROUP_PAD_Y_TOP == 36)
+        check("GROUP_PAD_X is 48px", GROUP_PAD_X == 48)
+        check("GROUP_PAD_Y_TOP is 52px", GROUP_PAD_Y_TOP == 52)
 
         # AC-4: :::external class parsing
         _, _, _, css_class = _parse_spec_and_class("A[Service]:::external")

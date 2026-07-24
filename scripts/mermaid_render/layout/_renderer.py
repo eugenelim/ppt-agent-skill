@@ -235,6 +235,9 @@ def _render_graph_fragment(
             _node_grp_idx[_nid] = _gi
 
     # Group containers (subgraphs) — dashed border + subtle tint per accent slot.
+    # Labels are collected here and appended AFTER node divs so they appear above
+    # node cards in DOM z-order (node cards would otherwise cover the label text).
+    _grp_label_overlays: list[str] = []
     for _gi, (gid, grp) in enumerate(groups.items()):
         if gid not in _grp_bboxes:
             continue
@@ -244,6 +247,7 @@ def _render_graph_fragment(
         glabel = _h(grp.label)
         _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
         _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
+        # Group boundary (no embedded label — label rendered below as overlay)
         parts.append(
             f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{glabel}" style="'
             f'position:absolute; left:{gx}px; top:{gy}px; '
@@ -251,16 +255,21 @@ def _render_graph_fragment(
             f'border:1.5px dashed {_accent}; '
             f'background:{_tint}; '
             f'border-radius:var(--group-radius,12px); '
-            f'box-sizing:border-box; overflow:visible;">'
-            f'<span class="group-label" style="'
-            f'position:absolute; top:8px; left:10px; '
-            f'font-size:11px; color:{_accent}; '
-            f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
-            f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
-            f'display:block; overflow-wrap:break-word; word-break:break-word; '
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-            f'{glabel}</span></div>'
+            f'box-sizing:border-box; overflow:visible;"></div>'
         )
+        # Collect label overlay for post-node rendering
+        if glabel:
+            _grp_label_overlays.append(
+                f'<div class="group-label" data-for-group="{_h(gid)}" style="'
+                f'position:absolute; top:{gy + 8}px; left:{gx + 10}px; '
+                f'font-size:11px; color:{_accent}; '
+                f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
+                f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
+                f'display:block; overflow-wrap:break-word; word-break:break-word; '
+                f'pointer-events:none; '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                f'{glabel}</div>'
+            )
 
     # Depth wash: rank-to-tint index for architectural layer encoding
     _real_ranks = [n.rank for n in nodes.values() if not n.is_dummy]
@@ -502,6 +511,10 @@ def _render_graph_fragment(
             _html = _geom.paint_html(n.x, n.y, _nw, node_h, **_paint_kw)
             if _html is not None:
                 parts.append(_html)
+
+    # Group label overlays — rendered AFTER node divs so they appear on top of
+    # node card backgrounds (nodes are higher in DOM z-order than group boundaries).
+    parts.extend(_grp_label_overlays)
 
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
     # clip-path:inset(0) keeps edges inside the diagram area so they cannot
@@ -1017,7 +1030,7 @@ def _separate_groups_lr(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]  # type: ignore[index]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] <= b1["gx_right"]  # type: ignore[index]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
                 if x_overlap and y_overlap:
                     shift = b1["gy_bot"] - b2["gy"] + COL_GAP  # type: ignore[index]
@@ -1067,7 +1080,7 @@ def _separate_groups_tb(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]  # type: ignore[index]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] <= b1["gx_right"]  # type: ignore[index]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
                 if x_overlap and y_overlap:
                     shift = int(b1["gx_right"] - b2["gx"] + COL_GAP)  # type: ignore[index]
@@ -1261,6 +1274,22 @@ def _compute_group_bboxes(
                 "y1": max(m.y + _node_render_h(m) for m in mbrs),
             }
 
+    # Pre-compute RECURSIVE member coordinate extremes per group for Step 3 split
+    # containment checks.  Unlike _grp_mc (direct members only), this covers members
+    # inside nested child groups so a sibling-split can't push a group boundary past
+    # a deeply-nested node.
+    _grp_mc_rec: dict[str, dict] = {}
+    for gid in groups:
+        _all_rec_ids = _recursive_members(gid)
+        _rec_mbrs = [nodes[m] for m in _all_rec_ids if m in nodes and not nodes[m].is_dummy]
+        if _rec_mbrs:
+            _grp_mc_rec[gid] = {
+                "x0": float(min(m.x for m in _rec_mbrs)),
+                "x1": float(max(m.x + _node_render_w(m) for m in _rec_mbrs)),
+                "y0": float(min(m.y for m in _rec_mbrs)),
+                "y1": float(max(m.y + _node_render_h(m) for m in _rec_mbrs)),
+            }
+
     # Step 2: non-member node exclusion — shrink the closest group edge, but only
     # when the shrink won't exclude any group member. If no safe direction exists,
     # accept the visual overlap rather than corrupting the group bbox.
@@ -1331,36 +1360,59 @@ def _compute_group_bboxes(
 
     # Step 3: pairwise overlap resolution (iterative, up to GROUP_CAP passes)
     # Skip nested pairs — their bboxes overlap by design (parent wraps child).
+    # Also skip empty groups: their [0,0] origin placeholder would damage non-empty
+    # group bboxes; empty groups are repositioned later by _place_empty_groups.
+    _empty_gids = {
+        gid for gid in groups
+        if not any(
+            m in nodes and not nodes[m].is_dummy
+            for m in _recursive_members(gid)
+        )
+    }
     gids = list(bboxes)
     for _ in range(GROUP_CAP):
         changed = False
         for i, g1 in enumerate(gids):
+            if g1 in _empty_gids:
+                continue
             b1 = bboxes[g1]
             for g2 in gids[i + 1:]:
                 if _is_nested_groups(g1, g2, groups):
+                    continue
+                if g2 in _empty_gids:
                     continue
                 b2 = bboxes[g2]
                 ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
                 oy = min(b1[3], b2[3]) - max(b1[1], b2[1])
                 if ox > 0 and oy > 0:
+                    mc1 = _grp_mc_rec.get(g1, {})
+                    mc2 = _grp_mc_rec.get(g2, {})
                     if ox <= oy:
                         mid = (max(b1[0], b2[0]) + min(b1[2], b2[2])) / 2
                         if b1[0] < b2[0]:
-                            b1[2] = mid
-                            b2[0] = mid
+                            if (not mc1 or mc1["x1"] <= mid) and (not mc2 or mc2["x0"] >= mid):
+                                b1[2] = mid
+                                b2[0] = mid
+                                changed = True
                         else:
-                            b2[2] = mid
-                            b1[0] = mid
+                            if (not mc2 or mc2["x1"] <= mid) and (not mc1 or mc1["x0"] >= mid):
+                                b2[2] = mid
+                                b1[0] = mid
+                                changed = True
                     else:
                         mid = (max(b1[1], b2[1]) + min(b1[3], b2[3])) / 2
                         if b1[1] < b2[1]:
-                            b1[3] = mid
-                            b2[1] = mid
+                            if (not mc1 or mc1["y1"] <= mid) and (not mc2 or mc2["y0"] >= mid):
+                                b1[3] = mid
+                                b2[1] = mid
+                                changed = True
                         else:
-                            b2[3] = mid
-                            b1[1] = mid
-                    changed = True
-                    break
+                            if (not mc2 or mc2["y1"] <= mid) and (not mc1 or mc1["y0"] >= mid):
+                                b2[3] = mid
+                                b1[1] = mid
+                                changed = True
+                    if changed:
+                        break
             if changed:
                 break
         if not changed:
@@ -1431,7 +1483,10 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
         f' style="position:relative; width:{cw}px; height:{ch}px;">'
     )
 
-    # Group boundaries first (rendered behind nodes)
+    # Group boundaries first (rendered behind nodes).
+    # Labels are collected here and appended AFTER node divs so they appear above
+    # node card backgrounds in DOM z-order.
+    _rf_label_overlays: list[str] = []
     for _gi, (gid, gl) in enumerate(layout.group_layouts.items()):
         b = gl.boundary_bounds
         gw, gh = max(1, int(b.w)), max(1, int(b.h))
@@ -1442,6 +1497,7 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
             if gl.label_layout and gl.label_layout.lines and gl.label_layout.lines[0].runs
             else ""
         )
+        # Group boundary only (no embedded label)
         parts.append(
             f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{lbl}" style="'
             f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
@@ -1449,20 +1505,21 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
             f'border:1.5px dashed {_accent}; '
             f'background:{_tint}; '
             f'border-radius:var(--group-radius,12px); '
-            f'box-sizing:border-box; overflow:visible;">'
+            f'box-sizing:border-box; overflow:visible;"></div>'
         )
+        # Collect label overlay for post-node rendering
         if lbl:
-            parts.append(
-                f'<span class="group-label" style="'
-                f'position:absolute; top:8px; left:10px; '
+            _rf_label_overlays.append(
+                f'<div class="group-label" data-for-group="{_h(gid)}" style="'
+                f'position:absolute; top:{int(b.y) + 8}px; left:{int(b.x) + 10}px; '
                 f'font-size:11px; color:{_accent}; '
                 f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
                 f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
                 f'display:block; overflow-wrap:break-word; word-break:break-word; '
+                f'pointer-events:none; '
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-                f'{lbl}</span>'
+                f'{lbl}</div>'
             )
-        parts.append("</div>")
 
     # Nodes
     for nid, nl in layout.node_layouts.items():
@@ -1650,6 +1707,10 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
             _html = _geom.paint_html(int(b.x), int(b.y), _nw, nh, **_paint_kw)
             if _html is not None:
                 parts.append(_html)
+
+    # Group label overlays — rendered AFTER node divs so they appear on top of
+    # node card backgrounds (nodes are higher in DOM z-order than group boundaries).
+    parts.extend(_rf_label_overlays)
 
     # SVG overlay for routed edges (geometry pre-computed, no routing calls)
     parts.append(
