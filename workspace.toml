@@ -84,6 +84,18 @@ open = [
   # needs the same on-segment check wired into the conformance tests.
   {slug = "flowchart-diamond-endpoint-on-segment"},
 
+  # ── architecture-fixed-port-integration deferred sub-check (ini-003 item 5) ──
+  # spec/architecture-fixed-port-integration AC9: on the ELK path the api→cache
+  # route clips queue's interior for the architecture-complex fixture, and ELK's
+  # fixed-side port positions sit ~12px inside the visual node face (surfaces the
+  # pre-existing test_arch_port_acceptance / test_no_edge_waypoint_inside_service
+  # / TestBiRelEdge::test_birel_with_label failures that only appear when elkjs is
+  # installed). Holds on the Python fallback (segment-aware validators clean).
+  # Fixing requires ELK-side architecture edge-routing + port-snapping work, which
+  # the spec forbids ("do not redesign the successful ELK path"). Unblock: a follow-on
+  # ELK-architecture-geometry spec in an elkjs-enabled environment.
+  {slug = "arch-elk-edge-interior-crossing", source = "spec/architecture-fixed-port-integration AC9"},
+
     # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
   # These slugs remain here only to satisfy (deferred: <slug>) references in shipped
   # specs (immutable bodies). Implementation is tracked in docs/specs/mmdc-browser-geometry-capture
@@ -168,11 +180,6 @@ status = "active"
 
 ["ini-003".work]
 queue = [
-  # Item 5 — architecture ports; sequential after item 4 for clean base
-  {path = "docs/specs/architecture-fixed-port-integration", needs = [
-    "work:docs/specs/eight-case-validation-and-provenance",
-    "work:docs/specs/flowchart-arrow-style-conformance",
-  ]},
   # Item 6 — CI gate and cleanup; requires all of 2–5
   {path = "docs/specs/eight-case-parity-ci-and-cleanup", needs = [
     "work:docs/specs/sequence-shared-compiler-and-native-scene",
@@ -182,4 +189,4 @@ queue = [
   ]},
 ]
 active = []
-shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance"]
+shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance", "docs/specs/architecture-fixed-port-integration"]

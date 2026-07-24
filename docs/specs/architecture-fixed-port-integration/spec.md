@@ -2,7 +2,7 @@
 
 Mode: full (ELK integration test; fixed-port semantics; fallback correctness)
 
-- **Status:** Approved
+- **Status:** Shipped
 
 Dependencies: `docs/specs/eight-case-validation-and-provenance`
 
@@ -69,28 +69,56 @@ architecture-beta
 
 ## Acceptance Criteria
 
-- [ ] AC1: Integration test runs actual elkjs subprocess; `layout_backend = "elkjs"`;
+- [x] AC1: Integration test runs actual elkjs subprocess; `layout_backend = "elkjs"`;
   `fallback_reason = null`; test fails if ELK is unavailable.
-- [ ] AC2: ELK result is consumed directly; the Python router is not called after a
+  (`tests/test_architecture_elk_integration.py`, `@pytest.mark.elk_integration`.)
+- [x] AC2: ELK result is consumed directly; the Python router is not called after a
   successful ELK layout.
-- [ ] AC3: All four declared port sides preserved through ELK: `lb:R`, `api:R` (×2),
+- [x] AC3: All four declared port sides preserved through ELK: `lb:R`, `api:R` (×2),
   `api:B`, with matching destination sides `L:api`, `L:db`, `T:cache`, `L:queue`.
-- [ ] AC4: First and last route segment tangents agree with the declared source and
+- [x] AC4: First and last route segment tangents agree with the declared source and
   destination sides for all four edges.
-- [ ] AC5: Python fallback preserves all four declared source/destination sides; no
+- [x] AC5: Python fallback preserves all four declared source/destination sides; no
   finalized port remains `PortSide.AUTO`.
-- [ ] AC6: Python fallback raises a typed error rather than silently substituting AUTO
+- [x] AC6: Python fallback raises a typed error rather than silently substituting AUTO
   when it cannot honor a port-side constraint.
-- [ ] AC7: All five services (`lb`, `api`, `db`, `cache`, `queue`) exist in the layout.
-- [ ] AC8: All five services are inside the Cloud Platform group.
-- [ ] AC9: No edge crosses a service interior; Cloud Platform title band is clear.
-- [ ] AC10: Each relation has a stable `edge_id` in both ELK and fallback lanes.
-- [ ] AC11: `faithful_mermaid=True` output contains no synchronous or service-boundary
+- [x] AC7: All five services (`lb`, `api`, `db`, `cache`, `queue`) exist in the layout.
+- [x] AC8: All five services are inside the Cloud Platform group.
+- [ ] AC9 (deferred: arch-elk-edge-interior-crossing): No edge crosses a service
+  interior; Cloud Platform title band is clear. Holds on the Python fallback
+  (validated clean by the segment-aware validators); the ELK path has a
+  pre-existing `api→cache` route that clips `queue`'s interior for this fixture.
+  Fixing it requires changing ELK's architecture edge routing, which this spec's
+  Never/Out-of-scope constraints forbid ("do not redesign the successful ELK path").
+- [x] AC10: Each relation has a stable `edge_id` in both ELK and fallback lanes.
+- [x] AC11: `faithful_mermaid=True` output contains no synchronous or service-boundary
   legend.
 
 **Note on `layout_backend` vocabulary:** architecture's native `backend` field uses `"elk-js"`
 (not `"elkjs"`) for the ELK path. The `Provenance.layout_backend` normalization maps
 `"elk-js"` → `"elkjs"` for consistent cross-compiler provenance.
+
+## Deviations
+
+- **`compile_architecture` return type unified to `ArchitectureDiagramLayout`.**
+  The prior `mermaid-architecture-metadata-preservation` spec returned a
+  `FinalizedLayout` directly on the ELK success path. That conflicts with the
+  ini-003 eight-case AC9 harness (item 1, merged), which reads
+  `.services`/`.groups`/`.edges` — so `architecture-complex` failed on `main`
+  whenever elkjs was installed. Item 5 unifies the return type: both the ELK and
+  fallback paths return the documented `ArchitectureDiagramLayout`; the
+  `FinalizedLayout` is obtained via `arch_to_finalized()`. The ELK geometry is
+  consumed directly (no re-routing — AC2 preserved). The prior spec's conformance
+  tests (`tests/test_architecture_conformance.py`) were updated to assert their
+  invariants on `arch_to_finalized(compile_architecture(...))`.
+- **AC9 ELK-path interior crossing deferred** (see AC9 above), anchor
+  `arch-elk-edge-interior-crossing`. The same anchor covers the pre-existing
+  ELK-only architecture geometry test failures (`test_arch_port_acceptance`
+  edge-face inset, `test_no_edge_waypoint_inside_service`,
+  `test_arch_compiled_model::TestBiRelEdge::test_birel_with_label`): ELK's port
+  positions sit ~12px inside the visual node face. These fail only when elkjs is
+  installed and are unchanged by this item (proven: zero new FAILED-set drift vs
+  a pristine `origin/main` worktree with the same elkjs).
 
 ## Testing Strategy
 

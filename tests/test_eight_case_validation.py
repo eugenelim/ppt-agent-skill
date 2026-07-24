@@ -199,6 +199,36 @@ def _flowchart_provenance(
     )
 
 
+def _architecture_provenance(stem: str, renderer_api: str, output_format: str) -> Provenance:
+    """Compile an architecture fixture and stamp its provenance from the model.
+
+    ``compile_architecture`` returns an ``ArchitectureDiagramLayout`` whose
+    ``backend`` field is ``"elk-js"`` on the ELK path / ``"python-fallback"`` on
+    the fallback path. ``layout_backend`` normalizes ``"elk-js"`` → ``"elkjs"``
+    (spec note) — it is read from the compiled model, never from output_format.
+    """
+    arch = compile_architecture(_src(stem))
+    layout_backend = _layout_backend_from_metadata_str(arch.backend)
+    is_elk = layout_backend == "elkjs"
+    return Provenance(
+        renderer_api=renderer_api,
+        output_format=output_format,
+        semantic_compiler="architecture",
+        layout_backend=layout_backend,
+        fallback_reason=None if is_elk else "elk-unavailable",
+        node_version=_node_version() if is_elk else None,
+        elkjs_version=_elkjs_version() if is_elk else None,
+    )
+
+
+def _layout_backend_from_metadata_str(backend: str) -> str:
+    """Normalize a raw ``backend`` string to the provenance vocabulary."""
+    return {
+        "elkjs": "elkjs", "elk-js": "elkjs",
+        "python": "python-fallback", "python-fallback": "python-fallback",
+    }.get(backend, backend)
+
+
 def _sequence_provenance(stem: str, renderer_api: str, output_format: str) -> Provenance:
     """Compile a sequence fixture and stamp its provenance at the call site.
 
@@ -387,20 +417,12 @@ def _render_lane_params():
     for stem in ALL_FIXTURES:
         for api in ("to_html", "to_svg"):
             for faithful in (True, False):
-                # Item 2 landed the shared sequence compiler + native scene, so
-                # sequence to_svg is no longer broken. Architecture native SVG
-                # remains pending item 5.
-                broken = api == "to_svg" and stem in ARCHITECTURE_FIXTURES
-                marks = (
-                    [pytest.mark.xfail(
-                        reason="architecture native SVG pending item 5",
-                        strict=False,
-                    )]
-                    if broken
-                    else []
-                )
+                # Item 2 landed the shared sequence compiler + native scene;
+                # item 5 landed the architecture ELK/port integration + native
+                # scene. Both render across all four variants now (each opts into
+                # the experimental native-SVG path on the to_svg lane).
                 params.append(
-                    pytest.param(stem, api, faithful, marks=marks, id=f"{stem}-{api}-f{int(faithful)}")
+                    pytest.param(stem, api, faithful, id=f"{stem}-{api}-f{int(faithful)}")
                 )
     return params
 
@@ -409,13 +431,12 @@ def _render_lane_params():
 def test_render_variant_lane(stem, api, faithful):
     """AC1: every fixture renders across the four variants; loud on any error.
 
-    Sequence has an experimental native SVG builder, so its to_svg lane opts in
-    with ``experimental=True``. Architecture stays on the opt-in-required path
-    (its native SVG is pending item 5) so its lane remains a genuine xfail.
+    Sequence and architecture have experimental native SVG builders, so their
+    to_svg lanes opt in with ``experimental=True``.
     """
     if api == "to_html":
         out = mr.to_html(_src(stem), faithful=faithful)
-    elif stem in SEQUENCE_FIXTURES:
+    elif stem in SEQUENCE_FIXTURES or stem in ARCHITECTURE_FIXTURES:
         out = mr.to_svg(_src(stem), faithful=faithful, experimental=True)
     else:
         out = mr.to_svg(_src(stem), faithful=faithful)
@@ -434,12 +455,9 @@ def _elk_lane_params():
             reason="compound layout takes the Python path until item 3", strict=False,
         )] if compound else []
         params.append(pytest.param(stem, marks=marks, id=stem))
-    # Architecture ELK/port integration is item 5.
-    params.append(pytest.param(
-        "architecture-complex",
-        marks=[pytest.mark.xfail(reason="architecture ELK/port integration pending item 5", strict=False)],
-        id="architecture-complex",
-    ))
+    # Architecture ELK/port integration landed in item 5: it now uses the elkjs
+    # backend directly, so its ELK lane is a real assertion (no longer xfail).
+    params.append(pytest.param("architecture-complex", id="architecture-complex"))
     return params
 
 
@@ -448,7 +466,10 @@ def _elk_lane_params():
 def test_elk_lane_requires_elkjs_present(stem):
     """AC2: with ELK available, the ELK-required fixtures use the elkjs backend
     and record Node + elkjs versions. Skipped cleanly when ELK is absent."""
-    prov = _flowchart_provenance(stem, "to_html", "html", force_python=False)
+    if stem in ARCHITECTURE_FIXTURES:
+        prov = _architecture_provenance(stem, "to_html", "html")
+    else:
+        prov = _flowchart_provenance(stem, "to_html", "html", force_python=False)
     assert prov.layout_backend == "elkjs"
     assert prov.fallback_reason is None
     assert prov.node_version, "node version must be recorded on the ELK lane"

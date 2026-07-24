@@ -122,10 +122,18 @@ def _make_mock_elk_result(node_ids: list[str], group_ids: list[str],
     return (fl, None)
 
 
-# ── Task 1: success path returns FinalizedLayout; no _elk_routes_to_specs ────
+# ── Task 1: success path returns the compiled model; no _elk_routes_to_specs ──
+#
+# Contract updated by architecture-fixed-port-integration (item 5 of ini-003):
+# compile_architecture now returns the documented ArchitectureDiagramLayout on
+# BOTH the ELK and Python-fallback paths (the eight_case AC9 harness reads
+# ``.services``/``.groups``/``.edges``). The FinalizedLayout is obtained via
+# arch_to_finalized() — the ELK geometry is consumed directly (no re-routing),
+# so every invariant the prior contract asserted still holds on the lowered
+# FinalizedLayout.
 
-class TestSuccessPathReturnsFinalizedLayout:
-    """Task 1 tests — ELK success path returns FinalizedLayout directly."""
+class TestSuccessPathReturnsCompiledModel:
+    """Task 1 tests — ELK success path returns ArchitectureDiagramLayout."""
 
     def _make_complex_mock(self):
         node_ids = ["lb", "api", "db", "cache", "queue"]
@@ -139,15 +147,18 @@ class TestSuccessPathReturnsFinalizedLayout:
         ]
         return _make_mock_elk_result(node_ids, group_ids, edges, group_map=group_map)
 
-    def test_success_path_returns_finalized_layout(self):
-        """ELK success path must return FinalizedLayout, not ArchitectureDiagramLayout."""
+    def test_success_path_returns_compiled_model(self):
+        """ELK success path returns ArchitectureDiagramLayout; arch_to_finalized lowers it."""
+        from mermaid_render.layout.architecture import ArchitectureDiagramLayout
         mock_ret = self._make_complex_mock()
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout), (
-            f"Expected FinalizedLayout, got {type(result).__name__}"
+        assert isinstance(result, ArchitectureDiagramLayout), (
+            f"Expected ArchitectureDiagramLayout, got {type(result).__name__}"
         )
+        assert result.backend == "elk-js"
+        assert isinstance(arch_to_finalized(result), FinalizedLayout)
 
     def test_elk_routes_to_specs_deleted(self):
         """_elk_routes_to_specs must not exist — it is dead code deleted by AC7.
@@ -168,25 +179,25 @@ class TestSuccessPathReturnsFinalizedLayout:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        assert "elk-js" in result.diagnostics.warnings
+        fl = arch_to_finalized(result)
+        assert "elk-js" in fl.diagnostics.warnings
 
     def test_success_path_has_node_layouts_for_all_services(self):
         mock_ret = self._make_complex_mock()
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
+        fl = arch_to_finalized(result)
         for nid in ("lb", "api", "db", "cache", "queue"):
-            assert nid in result.node_layouts, f"Missing node layout for {nid!r}"
+            assert nid in fl.node_layouts, f"Missing node layout for {nid!r}"
 
     def test_success_path_has_group_layout_for_cloud(self):
         mock_ret = self._make_complex_mock()
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        assert "cloud" in result.group_layouts
+        fl = arch_to_finalized(result)
+        assert "cloud" in fl.group_layouts
 
 
 # ── Task 2: edge-id keyed metadata ───────────────────────────────────────────
@@ -216,8 +227,8 @@ architecture-beta
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(self.DUAL_EDGE_SRC)
-        assert isinstance(result, FinalizedLayout)
-        edge_ids = [re.edge_id for re in result.routed_edges]
+        fl = arch_to_finalized(result)
+        edge_ids = [re.edge_id for re in fl.routed_edges]
         assert len(set(edge_ids)) == 2, f"Expected 2 distinct edge_ids, got {edge_ids}"
 
     def test_duplicate_src_dst_both_survive(self):
@@ -226,8 +237,8 @@ architecture-beta
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(self.DUAL_EDGE_SRC)
-        assert isinstance(result, FinalizedLayout)
-        assert len(result.routed_edges) == 2
+        fl = arch_to_finalized(result)
+        assert len(fl.routed_edges) == 2
 
     def test_no_src_dst_tuple_lookup_in_pipeline(self):
         """The (src,dst) tuple-identity map (_elk_routes_to_specs) must not exist.
@@ -280,8 +291,8 @@ class TestFixedSidePortPreservation:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        edge = self._get_edge(result, "lb", "api")
+        fl = arch_to_finalized(result)
+        edge = self._get_edge(fl, "lb", "api")
         assert edge is not None, "lb->api not found in routed_edges"
         assert edge.src_port.side == PortSide.RIGHT, (
             f"Expected RIGHT, got {edge.src_port.side}"
@@ -293,8 +304,8 @@ class TestFixedSidePortPreservation:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        edge = self._get_edge(result, "lb", "api")
+        fl = arch_to_finalized(result)
+        edge = self._get_edge(fl, "lb", "api")
         assert edge is not None
         assert edge.dst_port.side == PortSide.LEFT
 
@@ -304,8 +315,8 @@ class TestFixedSidePortPreservation:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        edge = self._get_edge(result, "api", "cache")
+        fl = arch_to_finalized(result)
+        edge = self._get_edge(fl, "api", "cache")
         assert edge is not None, "api->cache not found"
         assert edge.src_port.side == PortSide.BOTTOM, (
             f"Expected BOTTOM, got {edge.src_port.side}"
@@ -317,8 +328,8 @@ class TestFixedSidePortPreservation:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        edge = self._get_edge(result, "api", "cache")
+        fl = arch_to_finalized(result)
+        edge = self._get_edge(fl, "api", "cache")
         assert edge is not None
         assert edge.dst_port.side == PortSide.TOP
 
@@ -328,9 +339,9 @@ class TestFixedSidePortPreservation:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
+        fl = arch_to_finalized(result)
         # architecture-complex declares fixed sides on all 4 edges
-        for re in result.routed_edges:
+        for re in fl.routed_edges:
             assert re.src_port.side != PortSide.AUTO, (
                 f"Edge {re.edge_id} src_port.side is AUTO — fixed side was overwritten"
             )
@@ -367,8 +378,8 @@ architecture-beta
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(self.LABELED_SRC)
-        assert isinstance(result, FinalizedLayout)
-        for nid, nl in result.node_layouts.items():
+        fl = arch_to_finalized(result)
+        for nid, nl in fl.node_layouts.items():
             if not nl.is_dummy:
                 assert isinstance(nl.title_layout, TextLayout), (
                     f"Node {nid}: title_layout is not a TextLayout"
@@ -383,8 +394,8 @@ architecture-beta
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(self.LABELED_SRC)
-        assert isinstance(result, FinalizedLayout)
-        gl = result.group_layouts.get("g")
+        fl = arch_to_finalized(result)
+        gl = fl.group_layouts.get("g")
         assert gl is not None
         assert isinstance(gl.label_layout, TextLayout), (
             f"Group g: label_layout is not a TextLayout"
@@ -396,8 +407,8 @@ architecture-beta
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(self.LABELED_SRC)
-        assert isinstance(result, FinalizedLayout)
-        labeled = [re for re in result.routed_edges if re.label_layout is not None]
+        fl = arch_to_finalized(result)
+        labeled = [re for re in fl.routed_edges if re.label_layout is not None]
         assert len(labeled) == 1, "Expected one labeled edge"
         ll = labeled[0].label_layout
         assert ll is not None
@@ -425,13 +436,14 @@ architecture-beta
                    side_effect=_mock_long):
             long_result = compile_architecture(long_src)
 
-        if isinstance(short_result, FinalizedLayout) and isinstance(long_result, FinalizedLayout):
-            short_w = short_result.group_layouts["g"].label_layout
-            long_w = long_result.group_layouts["g"].label_layout
-            if short_w is not None and long_w is not None:
-                assert long_w.width > short_w.width, (
-                    f"Longer label should have wider TextLayout: {long_w.width} <= {short_w.width}"
-                )
+        short_fl = arch_to_finalized(short_result)
+        long_fl = arch_to_finalized(long_result)
+        short_w = short_fl.group_layouts["g"].label_layout
+        long_w = long_fl.group_layouts["g"].label_layout
+        assert short_w is not None and long_w is not None
+        assert long_w.width > short_w.width, (
+            f"Longer label should have wider TextLayout: {long_w.width} <= {short_w.width}"
+        )
 
 
 # ── Task 5: fallback contract ─────────────────────────────────────────────────
@@ -532,8 +544,8 @@ class TestArchitectureComplexConformance:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        edge_map = {re.edge_id: re for re in result.routed_edges}
+        fl = arch_to_finalized(result)
+        edge_map = {re.edge_id: re for re in fl.routed_edges}
 
         # lb:R → L:api
         e = edge_map.get("lb->api")
@@ -565,8 +577,8 @@ class TestArchitectureComplexConformance:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        edge_ids = [re.edge_id for re in result.routed_edges]
+        fl = arch_to_finalized(result)
+        edge_ids = [re.edge_id for re in fl.routed_edges]
         assert len(edge_ids) == len(set(edge_ids)), (
             f"Duplicate edge_ids found: {edge_ids}"
         )
@@ -586,7 +598,7 @@ class TestArchitectureComplexConformance:
                    return_value=mock_ret):
             with patch.object(_rout, "_route_edges", side_effect=_spy_route):
                 result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
+        fl = arch_to_finalized(result)
         assert not route_calls, (
             "_route_edges was called on ELK success path — rerouting detected"
         )
@@ -597,22 +609,185 @@ class TestArchitectureComplexConformance:
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        for nid, nl in result.node_layouts.items():
+        fl = arch_to_finalized(result)
+        for nid, nl in fl.node_layouts.items():
             if not nl.is_dummy:
                 assert isinstance(nl.title_layout, TextLayout), (
                     f"Node {nid} title_layout is not a TextLayout"
                 )
                 assert nl.title_layout.width > 0
 
-    def test_arch_to_finalized_passthrough_on_elk_result(self):
-        """arch_to_finalized passes through FinalizedLayout unchanged."""
+    def test_arch_to_finalized_lowers_elk_model(self):
+        """arch_to_finalized lowers the ELK-origin model to a FinalizedLayout.
+
+        The ELK geometry is consumed directly (no re-routing), so the lowered
+        layout keeps ELK's node bounds, group bounds, and routed waypoints.
+        """
         mock_ret = self._make_complex_mock()
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
                    return_value=mock_ret):
             result = compile_architecture(COMPLEX_SRC, width_hint=1200)
-        assert isinstance(result, FinalizedLayout)
-        passthrough = arch_to_finalized(result)
-        assert passthrough is result, (
-            "arch_to_finalized should return the same FinalizedLayout unchanged"
+        fl = arch_to_finalized(result)
+        assert isinstance(fl, FinalizedLayout)
+        assert set(fl.node_layouts) == {"lb", "api", "db", "cache", "queue"}
+        assert {re.edge_id for re in fl.routed_edges} == {
+            "lb->api", "api->db", "api->cache", "api->queue"
+        }
+
+
+# ── architecture-fixed-port-integration AC5/AC6: fallback declared-side ports ──
+
+class TestFallbackDeclaredSides:
+    """Item-5 AC5/AC6 — the Python fallback copies declared sides into the
+    finalized ports (no PortSide.AUTO) and raises a typed error rather than
+    silently substituting AUTO when a declared side cannot be honored."""
+
+    def _fallback_finalized(self):
+        with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
+                   side_effect=ElkUnavailable("forced fallback")):
+            result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        assert result.backend == "python-fallback"
+        return arch_to_finalized(result)
+
+    def test_fallback_no_auto_ports(self):
+        """AC5: no finalized port remains PortSide.AUTO in the fallback."""
+        fl = self._fallback_finalized()
+        for re in fl.routed_edges:
+            assert re.src_port.side != PortSide.AUTO, f"{re.edge_id} src AUTO"
+            assert re.dst_port.side != PortSide.AUTO, f"{re.edge_id} dst AUTO"
+
+    def test_fallback_preserves_declared_sides(self):
+        """AC5: all four declared source/destination sides survive the fallback."""
+        fl = self._fallback_finalized()
+        by_id = {re.edge_id: re for re in fl.routed_edges}
+        expected = {
+            "lb->api": (PortSide.RIGHT, PortSide.LEFT),
+            "api->db": (PortSide.RIGHT, PortSide.LEFT),
+            "api->cache": (PortSide.BOTTOM, PortSide.TOP),
+            "api->queue": (PortSide.RIGHT, PortSide.LEFT),
+        }
+        for eid, (ss, ds) in expected.items():
+            e = by_id.get(eid)
+            assert e is not None, f"{eid} missing"
+            assert e.src_port.side == ss, f"{eid} src {e.src_port.side} != {ss}"
+            assert e.dst_port.side == ds, f"{eid} dst {e.dst_port.side} != {ds}"
+
+    def test_fallback_source_directions_point_outward(self):
+        """AC5: source endpoint directions point outward from the source face."""
+        fl = self._fallback_finalized()
+        by_id = {re.edge_id: re for re in fl.routed_edges}
+        # api:B → cache — source BOTTOM points down (+y); dest TOP points into cache (+y down).
+        e = by_id["api->cache"]
+        assert e.src_port.direction.y > 0, "BOTTOM source should point downward"
+        # lb:R → api — source RIGHT points right (+x).
+        e = by_id["lb->api"]
+        assert e.src_port.direction.x > 0, "RIGHT source should point rightward"
+
+    def test_fallback_typed_error_on_unknown_side(self):
+        """AC6: an unknown declared side raises ArchitectureLayoutError, not AUTO."""
+        from mermaid_render.errors import ArchitectureLayoutError
+        from mermaid_render.layout.architecture import _resolve_fallback_port
+        rect = Rect(0.0, 0.0, 100.0, 60.0)
+        with pytest.raises(ArchitectureLayoutError):
+            _resolve_fallback_port("n", rect, "Z", Point(100.0, 30.0),
+                                   is_source=True, edge_id="n->m")
+
+    def test_fallback_typed_error_on_offface_endpoint(self):
+        """AC6: a routed endpoint that cannot honor the declared face raises."""
+        from mermaid_render.errors import ArchitectureLayoutError
+        from mermaid_render.layout.architecture import _resolve_fallback_port
+        rect = Rect(0.0, 0.0, 100.0, 60.0)
+        # declared RIGHT (face x=100) but endpoint sits at x=20 — cannot honor.
+        with pytest.raises(ArchitectureLayoutError):
+            _resolve_fallback_port("n", rect, "R", Point(20.0, 30.0),
+                                   is_source=True, edge_id="n->m")
+
+    def test_fallback_no_declared_side_infers_face(self):
+        """AC5: an endpoint with no declared side infers the nearest face (never AUTO)."""
+        from mermaid_render.layout.architecture import _resolve_fallback_port
+        rect = Rect(0.0, 0.0, 100.0, 60.0)
+        port = _resolve_fallback_port("n", rect, "", Point(100.0, 30.0),
+                                      is_source=True, edge_id="n->m")
+        assert port.side == PortSide.RIGHT
+        assert port.side != PortSide.AUTO
+
+
+# ── architecture-fixed-port-integration AC11: faithful-mode guard ─────────────
+
+class TestFaithfulModeGuard:
+    """Item-5 AC11 — faithful_mermaid=True adds no synchronous / service-boundary
+    legend and infers no business semantics beyond the architecture source."""
+
+    def _html(self, faithful: bool) -> str:
+        import mermaid_render as mr
+        return mr.to_html(COMPLEX_SRC, faithful=faithful)
+
+    def test_faithful_no_synchronous_legend(self):
+        assert "Synchronous" not in self._html(True)
+
+    def test_faithful_no_service_boundary_legend(self):
+        html = self._html(True)
+        assert "Service boundary" not in html
+        assert "diagram-legend" not in html
+
+    def test_faithful_no_inferred_semantics(self):
+        """Faithful output annotates no edge with async/critical-path semantics."""
+        html = self._html(True)
+        for term in ("Async / optional", "Critical path"):
+            assert term not in html
+
+    def test_editorial_variant_also_has_no_arch_legend(self):
+        """architecture-complex has only solid edges, so neither variant shows a legend."""
+        assert "diagram-legend" not in self._html(False)
+
+
+# ── architecture-fixed-port-integration AC7/AC8/AC9: validation assertions ────
+
+class TestArchitectureValidationAssertions:
+    """Item-5 AC7/AC8/AC9 — service existence, group containment, and clean
+    routing. Containment/existence hold on both backends; the no-interior-
+    crossing assertion is validated on the Python fallback (the ELK path has a
+    pre-existing api→cache/queue crossing tracked under
+    arch-elk-edge-interior-crossing — see spec Deviations)."""
+
+    def _fallback_finalized(self):
+        with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
+                   side_effect=ElkUnavailable("forced fallback")):
+            result = compile_architecture(COMPLEX_SRC, width_hint=1200)
+        return arch_to_finalized(result)
+
+    def test_all_five_services_exist(self):
+        """AC7: all five services are present in the layout."""
+        fl = self._fallback_finalized()
+        for nid in ("lb", "api", "db", "cache", "queue"):
+            assert nid in fl.node_layouts, f"missing service {nid!r}"
+
+    def test_all_services_inside_cloud_group(self):
+        """AC8: every service is contained by the Cloud Platform group bounds."""
+        fl = self._fallback_finalized()
+        cloud = fl.group_layouts["cloud"]
+        cb = cloud.boundary_bounds
+        for nid, nl in fl.node_layouts.items():
+            if nl.parent_group_id == "cloud":
+                b = nl.outer_bounds
+                assert (b.x >= cb.x and b.y >= cb.y
+                        and b.x + b.w <= cb.x + cb.w
+                        and b.y + b.h <= cb.y + cb.h), (
+                    f"{nid} {b} not inside cloud {cb}"
+                )
+
+    def test_no_edge_crosses_service_interior_fallback(self):
+        """AC9 (fallback): no route segment crosses a service interior or the
+        Cloud Platform title band — the segment-aware validators are clean."""
+        from mermaid_render.layout._layout_validation import (
+            all_violations, translate_layout_to_positive,
         )
+        fl = translate_layout_to_positive(self._fallback_finalized())
+        assert all_violations(fl) == [], all_violations(fl)
+
+    def test_stable_edge_ids_fallback(self):
+        """AC10 (fallback): each relation carries a unique, non-empty edge_id."""
+        fl = self._fallback_finalized()
+        ids = [re.edge_id for re in fl.routed_edges]
+        assert all(isinstance(i, str) and i for i in ids)
+        assert len(ids) == len(set(ids)), f"duplicate edge_ids: {ids}"
