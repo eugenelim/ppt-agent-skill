@@ -123,7 +123,7 @@ open = [
 ["ini-002"]
 name = "Mermaid Rendering Correctness Follow-on"
 milestone = "boston-v1"
-status = "active"
+status = "shipped"
 
 ["ini-002".work]
 queue = []
