@@ -216,7 +216,6 @@ status = "active"
 
 ["ini-004".work]
 queue = [
-  {path = "docs/specs/routing-node-ordering-refinement", needs = "work:docs/specs/routing-search-and-assignment"},
   {path = "docs/specs/routing-validation-invariants", needs = "work:docs/specs/routing-node-ordering-refinement"},
 ]
 active = []
@@ -224,4 +223,5 @@ shipped = [
   "docs/specs/routing-port-planner-foundation",
   "docs/specs/routing-search-and-assignment",
   "docs/specs/routing-endpoint-marker-geometry",
+  "docs/specs/routing-node-ordering-refinement",
 ]
