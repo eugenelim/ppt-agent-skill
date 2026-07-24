@@ -773,10 +773,12 @@ def _recursive_group_layout(
       LR/RL — all members at the same y, placed left-to-right by topo order.
       TB/TD — all members at the same x, placed top-to-bottom by topo order.
 
-    Replaces the _apply_inner_direction_positions call in _compile_flowchart.
-    Removes the need for the rank-flattening pre-pass: instead of forcing all
-    LR-group members to the same rank before coordinate assignment, we let
-    _assign_coordinates run normally and correct positions afterward.
+    Replaces the removed unconditional inner-direction position fixup that the
+    old ``_layout`` module ran after global placement (deleted in the eight-case
+    parity cleanup, spec AC4/AC5). Removes the need for the rank-flattening
+    pre-pass: instead of forcing all LR-group members to the same rank before
+    coordinate assignment, we let _assign_coordinates run normally and correct
+    positions afterward.
     """
     _col_gap = col_gap if col_gap is not None else COL_GAP
     # Match _assign_coordinates axis classification exactly: anything not LR/RL is vertical.

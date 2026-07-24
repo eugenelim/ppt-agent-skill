@@ -34,6 +34,7 @@ from ._geometry import (
     NodeLayout,
     Point,
     PortLayout,
+    PortSide,
     Rect,
     RoutedEdge,
 )
@@ -475,3 +476,181 @@ def all_violations(layout: FinalizedLayout, tol: float = 1.0) -> list[str]:
     out += validate_segment_obstruction(layout, tol)
     out += validate_compound_gates(layout, tol)
     return out
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CI hard-failure gates (eight-case-parity-ci-and-cleanup AC2)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Each gate below turns one spec-listed hard-failure condition into a
+# ``list[str]`` of violations (empty == pass), so the CI gate suite can
+# fabricate a pathological input per condition and assert the gate bites.
+# They are pure functions over already-computed geometry/records — never a
+# re-layout, and never a read of a stored artifact (spec Never-rules).
+
+
+def validate_backend_declared(backend: "str | None") -> list[str]:
+    """Hidden-backend-fallback gate: a layout must declare a non-empty backend."""
+    if backend is None or not str(backend).strip():
+        return ["hidden backend fallback: layout backend is empty/undeclared"]
+    return []
+
+
+def validate_provenance(record: dict) -> list[str]:
+    """Backend-provenance gate over the seven-field provenance record.
+
+    Fails on (a) a missing/empty required field (missing provenance), and
+    (b) ``layout_backend`` carrying an output-format token — the "layout
+    backend inferred from output_format" incorrect-field-usage condition.
+    """
+    errors: list[str] = []
+    required = (
+        "renderer_api", "output_format", "semantic_compiler", "layout_backend",
+    )
+    for key in required:
+        if not record.get(key):
+            errors.append(f"missing/empty provenance field {key!r}")
+    lb = record.get("layout_backend")
+    if lb in ("html", "svg"):
+        errors.append(
+            f"layout_backend {lb!r} is an output-format token — inferred from "
+            f"output_format, not read from layout metadata"
+        )
+    return errors
+
+
+def validate_no_auto_ports(layout: FinalizedLayout) -> list[str]:
+    """Incorrect-architecture-fixed-side-port gate: no ``PortSide.AUTO`` survives.
+
+    A fixed-side port left as ``AUTO`` in finalized output means a declared
+    side was silently dropped (spec architecture-fixed-port-integration AC5/AC6).
+    """
+    errors: list[str] = []
+    for e in layout.routed_edges:
+        for tag, port in (("src", e.src_port), ("dst", e.dst_port)):
+            if port.side == PortSide.AUTO:
+                errors.append(
+                    f"edge {e.edge_id!r} {tag}_port is PortSide.AUTO "
+                    f"(unresolved fixed side)"
+                )
+    return errors
+
+
+def _rects_overlap_or_touch(a: Rect, b: Rect, tol: float = 0.0) -> bool:
+    """True if two rectangles overlap OR share a touching edge (within ``tol``)."""
+    return (
+        a.x <= b.x1 + tol and b.x <= a.x1 + tol
+        and a.y <= b.y1 + tol and b.y <= a.y1 + tol
+    )
+
+
+def validate_sibling_groups_disjoint(
+    layout: FinalizedLayout, tol: float = 0.0
+) -> list[str]:
+    """Overlapping-or-touching-sibling-groups gate.
+
+    Groups that share the same ``parent_group_id`` must be strictly separated;
+    an overlap OR a touching boundary is a violation (spec
+    flowchart-compound-layout-and-boundary-gates AC1).
+    """
+    from collections import defaultdict
+
+    by_parent: "dict[str | None, list[tuple[str, Rect]]]" = defaultdict(list)
+    for gid, gl in layout.group_layouts.items():
+        by_parent[gl.parent_group_id].append((gid, gl.boundary_bounds))
+    errors: list[str] = []
+    for _parent, items in by_parent.items():
+        for i in range(len(items)):
+            for j in range(i + 1, len(items)):
+                (gid_a, ra), (gid_b, rb) = items[i], items[j]
+                if _rects_overlap_or_touch(ra, rb, tol):
+                    errors.append(
+                        f"sibling groups {gid_a!r} and {gid_b!r} overlap or touch "
+                        f"({ra} / {rb})"
+                    )
+    return errors
+
+
+def validate_local_directions(
+    layout: FinalizedLayout, expected: dict
+) -> list[str]:
+    """Incorrect-local-group-direction gate: each group's ``local_direction``
+    must equal the direction declared for it in the source."""
+    errors: list[str] = []
+    for gid, exp in expected.items():
+        gl = layout.group_layouts.get(gid)
+        if gl is None:
+            errors.append(f"group {gid!r} absent (cannot check local direction)")
+            continue
+        if gl.local_direction != exp:
+            errors.append(
+                f"group {gid!r} local_direction {gl.local_direction!r} != "
+                f"expected {exp!r}"
+            )
+    return errors
+
+
+def validate_edge_styles(layout: FinalizedLayout, required) -> list[str]:
+    """Missing-flowchart-edge-style gate: every required style must be present."""
+    present = {e.edge_style for e in layout.routed_edges}
+    return [
+        f"missing flowchart edge style {s!r}"
+        for s in sorted(set(required) - present)
+    ]
+
+
+def validate_min_counts(counts: dict, minimums: dict) -> list[str]:
+    """Missing-empty-group / missing-box / missing-fragment gate.
+
+    Generic minimum-count gate: any ``counts[k]`` below ``minimums[k]`` (a
+    missing empty group, box, or fragment) is a violation.
+    """
+    errors: list[str] = []
+    for key, minimum in minimums.items():
+        actual = counts.get(key, 0)
+        if actual < minimum:
+            errors.append(f"{key}: {actual} below required minimum {minimum}")
+    return errors
+
+
+def validate_membership(actual: dict, expected: dict) -> list[str]:
+    """Incorrect-box-membership gate: membership sets must match exactly."""
+    errors: list[str] = []
+    for key, exp in expected.items():
+        act = actual.get(key)
+        if act is None:
+            errors.append(f"missing membership group {key!r}")
+            continue
+        if set(act) != set(exp):
+            errors.append(
+                f"group {key!r} membership {sorted(act)} != expected {sorted(exp)}"
+            )
+    return errors
+
+
+def validate_parent_refs(child_parents: dict, valid_parents) -> list[str]:
+    """Incorrect-nested-fragment-parent gate: every child's parent must resolve."""
+    valid = set(valid_parents)
+    return [
+        f"child {child!r} references unknown parent {parent!r}"
+        for child, parent in child_parents.items()
+        if parent not in valid
+    ]
+
+
+def semantic_divergence(record_a: dict, record_b: dict, keys=None) -> list[str]:
+    """HTML/SVG-divergence and nondeterminism gate.
+
+    Returns one message per differing key across two normalized records. Used
+    both to compare the HTML and SVG lanes of one fixture (semantic/geometry
+    divergence) and to compare two clean runs of the same lane (nondeterministic
+    normalized output). An empty list means the records agree.
+    """
+    ks = list(keys) if keys is not None else sorted(set(record_a) | set(record_b))
+    errors: list[str] = []
+    for key in ks:
+        if record_a.get(key) != record_b.get(key):
+            errors.append(
+                f"divergence on {key!r}: {record_a.get(key)!r} != {record_b.get(key)!r}"
+            )
+    return errors

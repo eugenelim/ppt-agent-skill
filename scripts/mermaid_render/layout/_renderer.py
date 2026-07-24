@@ -586,6 +586,14 @@ def _render_graph_fragment(
         defs_parts.append("</defs>")
         parts.append("".join(defs_parts))
 
+    # NOTE (renderer-two-paths): this graph-fragment HTML painter (classDiagram
+    # path) derives edge stroke color from line style unconditionally. Its twin,
+    # `render_finalized`, neutralizes those style-derived colors when
+    # ``faithful=True`` (flowchart-arrow-style-conformance AC9). This path does
+    # not currently receive a ``faithful`` flag, so it is NOT faithful-neutralized.
+    # A shared ``(edge_style, faithful) → (stroke_color, width, dash)`` resolver
+    # for both painters is deferred under backlog anchor
+    # `renderer-two-paths-faithful-resolver`.
     for _ei, spec in enumerate(routed):
         d = spec["d"]
         style = spec["style"]
@@ -1379,6 +1387,12 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
     flowchart-arrow-style-conformance AC9). Default False preserves the
     editorial palette (thick → accent, dotted → amber) for existing callers.
 
+    Because flowchart, graph, and stateDiagram sources all serialize through
+    this shared painter (see ``_strategies._render_flowchart_fragment``), the
+    faithful guard also neutralizes stateDiagram edge colors in faithful mode.
+    That is spec-aligned and effectively a no-op: stateDiagram transition edges
+    are already emitted with the neutral edge color.
+
     This function MUST NOT perform any geometry work:
       - no _route_edges call
       - no _compute_group_bboxes call
@@ -1745,6 +1759,11 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
         marker_end = f' marker-end="url(#{_mid})"' if re_obj.has_marker_end else ""
         marker_start = (f' marker-start="url(#{_mid_start})"'
                         if re_obj.has_marker_start else "")
+        # NOTE (renderer-two-paths): this canonical FinalizedLayout painter
+        # neutralizes style-derived edge color in faithful mode. Its twin,
+        # `_render_graph_fragment` (classDiagram HTML path), does NOT — see the
+        # matching note there and backlog anchor
+        # `renderer-two-paths-faithful-resolver` for the deferred shared resolver.
         _neutral_stroke = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
         if re_obj.edge_style == "thick":
             # Faithful mode: thickness alone (stroke-width) conveys ==>, no color.

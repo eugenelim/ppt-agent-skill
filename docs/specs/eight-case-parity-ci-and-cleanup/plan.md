@@ -1,6 +1,6 @@
 # Implementation Plan — Eight-Case Parity CI and Cleanup
 
-**Status:** Approved
+**Status:** Done
 
 ## Pre-mortem
 
@@ -89,8 +89,10 @@ Verification: Goal-based check
 `test-artifacts/<fixture>/<lane>.json` containing the fields listed in the spec.
 
 **Approach:**
-- Add `tools/mermaid_fidelity/eight_case_artifacts.py` with a `publish_fixture_artifact`
-  function.
+- Add `tools/eight_case_artifacts.py` with a `publish_fixture_artifact` function.
+  (Placed directly under `tools/`, NOT under `tools/mermaid_fidelity/`, because the
+  publisher depends on the live `mermaid_render` pipeline and the fidelity core is
+  guarded renderer-free by `tests/fidelity/test_core_boundary.py`.)
 - Call it from the canonical runner after each fixture lane completes.
 - Fields: fixture source hash, implementation git SHA, compiler metadata, layout metadata,
   normalized nodes/groups/boxes/fragments, normalized routes/messages, labels/markers,

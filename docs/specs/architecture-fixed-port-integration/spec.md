@@ -107,10 +107,15 @@ architecture-beta
   `.services`/`.groups`/`.edges` — so `architecture-complex` failed on `main`
   whenever elkjs was installed. Item 5 unifies the return type: both the ELK and
   fallback paths return the documented `ArchitectureDiagramLayout`; the
-  `FinalizedLayout` is obtained via `arch_to_finalized()`. The ELK geometry is
-  consumed directly (no re-routing — AC2 preserved). The prior spec's conformance
-  tests (`tests/test_architecture_conformance.py`) were updated to assert their
-  invariants on `arch_to_finalized(compile_architecture(...))`.
+  `FinalizedLayout` is obtained via `arch_to_finalized()`. The ELK *route*
+  geometry is consumed directly (no re-routing — AC2 preserved); however
+  `arch_to_finalized` is a lossy adapter, not a byte-faithful round-trip — it
+  re-derives node `content_bounds` and emits empty diagnostics rather than
+  carrying the ELK-enriched `LayoutDiagnostics` through. This is spec-aligned
+  (the eight-case harness reads the model, not the enriched diagnostics) and
+  tracked by backlog anchor `arch-elk-roundtrip-lossy`. The prior spec's
+  conformance tests (`tests/test_architecture_conformance.py`) were updated to
+  assert their invariants on `arch_to_finalized(compile_architecture(...))`.
 - **AC9 ELK-path interior crossing deferred** (see AC9 above), anchor
   `arch-elk-edge-interior-crossing`. The same anchor covers the pre-existing
   ELK-only architecture geometry test failures (`test_arch_port_acceptance`
