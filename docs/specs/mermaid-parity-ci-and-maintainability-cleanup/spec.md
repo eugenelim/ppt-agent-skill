@@ -2,7 +2,7 @@
 
 Mode: full (structural — CI pipeline; _strategies.py split; dead-code deletion)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 Merges: differential-parity-test, playwright-gated-snapshot-verification,
 strategies-module-split

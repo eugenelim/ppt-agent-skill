@@ -73,6 +73,10 @@ def pytest_configure(config):
         "markers",
         "requires_elk: mark test as requiring elkjs + node",
     )
+    config.addinivalue_line(
+        "markers",
+        "parity_fast: browser-free parity check; run via make parity-fast or pytest -m parity_fast",
+    )
 
 
 # ---------------------------------------------------------------------------

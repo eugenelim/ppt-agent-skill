@@ -631,54 +631,6 @@ def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
     )
 
 
-def _elk_routes_to_specs(elk_fl: object, parsed_edges: list) -> list:
-    """Convert ELK routed_edges to the route-spec dicts expected by the edge-builder loop.
-
-    Produces one dict per routed edge with keys: src, dst, d (waypoints path string),
-    marker_id, bidir, label, lx, ly.
-    """
-    from ._geometry import FinalizedLayout, MarkerKind
-    _fl: FinalizedLayout = elk_fl  # type: ignore[assignment]
-
-    # Build label lookup from parsed edges (src, dst) → label
-    label_by_pair: dict = {}
-    for e in parsed_edges:
-        if not getattr(e, "reversed_", False):
-            label_by_pair[(e.src, e.dst)] = e.label or ""
-
-    specs = []
-    for re in _fl.routed_edges:
-        src = re.src_node_id
-        dst = re.dst_node_id
-        # Build SVG-ish path string from waypoints
-        wps = re.waypoints
-        if len(wps) < 2:
-            continue
-        parts = [f"M {wps[0].x:.1f} {wps[0].y:.1f}"]
-        for wp in wps[1:]:
-            parts.append(f"L {wp.x:.1f} {wp.y:.1f}")
-        d = " ".join(parts)
-        # Derive marker flags from RoutedEdge
-        from ._constants import _marker_kind
-        t_kind = _marker_kind(re.target_marker)
-        s_kind = _marker_kind(re.source_marker)
-        has_end = t_kind not in (MarkerKind.NONE,)
-        has_start = s_kind not in (MarkerKind.NONE,)
-        marker_id = "arrow" if has_end else ""
-        bidir = has_start
-        label = label_by_pair.get((src, dst), "")
-        lx = ly = 0.0
-        if re.label_layout is not None:
-            lx = re.label_layout.bounds.x
-            ly = re.label_layout.bounds.y
-        specs.append({
-            "src": src, "dst": dst, "d": d,
-            "marker_id": marker_id, "bidir": bidir,
-            "label": label, "lx": lx, "ly": ly,
-        })
-    return specs
-
-
 # ── compile_architecture ───────────────────────────────────────────────────────
 
 def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagramLayout:

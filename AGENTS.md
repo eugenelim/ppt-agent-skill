@@ -173,6 +173,26 @@ pytest tests/test_oracle.py
 # Oracle — live differential (requires: npm i -g @mermaid-js/mermaid-cli)
 pytest --run-external-reference tests/test_oracle.py
 
+
+**Parity checks** (mermaid renderer geometry and CI gates):
+
+```bash
+# Fast parity job (browser-free, < 60 s on a standard CI worker)
+make parity-fast
+# — or equivalently —
+pytest tests/ -m parity_fast --timeout=60
+
+# Pinned browser reference suite (sequential, requires playwright install chromium)
+make parity-browser
+# — or equivalently —
+pytest --run-browser tests/ -m browser -p no:xdist
+```
+
+`parity_fast` tests cover: parser correctness, semantic counts, `FinalizedLayout`
+validation, determinism, geometry invariants (overlap, containment, boundary-endpoint,
+route-obstacle), marker/cardinality checks, backend metadata visibility, and import
+boundaries. No browser or subprocess required.
+
 # Isolation / subprocess tests
 pytest --run-isolation tests/
 
