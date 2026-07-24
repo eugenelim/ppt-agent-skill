@@ -12,13 +12,7 @@ in the default test run.
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-_REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO / "tools"))
 
 try:
     import playwright  # type: ignore[import-untyped]
@@ -26,8 +20,8 @@ try:
 except ImportError:
     _HAVE_PLAYWRIGHT = False
 
-from mermaid_fidelity.models import ComparisonStatus, ReferenceDiagram
-from mermaid_fidelity.oracle_contract import FIXTURE_MINIMUMS, FixtureMinimums
+from tools.mermaid_fidelity.models import ComparisonStatus, ReferenceDiagram
+from tools.mermaid_fidelity.oracle_contract import FIXTURE_MINIMUMS, FixtureMinimums
 
 
 # ── sample fixtures for integration testing ────────────────────────────────────
@@ -82,7 +76,7 @@ class TestBrowserCaptureIntegration:
 
     def test_capture_returns_reference_diagram(self):
         """Single fixture should produce a ReferenceDiagram (AC1)."""
-        from mermaid_fidelity.capture.runner import BatchRunner
+        from tools.mermaid_fidelity.capture.runner import BatchRunner
 
         runner = BatchRunner()
         results = runner.render_all([_SAMPLE_FIXTURES[0]], use_cache=False)
@@ -91,7 +85,7 @@ class TestBrowserCaptureIntegration:
 
     def test_capture_all_fixtures(self):
         """All sample fixtures pass manifest minimums (AC2)."""
-        from mermaid_fidelity.capture.runner import BatchRunner
+        from tools.mermaid_fidelity.capture.runner import BatchRunner
 
         runner = BatchRunner()
         results = runner.render_all(_SAMPLE_FIXTURES, use_cache=False)
@@ -109,7 +103,7 @@ class TestBrowserCaptureIntegration:
         We verify this indirectly: all fixtures complete without error
         in a single call (which internally uses one context).
         """
-        from mermaid_fidelity.capture.runner import BatchRunner
+        from tools.mermaid_fidelity.capture.runner import BatchRunner
 
         runner = BatchRunner()
         results = runner.render_all(_SAMPLE_FIXTURES, use_cache=False)
@@ -123,7 +117,7 @@ class TestBrowserCaptureIntegration:
 
     def test_parallel_edges_distinct(self):
         """Parallel edges produce distinct IDs (AC4)."""
-        from mermaid_fidelity.capture.runner import BatchRunner
+        from tools.mermaid_fidelity.capture.runner import BatchRunner
 
         parallel_source = "flowchart LR\n  A --> B\n  A --> B\n"
         runner = BatchRunner()
@@ -137,7 +131,7 @@ class TestBrowserCaptureIntegration:
 
     def test_coordinate_determinism(self):
         """Same source produces identical bounds across two runs (AC3)."""
-        from mermaid_fidelity.capture.runner import BatchRunner
+        from tools.mermaid_fidelity.capture.runner import BatchRunner
 
         fixture = [("flowchart-basic", "flowchart", "flowchart LR\n  A --> B\n")]
         runner = BatchRunner()
