@@ -2,7 +2,7 @@
 
 Mode: full (multi-fixture; recursive index; semantic/routing endpoint separation)
 
-- **Status:** Draft
+- **Status:** Shipped
 
 Dependencies: mermaid-oracle-runtime-unification, mermaid-text-measurement-adoption,
 flowchart-elk-finalized-layout-consumption, mermaid-recursive-compound-layout,
@@ -57,23 +57,23 @@ needs edge-ID-based metadata and targeted handling of terminal and self-loop geo
 
 ## Acceptance Criteria
 
-- [ ] AC1 (statediagram-complex): Every state and transition has a unique identifier;
+- [x] AC1 (statediagram-complex): Every state and transition has a unique identifier;
   local cycles are confined to their relevant states; labels are associated by edge ID.
-- [ ] AC2 (statediagram-nested): The `Processing` composite contains all internal states
+- [x] AC2 (statediagram-nested): The `Processing` composite contains all internal states
   and pseudo-states; internal routes remain inside `Processing`; external transitions
   begin or end on explicit `Processing` gates; `Processing` remains the semantic endpoint
   where declared; global and internal final states remain distinct; nested lookup works
   beyond one composite depth.
-- [ ] AC3: `StateIndex` provides `by_id`, `parent_by_id`, `scope_by_id`,
+- [x] AC3: `StateIndex` provides `by_id`, `parent_by_id`, `scope_by_id`,
   `composite_ids`, `initial_by_scope`, and `final_by_scope` populated by recursive
   traversal (not top-level-only scan).
-- [ ] AC4: Every transition has a unique `edge_id` assigned before endpoint rewriting;
+- [x] AC4: Every transition has a unique `edge_id` assigned before endpoint rewriting;
   all metadata keyed by `edge_id`, not `(src, dst)`.
-- [ ] AC5: Composite-to-external transitions route through an explicit exit gate; the
+- [x] AC5: Composite-to-external transitions route through an explicit exit gate; the
   visible external route begins on the composite boundary.
-- [ ] AC6: A self-loop is handled without triggering a whole-diagram fallback; only
+- [x] AC6: A self-loop is handled without triggering a whole-diagram fallback; only
   the self-loop edge is affected by the local repair.
-- [ ] AC7: `pytest tests/` continues to pass with zero regressions.
+- [x] AC7: `pytest tests/` continues to pass with zero regressions.
 
 ## Testing Strategy
 

@@ -128,6 +128,75 @@ StateNode = Union[
     StateGate,
 ]
 
+# ── StateIndex: recursive six-field index (AC3) ───────────────────────────────
+
+@dataclass
+class StateIndex:
+    """Six-field index over all state nodes in a StateMachineModel.
+
+    Built by build_state_index() via recursive DFS — not a top-level-only scan.
+
+    AC3: provides all six fields populated by recursive traversal.
+
+    by_id:           id → StateNode for every state at every nesting level.
+    parent_by_id:    id → parent composite ID (missing for top-level states).
+    scope_by_id:     id → enclosing composite ID ('' for top-level states).
+    composite_ids:   set of all CompositeState IDs at any nesting depth.
+    initial_by_scope: scope_id → InitialPseudoState id in that scope.
+    final_by_scope:  scope_id → FinalPseudoState id in that scope.
+    """
+    by_id: dict           # dict[str, StateNode]
+    parent_by_id: dict    # dict[str, str]  — child id → parent composite id
+    scope_by_id: dict     # dict[str, str]  — state id → enclosing scope ('' = top-level)
+    composite_ids: set    # set[str]        — all CompositeState ids, all depths
+    initial_by_scope: dict  # dict[str, str]  — scope → InitialPseudoState id
+    final_by_scope: dict    # dict[str, str]  — scope → FinalPseudoState id
+
+
+def build_state_index(states: tuple) -> "StateIndex":
+    """Build a StateIndex by recursive DFS over all states in a StateMachineModel.
+
+    The root scope is '' (empty string, representing the top-level machine).
+    Composite state children are visited recursively with the composite's id as scope.
+    Scoped initial/final pseudo-states are keyed by their enclosing scope id.
+
+    AC3: replaces top-level-only scans for composite IDs with a recursive traversal
+    that covers all nesting levels.
+    """
+    by_id: dict = {}
+    parent_by_id: dict = {}
+    scope_by_id: dict = {}
+    composite_ids: set = set()
+    initial_by_scope: dict = {}
+    final_by_scope: dict = {}
+
+    def _dfs(nodes, parent_id: Optional[str], scope: str) -> None:
+        for s in nodes:
+            if not hasattr(s, "id"):
+                continue
+            sid: str = s.id  # type: ignore[union-attr]
+            by_id[sid] = s
+            scope_by_id[sid] = scope
+            if parent_id is not None:
+                parent_by_id[sid] = parent_id
+            if isinstance(s, InitialPseudoState):
+                initial_by_scope[scope] = sid
+            elif isinstance(s, FinalPseudoState):
+                final_by_scope[scope] = sid
+            elif isinstance(s, CompositeState):
+                composite_ids.add(sid)
+                _dfs(s.children, parent_id=sid, scope=sid)
+
+    _dfs(states, parent_id=None, scope="")
+    return StateIndex(
+        by_id=by_id,
+        parent_by_id=parent_by_id,
+        scope_by_id=scope_by_id,
+        composite_ids=composite_ids,
+        initial_by_scope=initial_by_scope,
+        final_by_scope=final_by_scope,
+    )
+
 
 @dataclass(frozen=True)
 class CompositeState:
@@ -418,15 +487,6 @@ def compile_state_machine(lines: list[str]) -> StateMachineModel:
 
 # ── Conversion: StateMachineModel → legacy graph format ───────────────────────
 
-def _all_composite_ids(model: StateMachineModel) -> set[str]:
-    """Collect all CompositeState IDs in the model (top-level states only)."""
-    result: set[str] = set()
-    for s in model.states:
-        if isinstance(s, CompositeState):
-            result.add(s.id)
-    return result
-
-
 def _find_member(cs: CompositeState, prefer_end: bool) -> Optional[str]:
     """Find the first/last non-pseudo member of a composite for entry/exit fallback."""
     candidates = [
@@ -490,7 +550,9 @@ def state_model_to_graph(
     edges: list[_Edge] = []
     groups: dict[str, _Group] = {}
 
-    _composite_ids: set[str] = _all_composite_ids(model)
+    # AC3: use recursive StateIndex for composite IDs (not top-level-only _all_composite_ids)
+    _state_index: StateIndex = build_state_index(model.states)
+    _composite_ids: set[str] = _state_index.composite_ids
     # Map composite_id → group_id for cross-scope transition routing
     _cs_to_group: dict[str, str] = {}
 
@@ -559,16 +621,17 @@ def state_model_to_graph(
     def _make_edge(src: str, dst: str, label: str,
                    src_group: Optional[str] = None,
                    semantic_src: str = "",
-                   source_scope: str = "") -> None:
+                   source_scope: str = "",
+                   semantic_dst: str = "",    # AC5: declared composite target for entry transitions
+                   target_scope: str = "",
+                   edge_id: str = "") -> None:
         # Ensure both endpoints exist as nodes
         if src not in nodes:
             nodes[src] = _Node(id=src, label=src, shape="rect")
         if dst not in nodes:
             nodes[dst] = _Node(id=dst, label=dst, shape="rect")
-        _base = f"{src}->{dst}"
-        _n = _id_counts.get(_base, 0)
-        _id_counts[_base] = _n + 1
-        eid = _base if _n == 0 else f"{_base}#{_n}"
+        # AC4: use pre-assigned semantic edge_id (based on original endpoints, not routing proxies)
+        eid = edge_id if edge_id else f"{src}->{dst}"
         e = _Edge(src=src, dst=dst, label=label,
                   target_marker=MarkerSpec(kind=MarkerKind.ARROW, end="TARGET"), edge_id=eid)
         if src_group is not None:
@@ -577,10 +640,22 @@ def state_model_to_graph(
             e.semantic_src = semantic_src  # type: ignore[attr-defined]
         if source_scope:
             e.source_scope = source_scope  # type: ignore[attr-defined]
+        if semantic_dst:
+            e.semantic_dst = semantic_dst  # type: ignore[attr-defined]
+        if target_scope:
+            e.target_scope = target_scope  # type: ignore[attr-defined]
         edges.append(e)
+
+    # AC4: track dedup for semantic (pre-rewrite) edge IDs across all transitions
+    _sem_id_counts: dict[str, int] = {}
 
     for tr in model.transitions:
         src, dst = tr.src_id, tr.dst_id
+        # AC4: assign stable edge_id from semantic endpoints BEFORE any gate/proxy rewriting
+        _sem_base = f"{src}->{dst}"
+        _sem_n = _sem_id_counts.get(_sem_base, 0)
+        _sem_id_counts[_sem_base] = _sem_n + 1
+        _tr_edge_id = _sem_base if _sem_n == 0 else f"{_sem_base}#{_sem_n}"
 
         # Determine effective src: composite exit → route via internal final state
         effective_src = src
@@ -588,8 +663,10 @@ def state_model_to_graph(
         _sem_src: str = ""      # semantic source (composite name) for scope-aware edges
         _src_scope: str = ""    # composite state ID containing the source
         if src in _composite_ids:
-            cs_obj = next((s for s in model.states
-                          if isinstance(s, CompositeState) and s.id == src), None)
+            # AC3: use StateIndex.by_id for recursive composite lookup (not model.states)
+            cs_obj = _state_index.by_id.get(src)
+            if not isinstance(cs_obj, CompositeState):
+                cs_obj = None
             if cs_obj is not None:
                 gid = _cs_to_group.get(src)
                 # Prefer the scoped final state; fall back to last child
@@ -608,20 +685,32 @@ def state_model_to_graph(
 
         # Determine effective dst: composite entry → route via internal initial state
         effective_dst = dst
+        _sem_dst: str = ""
+        _dst_scope: str = ""
         if dst in _composite_ids:
+            # AC4/AC5: set semantic target so RoutedEdge preserves declared composite target
+            _sem_dst = dst
+            _dst_scope = dst
             entry_id = _initial_id(dst)
             if entry_id in nodes:
                 effective_dst = entry_id
             else:
-                cs_obj2 = next((s for s in model.states
-                               if isinstance(s, CompositeState) and s.id == dst), None)
+                # AC3: use StateIndex.by_id for recursive composite lookup
+                cs_obj2 = _state_index.by_id.get(dst)
+                if not isinstance(cs_obj2, CompositeState):
+                    cs_obj2 = None
+                if cs_obj2 is None:
+                    cs_obj2 = next((s for s in model.states
+                                   if isinstance(s, CompositeState) and s.id == dst), None)
                 if cs_obj2 is not None:
                     fb2 = _find_member(cs_obj2, prefer_end=False)
                     if fb2:
                         effective_dst = fb2
 
         _make_edge(effective_src, effective_dst, tr.label, src_group=sg,
-                   semantic_src=_sem_src, source_scope=_src_scope)
+                   semantic_src=_sem_src, source_scope=_src_scope,
+                   semantic_dst=_sem_dst, target_scope=_dst_scope,
+                   edge_id=_tr_edge_id)
 
     # Emit notes as rect nodes with dotted edges (mirrors _parse_graph_source note logic)
     _note_counter = 0

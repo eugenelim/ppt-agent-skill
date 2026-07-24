@@ -461,7 +461,7 @@ def _build_routed_edges_ir(
         _m_canvas_area: int = int(_metrics.get("canvas_area") or 0)
         _m_max_ep_dist: float = float(_metrics.get("max_endpoint_distance") or 0.0)
         # Semantic / routing / scope fields for state-diagram edges
-        _sem_e = (sm_edge_semantic or {}).get((src, dst))
+        _sem_e = (sm_edge_semantic or {}).get(spec.get("edge_id"))  # AC4: join on edge_id
         _semantic_source_id = getattr(_sem_e, 'semantic_src', '') if _sem_e else ''
         _semantic_target_id = getattr(_sem_e, 'semantic_dst', '') if _sem_e else ''
         _source_scope = getattr(_sem_e, 'source_scope', '') if _sem_e else ''
@@ -1096,7 +1096,7 @@ def parse_flowchart_semantics(
             _sm_sc = getattr(_se, "source_scope", "")
             _sm_sg = getattr(_se, "target_scope", "")
             if _sm_src or _sm_sc or _sm_sg:
-                _sm_edge_semantic[(_se.src, _se.dst)] = _se
+                _sm_edge_semantic[_se.edge_id] = _se  # AC4: keyed by edge_id, not (src,dst)
         for _cs in _sm_model.states:
             if isinstance(_cs, _CompositeState) and _cs.entry_gate and _cs.exit_gate:
                 _sm_composite_gates[_cs.id] = (_cs.entry_gate.id, _cs.exit_gate.id)
