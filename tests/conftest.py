@@ -82,6 +82,11 @@ def pytest_configure(config):
         "eight_case: eight-fixture validation-and-provenance acceptance harness; "
         "run via pytest -m eight_case",
     )
+    config.addinivalue_line(
+        "markers",
+        "elk_integration: authoritative real-ELK-subprocess lane (no mocks); "
+        "opt-in with --run-elk-integration or -m elk_integration; FAILS if ELK absent",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +131,13 @@ def pytest_addoption(parser):
         help="Run isolation / subprocess process-boundary tests.",
     )
     parser.addoption(
+        "--run-elk-integration",
+        action="store_true",
+        default=False,
+        help="Run the authoritative real-ELK-subprocess integration lane "
+             "(fails if elkjs/node are unavailable).",
+    )
+    parser.addoption(
         "--run-all-expensive",
         action="store_true",
         default=False,
@@ -165,6 +177,15 @@ def pytest_collection_modifyitems(config, items):
     run_snapshots = run_snapshots_full or run_snapshots_quick
     run_external = config.getoption("--run-external-reference", default=False) or run_all
     run_isolation = config.getoption("--run-isolation", default=False) or run_all
+    # elk_integration runs when opted in via the flag OR selected explicitly with
+    # `-m elk_integration`; otherwise it is skipped (so the default fast tier does
+    # not fail on machines without elkjs/node).
+    _markexpr = config.getoption("-m", default="") or ""
+    run_elk_integration = (
+        config.getoption("--run-elk-integration", default=False)
+        or run_all
+        or "elk_integration" in _markexpr
+    )
 
     skip_snapshot = pytest.mark.skip(
         reason="snapshot tests require --run-snapshots or --run-all-expensive"
@@ -177,6 +198,9 @@ def pytest_collection_modifyitems(config, items):
     )
     skip_external = pytest.mark.skip(
         reason="external_reference tests require --run-external-reference or --run-all-expensive"
+    )
+    skip_elk_integration = pytest.mark.skip(
+        reason="elk_integration lane requires --run-elk-integration or -m elk_integration"
     )
     skip_isolation = pytest.mark.skip(
         reason="isolation tests require --run-isolation or --run-all-expensive"
@@ -240,6 +264,9 @@ def pytest_collection_modifyitems(config, items):
 
         if "isolation" in marker_names and not run_isolation:
             item.add_marker(skip_isolation)
+
+        if "elk_integration" in marker_names and not run_elk_integration:
+            item.add_marker(skip_elk_integration)
 
         if "requires_elk" in marker_names and not _elk_ok:
             item.add_marker(skip_elk)
