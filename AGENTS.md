@@ -186,6 +186,14 @@ pytest tests/ -m parity_fast --timeout=60
 make parity-browser
 # — or equivalently —
 pytest --run-browser tests/ -m browser -p no:xdist
+
+# Eight-case parity gate (8 scoped fixtures × output × presentation × backend +
+# hard-failure-condition gates). ELK-required lanes need Node + elkjs
+# (npm install --prefix scripts/mermaid_render/layout); they skip cleanly without.
+# Writes structured artifacts to test-artifacts/ (gitignored). CI job: eight-case-parity.
+make eight-case-ci
+# — or equivalently —
+pytest -m eight_case --timeout=120
 ```
 
 `parity_fast` tests cover: parser correctness, semantic counts, `FinalizedLayout`

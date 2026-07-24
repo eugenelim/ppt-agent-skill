@@ -1,7 +1,6 @@
 """Stage 6 tests: recursive compound-graph layout.
 
 Covers:
-- _apply_inner_direction_positions reorders x for TB-outer/LR-inner groups
 - Actual node widths used in group bbox separation (not NODE_W constant)
 - Inner-direction edge flow preserved (A→B ⟹ A.x < B.x in LR inner)
 - Descendant containment: all member node bboxes inside group bbox
@@ -20,7 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import pytest
 
 from mermaid_render.layout._constants import _Node, _Edge, _Group, NODE_W, NODE_H, COL_GAP
-from mermaid_render.layout._layout import _apply_inner_direction_positions
 from mermaid_render.layout._renderer import _compute_group_bboxes
 
 
@@ -76,78 +74,6 @@ def _node_top(html: str, nid: str) -> int | None:
         return None
     m = re.search(r"top:(\d+)px", html[idx:idx + 300])
     return int(m.group(1)) if m else None
-
-
-# ── Unit tests: _apply_inner_direction_positions ──────────────────────────────
-
-class TestApplyInnerDirection:
-    """Unit tests for the inner-direction position fixup function."""
-
-    def _setup_lr_inner_tb_outer(self):
-        """3 nodes A→B→C in an LR inner group, TB outer layout."""
-        nodes = {
-            "A": _make_node("A", x=300, y=100, group="grp"),
-            "B": _make_node("B", x=100, y=100, group="grp"),  # out of order before fixup
-            "C": _make_node("C", x=200, y=100, group="grp"),
-        }
-        edges = [_make_edge("A", "B"), _make_edge("B", "C")]
-        groups = {"grp": _make_group("grp", ["A", "B", "C"], direction="LR")}
-        return nodes, edges, groups
-
-    def test_lr_inner_reorders_x_ascending(self):
-        nodes, edges, groups = self._setup_lr_inner_tb_outer()
-        _apply_inner_direction_positions(nodes, edges, groups, "TB")
-        # After fixup: A.x < B.x < C.x (edge flow: A→B→C)
-        assert nodes["A"].x < nodes["B"].x < nodes["C"].x
-
-    def test_lr_inner_preserves_y(self):
-        nodes, edges, groups = self._setup_lr_inner_tb_outer()
-        original_y = {nid: nodes[nid].y for nid in nodes}
-        _apply_inner_direction_positions(nodes, edges, groups, "TB")
-        for nid in nodes:
-            assert nodes[nid].y == original_y[nid], f"y changed for {nid}"
-
-    def test_rl_inner_reorders_x_descending(self):
-        nodes = {
-            "A": _make_node("A", x=100, y=100, group="grp"),
-            "B": _make_node("B", x=300, y=100, group="grp"),
-        }
-        edges = [_make_edge("A", "B")]
-        groups = {"grp": _make_group("grp", ["A", "B"], direction="RL")}
-        _apply_inner_direction_positions(nodes, edges, groups, "TB")
-        # RL inner: B (higher topo order) should be to the left of A
-        assert nodes["B"].x < nodes["A"].x
-
-    def test_no_inner_direction_unchanged(self):
-        nodes = {
-            "A": _make_node("A", x=100, y=100, group="grp"),
-            "B": _make_node("B", x=300, y=200, group="grp"),
-        }
-        edges = [_make_edge("A", "B")]
-        groups = {"grp": _make_group("grp", ["A", "B"], direction="")}
-        original_x = {nid: nodes[nid].x for nid in nodes}
-        _apply_inner_direction_positions(nodes, edges, groups, "TB")
-        # No direction override → no change
-        for nid in nodes:
-            assert nodes[nid].x == original_x[nid]
-
-    def test_single_member_unchanged(self):
-        nodes = {"A": _make_node("A", x=100, y=100, group="grp")}
-        edges = []
-        groups = {"grp": _make_group("grp", ["A"], direction="LR")}
-        _apply_inner_direction_positions(nodes, edges, groups, "TB")
-        assert nodes["A"].x == 100
-
-    def test_positions_spaced_by_col_gap(self):
-        nodes = {
-            "A": _make_node("A", x=100, y=100, group="grp", w=120),
-            "B": _make_node("B", x=100, y=100, group="grp", w=120),
-        }
-        edges = [_make_edge("A", "B")]
-        groups = {"grp": _make_group("grp", ["A", "B"], direction="LR")}
-        _apply_inner_direction_positions(nodes, edges, groups, "TB", col_gap=COL_GAP)
-        gap = nodes["B"].x - nodes["A"].x
-        assert gap == 120 + COL_GAP  # width of A + col_gap
 
 
 # ── Group bbox uses actual node width ─────────────────────────────────────────

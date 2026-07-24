@@ -124,6 +124,32 @@ open = [
   {slug = "oracle-ac6-unsupported-reference-feature", source = "spec/mermaid-oracle-runtime-unification AC6"},
   {slug = "oracle-ac10-emit-report-runner-wiring", source = "spec/mermaid-oracle-runtime-unification AC10"},
   {slug = "oracle-fixture-minimums-migrate-to-contract", source = "spec/mermaid-oracle-runtime-unification"},
+
+  # ── ini-003 item 6 carry-forwards (eight-case-parity-ci-and-cleanup) ─────────
+  # Faithful edge-color neutralization lives in render_finalized but not its twin
+  # _render_graph_fragment (classDiagram HTML path). Extract a shared
+  # (edge_style, faithful) → (stroke_color, width, dash) resolver both painters
+  # call. Cross-reference comments landed in both paths in item 6.
+  {slug = "renderer-two-paths-faithful-resolver", source = "review/flowchart-arrow-style-conformance"},
+  # arch_to_finalized is a lossy adapter: it re-derives node content_bounds and
+  # drops the ELK-enriched LayoutDiagnostics (emits empty diagnostics) rather than
+  # carrying them through. Spec-aligned (harness reads the model, not diagnostics);
+  # wording corrected in spec/architecture-fixed-port-integration Deviations.
+  {slug = "arch-elk-roundtrip-lossy", source = "review/architecture-fixed-port-integration"},
+  # The dual edge_id reconstruction in architecture ELK→spec mapping can desync for
+  # duplicate (src,dst) architecture edges → false ArchitectureLayoutError. Not hit
+  # by the 4-distinct-pair architecture-complex fixture; guarded now by
+  # tests/test_architecture_conformance.py::test_duplicate_src_dst_both_survive and
+  # ::test_fallback_duplicate_pair_keeps_per_edge_sides. Fix: single authoritative
+  # edge_id keyed source in the ELK route→spec mapping.
+  {slug = "arch-dual-edge-id-desync", source = "review/architecture-fixed-port-integration"},
+  # AC5 cleanup was scoped to the dead inner-direction fixup only. The Python
+  # Sugiyama-fallback group-correction helpers (_push_nonmembers_out_of_groups_lr,
+  # _separate_groups, _compute_group_bboxes) are RETAINED — they remain load-bearing
+  # for the Python fallback path (frozen by spec/compound-layout-elk-first-class), so
+  # removing them would regress the Python compound layout. Unblock: an ELK-first
+  # compound path that makes the Sugiyama correction unreachable.
+  {slug = "cleanup-python-fallback-group-correction-retained", source = "spec/eight-case-parity-ci-and-cleanup AC5"},
 ]
 
 # ── Initiative: Mermaid Rendering Correctness Follow-on — boston-v1 ──────────
@@ -184,17 +210,9 @@ shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-bro
 ["ini-003"]
 name = "Eight-Case Mermaid Compound and Sequence Parity"
 milestone = "davao-v1"
-status = "active"
+status = "shipped"
 
 ["ini-003".work]
-queue = [
-  # Item 6 — CI gate and cleanup; requires all of 2–5
-  {path = "docs/specs/eight-case-parity-ci-and-cleanup", needs = [
-    "work:docs/specs/sequence-shared-compiler-and-native-scene",
-    "work:docs/specs/flowchart-compound-layout-and-boundary-gates",
-    "work:docs/specs/flowchart-arrow-style-conformance",
-    "work:docs/specs/architecture-fixed-port-integration",
-  ]},
-]
+queue = []
 active = []
-shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance", "docs/specs/architecture-fixed-port-integration"]
+shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance", "docs/specs/architecture-fixed-port-integration", "docs/specs/eight-case-parity-ci-and-cleanup"]

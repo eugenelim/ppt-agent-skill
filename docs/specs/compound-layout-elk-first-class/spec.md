@@ -34,6 +34,12 @@ All three of these prevent correct ELK compound layout.
 **What we're NOT changing:**
 - Python Sugiyama fallback path: `_compute_group_bboxes`, `_separate_groups_*`, `_push_nonmembers_out_of_groups_lr` remain intact for the Python path.
 - `_layout.py`: `_apply_inner_direction_positions` stays — it's independently unit-tested.
+  <!-- SUPERSEDED by eight-case-parity-ci-and-cleanup AC4/AC10 (ini-003 item 6): this
+  function was the unconditional inner-direction / post-global-placement fixup that
+  the bottom-up Python compound layout (item 3) replaced. It became dead production
+  code and was deleted along with its TestApplyInnerDirection unit tests. This
+  frozen bullet no longer reflects the code. -->
+
 - `_routing.py`: no changes.
 - `_from_elk_result` in `elk_adapter.py`: no changes (already builds correct group layouts).
 

@@ -289,7 +289,15 @@ def test_faithful_mode_no_legend(api):
 
 @pytest.mark.parametrize("api", ["to_html", "to_svg"])
 def test_faithful_mode_no_semantic_edge_color(api):
-    """AC9: no edge stroke or arrowhead marker derives a color from line style."""
+    """AC9: no edge stroke or arrowhead marker derives a color from line style.
+
+    Note: on the ``to_svg`` lane the native SVG flowchart path is *neutral by
+    construction* — it never emits the editorial style→color mapping — so this
+    guard is a regression *pin* for that path, not a proof that a faithful
+    suppression fired there. The faithful suppression is exercised and proven on
+    the ``to_html`` lane (``render_finalized``), where editorial color is the
+    default that faithful mode must actively neutralize.
+    """
     out = getattr(mr, api)(_src(), faithful=True)
     for tag in _EDGE_PATH_RE.findall(out):
         for tok in _SEMANTIC_COLOR_TOKENS:

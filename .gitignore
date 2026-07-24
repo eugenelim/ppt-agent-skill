@@ -12,6 +12,10 @@ ppt-output/*
 tests/smoke-results/
 tests/smoke-results/*/screenshots/
 
+# Eight-case CI structured artifacts — regenerated on every `pytest -m eight_case`
+# run and uploaded by the eight-case-parity CI job; never committed.
+test-artifacts/
+
 # Bundler runtime artifacts — except the prebuilt dom-to-svg bundle (shipped asset)
 *.bundle.js
 !scripts/vendor/dom-to-svg.bundle.js

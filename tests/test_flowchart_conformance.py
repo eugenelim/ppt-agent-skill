@@ -691,28 +691,23 @@ class TestFlowchartEmptySubgraph:
 
     def test_groups_present_in_layout(self, layout: FinalizedLayout):
         """The fixture produces at least one group in the layout. (AC5)"""
-        # ELK may collapse empty subgraphs; if it does, the subsequent
-        # empty-group test skips gracefully. This test confirms the pipeline
-        # produced some group structure.
-        assert len(layout.group_layouts) > 0, (
-            "No groups found — ELK may have collapsed all subgraphs. "
-            "If this is a known ELK limitation, skip via pytest.skip above."
-        )
+        # Since item 3 (first-class empty groups), both the ELK and Python
+        # compound paths retain empty subgraphs, so this is a hard assertion.
+        assert len(layout.group_layouts) > 0, "No groups found in empty-subgraph layout"
 
     def test_empty_group_has_positive_bounds(self, layout: FinalizedLayout):
-        """The 'Empty' group has positive width and height. (AC5)
+        """The empty group is a first-class proxy with positive bounds. (AC5)
 
-        Note: ELK may drop subgraphs with no member nodes. If that happens,
-        this test skips rather than fails — the empty-subgraph rendering
-        limitation is tracked separately.
+        Empty subgraphs are first-class since item 3 (eight-case parity): the
+        empty group MUST exist with positive bounds — an absent empty group is a
+        hard failure, never a skip (spec eight-case-parity-ci-and-cleanup AC10).
         """
         # The group ID may vary; we look for a group with no member nodes
         empty_groups = [
             (gid, gl) for gid, gl in layout.group_layouts.items()
             if len(gl.member_ids) == 0
         ]
-        if not empty_groups:
-            pytest.skip("No empty groups found in layout (ELK may have dropped them)")
+        assert empty_groups, "expected empty group is absent (must be first-class, not skipped)"
         for gid, gl in empty_groups:
             assert gl.boundary_bounds.w > 0, f"Empty group {gid!r} has zero width"
             assert gl.boundary_bounds.h > 0, f"Empty group {gid!r} has zero height"

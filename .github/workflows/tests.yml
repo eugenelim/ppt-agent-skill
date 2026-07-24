@@ -185,6 +185,41 @@ jobs:
       # Must complete in under 60 seconds. No Playwright required.
       - run: python3 -m pytest tests/ -m parity_fast --timeout=60 -q
 
+  eight-case-parity:
+    name: eight-case parity gate (ELK + fallback)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      # Node + elkjs so the ELK-required lanes (architecture, flowchart) actually
+      # run in CI rather than skipping. elkjs is pinned to 0.12.0 in
+      # scripts/mermaid_render/layout/package.json; `npm install --prefix` places
+      # node_modules there where _find_elkjs() looks. node_modules is gitignored.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm install --prefix scripts/mermaid_render/layout
+      - run: pip install -r requirements-dev.txt
+      # The eight scoped fixtures across output (to_html/to_svg) × presentation
+      # (faithful/editorial) × backend (ELK-required / Python fallback for
+      # architecture+flowchart; canonical geometry for sequence), plus the
+      # hard-failure-condition gate suite. Fails the workflow on any lane error.
+      # --timeout=120 guards against a hung ELK subprocess.
+      - run: python3 -m pytest -m eight_case --timeout=120 -q
+      # Generate structured per-fixture artifacts (spec AC7) as a dedicated build
+      # step (not a test side effect) so upload-artifact has files to collect.
+      - run: python3 tools/eight_case_artifacts.py
+      - name: Upload eight-case artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eight-case-artifacts
+          path: test-artifacts/
+          if-no-files-found: warn
+
   parity-browser:
     name: mermaid parity browser suite (pinned, sequential)
     runs-on: ubuntu-latest
