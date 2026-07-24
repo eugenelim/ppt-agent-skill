@@ -95,6 +95,14 @@ open = [
   # the spec forbids ("do not redesign the successful ELK path"). Unblock: a follow-on
   # ELK-architecture-geometry spec in an elkjs-enabled environment.
   {slug = "arch-elk-edge-interior-crossing", source = "spec/architecture-fixed-port-integration AC9"},
+  # quality-engineer Concern (item 5): _arch_fallback_to_finalized in
+  # scripts/mermaid_render/layout/architecture.py duplicates the inlined fallback
+  # body in compile_architecture and has no production caller (only referenced by
+  # tests/test_architecture_elk_authoritative.py). Both bodies were updated in
+  # lockstep for item 5 but will drift. Fix: route compile_architecture's fallback
+  # through the helper (one authoritative body) or delete the dead function and
+  # repoint its tests at the live path. Unblock: a maintainability follow-on PR.
+  {slug = "arch-fallback-duplicate-body", source = "review/architecture-fixed-port-integration"},
 
     # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
   # These slugs remain here only to satisfy (deferred: <slug>) references in shipped

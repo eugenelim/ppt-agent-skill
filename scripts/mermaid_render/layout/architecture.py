@@ -173,16 +173,24 @@ def _face_normals(side, *, outward: bool):
 
 
 def _endpoint_on_face(rect, side, position, tol: float = _FACE_ON_TOL) -> bool:
-    """True when *position* lies on the declared *side* face of *rect* (± tol)."""
+    """True when *position* lies on the declared *side* face segment of *rect*.
+
+    Checks both the perpendicular axis (± tol from the face line) and the
+    parallel axis (within the face span ± tol) so an endpoint that shares the
+    face's line but sits beyond a corner is not accepted as on-face.
+    """
     from ._geometry import PortSide
+    x0, y0, x1, y1 = rect.x, rect.y, rect.x + rect.w, rect.y + rect.h
+    in_x = (x0 - tol) <= position.x <= (x1 + tol)
+    in_y = (y0 - tol) <= position.y <= (y1 + tol)
     if side == PortSide.LEFT:
-        return abs(position.x - rect.x) <= tol
+        return abs(position.x - x0) <= tol and in_y
     if side == PortSide.RIGHT:
-        return abs(position.x - (rect.x + rect.w)) <= tol
+        return abs(position.x - x1) <= tol and in_y
     if side == PortSide.TOP:
-        return abs(position.y - rect.y) <= tol
+        return abs(position.y - y0) <= tol and in_x
     if side == PortSide.BOTTOM:
-        return abs(position.y - (rect.y + rect.h)) <= tol
+        return abs(position.y - y1) <= tol and in_x
     return False
 
 

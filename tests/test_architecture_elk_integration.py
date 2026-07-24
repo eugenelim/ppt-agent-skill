@@ -115,11 +115,18 @@ def test_layout_backend_is_elkjs():
 
 
 def test_node_and_elkjs_versions_present():
-    """AC1: node + elkjs are resolvable (records provenance for the ELK lane)."""
-    from mermaid_render.layout.elk_adapter import _find_elkjs, _find_node
+    """AC1: node + elkjs versions are resolvable (records provenance for the lane)."""
+    import subprocess
+    import json as _json
     _require_elk()
-    assert _find_node()
-    assert _find_elkjs()
+    from mermaid_render.layout.elk_adapter import _find_node
+    node = _find_node()
+    out = subprocess.run([node, "--version"], capture_output=True, text=True, timeout=10)
+    assert out.stdout.strip(), "node --version returned no version string"
+    pkg = (REPO_ROOT / "scripts" / "mermaid_render" / "layout"
+           / "node_modules" / "elkjs" / "package.json")
+    assert pkg.exists(), "elkjs package.json not found"
+    assert _json.loads(pkg.read_text()).get("version"), "elkjs version missing"
 
 
 # ── AC2: ELK result consumed directly (no reroute) ────────────────────────────

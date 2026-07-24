@@ -702,6 +702,27 @@ class TestFallbackDeclaredSides:
             _resolve_fallback_port("n", rect, "R", Point(20.0, 30.0),
                                    is_source=True, edge_id="n->m")
 
+    def test_fallback_duplicate_pair_keeps_per_edge_sides(self):
+        """AC5: two edges sharing (src,dst) each keep their OWN declared side in
+        the fallback — the declared-side lookup does not cross-assign."""
+        src = (
+            "architecture-beta\n"
+            "  service a(server)[A]\n"
+            "  service b(database)[B]\n"
+            "  a:R --> L:b\n"
+            "  a:B --> T:b\n"
+        )
+        with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
+                   side_effect=ElkUnavailable("forced fallback")):
+            result = compile_architecture(src, width_hint=800)
+        assert result.backend == "python-fallback"
+        fl = arch_to_finalized(result)
+        by_id = {re.edge_id: re for re in fl.routed_edges}
+        assert by_id["a->b"].src_port.side == PortSide.RIGHT
+        assert by_id["a->b"].dst_port.side == PortSide.LEFT
+        assert by_id["a->b#1"].src_port.side == PortSide.BOTTOM
+        assert by_id["a->b#1"].dst_port.side == PortSide.TOP
+
     def test_fallback_no_declared_side_infers_face(self):
         """AC5: an endpoint with no declared side infers the nearest face (never AUTO)."""
         from mermaid_render.layout.architecture import _resolve_fallback_port
