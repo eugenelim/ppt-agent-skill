@@ -4,6 +4,7 @@
 -r requirements.txt
 
 pytest>=8
+pytest-timeout>=2    # --timeout flag used by parity-fast CI job
 pytest-xdist>=3.3    # parallel test execution; snapshot guard tests its own -n guard
 numpy>=1.26          # tests/test_snapshots.py pixel diffing
 mermaidx==0.9.1      # tests/test_oracle.py differential mode (embeds real mermaid.js)

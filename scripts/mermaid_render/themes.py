@@ -120,11 +120,11 @@ def render_page(fragment: str, theme: Theme = None) -> str:
         return make_adaptive_page(fragment)
     if isinstance(theme, dict):
         return make_baked_page(fragment, theme)
-    if theme in ("light", "adaptive-light"):
+    if theme in ("light", "adaptive-light", "neutral"):
         return make_baked_page(fragment, THEME_ADAPTIVE_LIGHT)
     if theme in ("dark", "adaptive-dark"):
         return make_baked_page(fragment, THEME_ADAPTIVE_DARK)
     raise ValueError(
         f"unknown theme {theme!r}; expected None, 'adaptive', 'auto', 'light', "
-        "'adaptive-light', 'dark', 'adaptive-dark', or a dict of CSS vars"
+        "'adaptive-light', 'dark', 'adaptive-dark', 'neutral', or a dict of CSS vars"
     )
