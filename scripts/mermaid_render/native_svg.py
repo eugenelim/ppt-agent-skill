@@ -261,8 +261,39 @@ def _class_topology_scene(src: str, direction: str, width_hint: int) -> SvgScene
 
 
 def _sequence_scene(src: str, direction: str, width_hint: int) -> SvgScene:
-    from .layout.sequence import layout_sequence_scene
-    return layout_sequence_scene(src, width_hint=width_hint)
+    """Build the native SvgScene for a sequenceDiagram via the shared compiler.
+
+    Parses once, compiles the shared SequenceGeometry, then paints the scene
+    from that geometry — the same geometry the HTML painter consumes. The
+    legacy independent parser (layout/sequence.py) is retired.
+    """
+    import hashlib
+    from .layout._sequence_compile import (
+        parse_sequence_semantics,
+        compile_sequence_geometry,
+        sequence_geometry_to_scene,
+    )
+    from .scene import SvgScene, make_scene_id
+    try:
+        model = parse_sequence_semantics(src)
+    except ValueError as exc:
+        # Only the participant-less case is a graceful empty render; any other
+        # ValueError is a genuine fault and must propagate (no silent swallow).
+        if "No participants" not in str(exc):
+            raise
+        # Empty / participant-less diagram: emit a minimal valid stub scene
+        # (preserves the pre-retirement SVG contract that an empty sequence
+        # renders rather than raising; the HTML path still raises as before).
+        # Carry a diagnostic so the empty output is explained, not silent.
+        return SvgScene(
+            scene_id=make_scene_id("sequencediagram", int(hashlib.sha1(src.encode()).hexdigest(), 16)),
+            diagram_type="sequencediagram",
+            width=160.0, height=80.0, view_box=(0.0, 0.0, 160.0, 80.0),
+            renderer_backend="sequence-geometry",
+            diagnostics=("empty_sequence: no participants declared in sequenceDiagram",),
+        )
+    geometry = compile_sequence_geometry(model, width_hint)
+    return sequence_geometry_to_scene(model, geometry)
 
 
 def _er_scene(src: str, direction: str, width_hint: int) -> SvgScene:
