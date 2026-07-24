@@ -422,3 +422,5 @@ body {
 | 全页 `flex; center; center` | 三分法偏心 + 对角线张力 |
 | 所有卡片等大等高 | 主副节奏 / 递减 / 孤岛+群落 |
 | 只用 1 层 box-shadow | 3-4 层渐进阴影 |
+| **并列 N 列内容用 N 个独立描边卡片** | **统一列面板（单一外框 + 列间 `border-right` 竖线分隔）**，见 [`blocks/columnar-panel.md`](../blocks/columnar-panel.md) |
+| 页面标题只有 `overline + h1` | 内容区需统帅标题时，用 `columnar-panel` B 组的 header-bar（eyebrow + 主标题 + 副标题，accent 色实底，贴合列面板顶部无缝连接）|
