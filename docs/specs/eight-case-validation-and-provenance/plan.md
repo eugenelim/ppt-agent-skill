@@ -1,6 +1,6 @@
 # Implementation Plan — Eight-Case Validation and Provenance
 
-**Status:** Executing
+**Status:** Done
 
 ## Pre-mortem
 

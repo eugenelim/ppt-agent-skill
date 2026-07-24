@@ -77,6 +77,11 @@ def pytest_configure(config):
         "markers",
         "parity_fast: browser-free parity check; run via make parity-fast or pytest -m parity_fast",
     )
+    config.addinivalue_line(
+        "markers",
+        "eight_case: eight-fixture validation-and-provenance acceptance harness; "
+        "run via pytest -m eight_case",
+    )
 
 
 # ---------------------------------------------------------------------------
