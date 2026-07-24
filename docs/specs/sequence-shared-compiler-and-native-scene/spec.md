@@ -2,7 +2,7 @@
 
 Mode: full (sequence pipeline refactor — shared IR; retire legacy native-SVG parser)
 
-- **Status:** Approved
+- **Status:** Shipped
 
 Dependencies: `docs/specs/eight-case-validation-and-provenance`
 
@@ -60,27 +60,27 @@ independent native-SVG parser.
 
 ## Acceptance Criteria
 
-- [ ] AC1: `sequence-box-unsupported` — 4 participants (Alice, Bob, Carol, Dave). Group A
+- [x] AC1: `sequence-box-unsupported` — 4 participants (Alice, Bob, Carol, Dave). Group A
   has label "Group A", color Blue, contains Alice and Bob only. Group B has label "Group
   B", color rgb(200,100,50), contains Carol only. Dave is outside both boxes. Exactly 4
   messages present and ordered. HTML and SVG consume matching participant, box, and message
   coordinates.
-- [ ] AC2: The historical `sequence-box-unsupported` fixture filename is preserved; any
+- [x] AC2: The historical `sequence-box-unsupported` fixture filename is preserved; any
   test expectation that box syntax is unsupported is removed.
-- [ ] AC3: `sequence-nested-fragments` — outer alt (label "success", `parent_fragment_id
+- [x] AC3: `sequence-nested-fragments` — outer alt (label "success", `parent_fragment_id
   = None`) contains inner loop (label "retry", `parent_fragment_id` = outer alt ID). The
   failure branch belongs to the outer alt. Loop bounds are contained by alt bounds. Two
   retry messages occur inside the loop event interval. Failure notification occurs inside
   the outer alt but outside the loop interval. Native SVG no longer omits the fragments.
-- [ ] AC4: `layout/sequence.py` is deleted; no remaining imports reference it.
-- [ ] AC5: Both sequence fixtures report `semantic_compiler = "sequence"` and
+- [x] AC4: `layout/sequence.py` is deleted; no remaining imports reference it.
+- [x] AC5: Both sequence fixtures report `semantic_compiler = "sequence"` and
   `layout_backend = "sequence-geometry"`.
-- [ ] AC6: HTML and SVG consume the same `SequenceGeometry` instance (same canvas, same
+- [x] AC6: HTML and SVG consume the same `SequenceGeometry` instance (same canvas, same
   participant positions, same box and fragment bounds).
-- [ ] AC7: All unsupported sequence constructs produce typed diagnostics rather than
+- [x] AC7: All unsupported sequence constructs produce typed diagnostics rather than
   silent omission.
-- [ ] AC8: `data-box-id` attributes match between HTML and SVG for the same box.
-- [ ] AC9: `data-fragment-id`, `data-parent-fragment-id`, `data-depth` attributes present
+- [x] AC8: `data-box-id` attributes match between HTML and SVG for the same box.
+- [x] AC9: `data-fragment-id`, `data-parent-fragment-id`, `data-depth` attributes present
   in both HTML and SVG for nested fragments.
 
 ## Testing Strategy

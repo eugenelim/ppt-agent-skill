@@ -185,6 +185,11 @@ from ._sequence_compile import (
     _parse_box_color_label,
     # Core sequence layout
     _layout_lifeline,
+    # Shared-compiler pipeline (parse → compile geometry → paint html/scene)
+    parse_sequence_semantics,
+    compile_sequence_geometry,
+    sequence_geometry_to_html,
+    sequence_geometry_to_scene,
     # Compile-once entry point
     compile_sequence,
     # Geometry validation

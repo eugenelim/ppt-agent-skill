@@ -840,6 +840,34 @@ ARROW_SPECS: "Mapping[str, ArrowSpec]" = MappingProxyType({
 })
 
 
+@dataclass(frozen=True)
+class SequenceModel:
+    """Parsed sequenceDiagram semantics — stage 1 of the shared pipeline.
+
+    Produced by ``parse_sequence_semantics`` and consumed by
+    ``compile_sequence_geometry`` (which produces the shared
+    ``SequenceGeometry`` both the HTML and SVG painters render from). Holds the
+    tokenized participants, messages/notes/activation ``items`` (in source
+    order), participant ``box`` groups, and the fragment-hierarchy maps
+    (id/parent/depth keyed by item index) the block-span prepass computed.
+
+    Item-index-keyed maps use plain dicts; the dataclass is frozen (no field
+    reassignment) but the contained collections are read-only by convention.
+    """
+    source: str
+    participants: Tuple[str, ...]
+    participant_labels: "Mapping[str, str]"
+    items: Tuple[dict, ...]
+    box_groups: Tuple[dict, ...]
+    created_at: "Mapping[str, int]"
+    destroyed_at: "Mapping[str, int]"
+    frag_id: "Mapping[int, str]"
+    branch_parent_id: "Mapping[int, str]"
+    frag_parent: "Mapping[int, Optional[str]]"
+    frag_depth: "Mapping[int, int]"
+    diagnostics: Tuple["Diagnostic", ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class SequenceCompileResult:
     """Result of a single compile_sequence() call.
@@ -946,12 +974,40 @@ class NoteGeometry:
 
 @dataclass(frozen=True, slots=True)
 class FragmentGeometry:
-    """Geometry for one combined fragment (alt/opt/loop/par/critical/break/ref/seq/strict/neg/ignore/consider)."""
+    """Geometry for one combined fragment (alt/opt/loop/par/critical/break/ref/seq/strict/neg/ignore/consider).
+
+    ``parent_fragment_id`` names the enclosing fragment (``None`` for a
+    top-level fragment); ``depth`` is 0 for a top-level fragment and increments
+    per nesting level. ``start_event_index``/``end_event_index`` are the
+    half-open row-event interval [start, end) the fragment spans, in the same
+    row space the SVG ``data-start-event``/``data-end-event`` attributes expose.
+    """
     fragment_id: str
     kind: str
     participant_ids: Tuple[str, ...]
     bounds: Bounds
     header_text: str = ""
+    parent_fragment_id: Optional[str] = None
+    start_event_index: int = -1
+    end_event_index: int = -1
+    depth: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class BoxGeometry:
+    """Geometry for one participant ``box`` grouping.
+
+    ``participant_ids`` are exactly the declared members (source order);
+    ``bounds`` encompass those members' columns. ``color`` is the CSS color
+    token parsed from the ``box`` directive (named color or ``rgb()`` etc.),
+    retained verbatim. ``source_order`` is the box's position among all boxes.
+    """
+    box_id: str
+    label: str
+    color: str
+    participant_ids: Tuple[str, ...]
+    bounds: Bounds
+    source_order: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -996,6 +1052,7 @@ class SequenceGeometry:
     notes: Tuple["NoteGeometry", ...] = ()
     fragments: Tuple["FragmentGeometry", ...] = ()
     branches: Tuple["BranchGeometry", ...] = ()
+    boxes: Tuple["BoxGeometry", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -110,9 +110,9 @@ Fixtures in scope:
   - `flowchart-groups-complex`: 3 groups, 7 nodes, 8 relations, containment/route-obstacle assertions
   - `flowchart-inner-direction`: 1 group, 5 nodes, 4 relations, local-direction/gate assertions
   - `sequence-box-unsupported`: 4 participants, 2 boxes, 4 messages, box membership/color assertions
-    (box membership/color assertions deferred to item 2 — the box construct is unsupported until the
-    shared sequence compiler lands; tracked in `workspace.toml [backlog].open` as
-    `seq-box-membership-assertions`. Participant and message counts are asserted now.)
+    (box membership/color assertions were deferred to item 2 and landed with the shared sequence
+    compiler — `seq-box-membership-assertions` is resolved; the AC9 contract now asserts box count,
+    Group A/B membership, and accent colors alongside participant and message counts.)
   - `sequence-nested-fragments`: 2 participants, 2 nested fragments, 1 branch, 3 messages, fragment-parent/event-containment assertions
 - [x] AC10: All seven provenance fields (`renderer_api`, `output_format`, `semantic_compiler`,
   `layout_backend`, `fallback_reason`, `node_version`, `elkjs_version`) are populated from

@@ -243,6 +243,7 @@ class FixtureContract:
     min_branches: int = 0
     min_endpoint_assertions: int = 0
     min_empty_groups: int = 0
+    min_boxes: int = 0
 
 
 CONTRACTS = {
@@ -277,7 +278,7 @@ CONTRACTS = {
         "flowchart-inner-direction", min_nodes=5, min_groups=1, min_relations=4
     ),
     "sequence-box-unsupported": FixtureContract(
-        "sequence-box-unsupported", min_nodes=4, min_relations=4
+        "sequence-box-unsupported", min_nodes=4, min_relations=4, min_boxes=2
     ),
     "sequence-nested-fragments": FixtureContract(
         "sequence-nested-fragments",
@@ -386,10 +387,13 @@ def _render_lane_params():
     for stem in ALL_FIXTURES:
         for api in ("to_html", "to_svg"):
             for faithful in (True, False):
-                broken = api == "to_svg" and stem not in FLOWCHART_FIXTURES
+                # Item 2 landed the shared sequence compiler + native scene, so
+                # sequence to_svg is no longer broken. Architecture native SVG
+                # remains pending item 5.
+                broken = api == "to_svg" and stem in ARCHITECTURE_FIXTURES
                 marks = (
                     [pytest.mark.xfail(
-                        reason="native SVG pending item 2 (sequence) / item 5 (architecture)",
+                        reason="architecture native SVG pending item 5",
                         strict=False,
                     )]
                     if broken
@@ -403,9 +407,18 @@ def _render_lane_params():
 
 @pytest.mark.parametrize("stem,api,faithful", _render_lane_params())
 def test_render_variant_lane(stem, api, faithful):
-    """AC1: every fixture renders across the four variants; loud on any error."""
-    fn = mr.to_html if api == "to_html" else mr.to_svg
-    out = fn(_src(stem), faithful=faithful)
+    """AC1: every fixture renders across the four variants; loud on any error.
+
+    Sequence has an experimental native SVG builder, so its to_svg lane opts in
+    with ``experimental=True``. Architecture stays on the opt-in-required path
+    (its native SVG is pending item 5) so its lane remains a genuine xfail.
+    """
+    if api == "to_html":
+        out = mr.to_html(_src(stem), faithful=faithful)
+    elif stem in SEQUENCE_FIXTURES:
+        out = mr.to_svg(_src(stem), faithful=faithful, experimental=True)
+    else:
+        out = mr.to_svg(_src(stem), faithful=faithful)
     assert out, "renderer returned empty output"
     root_tag = "<svg" if api == "to_svg" else "<html"
     assert root_tag in out.lower(), f"{api} output missing {root_tag} root tag"
@@ -903,11 +916,28 @@ def test_fixture_non_vacuous_contract(stem):
         checks.append(("endpoint_count", endpoint_checks >= contract.min_endpoint_assertions))
     else:  # sequence
         geom = compile_sequence(_src(stem)).geometry
-        # NOTE: box membership/colour assertions for sequence-box-unsupported are
-        # deferred to item 2 (the box construct is unsupported until the shared
-        # sequence compiler lands); participants + messages are asserted here.
         checks.append(("participants", len(geom.participants) >= contract.min_nodes))
         checks.append(("messages", len(geom.messages) >= contract.min_relations))
+        if contract.min_boxes:
+            # Item 2 landed the shared sequence compiler, which surfaces `box`
+            # geometry — the assertions item 1 deferred under the
+            # `seq-box-membership-assertions` anchor. sequence-box-unsupported:
+            # Group A = {Alice, Bob} (blue), Group B = {Carol} (rgb(200,100,50)),
+            # Dave in neither box.
+            checks.append(("boxes", len(geom.boxes) >= contract.min_boxes))
+            by_label = {b.label: b for b in geom.boxes}
+            checks.append(("box-labels", {"Group A", "Group B"} <= set(by_label)))
+            if "Group A" in by_label:
+                ga = by_label["Group A"]
+                checks.append(("group-a-members", set(ga.participant_ids) == {"Alice", "Bob"}))
+                checks.append(("group-a-color", ga.color.lower() == "blue"))
+            if "Group B" in by_label:
+                gb = by_label["Group B"]
+                checks.append(("group-b-members", set(gb.participant_ids) == {"Carol"}))
+                checks.append(("group-b-color", gb.color.replace(" ", "") == "rgb(200,100,50)"))
+            # Dave belongs to no box.
+            boxed = {pid for b in geom.boxes for pid in b.participant_ids}
+            checks.append(("dave-unboxed", "Dave" not in boxed))
         if contract.min_fragments:
             checks.append(("fragments", len(geom.fragments) >= contract.min_fragments))
             # event-containment: every fragment names ≥1 participant it spans.

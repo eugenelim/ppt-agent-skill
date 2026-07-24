@@ -97,12 +97,6 @@ open = [
   {slug = "oracle-ac6-unsupported-reference-feature", source = "spec/mermaid-oracle-runtime-unification AC6"},
   {slug = "oracle-ac10-emit-report-runner-wiring", source = "spec/mermaid-oracle-runtime-unification AC10"},
   {slug = "oracle-fixture-minimums-migrate-to-contract", source = "spec/mermaid-oracle-runtime-unification"},
-  # AC9 sub-assertion: sequence-box-unsupported box membership/color assertions.
-  # Blocked — the `box` construct is unsupported until item 2 (sequence-shared-compiler-and-native-scene)
-  # exposes box geometry. Add box-count + membership + accent-color checks to the AC9 contract in
-  # tests/test_eight_case_validation.py once compile_sequence surfaces boxes. Participant/message
-  # counts for this fixture are already asserted.
-  {slug = "seq-box-membership-assertions", source = "spec/eight-case-validation-and-provenance AC9"},
 ]
 
 # ── Initiative: Mermaid Rendering Correctness Follow-on — boston-v1 ──────────
@@ -167,10 +161,6 @@ status = "active"
 
 ["ini-003".work]
 queue = [
-  # Item 2 — sequence shared compiler; no flowchart code conflicts
-  {path = "docs/specs/sequence-shared-compiler-and-native-scene", needs = [
-    "work:docs/specs/eight-case-validation-and-provenance",
-  ]},
   # Item 3 — flowchart compound layout; sequential after item 2 to avoid
   #           concurrent edits to shared geometry modules
   {path = "docs/specs/flowchart-compound-layout-and-boundary-gates", needs = [
@@ -197,4 +187,4 @@ queue = [
   ]},
 ]
 active = []
-shipped = ["docs/specs/eight-case-validation-and-provenance"]
+shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene"]
