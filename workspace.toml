@@ -198,3 +198,44 @@ status = "shipped"
 queue = []
 active = []
 shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance", "docs/specs/architecture-fixed-port-integration", "docs/specs/eight-case-parity-ci-and-cleanup"]
+
+# ── Initiative: Shared Orthogonal Routing Foundation — maputo-v1 ──────────────
+#
+# Builds the common port-aware routing infrastructure needed by architecture-complex,
+# class-basic/methods/visibility, all flowchart fixtures, and requirement-basic.
+#
+# Build order and parallelism:
+#   1. routing-port-planner-foundation  — data model + port_planner.py (no deps; first)
+#   2. routing-search-and-assignment    — route_search.py + cost + edge assignment (needs 1)
+#   3. routing-endpoint-marker-geometry — marker/line-endpoint geometry (needs 1; parallel with 2)
+#   4. routing-node-ordering-refinement — route-aware node ordering in _pipeline.py (needs 1+2)
+#   5. routing-validation-invariants    — route_validation.py + FinalizedLayout hard checks (needs 1-4)
+#
+# Phase 1:  item 1 alone
+# Phase 2:  items 2 and 3 in parallel (both depend only on item 1)
+# Phase 3:  item 4 (needs items 1 and 2)
+# Phase 4:  item 5 (needs all prior)
+#
+# Backlog items addressable after this initiative ships:
+#   flowchart-diamond-endpoint-on-segment (exact on-segment check via port_planner)
+#   arch-dual-edge-id-desync (edge_id keyed source in routing)
+
+["ini-004"]
+name = "Shared Orthogonal Routing Foundation"
+milestone = "maputo-v1"
+status = "active"
+
+["ini-004".work]
+queue = [
+  # Phase 1 — no dependencies
+  "docs/specs/routing-port-planner-foundation",
+  # Phase 2 — both depend on item 1 only; run in parallel
+  {path = "docs/specs/routing-search-and-assignment", needs = "work:docs/specs/routing-port-planner-foundation"},
+  {path = "docs/specs/routing-endpoint-marker-geometry", needs = "work:docs/specs/routing-port-planner-foundation"},
+  # Phase 3 — needs items 1 and 2
+  {path = "docs/specs/routing-node-ordering-refinement", needs = "work:docs/specs/routing-search-and-assignment"},
+  # Phase 4 — needs all prior
+  {path = "docs/specs/routing-validation-invariants", needs = "work:docs/specs/routing-node-ordering-refinement"},
+]
+active = []
+shipped = []
