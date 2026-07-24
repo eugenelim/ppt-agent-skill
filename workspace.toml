@@ -198,3 +198,30 @@ status = "shipped"
 queue = []
 active = []
 shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance", "docs/specs/architecture-fixed-port-integration", "docs/specs/eight-case-parity-ci-and-cleanup"]
+
+# ── Initiative: Shared Orthogonal Routing Foundation — maputo-v1 ──────────────
+#
+# 5-item foundation initiative. Dependency order:
+#
+#   1. routing-port-planner-foundation  — data model + planning functions; gates all
+#   2. routing-search-and-assignment    — depends on 1; parallel with 3
+#   3. routing-endpoint-marker-geometry — depends on 1; parallel with 2
+#   4. routing-node-ordering-refinement — depends on 2
+#   5. routing-validation-invariants    — depends on 4
+
+["ini-004"]
+name = "Shared Orthogonal Routing Foundation"
+milestone = "maputo-v1"
+status = "active"
+
+["ini-004".work]
+queue = [
+  {path = "docs/specs/routing-search-and-assignment", needs = "work:docs/specs/routing-port-planner-foundation"},
+  {path = "docs/specs/routing-endpoint-marker-geometry", needs = "work:docs/specs/routing-port-planner-foundation"},
+  {path = "docs/specs/routing-node-ordering-refinement", needs = "work:docs/specs/routing-search-and-assignment"},
+  {path = "docs/specs/routing-validation-invariants", needs = "work:docs/specs/routing-node-ordering-refinement"},
+]
+active = []
+shipped = [
+  "docs/specs/routing-port-planner-foundation",
+]
