@@ -123,7 +123,7 @@ def _layout_graph_topology(
             zoom = min(w_zoom, 1.0)
 
     # Core fragment from render_finalized (not _render_graph_fragment)
-    fragment = render_finalized(layout)
+    fragment = render_finalized(layout, faithful=_opts.faithful_mermaid)
 
     # Apply zoom + style via a wrapper div when needed
     zoom_css = f" zoom:{zoom:.4f};" if abs(zoom - 1.0) > 0.005 else ""

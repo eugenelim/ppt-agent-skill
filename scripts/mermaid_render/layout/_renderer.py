@@ -1369,8 +1369,15 @@ def _compute_group_bboxes(
 
 # ── Serialization-only renderer (Stage 9) ────────────────────────────────────
 
-def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-defined]
+def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str:  # type: ignore[name-defined]
     """Serialize a FinalizedLayout to an HTML fragment.
+
+    ``faithful`` mirrors ``RenderOptions.faithful_mermaid``. When True, edge
+    stroke and arrowhead colors are held to the neutral edge color for every
+    line style — thickness and dash pattern still convey the ``==>`` / ``-.->``
+    distinction, but no semantic color is derived from the line style (spec
+    flowchart-arrow-style-conformance AC9). Default False preserves the
+    editorial palette (thick → accent, dotted → amber) for existing callers.
 
     This function MUST NOT perform any geometry work:
       - no _route_edges call
@@ -1659,19 +1666,25 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             '<polygon points="0,-4 9,0 0,4"'
             ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
         )
+    # Neutral edge color; used for every arrowhead in faithful mode so the
+    # marker fill/stroke never encodes a semantic meaning derived from the line
+    # style (spec flowchart-arrow-style-conformance AC9).
+    _neutral_edge = "var(--edge,rgba(100,116,139,0.7))"
     if "arrow-thick" in _needed_markers:
+        _thick_fill = _neutral_edge if faithful else "var(--edge-strong,var(--accent-1,#60a5fa))"
         defs_parts.append(
             '<marker id="arrow-thick" viewBox="0 -5 11 10" refX="11" refY="0"'
             ' markerWidth="11" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
             '<polygon points="0,-5 11,0 0,5"'
-            ' fill="var(--edge-strong,var(--accent-1,#60a5fa))"/></marker>'
+            f' fill="{_thick_fill}"/></marker>'
         )
     if "arrow-open" in _needed_markers:
+        _open_stroke = _neutral_edge if faithful else "var(--accent-4,var(--amber,#E8924A))"
         defs_parts.append(
             '<marker id="arrow-open" viewBox="0 -4 9 8" refX="9" refY="0"'
             ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
             '<path d="M 0,-4 L 9,0 L 0,4" fill="none"'
-            ' stroke="var(--accent-4,var(--amber,#E8924A))" stroke-width="1.5"/></marker>'
+            f' stroke="{_open_stroke}" stroke-width="1.5"/></marker>'
         )
     _cls_edge_color = "var(--edge,rgba(100,116,139,0.7))"
     for _base_id, _base_def, _rev_def in [
@@ -1732,14 +1745,17 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         marker_end = f' marker-end="url(#{_mid})"' if re_obj.has_marker_end else ""
         marker_start = (f' marker-start="url(#{_mid_start})"'
                         if re_obj.has_marker_start else "")
+        _neutral_stroke = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
         if re_obj.edge_style == "thick":
-            stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
+            # Faithful mode: thickness alone (stroke-width) conveys ==>, no color.
+            stroke_color = _neutral_stroke if faithful else "var(--edge-strong,var(--accent-1,#60a5fa))"
             stroke_w = "2"
         elif re_obj.edge_style == "dotted":
-            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
+            # Faithful mode: the dash pattern alone conveys -.->, no color.
+            stroke_color = _neutral_stroke if faithful else "var(--accent-4,var(--amber,#E8924A))"
             stroke_w = "1.5"
         else:
-            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+            stroke_color = _neutral_stroke
             stroke_w = "1.5"
         dash = ' stroke-dasharray="6 4"' if re_obj.edge_style == "dotted" else ""
         _re_rel_id = f'{_h(re_obj.src_node_id)}__{_h(re_obj.dst_node_id)}__{_rei}'
