@@ -810,12 +810,11 @@ def test_gate_route_crosses_unrelated_group():
 # Live validator lane — validators run against the real compiled FinalizedLayout
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Flowchart fixtures whose real compiled geometry is currently clean; the
-# remaining two carry geometry defects owned by items 3-4 and therefore xfail.
-_LIVE_BROKEN = {
-    "flowchart-cross-scope-edge": "off-canvas compound routing (B→C y=293 > canvas h=264) — item 3",
-    "flowchart-groups-complex": "edge-label route obstruction — item 3/4",
-}
+# Item 3 (flowchart compound layout + boundary gates) landed true bottom-up
+# compound routing: cross-boundary edges now route through explicit boundary
+# gates with an obstacle-aware channel, so all four scoped flowchart fixtures
+# compile to clean geometry on the live lane. No fixture xfails here anymore.
+_LIVE_BROKEN: "dict[str, str]" = {}
 
 
 def _live_lane_params():
@@ -835,10 +834,10 @@ def test_live_flowchart_geometry_clean(stem, monkeypatch):
     """AC6/AC7/AC8: run the segment-aware validators against each fixture's real
     compiled FinalizedLayout — the gate that actually bites on the eight cases.
 
-    Currently-clean fixtures must pass; fixtures whose geometry is fixed by
-    items 3-4 xfail (this is exactly how the harness gates those items). The
-    xfail on flowchart-cross-scope-edge confirms the historical off-canvas
-    state on the real fixture, complementing the fabricated AC6 regression.
+    Since item 3, every scoped flowchart fixture — including the two compound
+    ones whose geometry item 3 fixed (flowchart-cross-scope-edge off-canvas
+    routing; flowchart-groups-complex edge-label / group-interior obstruction) —
+    must compile to zero violations.
     """
     monkeypatch.setenv("MERMAID_LAYOUT_ENGINE", "python")  # deterministic backend
     compiled = _compile_flowchart(_src(stem), None, RenderOptions())

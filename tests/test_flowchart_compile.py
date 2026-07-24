@@ -491,7 +491,9 @@ class TestTypedExceptionHandling:
         assert compiled.metadata.fallback_reason == "elk-unavailable"
 
     def test_inner_dir_fallback_has_typed_reason(self):
-        """Inner-direction diagrams get fallback_reason='inner-direction'. (AC5)"""
+        """Inner-direction compound diagrams use the bottom-up Python compound path
+        (the one that emits BoundaryGate records) with fallback_reason
+        'inner-direction'. (AC5)"""
         src = "flowchart TB\n  subgraph SG\n    direction LR\n    A --> B\n  end\n  C --> A"
         sem = parse_flowchart_semantics(src)
         if not sem.has_inner_dir:

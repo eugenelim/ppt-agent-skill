@@ -1,6 +1,6 @@
 # Implementation Plan — Flowchart Compound Layout and Boundary Gates
 
-**Status:** Approved
+**Status:** Done
 
 ## Pre-mortem
 
@@ -29,26 +29,34 @@
 
 ## Tasks
 
-### Task 1: Remove unconditional inner-direction fallback
+### Task 1: ELK-first routing / engine selection
 Depends on: none
 Verification: TDD
 
-**Tests:**
-- `test_inner_direction_attempts_elk_first`: render `flowchart-inner-direction`; assert
-  the ELK path is attempted (mock to verify the call happens); assert `layout_backend !=
-  "python-fallback"` when ELK succeeds.
-- `test_inner_direction_fallback_only_on_typed_condition`: mock ELK to raise
-  `ElkUnavailable`; assert `layout_backend == "python-fallback"` and `fallback_reason`
-  is a typed string, not `None`.
+**As shipped (see spec § Deviations):** non-compound grouped flowcharts attempt
+ELK first and consume a successful result directly; inner-direction compound
+fixtures stay on the gate-emitting Python compound path, because `BoundaryGate`
+records (AC7) and the harness's non-forced `min_gates` contract are currently
+Python-path-only. The ELK-first-for-compound + post-ELK gate-derivation path is
+deferred (backlog `flowchart-compound-elk-gate-derivation`) pending an
+`elkjs`-enabled environment to verify it.
 
-**Approach:**
-- Find the condition in `_strategies.py` (or `_compound_layout.py`) that unconditionally
-  routes inner-direction diagrams to the Python fallback.
-- Replace with: build the full compound `LayoutGraph` with `local_direction` per group;
-  attempt ELK; on success, return the `FinalizedLayout` directly without calling the
-  Python router.
-- Keep the Python compound algorithm only for `ElkUnavailable`, `ElkInvalidResult`, and
-  documented typed unsupported conditions.
+**Tests (`tests/test_flowchart_compound_layout.py`):**
+- `test_non_compound_attempts_elk_first`: render `flowchart-groups-complex`; mock
+  to verify the ELK entry point is attempted; assert that reaching the Python path
+  happens only via the typed `elk-unavailable` reason (not a silent bypass).
+- `test_inner_direction_uses_gate_emitting_python_path`: assert the compound
+  fixture uses the Python compound path (`backend == "python"`,
+  `fallback_reason == "inner-direction"`) and emits boundary gates.
+- `test_non_compound_fallback_only_on_typed_condition`: mock ELK to raise
+  `ElkUnavailable`; assert `backend == "python"` and a typed `fallback_reason`.
+
+**Approach (as shipped):**
+- Keep the `has_inner_dir` → Python compound branch in `_compile_flowchart`; it is
+  the branch that emits `BoundaryGate` records.
+- Non-compound flowcharts build the `LayoutGraph`, attempt ELK, and consume a
+  successful `FinalizedLayout` directly; only `ElkUnavailable` / `ElkInvalidResult`
+  select the Python fallback.
 
 ---
 

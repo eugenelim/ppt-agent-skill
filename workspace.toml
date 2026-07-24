@@ -68,6 +68,13 @@ open = [
   # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
   {slug = "gpu-benchmark"},
 
+  # ── flowchart compound layout deferred sub-check ─────────────────────────────
+  # AC4/AC5: attempt ELK first for inner-direction compound fixtures and consume
+  # the ELK result directly, deriving BoundaryGate records from the ELK-produced
+  # routes (engine-agnostic _cbe_boundary_crossings). Deferred until an
+  # elkjs-enabled environment can verify ELK's compound geometry + gate parity.
+  {slug = "flowchart-compound-elk-gate-derivation", source = "spec/flowchart-compound-layout-and-boundary-gates AC4/AC5"},
+
   # ── flowchart-conformance deferred sub-checks ────────────────────────────────
   # AC1: verify edge labels fit within node content_bounds (usable interior).
   # Requires content_bounds export from the pipeline — deferred until that lands.
@@ -161,12 +168,6 @@ status = "active"
 
 ["ini-003".work]
 queue = [
-  # Item 3 — flowchart compound layout; sequential after item 2 to avoid
-  #           concurrent edits to shared geometry modules
-  {path = "docs/specs/flowchart-compound-layout-and-boundary-gates", needs = [
-    "work:docs/specs/eight-case-validation-and-provenance",
-    "work:docs/specs/sequence-shared-compiler-and-native-scene",
-  ]},
   # Item 4 — flowchart arrow style; sequential after item 3 to prevent
   #           conflicts on _geometry.py / _parser.py
   {path = "docs/specs/flowchart-arrow-style-conformance", needs = [
@@ -187,4 +188,4 @@ queue = [
   ]},
 ]
 active = []
-shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene"]
+shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates"]
