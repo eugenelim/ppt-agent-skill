@@ -168,12 +168,6 @@ status = "active"
 
 ["ini-003".work]
 queue = [
-  # Item 4 — flowchart arrow style; sequential after item 3 to prevent
-  #           conflicts on _geometry.py / _parser.py
-  {path = "docs/specs/flowchart-arrow-style-conformance", needs = [
-    "work:docs/specs/eight-case-validation-and-provenance",
-    "work:docs/specs/flowchart-compound-layout-and-boundary-gates",
-  ]},
   # Item 5 — architecture ports; sequential after item 4 for clean base
   {path = "docs/specs/architecture-fixed-port-integration", needs = [
     "work:docs/specs/eight-case-validation-and-provenance",
@@ -188,4 +182,4 @@ queue = [
   ]},
 ]
 active = []
-shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates"]
+shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance"]

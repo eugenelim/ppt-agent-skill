@@ -2,7 +2,7 @@
 
 Mode: full (style preservation — edge token normalization; style through pipeline; faithful mode)
 
-- **Status:** Approved
+- **Status:** Shipped
 
 Dependencies: `docs/specs/eight-case-validation-and-provenance`
 
@@ -55,21 +55,21 @@ flowchart TB
 
 ## Acceptance Criteria
 
-- [ ] AC1: A→B is normal solid line with target arrow marker.
-- [ ] AC2: A→C is thick solid line with target arrow marker.
-- [ ] AC3: A→D is dotted/dashed line (per the pinned Mermaid token reference) with target
+- [x] AC1: A→B is normal solid line with target arrow marker.
+- [x] AC2: A→C is thick solid line with target arrow marker.
+- [x] AC3: A→D is dotted/dashed line (per the pinned Mermaid token reference) with target
   arrow marker.
-- [ ] AC4: B→C and C→D are normal solid line with target arrow markers.
-- [ ] AC5: All five edges retain their target arrow marker independently confirmed from
+- [x] AC4: B→C and C→D are normal solid line with target arrow markers.
+- [x] AC5: All five edges retain their target arrow marker independently confirmed from
   stroke style.
-- [ ] AC6: Style and marker assertions execute with nonzero count in the structured
+- [x] AC6: Style and marker assertions execute with nonzero count in the structured
   oracle records.
-- [ ] AC7: ELK-required and Python-fallback lane results agree on style and marker for
+- [x] AC7: ELK-required and Python-fallback lane results agree on style and marker for
   all five edges.
-- [ ] AC8: `to_html` and `to_svg` results agree on style and marker for all five edges.
-- [ ] AC9: `faithful_mermaid=True` outputs contain no legend, no semantic edge labels, and
+- [x] AC8: `to_html` and `to_svg` results agree on style and marker for all five edges.
+- [x] AC9: `faithful_mermaid=True` outputs contain no legend, no semantic edge labels, and
   no semantically derived colors beyond the Mermaid source declaration.
-- [ ] AC10: Each edge has a stable `edge_id` that persists through ELK serialization and
+- [x] AC10: Each edge has a stable `edge_id` that persists through ELK serialization and
   deserialization.
 
 ## Testing Strategy
@@ -83,3 +83,31 @@ flowchart TB
 | AC8 | TDD: `to_html` and `to_svg` results agree on style/marker |
 | AC9 | TDD: render `to_html(faithful_mermaid=True)`; grep for legend/semantic-color |
 | AC10 | TDD: ELK serialization round-trip; assert `edge_id` unchanged |
+
+## Deviations
+
+All 10 ACs are met. Implementation diverges from the plan's *representation*,
+not its behavior:
+
+- **No `EdgeStyle` dataclass with enums.** The plan (authored before initiative
+  item 3 landed) proposed a new `EdgeStyle(line, thickness, end_marker)` value
+  type. Item 3 had since landed the equivalent contract on the shared flowchart
+  pipeline: a string `edge_style` ("solid" | "thick" | "dotted") on `_Edge` /
+  `LayoutEdge` / `RoutedEdge`, with marker ownership tracked *independently* by
+  `has_marker_end` + `target_marker` (`MarkerKind.ARROW`). Building on that
+  representation — rather than adding a parallel dataclass — keeps the diff
+  minimal (AGENTS.md: touch only what you're asked; prefer the boring solution)
+  while satisfying every AC, including AC5's marker-vs-stroke independence.
+- **Item 4's net-new code was the AC9 faithful guard only.** Stable `edge_id`
+  (AC10), token normalization (AC1–AC4), ELK round-trip preservation, and
+  HTML/SVG painting were already delivered by items 1–3's shared work. The one
+  real gap was that `render_finalized` (the `to_html` painter) assigned
+  line-style-derived accent colors (thick → accent-1 blue, dotted → accent-4
+  amber) unconditionally. It now takes a `faithful` flag; in faithful mode edge
+  strokes and the `arrow-thick` / `arrow-open` marker colors are held to the
+  neutral edge color, while stroke-width and dash pattern still convey the
+  `==>` / `-.->` distinction. Editorial mode (default) is unchanged.
+- **Acceptance oracle is a structured record, not a screenshot** (spec Never):
+  `tests/test_flowchart_arrow_conformance.py` builds per-edge `EdgeStyleOracle`
+  records from the compiled layout and rendered output, across both layout
+  lanes and both renderers.
