@@ -95,14 +95,6 @@ open = [
   # the spec forbids ("do not redesign the successful ELK path"). Unblock: a follow-on
   # ELK-architecture-geometry spec in an elkjs-enabled environment.
   {slug = "arch-elk-edge-interior-crossing", source = "spec/architecture-fixed-port-integration AC9"},
-  # quality-engineer Concern (item 5): _arch_fallback_to_finalized in
-  # scripts/mermaid_render/layout/architecture.py duplicates the inlined fallback
-  # body in compile_architecture and has no production caller (only referenced by
-  # tests/test_architecture_elk_authoritative.py). Both bodies were updated in
-  # lockstep for item 5 but will drift. Fix: route compile_architecture's fallback
-  # through the helper (one authoritative body) or delete the dead function and
-  # repoint its tests at the live path. Unblock: a maintainability follow-on PR.
-  {slug = "arch-fallback-duplicate-body", source = "review/architecture-fixed-port-integration"},
 
     # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
   # These slugs remain here only to satisfy (deferred: <slug>) references in shipped
@@ -126,16 +118,6 @@ open = [
   {slug = "oracle-fixture-minimums-migrate-to-contract", source = "spec/mermaid-oracle-runtime-unification"},
 
   # ── ini-003 item 6 carry-forwards (eight-case-parity-ci-and-cleanup) ─────────
-  # Faithful edge-color neutralization lives in render_finalized but not its twin
-  # _render_graph_fragment (classDiagram HTML path). Extract a shared
-  # (edge_style, faithful) → (stroke_color, width, dash) resolver both painters
-  # call. Cross-reference comments landed in both paths in item 6.
-  {slug = "renderer-two-paths-faithful-resolver", source = "review/flowchart-arrow-style-conformance"},
-  # arch_to_finalized is a lossy adapter: it re-derives node content_bounds and
-  # drops the ELK-enriched LayoutDiagnostics (emits empty diagnostics) rather than
-  # carrying them through. Spec-aligned (harness reads the model, not diagnostics);
-  # wording corrected in spec/architecture-fixed-port-integration Deviations.
-  {slug = "arch-elk-roundtrip-lossy", source = "review/architecture-fixed-port-integration"},
   # The dual edge_id reconstruction in architecture ELK→spec mapping can desync for
   # duplicate (src,dst) architecture edges → false ArchitectureLayoutError. Not hit
   # by the 4-distinct-pair architecture-complex fixture; guarded now by
