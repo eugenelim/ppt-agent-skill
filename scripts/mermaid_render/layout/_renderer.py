@@ -128,6 +128,32 @@ _DEPTH_TINTS = [
 
 _LEGEND_H = 44  # px reserved below the diagram canvas for the legend strip
 
+_NEUTRAL_STROKE = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+
+
+def _edge_stroke_attrs(
+    edge_style: str,
+    faithful: bool = False,
+) -> tuple[str, str, str]:
+    """Return (stroke_color, stroke_w, dash) for an edge.
+
+    ``faithful`` suppresses style-derived accent colors so only geometry
+    (thickness, dash pattern) encodes the Mermaid line kind.
+    ``dash`` uses the superset endswith check so raw-style values like
+    ``cls-dotted`` (graph-fragment painter) are handled correctly.
+    """
+    if edge_style == "thick":
+        stroke_color = _NEUTRAL_STROKE if faithful else "var(--edge-strong,var(--accent-1,#60a5fa))"
+        stroke_w = "2"
+    elif edge_style == "dotted":
+        stroke_color = _NEUTRAL_STROKE if faithful else "var(--accent-4,var(--amber,#E8924A))"
+        stroke_w = "1.5"
+    else:
+        stroke_color = _NEUTRAL_STROKE
+        stroke_w = "1.5"
+    dash = ' stroke-dasharray="6 4"' if (edge_style == "dotted" or edge_style.endswith("-dotted")) else ""
+    return stroke_color, stroke_w, dash
+
 
 def _render_graph_fragment(
     nodes: dict[str, _Node],
@@ -140,6 +166,8 @@ def _render_graph_fragment(
     style_overrides: str = "",
     group_bboxes: dict[str, tuple[int, int, int, int]] | None = None,
     show_legend: bool = True,
+    *,
+    faithful: bool = False,
 ) -> str:
     """Render an HTML fragment for a positioned graph.
 
@@ -586,28 +614,10 @@ def _render_graph_fragment(
         defs_parts.append("</defs>")
         parts.append("".join(defs_parts))
 
-    # NOTE (renderer-two-paths): this graph-fragment HTML painter (classDiagram
-    # path) derives edge stroke color from line style unconditionally. Its twin,
-    # `render_finalized`, neutralizes those style-derived colors when
-    # ``faithful=True`` (flowchart-arrow-style-conformance AC9). This path does
-    # not currently receive a ``faithful`` flag, so it is NOT faithful-neutralized.
-    # A shared ``(edge_style, faithful) → (stroke_color, width, dash)`` resolver
-    # for both painters is deferred under backlog anchor
-    # `renderer-two-paths-faithful-resolver`.
     for _ei, spec in enumerate(routed):
         d = spec["d"]
         style = spec["style"]
-        if style == "thick":
-            stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
-        elif style in ("dotted",) or style.endswith("-dotted"):
-            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-        else:
-            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-        if style == "dotted":
-            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
-        is_dashed = style == "dotted" or style.endswith("-dotted")
-        dash = ' stroke-dasharray="6 4"' if is_dashed else ""
-        stroke_w = "2" if style == "thick" else "1.5"
+        stroke_color, stroke_w, dash = _edge_stroke_attrs(style, faithful)
         # Apply linkStyle overrides: extract stroke color and stroke-width.
         # Values are sanitized to safe CSS color/length tokens only.
         _ecss = spec.get("extra_css", "")
@@ -1759,24 +1769,7 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
         marker_end = f' marker-end="url(#{_mid})"' if re_obj.has_marker_end else ""
         marker_start = (f' marker-start="url(#{_mid_start})"'
                         if re_obj.has_marker_start else "")
-        # NOTE (renderer-two-paths): this canonical FinalizedLayout painter
-        # neutralizes style-derived edge color in faithful mode. Its twin,
-        # `_render_graph_fragment` (classDiagram HTML path), does NOT — see the
-        # matching note there and backlog anchor
-        # `renderer-two-paths-faithful-resolver` for the deferred shared resolver.
-        _neutral_stroke = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-        if re_obj.edge_style == "thick":
-            # Faithful mode: thickness alone (stroke-width) conveys ==>, no color.
-            stroke_color = _neutral_stroke if faithful else "var(--edge-strong,var(--accent-1,#60a5fa))"
-            stroke_w = "2"
-        elif re_obj.edge_style == "dotted":
-            # Faithful mode: the dash pattern alone conveys -.->, no color.
-            stroke_color = _neutral_stroke if faithful else "var(--accent-4,var(--amber,#E8924A))"
-            stroke_w = "1.5"
-        else:
-            stroke_color = _neutral_stroke
-            stroke_w = "1.5"
-        dash = ' stroke-dasharray="6 4"' if re_obj.edge_style == "dotted" else ""
+        stroke_color, stroke_w, dash = _edge_stroke_attrs(re_obj.edge_style, faithful)
         _re_rel_id = f'{_h(re_obj.src_node_id)}__{_h(re_obj.dst_node_id)}__{_rei}'
         _re_arrow = _mid if re_obj.has_marker_end else "none"
         parts.append(

@@ -51,6 +51,7 @@ docs/specs/<feature>/
 | [`persistent-chrome-flag`](persistent-chrome-flag/spec.md) | Shipped | none | Deck-global `persistent_chrome` flag (default off) — masthead + runbook footer on every content page for reference decks, reusing worksheet.md group-C chrome recipes |
 | [`assimilate-slides-skill`](assimilate-slides-skill/spec.md) | Shipped | none | Internal `assimilate-slides` authoring skill (ingest→scrub→classify→extract style/primitives/icons→narrative→mock→gates→ship) + searchable SVG icon library + deterministic `deck_probe.py`/`build_pdf.py`; dogfooded on a maintainer-supplied deck |
 | [`architecture-diagram-primitives`](architecture-diagram-primitives/spec.md) | Shipped | none | Dogfood run of `assimilate-slides`: architecture-canvas primitives + seed icons under `schematic_blueprint` (no new style) |
+| [`arch-renderer-maintainability-cleanup`](arch-renderer-maintainability-cleanup/spec.md) | Shipped | `docs/specs/eight-case-parity-ci-and-cleanup`, `docs/specs/architecture-fixed-port-integration` | Three backlog anchors from ini-003: shared `_edge_stroke_attrs` resolver, `_build_arch_layout` extraction, and `content_bounds`/`diagnostics` round-trip carry-through |
 
 ## Adding a new spec
 
