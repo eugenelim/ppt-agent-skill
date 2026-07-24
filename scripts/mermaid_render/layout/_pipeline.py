@@ -1356,6 +1356,418 @@ def enrich_flowchart_finalized_layout(
     )
 
 
+# ── Flowchart routing adapter (ini-005) ───────────────────────────────────────
+
+_USE_LEGACY_ROUTE_EDGES: bool = False
+
+_SIDE_NORMALS_LOCAL: "dict[str, tuple[float, float]]" = {
+    "top":    (0.0, -1.0),
+    "right":  (1.0,  0.0),
+    "bottom": (0.0,  1.0),
+    "left":   (-1.0, 0.0),
+}
+
+
+def flowchart_route_adapter(
+    semantics: "FlowchartSemantics",
+    grp_bboxes: "dict[str, tuple]",
+    direction: str,
+) -> "tuple[list, list, list, list]":
+    """Convert FlowchartSemantics (post-layout) into port-planner abstractions.
+
+    Nodes must already have canvas coordinates set (called after coordinate
+    assignment, before routing).
+
+    Returns (list[PortCandidate], list[RoutingObstacle], list[RoutePermissions],
+    list[GateAperture]).
+    """
+    from .port_planner import (  # noqa: PLC0415
+        PortCandidate, RoutingObstacle, RoutePermissions, GateAperture,
+        fan_slots,
+    )
+
+    nodes = semantics.nodes
+    edges = semantics.edges
+    groups = semantics.groups
+    _dir = direction.upper()
+    _horiz = _dir in ("LR", "RL")
+
+    def _nb(n: "_Node") -> "tuple[float, float, float, float]":
+        return (float(n.x), float(n.y), float(_node_render_w(n)), float(_node_render_h(n)))
+
+    # Build edge lookups
+    from collections import defaultdict  # noqa: PLC0415
+    outgoing: "dict[str, list[str]]" = defaultdict(list)
+    incoming: "dict[str, list[str]]" = defaultdict(list)
+    edge_by_id: "dict[str, _Edge]" = {}
+    for e in edges:
+        if e.edge_id:
+            edge_by_id[e.edge_id] = e
+            outgoing[e.src].append(e.edge_id)
+            incoming[e.dst].append(e.edge_id)
+
+    src_face = "right" if _horiz else "bottom"
+    dst_face = "left" if _horiz else "top"
+
+    def _port_point(side: str, bx: float, by: float, bw: float, bh: float, off: float) -> "tuple[float, float]":
+        if side == "right":
+            return (bx + bw, by + off * bh)
+        if side == "left":
+            return (bx, by + off * bh)
+        if side == "bottom":
+            return (bx + off * bw, by + bh)
+        return (bx + off * bw, by)  # top
+
+    # PortCandidates for source endpoints (fan-distributed)
+    src_ports: "dict[str, PortCandidate]" = {}
+    for node_id, eids in outgoing.items():
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        face_len = bh if _horiz else bw
+        for eid, off in fan_slots(eids, src_face, face_length=face_len):
+            pt = _port_point(src_face, bx, by, bw, bh, off)
+            src_ports[eid] = PortCandidate(
+                edge_id=eid,
+                node_id=node_id,
+                side=src_face,
+                normalized_offset=off,
+                point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(src_face, (0.0, 0.0)),
+                fixed_side=False,
+                preference_penalty=0.0,
+            )
+
+    # PortCandidates for destination endpoints (fan-distributed)
+    dst_ports: "dict[str, PortCandidate]" = {}
+    for node_id, eids in incoming.items():
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        face_len = bh if _horiz else bw
+        for eid, off in fan_slots(eids, dst_face, face_length=face_len):
+            pt = _port_point(dst_face, bx, by, bw, bh, off)
+            dst_ports[eid] = PortCandidate(
+                edge_id=eid,
+                node_id=node_id,
+                side=dst_face,
+                normalized_offset=off,
+                point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(dst_face, (0.0, 0.0)),
+                fixed_side=False,
+                preference_penalty=0.0,
+            )
+
+    # Obstacles: NODE_INTERIOR for every real leaf node
+    obstacles: "list[RoutingObstacle]" = []
+    for nid, node in nodes.items():
+        if node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        obstacles.append(RoutingObstacle(
+            obstacle_id=nid,
+            kind="NODE_INTERIOR",
+            bounds=(bx, by, bw, bh),
+            scope_id=node.group,
+            title_bounds=None,
+            permitted_gate_ids=frozenset(),
+        ))
+
+    # Obstacles: GROUP_INTERIOR for each group
+    _TITLE_BAND: float = 20.0
+    for gid, (x0, y0, x1, y1) in grp_bboxes.items():
+        bw, bh = x1 - x0, y1 - y0
+        obstacles.append(RoutingObstacle(
+            obstacle_id=gid,
+            kind="GROUP_INTERIOR",
+            bounds=(x0, y0, bw, bh),
+            scope_id=gid,
+            title_bounds=(x0, y0, bw, _TITLE_BAND),
+            permitted_gate_ids=frozenset(),
+        ))
+
+    # RoutePermissions and GateApertures for cross-boundary edges
+    def _scope_chain(node: "_Node") -> "tuple[str, ...]":
+        chain: "list[str]" = []
+        gid = node.group
+        while gid:
+            chain.append(gid)
+            grp = groups.get(gid)
+            gid = grp.parent_group if grp else None
+        return tuple(chain)
+
+    permissions: "list[RoutePermissions]" = []
+    apertures: "list[GateAperture]" = []
+    for e in edges:
+        if not e.edge_id:
+            continue
+        sn = nodes.get(e.src)
+        dn = nodes.get(e.dst)
+        if sn is None or dn is None or sn.is_dummy or dn.is_dummy:
+            continue
+        if sn.group == dn.group or (sn.group is None and dn.group is None):
+            continue
+        src_chain = _scope_chain(sn)
+        dst_chain = _scope_chain(dn)
+        common = tuple(g for g in src_chain if g in set(dst_chain))
+        allowed = tuple(dict.fromkeys(src_chain + dst_chain))
+        permissions.append(RoutePermissions(
+            edge_id=e.edge_id,
+            source_scope_chain=src_chain,
+            target_scope_chain=dst_chain,
+            common_ancestor_ids=common,
+            permitted_gate_ids=allowed,
+        ))
+        for gid in (sn.group, dn.group):
+            if gid and gid in grp_bboxes:
+                x0, y0, x1, y1 = grp_bboxes[gid]
+                cx = (x0 + x1) / 2.0
+                cy = (y0 + y1) / 2.0
+                apertures.append(GateAperture(
+                    gate_id=f"gate_{e.edge_id}_{gid}",
+                    edge_id=e.edge_id,
+                    group_id=gid,
+                    side="right" if _horiz else "bottom",
+                    center=(cx, cy),
+                    half_width=(x1 - x0) / 4.0,
+                ))
+
+    all_ports: "list" = list(src_ports.values()) + list(dst_ports.values())
+    return all_ports, obstacles, permissions, apertures
+
+
+def _flowchart_route_new_path(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    grp_bboxes: "dict[str, tuple]",
+    direction: str,
+    canvas_w: float,
+    canvas_h: float,
+    semantics: "FlowchartSemantics",
+) -> "RouteBatch":
+    """New routing path (ini-005): adapter + assign_routes + local channel.
+
+    Replaces _route_edges() when _USE_LEGACY_ROUTE_EDGES is False. Does not
+    call _route_perimeter(); uses local_channel_route() for multi-rank edges.
+    """
+    from ._geometry import RouteBatch, RoutingFailure  # noqa: PLC0415
+    from .route_search import route_edge, local_channel_route  # noqa: PLC0415
+    from .port_planner import PortCandidate, RoutingObstacle, RouteCandidate  # noqa: PLC0415
+
+    edge_ids_in_order = [e.edge_id for e in edges if e.edge_id]
+    edge_by_id: "dict[str, _Edge]" = {e.edge_id: e for e in edges if e.edge_id}
+
+    # Build NODE_INTERIOR obstacles for leaf nodes only (group boundary
+    # enforcement happens post-routing in _reroute_cross_boundary_edges).
+    from .port_planner import RoutingObstacle  # noqa: PLC0415
+    obstacles = [
+        RoutingObstacle(
+            obstacle_id=nid,
+            kind="NODE_INTERIOR",
+            bounds=(float(n.x), float(n.y), float(_node_render_w(n)), float(_node_render_h(n))),
+            scope_id=n.group,
+            title_bounds=None,
+            permitted_gate_ids=frozenset(),
+        )
+        for nid, n in nodes.items()
+        if not n.is_dummy
+    ]
+
+    # Build per-edge port candidates directly (fan-distributed)
+    _dir = direction.upper()
+    _horiz = _dir in ("LR", "RL")
+
+    def _nb(n: "_Node") -> "tuple[float, float, float, float]":
+        return (float(n.x), float(n.y), float(_node_render_w(n)), float(_node_render_h(n)))
+
+    from collections import defaultdict as _dd  # noqa: PLC0415
+    from .port_planner import fan_slots  # noqa: PLC0415
+
+    # Only route real edges: skip intermediate dummy-chain segments where the
+    # destination is a dummy node. For dummy-chained edges (multi-rank), the last
+    # segment may have edge_id='' — synthesize an id from orig_src->orig_dst.
+    real_edges: "list[tuple[str, _Edge]]" = []  # (effective_eid, edge)
+    seen_real: "set[str]" = set()
+    eid_counters: "dict[str, int]" = {}
+    for e in edges:
+        dst_node = nodes.get(e.dst)
+        if dst_node and dst_node.is_dummy:
+            continue  # skip intermediate dummy segments
+        real_src = e.orig_src or e.src
+        real_dst = e.orig_dst or e.dst
+        pair_key = f"{real_src}->{real_dst}"
+        if pair_key in seen_real:
+            continue  # dedup dummy chains that converge to same pair
+        seen_real.add(pair_key)
+        # Use existing edge_id if set, else synthesize from real endpoints
+        eid = e.edge_id or pair_key
+        if eid in eid_counters:
+            eid_counters[eid] += 1
+            eid = f"{eid}#{eid_counters[eid]}"
+        else:
+            eid_counters[eid] = 0
+        real_edges.append((eid, e))
+
+    edge_by_real: "dict[str, _Edge]" = {eid: e for eid, e in real_edges}
+
+    out_map: "dict[str, list[str]]" = _dd(list)
+    in_map: "dict[str, list[str]]" = _dd(list)
+    for eid, e in real_edges:
+        real_src = e.orig_src or e.src
+        real_dst = e.orig_dst or e.dst
+        out_map[real_src].append(eid)
+        in_map[real_dst].append(eid)
+
+    src_face = "right" if _horiz else "bottom"
+    dst_face = "left" if _horiz else "top"
+
+    def _pp(side: str, bx: float, by: float, bw: float, bh: float, off: float) -> "tuple[float, float]":
+        if side == "right":
+            return (bx + bw, by + off * bh)
+        if side == "left":
+            return (bx, by + off * bh)
+        if side == "bottom":
+            return (bx + off * bw, by + bh)
+        return (bx + off * bw, by)
+
+    sp: "dict[str, PortCandidate]" = {}
+    for node_id, eids in out_map.items():
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        for eid, off in fan_slots(eids, src_face, face_length=(bh if _horiz else bw)):
+            pt = _pp(src_face, bx, by, bw, bh, off)
+            sp[eid] = PortCandidate(
+                edge_id=eid, node_id=node_id, side=src_face,
+                normalized_offset=off, point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(src_face, (0.0, 0.0)),
+                fixed_side=False, preference_penalty=0.0,
+            )
+
+    dp: "dict[str, PortCandidate]" = {}
+    for node_id, eids in in_map.items():
+        # For dummy-chained edges, real destination node resolved via in_map key
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            # Try to find the real destination node from the edge
+            for eid in eids:
+                e = edge_by_real.get(eid)
+                if e:
+                    real_dst_id = e.orig_dst or e.dst
+                    node = nodes.get(real_dst_id)
+                    if node and not node.is_dummy:
+                        node_id = real_dst_id
+                        break
+            if node is None or node.is_dummy:
+                continue
+        bx, by, bw, bh = _nb(node)
+        for eid, off in fan_slots(eids, dst_face, face_length=(bh if _horiz else bw)):
+            pt = _pp(dst_face, bx, by, bw, bh, off)
+            dp[eid] = PortCandidate(
+                edge_id=eid, node_id=node_id, side=dst_face,
+                normalized_offset=off, point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(dst_face, (0.0, 0.0)),
+                fixed_side=False, preference_penalty=0.0,
+            )
+
+    obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
+
+    # Route each edge: multi-rank → try local channel first, else standard route_edge
+    assignments: "dict[str, RouteCandidate]" = {}
+    failures_list: "list[RoutingFailure]" = []
+
+    def _local_bounds_for(src_rank: int, dst_rank: int) -> "tuple[float, float, float, float] | None":
+        min_r, max_r = min(src_rank, dst_rank), max(src_rank, dst_rank)
+        ns = [
+            n for n in nodes.values()
+            if not n.is_dummy and min_r <= n.rank <= max_r
+        ]
+        if not ns:
+            return None
+        xs = [n.x for n in ns]
+        ys = [n.y for n in ns]
+        x2 = [n.x + _node_render_w(n) for n in ns]
+        y2 = [n.y + _node_render_h(n) for n in ns]
+        bx, by = min(xs), min(ys)
+        return (bx, by, max(x2) - bx, max(y2) - by)
+
+    for eid, e in real_edges:
+        src_pc = sp.get(eid)
+        dst_pc = dp.get(eid)
+        if src_pc is None or dst_pc is None:
+            failures_list.append(RoutingFailure(
+                edge_id=eid, src_node_id=e.orig_src or e.src,
+                dst_node_id=e.orig_dst or e.dst,
+                reason="missing port candidate",
+            ))
+            continue
+
+        existing = tuple(assignments.values())
+        result: "RouteCandidate | None" = None
+
+        # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
+        real_src_id = e.orig_src or e.src
+        real_dst_id = e.orig_dst or e.dst
+        per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
+
+        # Multi-rank: try local channel first
+        src_node = nodes.get(real_src_id)
+        dst_node = nodes.get(real_dst_id)
+        if (src_node and dst_node
+                and not src_node.is_dummy and not dst_node.is_dummy
+                and abs(src_node.rank - dst_node.rank) > 1):
+            lb = _local_bounds_for(src_node.rank, dst_node.rank)
+            if lb is not None:
+                result = local_channel_route(eid, src_pc, dst_pc, lb, existing)
+                # Reject channels that land within 8px of the canvas boundary
+                if result is not None:
+                    _CANVAS_MARGIN = 8.0
+                    _mid = result.points[1:-1]
+                    if any(
+                        p[0] < _CANVAS_MARGIN or p[0] > canvas_w - _CANVAS_MARGIN
+                        or p[1] < _CANVAS_MARGIN or p[1] > canvas_h - _CANVAS_MARGIN
+                        for p in _mid
+                    ):
+                        result = None
+
+        if result is None:
+            result = route_edge(eid, src_pc, dst_pc, per_obs, existing)
+
+        if result is not None:
+            assignments[eid] = result
+        else:
+            failures_list.append(RoutingFailure(
+                edge_id=eid, src_node_id=real_src_id, dst_node_id=real_dst_id,
+                reason="no valid route",
+            ))
+
+    # Convert RouteCandidate assignments to route dicts
+    routed_dicts: "list[dict]" = []
+    for eid, rc in assignments.items():
+        e = edge_by_real.get(eid)
+        if e is None:
+            continue
+        routed_dicts.append({
+            "waypoints": list(rc.points),
+            "edge_id": eid,
+            "src": e.orig_src or e.src,
+            "dst": e.orig_dst or e.dst,
+            "style": e.style,
+            "label": e.label,
+            "ah": e.arrow,
+            "source_marker": e.source_marker,
+            "target_marker": e.target_marker,
+            "extra_css": e.extra_css,
+            "marker_id": None,
+            "d": "",
+        })
+
+    return RouteBatch(routed=tuple(routed_dicts), failures=tuple(failures_list))
+
+
 def layout_flowchart_with_python_fallback(
     semantics: FlowchartSemantics,
 ) -> "tuple[FinalizedLayout, LayoutMetadata]":
@@ -1498,12 +1910,18 @@ def layout_flowchart_with_python_fallback(
         if _sm_composite_gates else {}
     )
 
-    # Route edges via Python A*
-    route_batch = _route_edges(
-        nodes, edges, canvas_w, direction,
-        group_bboxes=_grp_bboxes,
-        scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None,
-    )
+    # Route edges: new path (ini-005) or legacy _route_edges
+    if not _USE_LEGACY_ROUTE_EDGES and not semantics.is_state_diagram:
+        route_batch = _flowchart_route_new_path(
+            nodes, edges, _grp_bboxes or {}, direction,
+            float(canvas_w), float(canvas_h), semantics,
+        )
+    else:
+        route_batch = _route_edges(
+            nodes, edges, canvas_w, direction,
+            group_bboxes=_grp_bboxes,
+            scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None,
+        )
 
     # Gate restoration: merge split route-dicts back into single route-dicts
     if _gate_to_orig:
@@ -2299,6 +2717,16 @@ def _reroute_cross_boundary_edges(
             obstacles.append((x0, y0, x1, y0 + band))       # title band
             if gid not in endpoint_groups:
                 obstacles.append((x0, y0, x1, y1))           # unrelated interior
+
+        # Block A* from routing within 5px of canvas edges (_blocked_segs CLEAR=4,
+        # so obstacle spanning ±9px around the edge blocks the edge grid line itself)
+        _cs = 9
+        obstacles.extend([
+            (-_cs, -_cs, _cs, canvas_h + _cs),                     # left edge strip
+            (canvas_w - _cs, -_cs, canvas_w + _cs, canvas_h + _cs),  # right edge strip
+            (-_cs, -_cs, canvas_w + _cs, _cs),                     # top edge strip
+            (-_cs, canvas_h - _cs, canvas_w + _cs, canvas_h + _cs),  # bottom edge strip
+        ])
 
         gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b], canvas_w, canvas_h)
         blocked = _blocked_segs(gx, gy, obstacles)

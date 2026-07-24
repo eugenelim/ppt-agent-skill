@@ -13,10 +13,25 @@ import math
 from typing import NamedTuple
 
 from mermaid_render.layout.port_planner import (
+    GateAperture,
     PortReservation,
     RouteCandidate,
+    RoutePermissions,
     RoutingObstacle,
 )
+
+# Old RoutingObstacle.kind values that map to the new six-value set.
+_KIND_ALIASES: dict[str, str] = {
+    "node": "NODE_INTERIOR",
+    "group": "GROUP_INTERIOR",
+    "title_band": "GROUP_TITLE",
+}
+
+# Kinds that indicate an obstacle that blocks interior traversal.
+_BLOCKING_KINDS = frozenset({
+    "NODE_INTERIOR", "GROUP_INTERIOR", "GROUP_BOUNDARY", "GROUP_TITLE",
+    "node", "group", "title_band",  # old values kept for back-compat
+})
 
 
 class ValidationError(NamedTuple):
@@ -31,21 +46,41 @@ def validate_routes(
     obstacles: list[RoutingObstacle] | None = None,
     canvas_bounds: tuple[float, float, float, float] | None = None,
     marker_depths: dict[str, float] | None = None,
+    route_permissions: list[RoutePermissions] | None = None,
+    gate_apertures: list[GateAperture] | None = None,
 ) -> list[ValidationError]:
     """Validate routes against all routing-layer hard invariants.
 
     Returns every violation found; never raises for invariant failures.
     Output order: per-edge checks in routes order, then cross-route shared-segment checks.
+
+    route_permissions / gate_apertures: when both are supplied, per-edge gate
+    permission checks are applied (AC4/AC5). When either is None, gate checking
+    is skipped and existing obstacle checks are unchanged.
     """
     reservations = reservations or {}
     obstacles = obstacles or []
     marker_depths = marker_depths or {}
+
+    # Build per-edge permission and aperture lookups when supplied.
+    perm_by_edge: dict[str, RoutePermissions] = {}
+    apertures_by_edge: dict[str, list[GateAperture]] = {}
+    if route_permissions is not None and gate_apertures is not None:
+        for rp in route_permissions:
+            perm_by_edge[rp.edge_id] = rp
+        for ga in gate_apertures:
+            apertures_by_edge.setdefault(ga.edge_id, []).append(ga)
 
     errors: list[ValidationError] = []
 
     for route in routes:
         route_errors = _check_single_route(route, reservations, obstacles, canvas_bounds, marker_depths)
         errors.extend(route_errors)
+        if perm_by_edge:
+            perm = perm_by_edge.get(route.edge_id)
+            apertures = apertures_by_edge.get(route.edge_id, [])
+            if perm is not None:
+                errors.extend(_check_gate_permissions(route, perm, apertures, obstacles))
 
     errors.extend(_check_shared_segments(routes))
     return errors
@@ -271,7 +306,9 @@ def _check_obstacles(
         ax, ay = pts[i]
         bx, by = pts[i + 1]
         for obs in obstacles:
-            if obs.kind not in ("node", "group"):
+            # Accept both old and new kind values; silently skip LABEL/MARKER_CLEARANCE/BOUNDARY.
+            canonical = _KIND_ALIASES.get(obs.kind, obs.kind)
+            if canonical not in ("NODE_INTERIOR", "GROUP_INTERIOR", "GROUP_TITLE"):
                 continue
             ox, oy, ow, oh = obs.bounds
             if _segment_aabb_intersects(ax, ay, bx, by, ox, oy, ow, oh):
@@ -279,6 +316,100 @@ def _check_obstacles(
                     eid, "obstacle_intersection",
                     f"segment [{i}→{i+1}] intersects {obs.kind} {obs.obstacle_id!r}",
                 ))
+    return errors
+
+
+def _check_gate_permissions(
+    route: RouteCandidate,
+    perm: RoutePermissions,
+    apertures: list[GateAperture],
+    obstacles: list[RoutingObstacle],
+) -> list[ValidationError]:
+    """Check per-edge gate permissions for cross-boundary routes.
+
+    Reports ValidationErrors for:
+    - GROUP_BOUNDARY crossings outside the assigned GateAperture
+    - GROUP_TITLE crossings
+    - Unrelated GROUP_INTERIOR traversals
+    - Re-entry into the same group
+    """
+    errors: list[ValidationError] = []
+    pts = route.points
+    eid = route.edge_id
+
+    # Build aperture lookup keyed by group_id for this edge.
+    aperture_by_group: dict[str, GateAperture] = {ga.group_id: ga for ga in apertures}
+
+    # Track which groups the route has already left (for re-entry detection).
+    entered_groups: set[str] = set()
+    exited_groups: set[str] = set()
+
+    allowed_scopes = (
+        set(perm.source_scope_chain)
+        | set(perm.target_scope_chain)
+        | set(perm.common_ancestor_ids)
+    )
+
+    for i in range(len(pts) - 1):
+        ax, ay = pts[i]
+        bx, by = pts[i + 1]
+        for obs in obstacles:
+            canonical = _KIND_ALIASES.get(obs.kind, obs.kind)
+
+            if canonical == "GROUP_TITLE":
+                ox, oy, ow, oh = obs.bounds
+                if _segment_aabb_intersects(ax, ay, bx, by, ox, oy, ow, oh):
+                    errors.append(ValidationError(
+                        eid, "gate_title_crossing",
+                        f"segment [{i}→{i+1}] crosses GROUP_TITLE of {obs.obstacle_id!r}",
+                    ))
+
+            elif canonical == "GROUP_INTERIOR":
+                if obs.obstacle_id not in allowed_scopes:
+                    ox, oy, ow, oh = obs.bounds
+                    if _segment_aabb_intersects(ax, ay, bx, by, ox, oy, ow, oh):
+                        errors.append(ValidationError(
+                            eid, "gate_unrelated_group",
+                            f"segment [{i}→{i+1}] crosses unrelated GROUP_INTERIOR {obs.obstacle_id!r}",
+                        ))
+
+            elif canonical == "GROUP_BOUNDARY":
+                gid = obs.obstacle_id
+                ox, oy, ow, oh = obs.bounds
+                if _segment_aabb_intersects(ax, ay, bx, by, ox, oy, ow, oh):
+                    # Check re-entry
+                    if gid in exited_groups:
+                        errors.append(ValidationError(
+                            eid, "gate_reentry",
+                            f"segment [{i}→{i+1}] re-enters group {gid!r}",
+                        ))
+                    # Check aperture: crossing must be within the assigned aperture
+                    aperture = aperture_by_group.get(gid)
+                    if aperture is None:
+                        errors.append(ValidationError(
+                            eid, "gate_violation",
+                            f"segment [{i}→{i+1}] crosses GROUP_BOUNDARY {gid!r} with no assigned aperture",
+                        ))
+                    else:
+                        # Compute crossing midpoint along the boundary
+                        mid_x, mid_y = (ax + bx) / 2.0, (ay + by) / 2.0
+                        cx, cy = aperture.center
+                        if aperture.side in ("top", "bottom"):
+                            deviation = abs(mid_x - cx)
+                        else:
+                            deviation = abs(mid_y - cy)
+                        if deviation > aperture.half_width + 1e-6:
+                            errors.append(ValidationError(
+                                eid, "gate_violation",
+                                f"segment [{i}→{i+1}] crosses GROUP_BOUNDARY {gid!r} "
+                                f"{deviation:.1f}px outside aperture (half_width={aperture.half_width})",
+                            ))
+                    # Mark exit if the segment leaves a group we were inside
+                    if gid in entered_groups:
+                        exited_groups.add(gid)
+                    else:
+                        entered_groups.add(gid)
+
     return errors
 
 

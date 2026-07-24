@@ -36,6 +36,7 @@ docs/specs/<feature>/
 | [`mermaid-source-bridge`](mermaid-source-bridge/spec.md) | Implementing | `diagram-consistency-system` | Extract Mermaid fences from any source document into planning JSON; native Python layout engine (`mermaid_layout.py`) renders all Mermaid diagram types to pipeline-safe HTML/CSS, bypassing dagre |
 | [`mermaid-renderer-uplift`](mermaid-renderer-uplift/spec.md) | Draft | none | 9-area renderer quality uplift: pixel-accurate text metrics, diamond clipping, 6 new node shapes, inline label formatting, SVG marker defs, sequence/ER/class notation, visual fixture corpus + screenshot baseline |
 | [`mermaid-unified-layout-pipeline`](mermaid-unified-layout-pipeline/spec.md) | Shipped | ADR-001 | ELK-layered algorithm via elkjs 0.12.0 Node subprocess for flowchart/stateDiagram; Python fallback for inner-direction groups, terminal circles, self-loops; strict layout validation; fidelity oracle entity-mismatch classification |
+| [`flowchart-routing-closure`](flowchart-routing-closure/spec.md) | Shipped | `routing-validation-invariants`, `routing-port-planner-foundation`, `routing-search-and-assignment` | Fan-slot face-spanning, local multi-rank channel routing, and cross-boundary gate routing for flowchart-parallel-links, flowchart-arrows-defs, and flowchart-inner-direction |
 
 ## Shipped specs (archived)
 

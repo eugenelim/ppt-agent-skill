@@ -224,3 +224,15 @@ shipped = [
   "docs/specs/routing-node-ordering-refinement",
   "docs/specs/routing-validation-invariants",
 ]
+
+["ini-005"]
+name = "Flowchart Routing Closure"
+milestone = "nukualofa-v1"
+status = "shipped"
+
+["ini-005".work]
+queue = []
+active = []
+shipped = [
+  "docs/specs/flowchart-routing-closure",
+]

@@ -1,8 +1,9 @@
 """Routing search and global edge assignment (ini-004 spec 2).
 
-Provides seven public functions that turn port candidates into costed route
+Provides public functions that turn port candidates into costed route
 candidates and assign one final route to every edge via a bounded
-rip-up/reroute pass.
+rip-up/reroute pass. Also provides local_channel_route() for bounded
+multi-rank channel routing (ini-005 flowchart-routing-closure).
 """
 from __future__ import annotations
 
@@ -13,6 +14,12 @@ from mermaid_render.layout.port_planner import (
     RouteCandidate,
     RoutingObstacle,
 )
+
+# ── Local channel constants (ini-005) ─────────────────────────────────────────
+
+MAX_LOCAL_EXCURSION: float = 48.0  # max px a channel may extend beyond local_bounds
+LOCAL_LANE_GAP: float = 16.0       # gap between local_bounds edge and first channel
+LANE_PITCH: float = 14.0           # px between staggered channels
 
 
 # ── Cost function ─────────────────────────────────────────────────────────────
@@ -197,6 +204,67 @@ def try_z_route(
         2, existing_routes,
     ))
     return results
+
+
+def local_channel_route(
+    edge_id: str,
+    src_port: PortCandidate,
+    dst_port: PortCandidate,
+    local_bounds: tuple[float, float, float, float],  # (x, y, w, h) bounding the obstruction
+    existing_routes: tuple[RouteCandidate, ...] = (),
+    lane_index: int = 0,
+) -> RouteCandidate | None:
+    """Try a bounded left or right local channel route between two ports.
+
+    Computes left_x and right_x as channel x-coordinates relative to local_bounds,
+    then builds an orthogonal 4-point route via each channel. Rejects any candidate
+    containing a waypoint outside local_bounds inflated by MAX_LOCAL_EXCURSION.
+    Returns the lower-cost valid candidate, or None if no valid channel exists.
+
+    Route shape (TB direction example):
+        src_port.point → (channel_x, src_y) → (channel_x, dst_y) → dst_port.point
+    """
+    bx, by, bw, bh = local_bounds
+    inflate = MAX_LOCAL_EXCURSION
+
+    # Inflated bounds check
+    allowed_x_min = bx - inflate
+    allowed_x_max = bx + bw + inflate
+    allowed_y_min = by - inflate
+    allowed_y_max = by + bh + inflate
+
+    def _within_bounds(pts: tuple[tuple[float, float], ...]) -> bool:
+        for px, py in pts:
+            if px < allowed_x_min or px > allowed_x_max:
+                return False
+            if py < allowed_y_min or py > allowed_y_max:
+                return False
+        return True
+
+    sx, sy = src_port.point
+    dx, dy = dst_port.point
+
+    candidates: list[RouteCandidate] = []
+    for side in ("left", "right"):
+        if side == "left":
+            channel_x = bx - LOCAL_LANE_GAP - lane_index * LANE_PITCH
+        else:
+            channel_x = bx + bw + LOCAL_LANE_GAP + lane_index * LANE_PITCH
+
+        pts: tuple[tuple[float, float], ...] = (
+            (sx, sy),
+            (channel_x, sy),
+            (channel_x, dy),
+            (dx, dy),
+        )
+        if not _within_bounds(pts):
+            continue
+        rc = _make_rc(edge_id, src_port, dst_port, pts, 2, existing_routes)
+        candidates.append(rc)
+
+    if not candidates:
+        return None
+    return min(candidates, key=lambda c: c.cost)
 
 
 # ── Validity check ────────────────────────────────────────────────────────────

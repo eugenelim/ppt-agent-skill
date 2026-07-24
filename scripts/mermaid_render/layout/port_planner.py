@@ -1,12 +1,21 @@
 """Port-aware routing data model and port-pair planning (ini-004 spec 1).
 
-Provides four immutable data structures and four planning functions that give
-all diagram-type renderers a shared vocabulary for port candidates, route
-candidates, port reservations, and routing obstacles.
+Provides immutable data structures and planning functions that give all
+diagram-type renderers a shared vocabulary for port candidates, route
+candidates, port reservations, routing obstacles, route permissions, and
+gate apertures.
 """
 from __future__ import annotations
 
 from typing import NamedTuple, Any
+
+
+# ── Fan distribution constants (ini-005 flowchart-routing-closure) ────────────
+
+FAN_EDGE_PADDING: float = 12.0   # px from face edge to first/last port
+FAN_MIN_PORT_PITCH: float = 24.0  # minimum px between adjacent fan ports
+FAN_ESCAPE_LENGTH: float = 20.0   # minimum straight exclusive segment after leaving a fan node
+FAN_CHANNEL_PITCH: float = 14.0   # px between staggered fan channels
 
 
 # ── Data structures ───────────────────────────────────────────────────────────
@@ -49,14 +58,57 @@ class RouteCandidate(NamedTuple):
 
 
 class RoutingObstacle(NamedTuple):
-    """A region of the canvas that routes must not intersect without a gate."""
+    """A region of the canvas that routes must not intersect without a gate.
+
+    kind values (new six-value set; old values remain accepted for back-compat):
+      "NODE_INTERIOR"    — interior of a leaf node (old: "node")
+      "GROUP_INTERIOR"   — interior of a compound group (old: "group")
+      "GROUP_BOUNDARY"   — the boundary ring of a compound group
+      "GROUP_TITLE"      — the measured title-label rectangle of a group (old: "title_band")
+      "LABEL"            — an edge label chip
+      "MARKER_CLEARANCE" — clearance zone around an arrowhead marker
+
+    Old values "node", "group", "title_band" are still accepted by callers and
+    by route_validation._check_obstacles (aliased to the new names internally).
+    """
 
     obstacle_id: str  # keyed by region ID, not edge_id
-    kind: str  # "node" | "group" | "title_band"
+    kind: str  # see docstring above
     bounds: tuple[float, float, float, float]  # x, y, w, h
     scope_id: str | None
     title_bounds: tuple[float, float, float, float] | None
     permitted_gate_ids: frozenset[str]  # gate IDs through which routes may cross
+
+
+class RoutePermissions(NamedTuple):
+    """Per-edge permission record for cross-boundary routing.
+
+    Produced by the flowchart adapter for every edge that crosses one or more
+    group boundaries. validate_routes() uses this to enforce that the route
+    only crosses its own group boundaries at the assigned gates.
+    """
+
+    edge_id: str
+    source_scope_chain: tuple[str, ...]  # group IDs from source node up to root
+    target_scope_chain: tuple[str, ...]  # group IDs from target node up to root
+    common_ancestor_ids: tuple[str, ...]  # groups that contain both endpoints
+    permitted_gate_ids: tuple[str, ...]  # gate IDs this edge is allowed to cross
+
+
+class GateAperture(NamedTuple):
+    """A permitted crossing point on a group boundary for one specific edge.
+
+    Produced alongside RoutePermissions for cross-boundary edges. The aperture
+    defines the exact region of the boundary through which the edge may cross.
+    validate_routes() rejects a crossing that falls outside the aperture.
+    """
+
+    gate_id: str
+    edge_id: str
+    group_id: str
+    side: str  # "top" | "right" | "bottom" | "left"
+    center: tuple[float, float]  # absolute canvas center of the aperture
+    half_width: float  # half-width of the allowed crossing window (px)
 
 
 # ── Side outward-normal lookup ────────────────────────────────────────────────
@@ -209,14 +261,44 @@ def plan_straight_corridor(
 def fan_slots(
     edge_ids: list[str],
     side: str,
+    face_length: float = 0.0,
 ) -> list[tuple[str, float]]:
-    """Distribute edge_ids evenly along a side.
+    """Distribute edge_ids evenly along a side, returning (edge_id, normalized_offset) pairs.
 
-    Returns (edge_id, normalized_offset) pairs. For n edges, slot i gets
-    offset (i+1)/(n+1), guaranteeing all values in (0.0, 1.0) exclusive with
-    no duplicates. Input order is preserved.
+    When face_length > 0 and N >= 2 (face-spanning mode):
+      Ports are linearly interpolated between first_px and last_px (absolute pixel
+      positions), then normalised by face_length. Offsets are always in [0, 1].
+      Wide faces: first_px=FAN_EDGE_PADDING, last_px=face_length-FAN_EDGE_PADDING.
+      Narrow faces (too small for FAN_MIN_PORT_PITCH spacing): ports are compressed
+      into the available inset range — first_px=min(FAN_EDGE_PADDING,face_length/2),
+      last_px=face_length-first_px — accepting sub-minimum pitch.
+
+    When face_length <= 0 or N == 1 (back-compat / center mode):
+      N=1: center (offset=0.5).
+      N>1: original (i+1)/(N+1) formula — all values in (0,1) exclusive.
     """
     if not edge_ids:
         return []
     n = len(edge_ids)
-    return [(eid, (i + 1) / (n + 1)) for i, eid in enumerate(edge_ids)]
+    if n == 1:
+        return [(edge_ids[0], 0.5)]
+
+    if face_length <= 0.0:
+        # Back-compat: original centre-compressed formula
+        return [(eid, (i + 1) / (n + 1)) for i, eid in enumerate(edge_ids)]
+
+    # Face-spanning: distribute between first_px and last_px
+    required = 2.0 * FAN_EDGE_PADDING + (n - 1) * FAN_MIN_PORT_PITCH
+    if face_length >= required:
+        first_px = FAN_EDGE_PADDING
+        last_px = face_length - FAN_EDGE_PADDING
+    else:
+        # Face too narrow: compress into available inset range; offsets always in [0, 1]
+        first_px = min(FAN_EDGE_PADDING, face_length / 2.0)
+        last_px = max(first_px, face_length - first_px)
+
+    result: list[tuple[str, float]] = []
+    for i, eid in enumerate(edge_ids):
+        px = first_px + i * (last_px - first_px) / (n - 1) if n > 1 else (first_px + last_px) / 2.0
+        result.append((eid, px / face_length))
+    return result
