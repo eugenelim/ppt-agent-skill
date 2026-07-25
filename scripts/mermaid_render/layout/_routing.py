@@ -495,7 +495,9 @@ def _label_on_longest(
     ]
     _lp = _best_label_pos(cands, label, obstacles, placed, canvas_w, y_range=y_range)
     if _lp.box is None:
-        return 0, 0
+        # All candidates blocked; use the above-midpoint position rather than (0,0)
+        # so the label stays on the edge even when obstacle-free placement fails.
+        return mid_x - w // 2, mid_y - _LABEL_CHIP_H - 4
     return int(_lp.box.x), int(_lp.box.y + _lp.box.h)
 
 
@@ -1179,24 +1181,27 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         parallel_edge_idx[_i] = _par_count.get(_key, 0)
         _par_count[_key] = _par_count.get(_key, 0) + 1
 
-    # Assign right-lane slots to TB skip-rank forward edges (rank_gap > 1) so they
-    # route around intermediate nodes cleanly instead of boundary-touching via A*.
-    _skip_lane: dict[int, int] = {}
-    if not is_lr:
-        _skip_count = 0
-        for _i, _e in enumerate(edges):
-            if _e.src not in nodes or _e.dst not in nodes:
-                continue
-            if nodes[_e.dst].is_dummy:
-                continue
-            if _e.reversed_:
-                continue
-            _real_s = nodes.get(_e.orig_src or _e.src)
-            _real_s_rank = _real_s.rank if _real_s else nodes[_e.src].rank
-            _rg = nodes[_e.dst].rank - _real_s_rank
-            if _rg > 1:
-                _skip_lane[_i] = _skip_count
-                _skip_count += 1
+    # Skip-lane routing removed: skip-rank TB forward edges (rank_gap > 1) now fall
+    # through to the standard A*-based TB routing path, which finds clean obstacle-
+    # avoiding routes instead of the old fixed right-lane heuristic.
+
+    # Build rank-fan groups: edges from the same source to the same destination rank.
+    # Used to stagger mid_y values for parallel fan-out so horizontal segments don't
+    # overlap (e.g. A → B & C & D all going to rank 1 from the same source node).
+    _rank_fan: dict[tuple, list[int]] = {}
+    for _i, _e in enumerate(edges):
+        if _e.src not in nodes or _e.dst not in nodes:
+            continue
+        if nodes[_e.dst].is_dummy or _e.reversed_:
+            continue
+        _rf_real_src = _e.orig_src or _e.src
+        _rf_real_dst = _e.orig_dst or _e.dst
+        if _rf_real_dst not in nodes:
+            continue
+        _rf_key = (_rf_real_src, nodes[_rf_real_dst].rank)
+        if _rf_key not in _rank_fan:
+            _rank_fan[_rf_key] = []
+        _rank_fan[_rf_key].append(_i)
 
     result: list[dict] = []
     failures: list[RoutingFailure] = []
@@ -1463,44 +1468,8 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                            "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
             continue
 
-        # TB skip-rank forward edge: rank_gap > 1 means this edge bypasses intermediate
-        # nodes. Route via the right lane to avoid visual boundary-touching via A*.
-        if not is_lr and rank_gap > 1 and not e.reversed_ and edge_i in _skip_lane:
-            skip_i = _skip_lane[edge_i]
-            _sk_lane_x = right_lane_x + 8 * skip_i
-            _tb_real_src = e.orig_src or e.src
-            _tb_real_dst = e.orig_dst or e.dst
-            out_list = fan_out.get(_tb_real_src, [])
-            out_idx = out_list.index(_tb_real_dst) if _tb_real_dst in out_list else 0
-            out_offset = _fan_offset(out_idx, len(out_list), node_w=_node_render_w(s))
-            in_list = fan_in.get(_tb_real_dst, [])
-            in_idx = in_list.index(_tb_real_src) if _tb_real_src in in_list else 0
-            in_offset = _fan_offset(in_idx, len(in_list), node_w=_node_render_w(d))
-            x1 = int(s.x + out_offset)
-            y1 = int(s.y + _node_render_h(s))   # src bottom
-            x2 = int(d.x + in_offset)
-            y2 = int(d.y)                         # dst top
-            _sk_pts = [(x1, y1), (_sk_lane_x, y1), (_sk_lane_x, y2), (x2, y2)]
-            path = _smooth_orthogonal_path(_sk_pts)
-            ah = _arrowhead(x2, y2, 0, 1, **ah_kw) if e.arrow else None
-            if e.label:
-                H = _LABEL_CHIP_H
-                mid_y = (y1 + y2) // 2
-                cands = [
-                    (_sk_lane_x + 4, mid_y),
-                    (_sk_lane_x + 4, y1 + H + 4),
-                    (_sk_lane_x + 4, y2 - H - 4),
-                ]
-                llx, lly = _lp_xy(_best_label_pos(cands, e.label, obstacles, placed_labels, canvas_w))
-            else:
-                llx, lly = _sk_lane_x + 4, (y1 + y2) // 2
-            result.append({"d": path, "waypoints": _sk_pts, "ah": ah, "label": e.label, "style": e.style,
-                           "lx": llx, "ly": lly, "rot": 0, "marker_id": marker_id,
-                           "src": e.orig_src or e.src, "dst": e.orig_dst or e.dst, "extra_css": e.extra_css,
-                           "src_label": e.src_label, "dst_label": e.dst_label, "bidir": getattr(e, "bidir", False),
-                           "source_marker": getattr(e, "source_marker", None),
-                           "target_marker": getattr(e, "target_marker", None), "edge_id": e.edge_id})
-            continue
+        # (Skip-lane routing removed — skip-rank TB forward edges fall through to
+        # the standard A*-based TB routing path below.)
 
         if is_lr:
             # LR forward edge: orthogonal path right-of-src to left-of-dst
@@ -1557,6 +1526,20 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
                     float(x2) - float(_ldx2), float(y2) - float(_ldy2),
                 ))
 
+            # Horizontal corridor: if src and dst y-ranges strictly overlap, use the
+            # midpoint as a shared y for a zero-bend straight horizontal connection.
+            # This eliminates jogs when nodes are at similar vertical positions (e.g.
+            # bidirectional arrows A<-->B that have slightly offset center-y values).
+            if not _has_fixed_port and int(x1) < int(x2):
+                _lr_s_top, _lr_s_bot = s.y, s.y + _node_render_h(s)
+                _lr_d_top, _lr_d_bot = d.y, d.y + _node_render_h(d)
+                _lr_ov_top = max(_lr_s_top, _lr_d_top)
+                _lr_ov_bot = min(_lr_s_bot, _lr_d_bot)
+                if _lr_ov_bot > _lr_ov_top:  # strict overlap → corridor exists
+                    _corridor_y = (_lr_ov_top + _lr_ov_bot) // 2
+                    y1 = _corridor_y
+                    y2 = _corridor_y
+
             # 3-segment fast path (right → vertical → right); fall back to A* if blocked.
             # Skip fast path when ports are pinned to non-standard faces.
             _cross_row = abs(y1 - y2) > _node_render_h(s) // 2 and rank_gap == 1
@@ -1587,7 +1570,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             _accumulate_occupied(_pts_lr)
             if e.style.startswith("cls"):
                 _pts_lr = _shorten_cls_route(
-                    _pts_lr, e.source_marker.clearance, e.target_marker.clearance, s, d,
+                    _pts_lr, 0.0, 0.0, s, d,
                 )
             path = _smooth_orthogonal_path(_pts_lr)
             if e.arrow:
@@ -1661,6 +1644,23 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         if _dst_port_tb:
             x2, y2 = _dst_port_tb
 
+        # Class diagram directional routing: when the destination center lies
+        # clearly outside the source's horizontal AABB, exit via the right or
+        # left face instead of the bottom.  This prevents lines from crossing
+        # when one target is to the right and another is below the same source.
+        if e.style.startswith("cls") and not _has_fixed_port_tb:
+            _dst_cx = d.x + _node_render_w(d) // 2
+            _src_nw = _node_render_w(s)
+            _src_nh = _node_render_h(s)
+            if _dst_cx > s.x + _src_nw:
+                # Destination right of source -> exit via right face
+                x1 = s.x + _src_nw
+                y1 = s.y + _src_nh // 2
+            elif _dst_cx < s.x:
+                # Destination left of source -> exit via left face
+                x1 = s.x
+                y1 = s.y + _src_nh // 2
+
         # Clip connector endpoints to the polygon outline for shapes that use
         # non-rectangular outlines (diamond, hexagon, trapezoid, flag).
         # Guard each endpoint independently so a pinned src port never suppresses dest clipping.
@@ -1683,7 +1683,16 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
 
         # Route: 3-segment fast path (down → across → down); fall back to A* if blocked.
         # Skip fast path when ports are pinned to non-standard faces.
-        mid_y = (int(y1) + int(y2)) // 2
+        # Stagger mid_y for parallel fan-out edges (same source, same destination rank)
+        # to prevent their horizontal segments from overlapping at the same y value.
+        _rf_key_tb = (_tb_real_src, d.rank)
+        _rf_list_tb = _rank_fan.get(_rf_key_tb, [])
+        _rf_total_tb = len(_rf_list_tb)
+        if _rf_total_tb > 1 and edge_i in _rf_list_tb:
+            _rf_idx_tb = _rf_list_tb.index(edge_i)
+            mid_y = int(int(y1) + (int(y2) - int(y1)) * (_rf_idx_tb + 1) / (_rf_total_tb + 1))
+        else:
+            mid_y = (int(y1) + int(y2)) // 2
         _fast = [(int(x1), int(y1)), (int(x1), mid_y), (int(x2), mid_y), (int(x2), int(y2))]
         if not _has_fixed_port_tb and _try_3seg_clear(_fast, _routing_obs):
             _pts = _fast
@@ -1711,8 +1720,22 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
         _accumulate_occupied(_pts)
         if e.style.startswith("cls"):
             _pts = _shorten_cls_route(
-                _pts, e.source_marker.clearance, e.target_marker.clearance, s, d,
+                _pts, 0.0, 0.0, s, d,
             )
+        # Snap 1-pixel horizontal jitter from nearly-straight vertical paths.
+        # Integer node-width centering can shift adjacent nodes' center-x by 1px,
+        # producing a tiny horizontal kink in what should be a straight vertical edge.
+        # When all x-coords span ≤1 px, collapse to the source port x and deduplicate.
+        if not is_lr and len(_pts) >= 2:
+            _px_all = [p[0] for p in _pts]
+            if max(_px_all) - min(_px_all) <= 1:
+                _snap_x = _pts[0][0]
+                _pts = [(_snap_x, p[1]) for p in _pts]
+                _deduped: list = [_pts[0]]
+                for _sp in _pts[1:]:
+                    if _sp != _deduped[-1]:
+                        _deduped.append(_sp)
+                _pts = _deduped
         path = _smooth_orthogonal_path(_pts)
 
         # Derive arrowhead direction from the actual last path segment so A*-routed

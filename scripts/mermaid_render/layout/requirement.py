@@ -634,6 +634,12 @@ def compile_requirement(src: str, *, width_hint: int = 0, height_hint: int = 0) 
         if rel["from"] in node_pos:
             outgoing_idx[rel["from"]].append(ri)
 
+    # Sort each source's outgoing edges by target x-position (left to right) so
+    # that left-going edges exit from the left part of the source node and
+    # right-going edges exit from the right — preventing routing crossings/overlaps.
+    for fn in outgoing_idx:
+        outgoing_idx[fn].sort(key=lambda ei: node_pos[relations[ei]["to"]][0])
+
     # Build RoutedEdge objects
     routed_edges_list: list[RoutedEdge] = []
     for ri, rel in enumerate(relations):

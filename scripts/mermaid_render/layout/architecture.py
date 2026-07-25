@@ -49,6 +49,7 @@ class ArchServiceTile:
     side_ports: tuple                # tuple[PortLayout, ...]: LEFT, RIGHT, TOP, BOTTOM
     group_id: Optional[str]          # parent group id, or None
     accent_color: str                # CSS color for stroke/text
+    content_bounds: Optional[object] = None  # Rect: content area; None → fixed-offset fallback
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ class ArchitectureDiagramLayout:
     direction: str
     zoom: float
     backend: str = "python-fallback" # "elk-js" | "python-fallback"
+    diagnostics: Optional[object] = None  # LayoutDiagnostics; None → empty fallback
 
 
 # ── Text layout helper ─────────────────────────────────────────────────────────
@@ -135,6 +137,141 @@ _ARCH_ACCENT_CYCLE = (
     "var(--accent-4,#a78bfa)",
 )
 _ARCH_ACCENT_DEFAULT = "var(--node-title-fg,var(--accent-1,#60a5fa))"
+
+
+# ── Fallback fixed-port resolution ─────────────────────────────────────────────
+#
+# The Python fallback pins each edge endpoint to the declared service face via
+# _routing._side_port, so the routed waypoint already sits on the correct face.
+# What remained AUTO was the *finalized* PortLayout.side (and its direction).
+# These helpers copy the declared side into the finalized port, compute the
+# outward (source) / inward (destination) normal, and raise a typed error rather
+# than silently substituting PortSide.AUTO when a declared side cannot be honored
+# (spec architecture-fixed-port-integration AC5/AC6).
+
+_FACE_ON_TOL = 2.0  # px tolerance for "endpoint lies on the declared face"
+
+
+def _side_char_to_portside(side_char: str):
+    from ._geometry import PortSide
+    return {
+        "L": PortSide.LEFT, "R": PortSide.RIGHT,
+        "T": PortSide.TOP, "B": PortSide.BOTTOM,
+    }.get(side_char.upper())
+
+
+def _face_normals(side, *, outward: bool):
+    """Return (dx, dy) unit normal for a PortSide.
+
+    outward=True points away from the node interior (source semantics); False
+    points into the node interior (destination semantics).
+    """
+    from ._geometry import PortSide
+    out = {
+        PortSide.LEFT: (-1.0, 0.0), PortSide.RIGHT: (1.0, 0.0),
+        PortSide.TOP: (0.0, -1.0), PortSide.BOTTOM: (0.0, 1.0),
+    }[side]
+    return out if outward else (-out[0], -out[1])
+
+
+def _endpoint_on_face(rect, side, position, tol: float = _FACE_ON_TOL) -> bool:
+    """True when *position* lies on the declared *side* face segment of *rect*.
+
+    Checks both the perpendicular axis (± tol from the face line) and the
+    parallel axis (within the face span ± tol) so an endpoint that shares the
+    face's line but sits beyond a corner is not accepted as on-face.
+    """
+    from ._geometry import PortSide
+    x0, y0, x1, y1 = rect.x, rect.y, rect.x + rect.w, rect.y + rect.h
+    in_x = (x0 - tol) <= position.x <= (x1 + tol)
+    in_y = (y0 - tol) <= position.y <= (y1 + tol)
+    if side == PortSide.LEFT:
+        return abs(position.x - x0) <= tol and in_y
+    if side == PortSide.RIGHT:
+        return abs(position.x - x1) <= tol and in_y
+    if side == PortSide.TOP:
+        return abs(position.y - y0) <= tol and in_x
+    if side == PortSide.BOTTOM:
+        return abs(position.y - y1) <= tol and in_x
+    return False
+
+
+def _infer_face(rect, position):
+    """Return the PortSide of the face nearest to *position* (never AUTO)."""
+    from ._geometry import PortSide
+    dists = {
+        PortSide.LEFT: abs(position.x - rect.x),
+        PortSide.RIGHT: abs(position.x - (rect.x + rect.w)),
+        PortSide.TOP: abs(position.y - rect.y),
+        PortSide.BOTTOM: abs(position.y - (rect.y + rect.h)),
+    }
+    return min(dists, key=dists.get)
+
+
+def _resolve_fallback_port(node_id, rect, side_char, position, *, is_source, edge_id):
+    """Build a finalized PortLayout with the declared side copied in.
+
+    * A declared side (L|R|T|B) is copied verbatim; the routed endpoint is
+      verified to lie on that face, else ArchitectureLayoutError is raised.
+    * An unknown non-empty side char raises ArchitectureLayoutError.
+    * No declared side → the face nearest the routed endpoint is inferred.
+
+    Never returns PortSide.AUTO (spec AC5); never silently substitutes AUTO for
+    an unhonorable declared side (spec AC6).
+    """
+    from ._geometry import Point, PortLayout
+    from ..errors import ArchitectureLayoutError
+
+    if side_char:
+        side = _side_char_to_portside(side_char)
+        if side is None:
+            raise ArchitectureLayoutError(
+                "fallback-port",
+                cause=ValueError(f"edge {edge_id!r}: unknown declared port side {side_char!r}"),
+            )
+        if rect is not None and not _endpoint_on_face(rect, side, position):
+            raise ArchitectureLayoutError(
+                "fallback-port",
+                cause=ValueError(
+                    f"edge {edge_id!r}: routed endpoint ({position.x:.1f}, {position.y:.1f}) "
+                    f"cannot honor declared {side.value} side of {node_id!r}"
+                ),
+            )
+    else:
+        if rect is None:
+            # No boundary to infer from and no declared side: cannot resolve a
+            # concrete face — surface rather than substitute AUTO.
+            raise ArchitectureLayoutError(
+                "fallback-port",
+                cause=ValueError(f"edge {edge_id!r}: no declared side and no boundary for {node_id!r}"),
+            )
+        side = _infer_face(rect, position)
+
+    dx, dy = _face_normals(side, outward=is_source)
+    return PortLayout(node_id=node_id, side=side, position=position, direction=Point(dx, dy))
+
+
+def _declared_sides_by_edge_id(edges: list) -> dict:
+    """Map reconstructed edge_id → (src_side_char, dst_side_char).
+
+    Uses the same ``src->dst`` (``#N`` for duplicates) id scheme the fallback
+    route loop builds, so declared sides can be looked up per routed edge
+    without touching the shared flowchart router.
+    """
+    out: dict = {}
+    seen: dict = {}
+    for e in edges:
+        if getattr(e, "reversed_", False):
+            continue
+        base = f"{e.src}->{e.dst}"
+        idx = seen.get(base, 0)
+        seen[base] = idx + 1
+        eid = base if idx == 0 else f"{base}#{idx}"
+        out[eid] = (
+            (getattr(e, "src_side", None) or ""),
+            (getattr(e, "dst_side", None) or ""),
+        )
+    return out
 
 
 # ── Layout helpers ─────────────────────────────────────────────────────────────
@@ -336,18 +473,19 @@ def _heuristic_arch_placement(nodes: dict, edges: list, groups: dict) -> tuple:
 
 # ── layout helpers ────────────────────────────────────────────────────────────
 
-def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
-                                 width_hint: int = 0) -> object:
-    """Run heuristic placement + route + finalize; return FinalizedLayout stamped 'python-fallback'.
+def _build_arch_layout(nodes: dict, edges: list, groups: dict, *,
+                        width_hint: int = 0,
+                        backend: str = "python-fallback") -> "ArchitectureDiagramLayout":
+    """Heuristic placement + route + model assembly; return ArchitectureDiagramLayout.
 
-    Calls _heuristic_arch_placement, _compute_group_bboxes, _route_edges, and
-    arch_to_finalized() in sequence, then stamps 'python-fallback' into
-    diagnostics.warnings.  Does not raise on internal failure; propagates as-is.
+    Single authoritative body for the Python-fallback model build. Called by
+    _arch_fallback_to_finalized (then lowered via arch_to_finalized) and by
+    compile_architecture's fallback branch (returned directly). Zoom is computed
+    internally from width_hint + canvas_w so callers never need canvas_w.
     """
-    import dataclasses as _dc
     from ._renderer import _compute_group_bboxes
     from ._routing import _route_edges
-    from ._geometry import LayoutDiagnostics, Rect
+    from ._geometry import Rect
     from ._constants import NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H
     from ._geometry import Point, PortLayout, PortSide, EdgeLabelLayout, MarkerKind
 
@@ -427,6 +565,9 @@ def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
 
     arch_edges: list = []
     seen_pairs: dict = {}
+    _node_rects = {s.node_id: s.outer_bounds for s in services}
+    _node_rects.update({j.node_id: j.outer_bounds for j in junctions})
+    _declared = _declared_sides_by_edge_id(edges)
     for spec in routes:
         src = spec.get("src", "")
         dst = spec.get("dst", "")
@@ -438,10 +579,11 @@ def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
         if len(waypoints) < 2:
             continue
         src_pos, dst_pos = waypoints[0], waypoints[-1]
-        src_port = PortLayout(node_id=src, side=PortSide.AUTO,
-                              position=src_pos, direction=Point(0.0, 1.0))
-        dst_port = PortLayout(node_id=dst, side=PortSide.AUTO,
-                              position=dst_pos, direction=Point(0.0, -1.0))
+        _ss, _ds = _declared.get(edge_id, ("", ""))
+        src_port = _resolve_fallback_port(
+            src, _node_rects.get(src), _ss, src_pos, is_source=True, edge_id=edge_id)
+        dst_port = _resolve_fallback_port(
+            dst, _node_rects.get(dst), _ds, dst_pos, is_source=False, edge_id=edge_id)
         mid = spec.get("marker_id") or ""
         has_marker_end = bool(mid) and not mid.endswith("-rev")
         has_marker_start = bool(spec.get("bidir")) or (bool(mid) and mid.endswith("-rev"))
@@ -463,15 +605,20 @@ def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
         ))
 
     canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
-    arch = ArchitectureDiagramLayout(
+    return ArchitectureDiagramLayout(
         services=tuple(services), junctions=tuple(junctions),
         groups=tuple(arch_groups), edges=tuple(arch_edges),
         canvas_bounds=canvas_bounds, direction="LR", zoom=zoom,
-        backend="python-fallback",
+        backend=backend,
     )
-    fl = arch_to_finalized(arch)
-    # arch_to_finalized already stamps arch.backend; return as-is
-    return fl
+
+
+def _arch_fallback_to_finalized(nodes: dict, edges: list, groups: dict, *,
+                                 width_hint: int = 0) -> object:
+    """Run heuristic placement + route + finalize; return FinalizedLayout stamped 'python-fallback'."""
+    arch = _build_arch_layout(nodes, edges, groups, width_hint=width_hint,
+                               backend="python-fallback")
+    return arch_to_finalized(arch)
 
 
 def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
@@ -631,17 +778,92 @@ def _arch_elk_to_finalized(elk_fl: object, nodes: dict, groups: dict, *,
     )
 
 
+# ── ELK FinalizedLayout → ArchitectureDiagramLayout ────────────────────────────
+
+def _finalized_to_arch(fl: object, nodes: dict, groups: dict, *,
+                       backend: str, zoom: float) -> "ArchitectureDiagramLayout":
+    """Wrap an ELK-enriched FinalizedLayout as an ArchitectureDiagramLayout.
+
+    Reads the already-computed ELK geometry (node bounds, group bounds, routed
+    waypoints, fixed-side ports) straight off the FinalizedLayout — no re-layout
+    and no re-routing (spec AC2). This gives compile_architecture a single return
+    type so the compiled-model contract (services / groups / edges) holds on both
+    the ELK and Python-fallback paths.
+    """
+    _group_children: dict = {gid: [] for gid in groups}
+    for gid, grp in groups.items():
+        parent = getattr(grp, "parent_group", None)
+        if parent and parent in _group_children:
+            _group_children[parent].append(gid)
+
+    services: list = []
+    junctions: list = []
+    for nid, nl in fl.node_layouts.items():  # type: ignore[attr-defined]
+        if getattr(nl, "is_dummy", False):
+            junctions.append(ArchJunction(node_id=nid, outer_bounds=nl.outer_bounds))
+            continue
+        n = nodes.get(nid)
+        services.append(ArchServiceTile(
+            node_id=nid,
+            label=(n.label if n is not None else ""),
+            icon_name=(n.icon if (n is not None and n.icon) else ""),
+            icon_svg=getattr(nl, "icon_svg", "") or "",
+            outer_bounds=nl.outer_bounds,
+            label_layout=nl.title_layout,
+            icon_bounds=nl.icon_bounds,
+            side_ports=nl.ports,
+            group_id=nl.parent_group_id,
+            accent_color=getattr(nl, "accent_color", "") or "",
+            content_bounds=nl.content_bounds,
+        ))
+
+    arch_groups: list = []
+    for gid, gl in fl.group_layouts.items():  # type: ignore[attr-defined]
+        grp = groups.get(gid)
+        arch_groups.append(ArchGroupBoundary(
+            group_id=gid,
+            parent_group_id=(getattr(grp, "parent_group", None) if grp is not None else gl.parent_group_id),
+            label=(grp.label if (grp is not None and grp.label) else ""),
+            boundary_bounds=gl.boundary_bounds,
+            label_layout=gl.label_layout,
+            member_ids=gl.member_ids,
+            child_group_ids=tuple(_group_children.get(gid, [])),
+        ))
+
+    arch_edges: list = []
+    for re in fl.routed_edges:  # type: ignore[attr-defined]
+        label_text = re.label_layout.text if re.label_layout is not None else ""
+        arch_edges.append(ArchEdge(
+            edge_id=re.edge_id,
+            src_id=re.src_node_id,
+            dst_id=re.dst_node_id,
+            label=label_text,
+            waypoints=re.waypoints,
+            src_port=re.src_port,
+            dst_port=re.dst_port,
+            has_marker_end=re.has_marker_end,
+            has_marker_start=re.has_marker_start,
+            label_layout=re.label_layout,
+        ))
+
+    return ArchitectureDiagramLayout(
+        services=tuple(services), junctions=tuple(junctions),
+        groups=tuple(arch_groups), edges=tuple(arch_edges),
+        canvas_bounds=fl.canvas_bounds,  # type: ignore[attr-defined]
+        direction=fl.direction,  # type: ignore[attr-defined]
+        zoom=zoom, backend=backend,
+        diagnostics=fl.diagnostics,  # type: ignore[attr-defined]
+    )
+
+
 # ── compile_architecture ───────────────────────────────────────────────────────
 
 def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagramLayout:
     """Parse + layout architecture-beta source into an immutable ArchitectureDiagramLayout."""
     from ._constants import (
         _Node, _Group, _Edge, NODE_CAP, _ARCH_ICON_MAP,
-        NODE_W, _node_render_h, _load_icon, _NODE_PAD_V, _ICON_H,
     )
-    from ._renderer import _compute_group_bboxes
-    from ._routing import _route_edges
-    from ._geometry import Rect, Point, PortLayout, PortSide, EdgeLabelLayout, MarkerKind, MarkerSpec
+    from ._geometry import PortSide, MarkerKind, MarkerSpec
 
     # ── Parse ──────────────────────────────────────────────────────────────────
     lines = src.splitlines()
@@ -796,180 +1018,19 @@ def compile_architecture(src: str, *, width_hint: int = 0) -> ArchitectureDiagra
                     _char_to_side.get(_ss) if _ss else None,
                     _char_to_side.get(_ds) if _ds else None,
                 )
-        return _arch_elk_to_finalized(_elk_fl, nodes, groups,
-                                       edge_sides=_edge_sides, width_hint=width_hint)
+        _enriched = _arch_elk_to_finalized(_elk_fl, nodes, groups,
+                                           edge_sides=_edge_sides, width_hint=width_hint)
+        _elk_zoom = 1.0
+        _cw = _enriched.canvas_bounds.w
+        if width_hint and _cw > 0 and _cw > width_hint:
+            _elk_zoom = width_hint / _cw
+        # Return the documented ArchitectureDiagramLayout on the ELK path too, so
+        # compile_architecture has one return type. The ELK geometry is consumed
+        # directly — the Python router is NOT re-run (spec AC2).
+        return _finalized_to_arch(_enriched, nodes, groups, backend="elk-js", zoom=_elk_zoom)
 
     # Fallback path: heuristic placement + Python router (ElkUnavailable was raised).
-    canvas_w, canvas_h = _heuristic_arch_placement(nodes, edges, groups)
-    group_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h) if groups else {}
-    routes = _route_edges(nodes, edges, canvas_w, "LR", group_bboxes or None)  # type: ignore[assignment]
-
-    zoom = 1.0
-    if width_hint and canvas_w > 0 and canvas_w > width_hint:
-        zoom = width_hint / canvas_w
-
-    # ── Build group → index map for accent colors ──────────────────────────────
-    node_grp_idx: dict = {}
-    for gi, gid in enumerate(groups):
-        for nid in groups[gid].members:
-            node_grp_idx[nid] = gi
-
-    # ── Build child_group_ids map ──────────────────────────────────────────────
-    group_children: dict = {gid: [] for gid in groups}
-    for gid, grp in groups.items():
-        parent = getattr(grp, "parent_group", None)
-        if parent and parent in group_children:
-            group_children[parent].append(gid)
-
-    # ── Service tiles and junctions ────────────────────────────────────────────
-    services: list = []
-    junctions: list = []
-
-    for nid, n in sorted(nodes.items()):
-        nw = n.width or NODE_W
-        nh = _node_render_h(n)
-        outer = Rect(x=float(n.x), y=float(n.y), w=float(nw), h=float(nh))
-
-        if n.is_dummy:
-            junctions.append(ArchJunction(node_id=nid, outer_bounds=outer))
-            continue
-
-        icon_svg = _load_icon(n.icon) if n.icon else ""
-        has_icon = bool(icon_svg)
-        icon_bounds = (
-            Rect(
-                x=float(n.x + _NODE_PAD_V),
-                y=float(n.y + _NODE_PAD_V),
-                w=float(_ICON_H),
-                h=float(_ICON_H),
-            )
-            if has_icon else None
-        )
-
-        label_layout = _arch_text_layout(n.label, font_size=15.0, font_weight=700)
-
-        # Side ports: L / R / T / B face centers
-        cx = float(n.x + nw / 2)
-        cy = float(n.y + nh / 2)
-        side_ports = (
-            PortLayout(node_id=nid, side=PortSide.LEFT,
-                       position=Point(float(n.x), cy),
-                       direction=Point(-1.0, 0.0)),
-            PortLayout(node_id=nid, side=PortSide.RIGHT,
-                       position=Point(float(n.x + nw), cy),
-                       direction=Point(1.0, 0.0)),
-            PortLayout(node_id=nid, side=PortSide.TOP,
-                       position=Point(cx, float(n.y)),
-                       direction=Point(0.0, -1.0)),
-            PortLayout(node_id=nid, side=PortSide.BOTTOM,
-                       position=Point(cx, float(n.y + nh)),
-                       direction=Point(0.0, 1.0)),
-        )
-
-        gi = node_grp_idx.get(nid)  # type: ignore[assignment]
-        accent = (
-            _ARCH_ACCENT_CYCLE[gi % len(_ARCH_ACCENT_CYCLE)]
-            if gi is not None else _ARCH_ACCENT_DEFAULT
-        )
-
-        services.append(ArchServiceTile(
-            node_id=nid,
-            label=n.label,
-            icon_name=n.icon or "",
-            icon_svg=icon_svg,
-            outer_bounds=outer,
-            label_layout=label_layout,
-            icon_bounds=icon_bounds,
-            side_ports=side_ports,
-            group_id=n.group,
-            accent_color=accent,
-        ))
-
-    # ── Group boundaries ───────────────────────────────────────────────────────
-    arch_groups: list = []
-    for gid, grp in groups.items():
-        if gid not in group_bboxes:
-            continue
-        bx1, by1, bx2, by2 = group_bboxes[gid]
-        boundary_bounds = Rect(
-            x=float(bx1), y=float(by1),
-            w=float(bx2 - bx1), h=float(by2 - by1),
-        )
-        lbl = grp.label or ""
-        label_layout = _arch_text_layout(lbl, font_size=12.0, font_weight=600) if lbl else None  # type: ignore[assignment]
-        arch_groups.append(ArchGroupBoundary(
-            group_id=gid,
-            parent_group_id=getattr(grp, "parent_group", None),
-            label=lbl,
-            boundary_bounds=boundary_bounds,
-            label_layout=label_layout,
-            member_ids=tuple(grp.members),
-            child_group_ids=tuple(group_children.get(gid, [])),
-        ))
-
-    # ── Edges ──────────────────────────────────────────────────────────────────
-    arch_edges: list = []
-    seen_pairs: dict = {}
-
-    for spec in routes:
-        src = spec.get("src", "")
-        dst = spec.get("dst", "")
-        pair = (src, dst)
-        idx = seen_pairs.get(pair, 0)
-        seen_pairs[pair] = idx + 1
-        edge_id = f"{src}->{dst}" if idx == 0 else f"{src}->{dst}#{idx}"
-
-        waypoints = _extract_waypoints(spec.get("d", ""))
-        if len(waypoints) < 2:
-            continue  # unroutable edge — skip rather than emit a zero-length path
-        src_pos = waypoints[0]
-        dst_pos = waypoints[-1]
-
-        src_port = PortLayout(node_id=src, side=PortSide.AUTO,
-                              position=src_pos, direction=Point(0.0, 1.0))
-        dst_port = PortLayout(node_id=dst, side=PortSide.AUTO,
-                              position=dst_pos, direction=Point(0.0, -1.0))
-
-        mid = spec.get("marker_id") or ""
-        has_marker_end = bool(mid) and not mid.endswith("-rev")
-        has_marker_start = bool(spec.get("bidir")) or (bool(mid) and mid.endswith("-rev"))
-
-        label_text = spec.get("label", "") or ""
-        edge_label = None
-        if label_text:
-            lx, ly = float(spec.get("lx", 0)), float(spec.get("ly", 0))
-            tl = _arch_text_layout(label_text, font_size=12.0, font_weight=400)
-            edge_label = EdgeLabelLayout(
-                text=label_text,
-                layout=tl,
-                bounds=Rect(x=lx, y=ly, w=tl.width, h=tl.height),
-                anchor_point=src_pos,
-            )
-
-        arch_edges.append(ArchEdge(
-            edge_id=edge_id,
-            src_id=src,
-            dst_id=dst,
-            label=label_text,
-            waypoints=waypoints,
-            src_port=src_port,
-            dst_port=dst_port,
-            has_marker_end=has_marker_end,
-            has_marker_start=has_marker_start,
-            label_layout=edge_label,
-        ))
-
-    canvas_bounds = Rect(x=0.0, y=0.0, w=float(canvas_w), h=float(canvas_h))
-    return ArchitectureDiagramLayout(
-        services=tuple(services),
-        junctions=tuple(junctions),
-        groups=tuple(arch_groups),
-        edges=tuple(arch_edges),
-        canvas_bounds=canvas_bounds,
-        direction="LR",
-        zoom=zoom,
-        backend=_backend,
-    )
+    return _build_arch_layout(nodes, edges, groups, width_hint=width_hint, backend=_backend)
 
 
 # ── arch_to_finalized ──────────────────────────────────────────────────────────
@@ -996,10 +1057,11 @@ def arch_to_finalized(arch: object) -> object:
             node_id=svc.node_id,
             semantic_shape="arch-service",
             outer_bounds=b,
-            content_bounds=Rect(
-                x=b.x + 8.0, y=b.y + 4.0,
-                w=float(max(b.w - 16.0, 20.0)),
-                h=float(max(b.h - 8.0, 10.0)),
+            content_bounds=(
+                svc.content_bounds if svc.content_bounds is not None
+                else Rect(x=b.x + 8.0, y=b.y + 4.0,
+                          w=float(max(b.w - 16.0, 20.0)),
+                          h=float(max(b.h - 8.0, 10.0)))
             ),
             title_layout=svc.label_layout,
             subtitle_layout=None,
@@ -1071,8 +1133,8 @@ def arch_to_finalized(arch: object) -> object:
     )
 
     import types as _types
-    diag = _empty_diagnostics()
-    if arch.backend:
+    diag = arch.diagnostics if arch.diagnostics is not None else _empty_diagnostics()
+    if arch.backend and arch.backend not in (diag.warnings or ()):
         diag = LayoutDiagnostics(
             unsupported_options=diag.unsupported_options,
             route_failures=diag.route_failures,
@@ -1095,17 +1157,10 @@ def arch_to_finalized(arch: object) -> object:
 def arch_to_html(src: str, *, width_hint: int = 0) -> str:
     """Render architecture-beta source as a self-contained HTML div string."""
     from ._renderer import render_finalized
-    from ._geometry import FinalizedLayout
 
     result = compile_architecture(src, width_hint=width_hint)
-    if isinstance(result, FinalizedLayout):
-        finalized = result
-        zoom = 1.0
-        if width_hint and finalized.canvas_bounds.w > 0 and finalized.canvas_bounds.w > width_hint:
-            zoom = width_hint / finalized.canvas_bounds.w
-    else:
-        finalized = arch_to_finalized(result)
-        zoom = result.zoom  # type: ignore[union-attr]
+    finalized = arch_to_finalized(result)
+    zoom = result.zoom
     html = render_finalized(finalized)
     if abs(zoom - 1.0) > 0.005:
         html = (
@@ -1122,17 +1177,10 @@ def layout_architecture_scene(src: str, *, width_hint: int = 0) -> SvgScene:
     """Parse architecture-beta source and return an SvgScene."""
     from ._renderer import _extract_diagram_title
     from ..paint import finalized_layout_to_scene
-    from ._geometry import FinalizedLayout
 
     result = compile_architecture(src, width_hint=width_hint)
-    if isinstance(result, FinalizedLayout):
-        finalized = result
-        zoom = 1.0
-        if width_hint and finalized.canvas_bounds.w > 0 and finalized.canvas_bounds.w > width_hint:
-            zoom = width_hint / finalized.canvas_bounds.w
-    else:
-        finalized = arch_to_finalized(result)
-        zoom = result.zoom  # type: ignore[union-attr]
+    finalized = arch_to_finalized(result)
+    zoom = result.zoom
     title = _extract_diagram_title(src)
 
     scene = finalized_layout_to_scene(

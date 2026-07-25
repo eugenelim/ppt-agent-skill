@@ -187,17 +187,17 @@ def _parse_box_color_label(line: str) -> "tuple[str, str]":
     return _default_color, (first + (" " + rest if rest else "")).strip()
 
 
-def _layout_lifeline(
-    src: str, direction: str, width_hint: int
-) -> "tuple[str, SequenceGeometry]":
-    """sequenceDiagram: participants as columns, messages as horizontal arrows."""
-    from ._geometry import (  # noqa: PLC0415
-        Bounds, ParticipantGeometry, MessageGeometry, ActivationGeometry,
-        NoteGeometry, FragmentGeometry, BranchGeometry,
-        Diagnostic, SequenceGeometry, TextStyle,
-    )
-    from ._text import get_default_measurer  # noqa: PLC0415
-    _MEASURER = get_default_measurer()
+def parse_sequence_semantics(source: str) -> "SequenceModel":
+    """Parse a sequenceDiagram source into a SequenceModel (stage 1 of the pipeline).
+
+    Tokenizes participants, messages, notes, activations, ``box`` groups, and
+    combined fragments, then runs the block-span prepass that computes each
+    fragment's participant set, id, parent, depth, and row span. Produces no
+    geometry, HTML, or SVG. Both ``to_html`` and ``to_svg`` begin here so a
+    single parser feeds both renderers (spec: shared compiler).
+    """
+    from ._geometry import Diagnostic, SequenceModel  # noqa: PLC0415
+    src = _strip_frontmatter(source)
     content_lines = _directive_content(src)
     participants: list[str] = []
     p_label: dict[str, str] = {}
@@ -215,20 +215,6 @@ def _layout_lifeline(
             if _open_box_stack and n not in _open_box_stack[-1]["members"]:
                 _open_box_stack[-1]["members"].append(n)
 
-    # ── Arrow spec table (SEQ-012) ────────────────────────────────────────────
-    _ARROW_SPECS: "dict[str, dict]" = {
-        "->":     {"dashed": False, "start_m": None,       "end_m": None},
-        "-->":    {"dashed": True,  "start_m": None,       "end_m": None},
-        "->>":    {"dashed": False, "start_m": None,       "end_m": "triangle"},
-        "-->>":   {"dashed": True,  "start_m": None,       "end_m": "triangle"},
-        "-x":     {"dashed": False, "start_m": None,       "end_m": "cross"},
-        "--x":    {"dashed": True,  "start_m": None,       "end_m": "cross"},
-        "-)":     {"dashed": False, "start_m": None,       "end_m": "filled_head"},
-        "--)":    {"dashed": True,  "start_m": None,       "end_m": "filled_head"},
-        "<<->>":  {"dashed": False, "start_m": "triangle", "end_m": "triangle"},
-        "<<-->>": {"dashed": True,  "start_m": "triangle", "end_m": "triangle"},
-    }
-
     items: list[dict] = []
     block_depth = 0
     _created_at: "dict[str, int]" = {}   # pid → row index of creation
@@ -243,7 +229,10 @@ def _layout_lifeline(
         # Guard against participant named "Box" (e.g. "Box ->> Alice: hi"): skip if _SEQ_MSG_RE matches.
         if re.match(r'^box(?:\s|$)', line, re.I) and not _SEQ_MSG_RE.match(line):
             _box_color, _box_label = _parse_box_color_label(line)
-            _new_box: "dict" = {"color": _box_color, "label": _box_label, "members": []}
+            _new_box: "dict" = {
+                "box_id": f"box-{len(_all_box_groups)}",
+                "color": _box_color, "label": _box_label, "members": [],
+            }
             _open_box_stack.append(_new_box)
             _all_box_groups.append(_new_box)
             _block_type_stack.append("box")
@@ -347,10 +336,14 @@ def _layout_lifeline(
     _frag_parts: "dict[int, set]" = {}
     _frag_id: "dict[int, str]" = {}
     _branch_parent_id: "dict[int, str]" = {}  # T7: else_item_idx → parent frag_id
+    _frag_parent: "dict[int, str | None]" = {}  # item_idx → parent fragment id (None at top level)
+    _frag_depth: "dict[int, int]" = {}          # item_idx → nesting depth (0 = top level)
     _frag_ctr = 0
     _row_types = {"msg", "block", "note", "else", "rect"}
     for _bi, _bit in enumerate(items):
         if _bit["type"] in ("block", "rect"):
+            _frag_depth[_bi] = len(_bstack)
+            _frag_parent[_bi] = _frag_id[_bstack[-1]] if _bstack else None
             _bstack.append(_bi)
             _frag_parts[_bi] = set()
             _frag_id[_bi] = f"f{_frag_ctr}"
@@ -379,6 +372,82 @@ def _layout_lifeline(
         if _bit["type"] in ("block", "rect"):
             _bit.setdefault("span", 1)
             _bit.setdefault("frag_parts", set())
+
+    return SequenceModel(
+        source=src,
+        participants=tuple(participants),
+        participant_labels=dict(p_label),
+        items=tuple(items),
+        box_groups=tuple(_all_box_groups),
+        created_at=dict(_created_at),
+        destroyed_at=dict(_destroyed_at),
+        frag_id=dict(_frag_id),
+        branch_parent_id=dict(_branch_parent_id),
+        frag_parent=dict(_frag_parent),
+        frag_depth=dict(_frag_depth),
+        diagnostics=tuple(_diagnostics),
+    )
+
+
+def _layout_lifeline(
+    src: str, direction: str, width_hint: int
+) -> "tuple[str, SequenceGeometry]":
+    """sequenceDiagram: participants as columns, messages as horizontal arrows.
+
+    Retained combined geometry+HTML compiler (spec: retain the HTML painter).
+    Parses via ``parse_sequence_semantics`` then compiles geometry+HTML in one
+    pass; kept as the single entry ``compile_sequence`` calls so its
+    call-once contract holds. The SVG path reuses the same parser and geometry
+    compiler (``compile_sequence_geometry``) and paints from the geometry.
+    """
+    model = parse_sequence_semantics(src)
+    return _compile_sequence_model(model, width_hint)
+
+
+def _compile_sequence_model(
+    model: "SequenceModel", width_hint: int
+) -> "tuple[str, SequenceGeometry]":
+    """Compile a parsed SequenceModel into (HTML, SequenceGeometry).
+
+    Stages 2+3 of the pipeline: geometry compile plus the retained HTML
+    painter. ``compile_sequence_geometry`` returns the geometry produced here;
+    the SVG painter (``sequence_geometry_to_scene``) consumes that geometry so
+    HTML and SVG share one geometry source (never HTML introspection).
+    """
+    from ._geometry import (  # noqa: PLC0415
+        Bounds, ParticipantGeometry, MessageGeometry, ActivationGeometry,
+        NoteGeometry, FragmentGeometry, BranchGeometry, BoxGeometry,
+        Diagnostic, SequenceGeometry, TextStyle,
+    )
+    from ._text import get_default_measurer  # noqa: PLC0415
+    _MEASURER = get_default_measurer()
+
+    participants: list[str] = list(model.participants)
+    p_label: dict[str, str] = dict(model.participant_labels)
+    _diagnostics: list[Diagnostic] = list(model.diagnostics)
+    _all_box_groups: "list[dict]" = list(model.box_groups)
+    items: list[dict] = list(model.items)
+    _created_at: "dict[str, int]" = dict(model.created_at)
+    _destroyed_at: "dict[str, int]" = dict(model.destroyed_at)
+    _frag_id: "dict[int, str]" = dict(model.frag_id)
+    _branch_parent_id: "dict[int, str]" = dict(model.branch_parent_id)
+    _frag_parent: "dict[int, str | None]" = dict(model.frag_parent)
+    _frag_depth: "dict[int, int]" = dict(model.frag_depth)
+    _row_types = {"msg", "block", "note", "else", "rect"}
+
+    # ── Arrow spec table (SEQ-012) ────────────────────────────────────────────
+    _ARROW_SPECS: "dict[str, dict]" = {
+        "->":     {"dashed": False, "start_m": None,       "end_m": None},
+        "-->":    {"dashed": True,  "start_m": None,       "end_m": None},
+        "->>":    {"dashed": False, "start_m": None,       "end_m": "triangle"},
+        "-->>":   {"dashed": True,  "start_m": None,       "end_m": "triangle"},
+        "-x":     {"dashed": False, "start_m": None,       "end_m": "cross"},
+        "--x":    {"dashed": True,  "start_m": None,       "end_m": "cross"},
+        "-)":     {"dashed": False, "start_m": None,       "end_m": "filled_head"},
+        "--)":    {"dashed": True,  "start_m": None,       "end_m": "filled_head"},
+        "<<->>":  {"dashed": False, "start_m": "triangle", "end_m": "triangle"},
+        "<<-->>": {"dashed": True,  "start_m": "triangle", "end_m": "triangle"},
+    }
 
     # ── Column geometry ───────────────────────────────────────────────────────
     COL_GAP, PAD_H, PAD_V = 24, 40, 24
@@ -766,6 +835,7 @@ def _layout_lifeline(
     _typed_notes: "list[NoteGeometry]" = []
     _typed_fragments: "list[FragmentGeometry]" = []
     _typed_branches: "list[BranchGeometry]" = []
+    _typed_boxes: "list[BoxGeometry]" = []
     _msg_ctr = 0
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -791,7 +861,7 @@ def _layout_lifeline(
     )
     _x_markers: "list[tuple[float, float]]" = []  # (cx, y) for destroyed participants
     # ── Box group backgrounds (lowest z-order, render before participants) ─────
-    for _bg in _all_box_groups:
+    for _box_order, _bg in enumerate(_all_box_groups):
         _bm = [p for p in _bg["members"] if p in _p_index]
         if not _bm:
             continue
@@ -801,11 +871,23 @@ def _layout_lifeline(
         _bx1 = float(_cx(_hi_p)) + _box_hw(_hi_p) + PAD_H / 2 + 4
         _bcolor = _h(_bg["color"])
         _blabel = _h(_bg["label"])
+        _box_id = _bg.get("box_id", f"box-{_box_order}")
+        # Box members in source order (only those that resolved to participants).
+        _box_member_ids = tuple(p for p in _bg["members"] if p in _p_index)
+        _typed_boxes.append(BoxGeometry(
+            box_id=_box_id,
+            label=_bg["label"],
+            color=_bg["color"],
+            participant_ids=_box_member_ids,
+            bounds=Bounds(float(_bx0), 0.0, float(_bx1), float(canvas_h)),
+            source_order=_box_order,
+        ))
         parts.append(
             f'<div style="position:absolute;left:{_bx0:.1f}px;top:0px;'
             f'width:{_bx1 - _bx0:.1f}px;height:{canvas_h}px;'
             f'background:{_bcolor};opacity:0.2;border:1px solid {_bcolor};'
-            f'box-sizing:border-box;" data-box-group="true"></div>'
+            f'box-sizing:border-box;" data-box-group="true" '
+            f'data-box-id="{_h(_box_id)}"></div>'
         )
         if _blabel:
             parts.append(
@@ -886,12 +968,17 @@ def _layout_lifeline(
                 )
             else:
                 fid = _frag_id.get(_bi_a, "")
+                _fparent = _frag_parent.get(_bi_a)
+                _fdepth = _frag_depth.get(_bi_a, 0)
+                _fstart, _fend = _rp_a, _rp_a + span
                 pids_str = " ".join(sorted(it.get("frag_parts", set())))
                 parts.append(
                     f'<rect x="{x0}" y="{ry}" width="{x1 - x0}" height="{bh}" '
                     f'data-fragment-id="{fid}" data-fragment-kind="{_h(it["kw"])}" '
+                    f'data-parent-fragment-id="{_h(_fparent) if _fparent else ""}" '
+                    f'data-depth="{_fdepth}" '
                     f'data-participants="{_h(pids_str)}" '
-                    f'data-start-event="{_rp_a}" data-end-event="{_rp_a + span}" '
+                    f'data-start-event="{_fstart}" data-end-event="{_fend}" '
                     f'fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" opacity="0.5" '
                     f'stroke="{_seq_edge}" stroke-width="1" stroke-dasharray="5 3" rx="3"/>'
                 )
@@ -901,6 +988,10 @@ def _layout_lifeline(
                     participant_ids=tuple(sorted(it.get("frag_parts", set()))),
                     bounds=Bounds(float(x0), float(ry), float(x1), float(ry + bh)),
                     header_text=(it.get("kw", "") + (" " + it.get("label", "") if it.get("label") else "")).strip(),
+                    parent_fragment_id=_fparent,
+                    start_event_index=_fstart,
+                    end_event_index=_fend,
+                    depth=_fdepth,
                 ))
         if it["type"] in _row_types:
             _rp_a += 1
@@ -1209,9 +1300,390 @@ def _layout_lifeline(
         notes=tuple(_typed_notes),
         fragments=tuple(_typed_fragments),
         branches=tuple(_typed_branches),
+        boxes=tuple(_typed_boxes),
     )
     return "\n".join(parts), _geom
 
+
+# ── Shared-compiler pipeline (parse → compile geometry → paint) ──────────────
+
+
+def compile_sequence_geometry(
+    model: "SequenceModel", width_hint: int = 0, render_options: "object | None" = None,
+) -> "SequenceGeometry":
+    """Compile a parsed SequenceModel into the shared SequenceGeometry.
+
+    Stage 2 of the pipeline. The returned geometry is the single source of
+    positions/bounds both painters consume: ``sequence_geometry_to_html`` and
+    ``sequence_geometry_to_scene``. ``width_hint`` is reserved (sequence columns
+    are content-sized; viewport scaling happens in ``compile_sequence`` via a
+    CSS transform) and ``render_options`` is accepted for API symmetry; sequence
+    geometry does not vary by either today.
+    """
+    return _compile_sequence_model(model, width_hint)[1]
+
+
+def sequence_geometry_to_html(
+    model: "SequenceModel", geometry: "SequenceGeometry", render_options: "object | None" = None,
+) -> str:
+    """Paint the retained HTML for a compiled sequence (stage 3a).
+
+    Contract: the HTML painter is retained verbatim (spec: HTML painter changes
+    are out of scope), so this repaints deterministically from ``model`` rather
+    than from ``geometry``. ``geometry`` MUST be the output of
+    ``compile_sequence_geometry(model)`` — because that compile is deterministic,
+    the HTML's positions equal ``geometry``'s (verified by the shared-geometry
+    test). The param is part of the spec-mandated signature and keeps both
+    painters call-compatible; it is not repainted from because
+    ``MessageGeometry``/``NoteGeometry`` carry no label text (that lives in
+    ``model``), and adding it would be out-of-scope IR growth.
+
+    A cheap consistency guard reads ``geometry`` so a caller that passes a
+    geometry belonging to a different model fails loud rather than silently
+    getting HTML re-derived from ``model``.
+    """
+    if len(geometry.participants) != len(model.participants):
+        raise ValueError(
+            "sequence_geometry_to_html: geometry does not match model "
+            f"({len(geometry.participants)} vs {len(model.participants)} participants); "
+            "pass compile_sequence_geometry(model)'s output"
+        )
+    return _compile_sequence_model(model, 0)[0]
+
+
+# SVG scene palette — concrete colors (standalone SVG can't resolve CSS vars).
+_SVG_SEQ_EDGE = "#64748b"
+_SVG_ACTOR_FILL = "#ffffff"
+_SVG_ACTOR_STROKE = "#dad7ce"
+_SVG_ACTOR_TEXT = "#191a17"
+_SVG_LIFELINE = "#94a3b8"
+_SVG_FRAG_FILL = "#ffffff"
+_SVG_FRAG_STROKE = "#94a3b8"
+_SVG_NOTE_FILL = "#ffffff"
+_SVG_NOTE_STROKE = "#64748b"
+_SVG_LABEL_DIM = "#75736c"
+_SVG_ACTIVATION = "#60a5fa"
+
+
+def _seq_marker_elements(marker, x, y, dirn, scene_id, key):
+    """Return a list of scene elements drawing an arrow marker at (x, y).
+
+    ``marker`` is a marker-kind string ("triangle"|"cross"|"filled_head"|
+    "point"); ``dirn`` is +1 (pointing right) or -1 (pointing left). Mirrors
+    the HTML ``_draw_marker`` geometry so HTML and SVG markers coincide.
+    """
+    from ..scene import ScenePolygon, SceneLine, SceneCircle, PaintStyle, FillStyle, StrokeStyle  # noqa: PLC0415
+    out: list = []
+    xf, yf = float(x), float(y)
+    if marker == "triangle":
+        back, half = 10.0, 6.0
+        pts = ((xf, yf), (xf - dirn * back, yf - half), (xf - dirn * back, yf + half))
+        out.append(ScenePolygon(
+            element_id=f"{scene_id}-mk-{key}", points=pts,
+            paint=PaintStyle(fill=FillStyle(color=_SVG_SEQ_EDGE)),
+        ))
+    elif marker == "cross":
+        sz = 6.0
+        out.append(SceneLine(
+            element_id=f"{scene_id}-mk-{key}-a", x1=xf - dirn * sz, y1=yf - sz, x2=xf, y2=yf + sz,
+            paint=PaintStyle(stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=1.5)),
+        ))
+        out.append(SceneLine(
+            element_id=f"{scene_id}-mk-{key}-b", x1=xf - dirn * sz, y1=yf + sz, x2=xf, y2=yf - sz,
+            paint=PaintStyle(stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=1.5)),
+        ))
+    elif marker == "filled_head":
+        sz = 7.0
+        if dirn == 1:
+            pts = ((xf, yf), (xf - sz, yf + sz / 2 + 1), (xf - sz / 2, yf), (xf - sz, yf - sz / 2 - 1))
+        else:
+            pts = ((xf, yf), (xf + sz, yf + sz / 2 + 1), (xf + sz / 2, yf), (xf + sz, yf - sz / 2 - 1))
+        out.append(ScenePolygon(
+            element_id=f"{scene_id}-mk-{key}", points=pts,
+            paint=PaintStyle(fill=FillStyle(color=_SVG_SEQ_EDGE)),
+        ))
+    elif marker == "point":
+        out.append(SceneCircle(
+            element_id=f"{scene_id}-mk-{key}", cx=xf, cy=yf, r=4.0,
+            paint=PaintStyle(fill=FillStyle(color="none"), stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=1.5)),
+        ))
+    return out
+
+
+def sequence_geometry_to_scene(
+    model: "SequenceModel", geometry: "SequenceGeometry", render_options: "object | None" = None,
+) -> "SvgScene":
+    """Paint a native SvgScene from the shared sequence geometry (stage 3b).
+
+    Consumes ``geometry`` (positions/bounds) and ``model`` (label text) — never
+    HTML introspection. Boxes paint in the background layer before lifelines and
+    participant cards; fragments paint parents-before-children by depth, each
+    carrying data-fragment-id / data-parent-fragment-id / data-depth so the SVG
+    and HTML expose matching attributes. ``render_options`` is accepted for API
+    symmetry and is not consumed (sequence scenes do not vary by render option).
+    """
+    import hashlib  # noqa: PLC0415
+    from ..scene import (  # noqa: PLC0415
+        AccessibilityMetadata, FillStyle, PaintStyle, SceneLine, ScenePath,
+        ScenePolygon, SceneRect, SceneRoundedRect, SceneText, SceneTextLine,
+        StrokeStyle, SvgScene, make_scene_id,
+        LAYER_BACKGROUND, LAYER_EDGES, LAYER_LABELS, LAYER_NODES, LAYER_NOTES,
+        LAYER_OVERLAYS, LAYER_ORDER,
+    )
+
+    scene_id = make_scene_id("sequencediagram", int(hashlib.sha1(model.source.encode()).hexdigest(), 16))
+    canvas_w, canvas_h = geometry.canvas
+    canvas_w = max(1.0, float(canvas_w))
+    canvas_h = max(1.0, float(canvas_h))
+
+    bg: list = []
+    edges: list = []
+    nodes: list = []
+    labels: list = []
+    notes: list = []
+    overlays: list = []
+
+    # ── Boxes (background, lowest z-order — before lifelines and cards) ────────
+    for box in geometry.boxes:
+        b = box.bounds
+        bg.append(SceneRect(
+            element_id=f"{scene_id}-box-{box.source_order}",
+            x=b.left, y=b.top, w=b.width, h=b.height,
+            paint=PaintStyle(
+                fill=FillStyle(color=box.color, opacity=0.2),
+                stroke=StrokeStyle(color=box.color, width=1.0),
+            ),
+            semantic_role="box",
+            data_attrs=(("data-box-id", box.box_id),),
+        ))
+        if box.label:
+            labels.append(SceneText(
+                element_id=f"{scene_id}-box-lbl-{box.source_order}",
+                lines=(SceneTextLine(
+                    text=box.label, x=b.cx, y=b.top + 14.0,
+                    font_size=10.0, font_weight=700, fill_color=_SVG_LABEL_DIM,
+                ),),
+                text_anchor="middle",
+            ))
+
+    # ── Fragments (background, parents before children) ────────────────────────
+    for frag in sorted(geometry.fragments, key=lambda f: f.depth):
+        fb = frag.bounds
+        bg.append(SceneRect(
+            element_id=f"{scene_id}-frag-{frag.fragment_id}",
+            x=fb.left, y=fb.top, w=fb.width, h=fb.height,
+            paint=PaintStyle(
+                fill=FillStyle(color=_SVG_FRAG_FILL, opacity=0.5),
+                stroke=StrokeStyle(color=_SVG_FRAG_STROKE, width=1.0, dasharray="5 3"),
+            ),
+            semantic_role="fragment",
+            data_attrs=(
+                ("data-fragment-id", frag.fragment_id),
+                ("data-parent-fragment-id", frag.parent_fragment_id or ""),
+                ("data-depth", str(frag.depth)),
+                ("data-start-event", str(frag.start_event_index)),
+                ("data-end-event", str(frag.end_event_index)),
+            ),
+        ))
+        if frag.header_text:
+            labels.append(SceneText(
+                element_id=f"{scene_id}-frag-lbl-{frag.fragment_id}",
+                lines=(SceneTextLine(
+                    text=frag.header_text, x=fb.left + 4.0, y=fb.top + 12.0,
+                    font_size=10.0, font_weight=700, fill_color=_SVG_LABEL_DIM,
+                ),),
+                text_anchor="start",
+            ))
+
+    # ── Branch separators (edges) ──────────────────────────────────────────────
+    for i, branch in enumerate(geometry.branches):
+        bb = branch.bounds
+        edges.append(SceneLine(
+            element_id=f"{scene_id}-branch-{i}",
+            x1=bb.left, y1=bb.top, x2=bb.right, y2=bb.top,
+            paint=PaintStyle(stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=1.0, dasharray="4 4")),
+            semantic_role="branch-separator",
+            data_attrs=(("data-parent-fragment-id", branch.parent_fragment_id),),
+        ))
+        if branch.label:
+            labels.append(SceneText(
+                element_id=f"{scene_id}-branch-lbl-{i}",
+                lines=(SceneTextLine(
+                    text=branch.label, x=bb.left + 4.0, y=bb.top + 12.0,
+                    font_size=10.0, font_weight=700, fill_color=_SVG_LABEL_DIM,
+                ),),
+                text_anchor="start",
+            ))
+
+    # ── Participants: cards (nodes), lifelines (edges), labels ─────────────────
+    for i, pg in enumerate(geometry.participants):
+        tb = pg.top_box
+        nodes.append(SceneRoundedRect(
+            element_id=f"{scene_id}-actor-{i}",
+            x=tb.left, y=tb.top, w=tb.width, h=tb.height, rx=6.0, ry=6.0,
+            paint=PaintStyle(fill=FillStyle(color=_SVG_ACTOR_FILL),
+                             stroke=StrokeStyle(color=_SVG_ACTOR_STROKE, width=1.5)),
+            semantic_role="participant",
+            data_attrs=(("data-id", pg.participant_id),),
+        ))
+        labels.append(SceneText(
+            element_id=f"{scene_id}-actor-lbl-{i}",
+            lines=(SceneTextLine(text=pg.label, x=tb.cx, y=tb.cy + 4.0,
+                                 font_size=13.0, font_weight=700, fill_color=_SVG_ACTOR_TEXT),),
+            text_anchor="middle",
+        ))
+        if pg.destroyed_at_row is None:
+            bb = pg.bottom_box
+            nodes.append(SceneRoundedRect(
+                element_id=f"{scene_id}-actor-bot-{i}",
+                x=bb.left, y=bb.top, w=bb.width, h=bb.height, rx=6.0, ry=6.0,
+                paint=PaintStyle(fill=FillStyle(color=_SVG_ACTOR_FILL),
+                                 stroke=StrokeStyle(color=_SVG_ACTOR_STROKE, width=1.5)),
+            ))
+            labels.append(SceneText(
+                element_id=f"{scene_id}-actor-bot-lbl-{i}",
+                lines=(SceneTextLine(text=pg.label, x=bb.cx, y=bb.cy + 4.0,
+                                     font_size=13.0, font_weight=700, fill_color=_SVG_ACTOR_TEXT),),
+                text_anchor="middle",
+            ))
+        else:
+            xa = 8.0
+            cx, cy = pg.center_x, pg.lifeline_bottom
+            overlays.append(SceneLine(
+                element_id=f"{scene_id}-destroy-{i}-a", x1=cx - xa, y1=cy - xa, x2=cx + xa, y2=cy + xa,
+                paint=PaintStyle(stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=2.0)),
+            ))
+            overlays.append(SceneLine(
+                element_id=f"{scene_id}-destroy-{i}-b", x1=cx + xa, y1=cy - xa, x2=cx - xa, y2=cy + xa,
+                paint=PaintStyle(stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=2.0)),
+            ))
+        edges.append(SceneLine(
+            element_id=f"{scene_id}-lifeline-{i}",
+            x1=pg.center_x, y1=pg.lifeline_top, x2=pg.center_x, y2=pg.lifeline_bottom,
+            paint=PaintStyle(stroke=StrokeStyle(color=_SVG_LIFELINE, width=1.0, dasharray="5 4")),
+        ))
+
+    # ── Activation bars (overlays) ──────────────────────────────────────────────
+    for i, act in enumerate(geometry.activations):
+        ab = act.bounds
+        overlays.append(SceneRect(
+            element_id=f"{scene_id}-act-{i}",
+            x=ab.left, y=ab.top, w=max(1.0, ab.width), h=max(1.0, ab.height),
+            paint=PaintStyle(fill=FillStyle(color=_SVG_ACTIVATION, opacity=0.35),
+                             stroke=StrokeStyle(color=_SVG_ACTIVATION, width=0.5)),
+            data_attrs=(("data-pid", act.participant_id),),
+        ))
+
+    # ── Messages (overlays) + labels ────────────────────────────────────────────
+    # Align labels with the messages the compiler actually painted: a msg whose
+    # endpoints are unregistered is skipped in the compile pass, so filter the
+    # label list by the same condition to keep the positional join sound.
+    _reg = {p.participant_id for p in geometry.participants}
+    _msg_labels = [
+        it.get("label", "") for it in model.items
+        if it.get("type") == "msg" and it.get("src") in _reg and it.get("dst") in _reg
+    ]
+    _note_texts = [it.get("text", "") for it in model.items if it.get("type") == "note"]
+    for i, msg in enumerate(geometry.messages):
+        dashed = "6 4" if msg.arrow_token in ("-->", "-->>", "--x", "--)", "<<-->>") else ""
+        label_text = _msg_labels[i] if i < len(_msg_labels) else ""
+        data_attrs = (
+            ("data-src", msg.source_id),
+            ("data-dst", msg.destination_id),
+            ("data-label", label_text),
+        )
+        if msg.is_self_message and msg.path_bounds is not None:
+            pb = msg.path_bounds
+            overlays.append(ScenePath(
+                element_id=f"{scene_id}-msg-{i}",
+                commands=(("M", pb.left, pb.top),
+                          ("C", pb.right, pb.top, pb.right, pb.bottom, pb.left, pb.bottom)),
+                paint=PaintStyle(fill=FillStyle(color="none"),
+                                 stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=1.5, dasharray=dashed)),
+                semantic_role="message",
+                data_attrs=data_attrs,
+            ))
+            overlays.extend(_seq_marker_elements(msg.end_marker, pb.left, pb.bottom, -1, scene_id, f"{i}e"))
+            if msg.start_marker:
+                overlays.extend(_seq_marker_elements(msg.start_marker, pb.left, pb.top, 1, scene_id, f"{i}s"))
+        else:
+            sx, dx = msg.source_x, msg.destination_x
+            dirn = 1 if dx > sx else -1
+            overlays.append(SceneLine(
+                element_id=f"{scene_id}-msg-{i}", x1=sx, y1=msg.baseline_y, x2=dx, y2=msg.baseline_y,
+                paint=PaintStyle(stroke=StrokeStyle(color=_SVG_SEQ_EDGE, width=1.5, dasharray=dashed)),
+                semantic_role="message",
+                data_attrs=data_attrs,
+            ))
+            overlays.extend(_seq_marker_elements(msg.end_marker, dx, msg.baseline_y, dirn, scene_id, f"{i}e"))
+            if msg.start_marker:
+                overlays.extend(_seq_marker_elements(msg.start_marker, sx, msg.baseline_y, -dirn, scene_id, f"{i}s"))
+        if label_text:
+            labels.append(SceneText(
+                element_id=f"{scene_id}-msg-lbl-{i}",
+                lines=(SceneTextLine(text=label_text, x=msg.label_x, y=msg.baseline_y - 6.0,
+                                     font_size=11.0, fill_color=_SVG_LABEL_DIM),),
+                text_anchor="middle",
+            ))
+
+    # ── Notes (notes layer) ─────────────────────────────────────────────────────
+    for i, note in enumerate(geometry.notes):
+        nb = note.bounds
+        fold = 10.0
+        pts = ((nb.left, nb.top), (nb.right - fold, nb.top), (nb.right, nb.top + fold),
+               (nb.right, nb.bottom), (nb.left, nb.bottom))
+        notes.append(ScenePolygon(
+            element_id=f"{scene_id}-note-{i}", points=pts,
+            paint=PaintStyle(fill=FillStyle(color=_SVG_NOTE_FILL),
+                             stroke=StrokeStyle(color=_SVG_NOTE_STROKE, width=1.0)),
+            semantic_role="note",
+        ))
+        text = _note_texts[i] if i < len(_note_texts) else ""
+        if text:
+            labels.append(SceneText(
+                element_id=f"{scene_id}-note-lbl-{i}",
+                lines=(SceneTextLine(text=text, x=nb.cx, y=nb.cy + 4.0,
+                                     font_size=10.0, fill_color=_SVG_ACTOR_TEXT),),
+                text_anchor="middle",
+            ))
+
+    _fixed = {LAYER_BACKGROUND, LAYER_EDGES, LAYER_NODES, LAYER_LABELS, LAYER_NOTES, LAYER_OVERLAYS}
+    layers = tuple(
+        [(LAYER_BACKGROUND, tuple(bg))]
+        + [(name, ()) for name in LAYER_ORDER if name not in _fixed]
+        + [(LAYER_EDGES, tuple(edges)), (LAYER_NODES, tuple(nodes)),
+           (LAYER_LABELS, tuple(labels)), (LAYER_NOTES, tuple(notes)),
+           (LAYER_OVERLAYS, tuple(overlays))]
+    )
+
+    diagnostics = [
+        f"{d.feature}: {d.source_text}" if getattr(d, "feature", None) else str(d)
+        for d in geometry.diagnostics
+    ]
+    # No silent skips (spec AC7): the `rect` solid-fill background is not painted
+    # in the native scene; surface a typed diagnostic instead of dropping it.
+    _rect_count = sum(1 for it in model.items if it.get("type") == "rect")
+    if _rect_count:
+        diagnostics.append(
+            f"unsupported_construct: rect × {_rect_count} "
+            "(sequence rect background fill is not painted in the native SVG scene)"
+        )
+    diagnostics = tuple(diagnostics)
+    n_msgs = len(geometry.messages)
+    return SvgScene(
+        scene_id=scene_id,
+        diagram_type="sequencediagram",
+        width=canvas_w,
+        height=canvas_h,
+        view_box=(0.0, 0.0, canvas_w, canvas_h),
+        accessibility=AccessibilityMetadata(
+            title="Sequence diagram",
+            description=f"Sequence diagram with {len(geometry.participants)} participants and {n_msgs} messages",
+        ),
+        layers=layers,
+        diagnostics=diagnostics,
+        renderer_backend="sequence-geometry",
+    )
 
 
 # ── sequence compile-once helper ─────────────────────────────────────────────

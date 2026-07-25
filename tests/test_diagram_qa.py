@@ -230,6 +230,7 @@ if __name__ == "__main__":
             _extract_diagram_title, _render_metadata_chip, _render_legend, _wrap_label,
             COL_GAP, GROUP_PAD_X, GROUP_PAD_Y_TOP,
         )
+        from mermaid_render.layout._pipeline import RenderOptions  # noqa: E402
 
         # AC-1: _parse_spec strips surrounding quotes from rect labels
         nid, label, shape = _parse_spec('A["My Service"]')
@@ -252,8 +253,8 @@ if __name__ == "__main__":
 
         # AC-3: COL_GAP and GROUP_PAD constants are at target values
         check("COL_GAP is 56px", COL_GAP == 56)
-        check("GROUP_PAD_X is 28px", GROUP_PAD_X == 28)
-        check("GROUP_PAD_Y_TOP is 36px", GROUP_PAD_Y_TOP == 36)
+        check("GROUP_PAD_X is 48px", GROUP_PAD_X == 48)
+        check("GROUP_PAD_Y_TOP is 52px", GROUP_PAD_Y_TOP == 52)
 
         # AC-4: :::external class parsing
         _, _, _, css_class = _parse_spec_and_class("A[Service]:::external")
@@ -279,17 +280,18 @@ if __name__ == "__main__":
         html_ws = _dispatch('flowchart TD\nA["Svc | Spring Boot"] --> B', None, 400)
         check("tech label whitespace stripped", "Spring Boot" in html_ws)
 
-        # AC-6: legend auto-generated for mixed edge styles
-        html_mixed = _dispatch("flowchart TD\nA --> B\nA -.- C", None, 400)
+        # AC-6: legend auto-generated for mixed edge styles (when inferred_legend=True)
+        _legend_opts = RenderOptions(inferred_legend=True)
+        html_mixed = _dispatch("flowchart TD\nA --> B\nA -.- C", None, 400, opts=_legend_opts)
         check("legend present for solid+dashed diagram", "diagram-legend" in html_mixed)
         check("Async legend item present", "Async" in html_mixed)
         html_plain = _dispatch("flowchart TD\nA --> B --> C", None, 400)
         check("legend absent for plain solid-only diagram", "diagram-legend" not in html_plain)
-        html_thick = _dispatch("flowchart TD\nA --> B\nA ==> C", None, 400)
+        html_thick = _dispatch("flowchart TD\nA --> B\nA ==> C", None, 400, opts=_legend_opts)
         check("legend present for solid+thick diagram", "diagram-legend" in html_thick)
         check("Critical path legend item present", "Critical path" in html_thick)
         # Single non-solid semantic still triggers legend (no solid edges present)
-        html_dashed_only = _dispatch("flowchart TD\nA -.- B -.- C", None, 400)
+        html_dashed_only = _dispatch("flowchart TD\nA -.- B -.- C", None, 400, opts=_legend_opts)
         check("legend present for dashed-only diagram", "diagram-legend" in html_dashed_only)
 
         # AC-7: metadata chip is title-gated (not added to untitled diagrams)

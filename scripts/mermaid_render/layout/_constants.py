@@ -146,9 +146,9 @@ NODE_H = 42       # minimum card height (2×pad_v + icon_h = 20+24=44 triggers i
 RANK_GAP = 80    # gap in flow direction (vertical in TB, horizontal in LR)
 COL_GAP = 56     # gap perpendicular to flow (horizontal in TB, vertical in LR)
 CANVAS_PAD = 48  # outer inset on all sides
-GROUP_PAD_X = 28  # group container horizontal inner padding
-GROUP_PAD_Y_TOP = 36  # group container top inner padding (room for label)
-GROUP_PAD_Y_BOT = 28  # group container bottom inner padding
+GROUP_PAD_X = 48  # group container horizontal inner padding
+GROUP_PAD_Y_TOP = 52  # group container top inner padding (room for label + breathing room)
+GROUP_PAD_Y_BOT = 48  # group container bottom inner padding
 
 # Node height constants — icon-left layout: icon sits ALONGSIDE text (not below).
 # header_h = max(icon_h, title_h + sub_h); icon only adds height when taller than text.

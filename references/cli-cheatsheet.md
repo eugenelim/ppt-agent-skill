@@ -64,6 +64,22 @@ python3 SKILL_DIR/scripts/contract_validator.py interview OUTPUT_DIR/interview-q
 python3 SKILL_DIR/scripts/contract_validator.py requirements-interview OUTPUT_DIR/requirements-interview.txt
 ```
 
+**品牌外壳提取（可选）**
+
+若 `requirements-interview.txt` 含 `brand_deck_path` 字段，在进入 Step 1 前先执行：
+
+```bash
+grep -q "brand_deck_path:" OUTPUT_DIR/requirements-interview.txt && \
+  python3 SKILL_DIR/scripts/brand_extract.py "<brand_deck_path 的值>" \
+    --refs-dir SKILL_DIR/references \
+    --output OUTPUT_DIR/style.json && \
+  python3 SKILL_DIR/scripts/contract_validator.py style OUTPUT_DIR/style.json
+```
+
+> **暂定接口**：上述 `brand_extract.py` 命令行格式以 `brand-shell-extraction` 规格落地时的实际接口为准。
+> `brand_mode`（`"dark"` / `"light"` / `"neutral"`）写入 `style.json` 后由 Step 3.5 和 Step 4 消费。
+> 未提供 `brand_deck_path` 时跳过此块。
+
 ---
 
 ## Step 1 分支确认
@@ -275,6 +291,26 @@ python3 SKILL_DIR/scripts/contract_validator.py outline OUTPUT_DIR/outline.txt
 
 ## Step 3.5 风格（渐进式上下文注入）
 
+**Style 跳过检测（品牌外壳优先）**
+
+先检查 `OUTPUT_DIR/style.json` 是否已存在且含 `brand_mode` 键：
+
+```bash
+[ -f OUTPUT_DIR/style.json ] && \
+  python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+    sys.exit(0 if 'brand_mode' in d else 1)
+except Exception:
+    sys.exit(1)
+" OUTPUT_DIR/style.json && echo "brand shell detected — skip Style subagent, go to Gate 校验"
+```
+
+- 输出 `brand shell detected` → **直接跳到第 4 步 Gate 校验**；跳过启动 Style subagent。
+- `style.json` 不存在 → 跳过检测，走正常 Style 流程。
+- `style.json` 存在但不含 `brand_mode`（包括 JSON 解析失败）→ 跳过检测，走正常 Style 流程。
+
 > **Subagent 强制**：本步产物必须由 Style subagent 生成，主 agent 禁止内联生产。
 > subagent 内部自主按阶段渐进：约束提炼+风格输出 -> 字段合同自审。
 
@@ -330,6 +366,24 @@ python3 SKILL_DIR/scripts/contract_validator.py style OUTPUT_DIR/style.json
 ```
 
 若 validator 未通过，回退 Step 3.5.01 重新生成 prompt 并**重建新的 Style subagent**；不要复用已 FINALIZE 的旧 session。
+
+### Step 3.5.B Brand Shell Override（可选）
+
+**适用场景**：用户提供了组织的 `.pptx` 作为品牌参考，希望输出使用其配色外壳。
+
+```bash
+# 在进入 Step 3.5 之前执行（替代 Style subagent；不得同时运行两者）
+python3 SKILL_DIR/scripts/brand_extract.py <brand.pptx> \
+  --refs-dir SKILL_DIR/references \
+  --output OUTPUT_DIR/style.json \
+  [--footer-text]           # 可选：将页脚文本写入 brand_footer_text 字段
+  [--base-style <style_id>] # 可选：指定基底风格；未指定时按深/浅色自动选择
+python3 SKILL_DIR/scripts/contract_validator.py style OUTPUT_DIR/style.json
+```
+
+**保留内容**：排版、卡片形状、装饰 DNA、叙事弧线来自最近似的内置基底风格；  
+**覆盖内容**：背景色、强调色、文字色（8 个 css_variables）来自品牌 PPTX；  
+**诊断模式**：`python3 SKILL_DIR/scripts/deck_probe.py --brand <brand.pptx>` 打印原始提取结果，不写入任何文件。
 
 ---
 

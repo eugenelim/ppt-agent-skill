@@ -31,9 +31,9 @@ _ELK_RUNNER = Path(__file__).parent / "elk_runner.js"
 _ELK_TIMEOUT = 30  # seconds
 
 # Group padding constants (mirrors _constants.py — kept here to avoid a circular import)
-_GROUP_PAD_Y_TOP = 36   # title strip reserved height (px)
-_GROUP_PAD_X = 28       # horizontal inner padding (px)
-_GROUP_PAD_Y_BOT = 28   # bottom inner padding (px)
+_GROUP_PAD_Y_TOP = 52   # title strip reserved height (px)
+_GROUP_PAD_X = 48       # horizontal inner padding (px)
+_GROUP_PAD_Y_BOT = 48   # bottom inner padding (px)
 
 # Mermaid direction → ELK direction string
 _ELK_DIR = {"TB": "DOWN", "TD": "DOWN", "BT": "UP", "LR": "RIGHT", "RL": "LEFT"}

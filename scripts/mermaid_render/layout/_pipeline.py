@@ -28,9 +28,12 @@ from ._constants import (
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
 from ._layout import (
     _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates,
-    _compact_group_columns, _group_coherent_cols,
+    _compact_group_columns, _group_coherent_cols, _snap_isolated_rank_cols,
 )
-from ._routing import _route_edges, _node_render_w, _finalize_self_loop_offsets
+from ._routing import (
+    _route_edges, _node_render_w, _finalize_self_loop_offsets,
+    _astar_route, _blocked_segs, _ensure_orthogonal, _label_on_longest,
+)
 from ._renderer import (
     _render_legend,
     _separate_groups_lr,
@@ -59,7 +62,7 @@ class RenderOptions:
     faithful_mermaid: bool = False
     infer_icons: bool = True
     auto_direction: bool = True
-    inferred_legend: bool = True
+    inferred_legend: bool = False
 
 # ── label-based icon inference ────────────────────────────────────────────────
 
@@ -460,15 +463,25 @@ def _build_routed_edges_ir(
         _m_bend_count: int = int(_metrics.get("bend_count") or 0)
         _m_canvas_area: int = int(_metrics.get("canvas_area") or 0)
         _m_max_ep_dist: float = float(_metrics.get("max_endpoint_distance") or 0.0)
-        # Semantic / routing / scope fields for state-diagram edges
+        # Semantic / routing / scope fields. State-diagram edges carry these on a
+        # semantic _Edge (joined by edge_id); flowchart cross-boundary edges carry
+        # them directly on the route dict (set by _reroute_cross_boundary_edges).
         _sem_e = (sm_edge_semantic or {}).get(spec.get("edge_id"))  # AC4: join on edge_id
-        _semantic_source_id = getattr(_sem_e, 'semantic_src', '') if _sem_e else ''
-        _semantic_target_id = getattr(_sem_e, 'semantic_dst', '') if _sem_e else ''
-        _source_scope = getattr(_sem_e, 'source_scope', '') if _sem_e else ''
-        _target_scope = getattr(_sem_e, 'target_scope', '') if _sem_e else ''
-        # routing_source_id / routing_target_id are the actual node IDs used for routing
-        _routing_source_id = src if (_source_scope or _semantic_source_id) else ''
-        _routing_target_id = dst if (_target_scope or _semantic_target_id) else ''
+        if spec.get("source_scope") or spec.get("target_scope"):
+            _semantic_source_id = spec.get("semantic_source_id", "")
+            _semantic_target_id = spec.get("semantic_target_id", "")
+            _source_scope = spec.get("source_scope", "")
+            _target_scope = spec.get("target_scope", "")
+            _routing_source_id = spec.get("routing_source_id", "")
+            _routing_target_id = spec.get("routing_target_id", "")
+        else:
+            _semantic_source_id = getattr(_sem_e, 'semantic_src', '') if _sem_e else ''
+            _semantic_target_id = getattr(_sem_e, 'semantic_dst', '') if _sem_e else ''
+            _source_scope = getattr(_sem_e, 'source_scope', '') if _sem_e else ''
+            _target_scope = getattr(_sem_e, 'target_scope', '') if _sem_e else ''
+            # routing_source_id / routing_target_id are the actual node IDs used for routing
+            _routing_source_id = src if (_source_scope or _semantic_source_id) else ''
+            _routing_target_id = dst if (_target_scope or _semantic_target_id) else ''
 
         results.append(RoutedEdge(
             edge_id=edge_id,
@@ -760,10 +773,12 @@ def _recursive_group_layout(
       LR/RL — all members at the same y, placed left-to-right by topo order.
       TB/TD — all members at the same x, placed top-to-bottom by topo order.
 
-    Replaces the _apply_inner_direction_positions call in _compile_flowchart.
-    Removes the need for the rank-flattening pre-pass: instead of forcing all
-    LR-group members to the same rank before coordinate assignment, we let
-    _assign_coordinates run normally and correct positions afterward.
+    Replaces the removed unconditional inner-direction position fixup that the
+    old ``_layout`` module ran after global placement (deleted in the eight-case
+    parity cleanup, spec AC4/AC5). Removes the need for the rank-flattening
+    pre-pass: instead of forcing all LR-group members to the same rank before
+    coordinate assignment, we let _assign_coordinates run normally and correct
+    positions afterward.
     """
     _col_gap = col_gap if col_gap is not None else COL_GAP
     # Match _assign_coordinates axis classification exactly: anything not LR/RL is vertical.
@@ -1341,6 +1356,675 @@ def enrich_flowchart_finalized_layout(
     )
 
 
+# ── Flowchart routing adapter (ini-005) ───────────────────────────────────────
+
+_USE_LEGACY_ROUTE_EDGES: bool = False
+
+_SIDE_NORMALS_LOCAL: "dict[str, tuple[float, float]]" = {
+    "top":    (0.0, -1.0),
+    "right":  (1.0,  0.0),
+    "bottom": (0.0,  1.0),
+    "left":   (-1.0, 0.0),
+}
+
+
+def flowchart_route_adapter(
+    semantics: "FlowchartSemantics",
+    grp_bboxes: "dict[str, tuple]",
+    direction: str,
+) -> "tuple[list, list, list, list]":
+    """Convert FlowchartSemantics (post-layout) into port-planner abstractions.
+
+    Nodes must already have canvas coordinates set (called after coordinate
+    assignment, before routing).
+
+    Returns (list[PortCandidate], list[RoutingObstacle], list[RoutePermissions],
+    list[GateAperture]).
+    """
+    from .port_planner import (  # noqa: PLC0415
+        PortCandidate, RoutingObstacle, RoutePermissions, GateAperture,
+        fan_slots,
+    )
+
+    nodes = semantics.nodes
+    edges = semantics.edges
+    groups = semantics.groups
+    _dir = direction.upper()
+    _horiz = _dir in ("LR", "RL")
+
+    def _nb(n: "_Node") -> "tuple[float, float, float, float]":
+        return (float(n.x), float(n.y), float(_node_render_w(n)), float(_node_render_h(n)))
+
+    # Build edge lookups
+    from collections import defaultdict  # noqa: PLC0415
+    outgoing: "dict[str, list[str]]" = defaultdict(list)
+    incoming: "dict[str, list[str]]" = defaultdict(list)
+    edge_by_id: "dict[str, _Edge]" = {}
+    for e in edges:
+        if e.edge_id:
+            edge_by_id[e.edge_id] = e
+            outgoing[e.src].append(e.edge_id)
+            incoming[e.dst].append(e.edge_id)
+
+    src_face = "right" if _horiz else "bottom"
+    dst_face = "left" if _horiz else "top"
+
+    def _port_point(side: str, bx: float, by: float, bw: float, bh: float, off: float) -> "tuple[float, float]":
+        if side == "right":
+            return (bx + bw, by + off * bh)
+        if side == "left":
+            return (bx, by + off * bh)
+        if side == "bottom":
+            return (bx + off * bw, by + bh)
+        return (bx + off * bw, by)  # top
+
+    # PortCandidates for source endpoints (fan-distributed)
+    src_ports: "dict[str, PortCandidate]" = {}
+    for node_id, eids in outgoing.items():
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        face_len = bh if _horiz else bw
+        for eid, off in fan_slots(eids, src_face, face_length=face_len):
+            pt = _port_point(src_face, bx, by, bw, bh, off)
+            src_ports[eid] = PortCandidate(
+                edge_id=eid,
+                node_id=node_id,
+                side=src_face,
+                normalized_offset=off,
+                point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(src_face, (0.0, 0.0)),
+                fixed_side=False,
+                preference_penalty=0.0,
+            )
+
+    # PortCandidates for destination endpoints (fan-distributed)
+    dst_ports: "dict[str, PortCandidate]" = {}
+    for node_id, eids in incoming.items():
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        face_len = bh if _horiz else bw
+        for eid, off in fan_slots(eids, dst_face, face_length=face_len):
+            pt = _port_point(dst_face, bx, by, bw, bh, off)
+            dst_ports[eid] = PortCandidate(
+                edge_id=eid,
+                node_id=node_id,
+                side=dst_face,
+                normalized_offset=off,
+                point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(dst_face, (0.0, 0.0)),
+                fixed_side=False,
+                preference_penalty=0.0,
+            )
+
+    # Obstacles: NODE_INTERIOR for every real leaf node
+    obstacles: "list[RoutingObstacle]" = []
+    for nid, node in nodes.items():
+        if node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        obstacles.append(RoutingObstacle(
+            obstacle_id=nid,
+            kind="NODE_INTERIOR",
+            bounds=(bx, by, bw, bh),
+            scope_id=node.group,
+            title_bounds=None,
+            permitted_gate_ids=frozenset(),
+        ))
+
+    # Obstacles: GROUP_INTERIOR for each group
+    _TITLE_BAND: float = 20.0
+    for gid, (x0, y0, x1, y1) in grp_bboxes.items():
+        bw, bh = x1 - x0, y1 - y0
+        obstacles.append(RoutingObstacle(
+            obstacle_id=gid,
+            kind="GROUP_INTERIOR",
+            bounds=(x0, y0, bw, bh),
+            scope_id=gid,
+            title_bounds=(x0, y0, bw, _TITLE_BAND),
+            permitted_gate_ids=frozenset(),
+        ))
+
+    # RoutePermissions and GateApertures for cross-boundary edges
+    def _scope_chain(node: "_Node") -> "tuple[str, ...]":
+        chain: "list[str]" = []
+        gid = node.group
+        while gid:
+            chain.append(gid)
+            grp = groups.get(gid)
+            gid = grp.parent_group if grp else None
+        return tuple(chain)
+
+    permissions: "list[RoutePermissions]" = []
+    apertures: "list[GateAperture]" = []
+    for e in edges:
+        if not e.edge_id:
+            continue
+        sn = nodes.get(e.src)
+        dn = nodes.get(e.dst)
+        if sn is None or dn is None or sn.is_dummy or dn.is_dummy:
+            continue
+        if sn.group == dn.group or (sn.group is None and dn.group is None):
+            continue
+        src_chain = _scope_chain(sn)
+        dst_chain = _scope_chain(dn)
+        common = tuple(g for g in src_chain if g in set(dst_chain))
+        allowed = tuple(dict.fromkeys(src_chain + dst_chain))
+        permissions.append(RoutePermissions(
+            edge_id=e.edge_id,
+            source_scope_chain=src_chain,
+            target_scope_chain=dst_chain,
+            common_ancestor_ids=common,
+            permitted_gate_ids=allowed,
+        ))
+        for gid in (sn.group, dn.group):
+            if gid and gid in grp_bboxes:
+                x0, y0, x1, y1 = grp_bboxes[gid]
+                cx = (x0 + x1) / 2.0
+                cy = (y0 + y1) / 2.0
+                apertures.append(GateAperture(
+                    gate_id=f"gate_{e.edge_id}_{gid}",
+                    edge_id=e.edge_id,
+                    group_id=gid,
+                    side="right" if _horiz else "bottom",
+                    center=(cx, cy),
+                    half_width=(x1 - x0) / 4.0,
+                ))
+
+    all_ports: "list" = list(src_ports.values()) + list(dst_ports.values())
+    return all_ports, obstacles, permissions, apertures
+
+
+def _flowchart_route_new_path(
+    nodes: "dict[str, _Node]",
+    edges: "list[_Edge]",
+    grp_bboxes: "dict[str, tuple]",
+    direction: str,
+    canvas_w: float,
+    canvas_h: float,
+    semantics: "FlowchartSemantics",
+) -> "RouteBatch":
+    """New routing path (ini-005): adapter + assign_routes + local channel.
+
+    Replaces _route_edges() when _USE_LEGACY_ROUTE_EDGES is False. Does not
+    call _route_perimeter(); uses local_channel_route() for multi-rank edges.
+    """
+    from ._geometry import RouteBatch, RoutingFailure  # noqa: PLC0415
+    from .route_search import route_edge, local_channel_route  # noqa: PLC0415
+    from .port_planner import PortCandidate, RoutingObstacle, RouteCandidate  # noqa: PLC0415
+
+    edge_ids_in_order = [e.edge_id for e in edges if e.edge_id]
+    edge_by_id: "dict[str, _Edge]" = {e.edge_id: e for e in edges if e.edge_id}
+
+    # Build NODE_INTERIOR obstacles for leaf nodes only (group boundary
+    # enforcement happens post-routing in _reroute_cross_boundary_edges).
+    from .port_planner import RoutingObstacle  # noqa: PLC0415
+    obstacles = [
+        RoutingObstacle(
+            obstacle_id=nid,
+            kind="NODE_INTERIOR",
+            bounds=(float(n.x), float(n.y), float(_node_render_w(n)), float(_node_render_h(n))),
+            scope_id=n.group,
+            title_bounds=None,
+            permitted_gate_ids=frozenset(),
+        )
+        for nid, n in nodes.items()
+        if not n.is_dummy
+    ]
+
+    # Build per-edge port candidates directly (fan-distributed)
+    _dir = direction.upper()
+    _horiz = _dir in ("LR", "RL")
+
+    def _nb(n: "_Node") -> "tuple[float, float, float, float]":
+        return (float(n.x), float(n.y), float(_node_render_w(n)), float(_node_render_h(n)))
+
+    from collections import defaultdict as _dd  # noqa: PLC0415
+    from .port_planner import fan_slots  # noqa: PLC0415
+
+    # Only route real edges: skip intermediate dummy-chain segments where the
+    # destination is a dummy node. For dummy-chained edges (multi-rank), the last
+    # segment may have edge_id='' — synthesize an id from orig_src->orig_dst.
+    real_edges: "list[tuple[str, _Edge]]" = []  # (effective_eid, edge)
+    seen_real: "set[str]" = set()
+    eid_counters: "dict[str, int]" = {}
+    for e in edges:
+        dst_node = nodes.get(e.dst)
+        if dst_node and dst_node.is_dummy:
+            continue  # skip intermediate dummy segments
+        real_src = e.orig_src or e.src
+        real_dst = e.orig_dst or e.dst
+        pair_key = f"{real_src}->{real_dst}"
+        if pair_key in seen_real:
+            continue  # dedup dummy chains that converge to same pair
+        seen_real.add(pair_key)
+        # Use existing edge_id if set, else synthesize from real endpoints
+        eid = e.edge_id or pair_key
+        if eid in eid_counters:
+            eid_counters[eid] += 1
+            eid = f"{eid}#{eid_counters[eid]}"
+        else:
+            eid_counters[eid] = 0
+        real_edges.append((eid, e))
+
+    edge_by_real: "dict[str, _Edge]" = {eid: e for eid, e in real_edges}
+
+    out_map: "dict[str, list[str]]" = _dd(list)
+    in_map: "dict[str, list[str]]" = _dd(list)
+    for eid, e in real_edges:
+        real_src = e.orig_src or e.src
+        real_dst = e.orig_dst or e.dst
+        out_map[real_src].append(eid)
+        in_map[real_dst].append(eid)
+
+    src_face = "right" if _horiz else "bottom"
+    dst_face = "left" if _horiz else "top"
+
+    def _pp(side: str, bx: float, by: float, bw: float, bh: float, off: float) -> "tuple[float, float]":
+        if side == "right":
+            return (bx + bw, by + off * bh)
+        if side == "left":
+            return (bx, by + off * bh)
+        if side == "bottom":
+            return (bx + off * bw, by + bh)
+        return (bx + off * bw, by)
+
+    sp: "dict[str, PortCandidate]" = {}
+    for node_id, eids in out_map.items():
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            continue
+        bx, by, bw, bh = _nb(node)
+        for eid, off in fan_slots(eids, src_face, face_length=(bh if _horiz else bw)):
+            pt = _pp(src_face, bx, by, bw, bh, off)
+            sp[eid] = PortCandidate(
+                edge_id=eid, node_id=node_id, side=src_face,
+                normalized_offset=off, point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(src_face, (0.0, 0.0)),
+                fixed_side=False, preference_penalty=0.0,
+            )
+
+    dp: "dict[str, PortCandidate]" = {}
+    for node_id, eids in in_map.items():
+        # For dummy-chained edges, real destination node resolved via in_map key
+        node = nodes.get(node_id)
+        if node is None or node.is_dummy:
+            # Try to find the real destination node from the edge
+            for eid in eids:
+                e = edge_by_real.get(eid)
+                if e:
+                    real_dst_id = e.orig_dst or e.dst
+                    node = nodes.get(real_dst_id)
+                    if node and not node.is_dummy:
+                        node_id = real_dst_id
+                        break
+            if node is None or node.is_dummy:
+                continue
+        bx, by, bw, bh = _nb(node)
+        for eid, off in fan_slots(eids, dst_face, face_length=(bh if _horiz else bw)):
+            pt = _pp(dst_face, bx, by, bw, bh, off)
+            dp[eid] = PortCandidate(
+                edge_id=eid, node_id=node_id, side=dst_face,
+                normalized_offset=off, point=pt,
+                outward_normal=_SIDE_NORMALS_LOCAL.get(dst_face, (0.0, 0.0)),
+                fixed_side=False, preference_penalty=0.0,
+            )
+
+    # Correct port faces for intra-group edges whose subgraph uses a different direction
+    # from the outer flowchart (e.g. "direction TB" inside an outer LR flowchart).
+    # The initial port building uses the outer direction for all edges; re-compute
+    # using the inner direction for any edge where both endpoints share an inner group.
+    _inner_group_dirs: "dict[str, str]" = {
+        gid: g.direction.upper()
+        for gid, g in semantics.groups.items()
+        if g.direction and g.direction.upper() != _dir
+    }
+    if _inner_group_dirs:
+        def _node_group(nid: str) -> "str | None":
+            n = nodes.get(nid)
+            return n.group if n else None
+
+        for eid, e in real_edges:
+            real_src = e.orig_src or e.src
+            real_dst = e.orig_dst or e.dst
+            sn = nodes.get(real_src)
+            dn = nodes.get(real_dst)
+            if not (sn and dn and sn.group and sn.group == dn.group
+                    and sn.group in _inner_group_dirs):
+                continue
+            gdir = _inner_group_dirs[sn.group]
+            g_horiz = gdir in ("LR", "RL")
+            g_src_face = "right" if g_horiz else "bottom"
+            g_dst_face = "left" if g_horiz else "top"
+
+            # All intra-group edges from the same src (for fan distribution)
+            intra_src = [
+                e2_id for e2_id, e2 in real_edges
+                if (e2.orig_src or e2.src) == real_src
+                and _node_group(e2.orig_dst or e2.dst) == sn.group
+            ]
+            # All intra-group edges into the same dst
+            intra_dst = [
+                e2_id for e2_id, e2 in real_edges
+                if (e2.orig_dst or e2.dst) == real_dst
+                and _node_group(e2.orig_src or e2.src) == dn.group
+            ]
+
+            bx, by, bw, bh = _nb(sn)
+            face_len_s = bh if g_horiz else bw
+            for e3_id, off in fan_slots(intra_src, g_src_face, face_length=face_len_s):
+                if e3_id == eid and eid in sp:
+                    pt = _pp(g_src_face, bx, by, bw, bh, off)
+                    sp[eid] = sp[eid]._replace(
+                        side=g_src_face, point=pt, normalized_offset=off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get(g_src_face, (0.0, 0.0)),
+                    )
+                    break
+
+            bx, by, bw, bh = _nb(dn)
+            face_len_d = bh if g_horiz else bw
+            for e3_id, off in fan_slots(intra_dst, g_dst_face, face_length=face_len_d):
+                if e3_id == eid and eid in dp:
+                    pt = _pp(g_dst_face, bx, by, bw, bh, off)
+                    dp[eid] = dp[eid]._replace(
+                        side=g_dst_face, point=pt, normalized_offset=off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get(g_dst_face, (0.0, 0.0)),
+                    )
+                    break
+
+    # Backward edges in TB mode: src exits RIGHT, dst enters BOTTOM.
+    # Default bottom→top creates a U-shaped loop that routes through group interiors.
+    # right→bottom routes via the open corridor to the right of src, entering dst
+    # from below — consistent with how ELK handles back-edges in TB flowcharts.
+    if not _horiz:
+        _back_eids: "set[str]" = set()
+        for eid, e in real_edges:
+            _rsrc = e.orig_src or e.src
+            _rdst = e.orig_dst or e.dst
+            _sn = nodes.get(_rsrc)
+            _dn = nodes.get(_rdst)
+            # Only override port faces for backward edges whose endpoints are
+            # both in groups.  Ungrouped backward edges (e.g. self-loops in a
+            # flat flowchart) are handled adequately by the standard router and
+            # the override would route them through unrelated nodes.
+            if (_sn and _dn and not _sn.is_dummy and not _dn.is_dummy
+                    and _sn.rank > _dn.rank
+                    and _sn.group and _dn.group):
+                _back_eids.add(eid)
+
+        if _back_eids:
+            # Override src: right face; recompute forward edges on bottom face
+            _back_src_nodes: "set[str]" = {
+                sp[eid].node_id for eid in _back_eids if eid in sp
+            }
+            for _snid in _back_src_nodes:
+                _sn2 = nodes.get(_snid)
+                if not _sn2:
+                    continue
+                _bx, _by, _bw, _bh = _nb(_sn2)
+                _back_out = [eid for eid in _back_eids
+                             if sp.get(eid) and sp[eid].node_id == _snid]
+                for _idx, _beid in enumerate(_back_out):
+                    _off = (_idx + 0.5) / max(len(_back_out), 1)
+                    _pt = _pp("right", _bx, _by, _bw, _bh, _off)
+                    sp[_beid] = sp[_beid]._replace(
+                        side="right", point=_pt, normalized_offset=_off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get("right", (0.0, 0.0)),
+                    )
+                # Recompute forward bottom fan without the backward edges
+                _fwd_out = [
+                    eid for eid, e in real_edges
+                    if (e.orig_src or e.src) == _snid
+                    and eid not in _back_eids
+                    and eid in sp and sp[eid].node_id == _snid
+                ]
+                if _fwd_out:
+                    for _feid, _foff in fan_slots(_fwd_out, "bottom", face_length=_bw):
+                        _fpt = _pp("bottom", _bx, _by, _bw, _bh, _foff)
+                        sp[_feid] = sp[_feid]._replace(
+                            side="bottom", point=_fpt, normalized_offset=_foff,
+                        )
+
+            # Override dst: bottom face; recompute forward edges on top face
+            _back_dst_nodes: "set[str]" = {
+                dp[eid].node_id for eid in _back_eids if eid in dp
+            }
+            for _dnid in _back_dst_nodes:
+                _dn2 = nodes.get(_dnid)
+                if not _dn2:
+                    continue
+                _bx, _by, _bw, _bh = _nb(_dn2)
+                _back_in = [eid for eid in _back_eids
+                            if dp.get(eid) and dp[eid].node_id == _dnid]
+                for _idx, _beid in enumerate(_back_in):
+                    _off = (_idx + 0.5) / max(len(_back_in), 1)
+                    _pt = _pp("bottom", _bx, _by, _bw, _bh, _off)
+                    dp[_beid] = dp[_beid]._replace(
+                        side="bottom", point=_pt, normalized_offset=_off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get("bottom", (0.0, 0.0)),
+                    )
+                # Recompute forward top fan without the backward edges
+                _fwd_in = [
+                    eid for eid, e in real_edges
+                    if (e.orig_dst or e.dst) == _dnid
+                    and eid not in _back_eids
+                    and eid in dp and dp[eid].node_id == _dnid
+                ]
+                if _fwd_in:
+                    for _feid, _foff in fan_slots(_fwd_in, "top", face_length=_bw):
+                        _fpt = _pp("top", _bx, _by, _bw, _bh, _foff)
+                        dp[_feid] = dp[_feid]._replace(
+                            side="top", point=_fpt, normalized_offset=_foff,
+                        )
+    else:
+        _back_eids = set()
+
+    obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
+
+    # Route each edge: multi-rank → try local channel first, else standard route_edge
+    assignments: "dict[str, RouteCandidate]" = {}
+    failures_list: "list[RoutingFailure]" = []
+    self_loop_dicts: "list[dict]" = []  # pre-built route dicts for self-loops
+
+    def _local_bounds_for(src_rank: int, dst_rank: int) -> "tuple[float, float, float, float] | None":
+        min_r, max_r = min(src_rank, dst_rank), max(src_rank, dst_rank)
+        ns = [
+            n for n in nodes.values()
+            if not n.is_dummy and min_r <= n.rank <= max_r
+        ]
+        if not ns:
+            return None
+        xs = [n.x for n in ns]
+        ys = [n.y for n in ns]
+        x2 = [n.x + _node_render_w(n) for n in ns]
+        y2 = [n.y + _node_render_h(n) for n in ns]
+        bx, by = min(xs), min(ys)
+        return (bx, by, max(x2) - bx, max(y2) - by)
+
+    for eid, e in real_edges:
+        real_src_id = e.orig_src or e.src
+        real_dst_id = e.orig_dst or e.dst
+
+        # Self-loop: produce a rectangular bump outside the node; skip generic routing
+        # which produces a degenerate same-node direct route with the label inside the node.
+        if real_src_id == real_dst_id:
+            s = nodes.get(real_src_id)
+            if s is None or s.is_dummy:
+                failures_list.append(RoutingFailure(
+                    edge_id=eid, src_node_id=real_src_id, dst_node_id=real_dst_id,
+                    reason="self-loop node not found",
+                ))
+                continue
+            from ._constants import BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD  # noqa: PLC0415
+            _SL_CHIP_H = 17  # label chip height (matches _LABEL_CHIP_H in _routing.py)
+            nw = float(_node_render_w(s))
+            nh = float(_node_render_h(s))
+            _label_w = len(e.label or "") * 7
+            extent = max(BASE_LOOP_EXTENT, _label_w + 2 * LABEL_PAD, int(0.35 * max(nw, nh)))
+            if _horiz:
+                x_out = float(s.x) + nw * 0.33
+                x_ret = float(s.x) + nw * 0.67
+                y_face = float(s.y)
+                loop_y = y_face - extent
+                sl_pts: "list[tuple[float, float]]" = [
+                    (x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face),
+                ]
+                mid_x = (x_out + x_ret) / 2
+                _lx = mid_x - _label_w / 2
+                _ly = loop_y - _SL_CHIP_H - 4
+            else:
+                y_out = float(s.y) + nh * 0.33
+                y_ret = float(s.y) + nh * 0.67
+                x_face = float(s.x) + nw
+                loop_x = x_face + extent
+                sl_pts = [
+                    (x_face, y_out), (loop_x, y_out), (loop_x, y_ret), (x_face, y_ret),
+                ]
+                _lx = loop_x + 4.0
+                _ly = (y_out + y_ret) / 2 - _SL_CHIP_H
+            if e.style == "thick":
+                _sl_marker_id: "str | None" = "arrow-thick" if e.arrow else None
+            else:
+                _sl_marker_id = ("arrow-open" if e.style == "dotted" else "arrow-normal") if e.arrow else None
+            self_loop_dicts.append({
+                "waypoints": sl_pts,
+                "edge_id": eid,
+                "src": real_src_id,
+                "dst": real_dst_id,
+                "style": e.style,
+                "label": e.label,
+                "ah": e.arrow,
+                "source_marker": e.source_marker,
+                "target_marker": e.target_marker,
+                "extra_css": e.extra_css,
+                "marker_id": _sl_marker_id,
+                "bidir": getattr(e, "bidir", False),
+                "lx": _lx,
+                "ly": _ly,
+                "d": "",
+            })
+            continue
+
+        src_pc = sp.get(eid)
+        dst_pc = dp.get(eid)
+        if src_pc is None or dst_pc is None:
+            failures_list.append(RoutingFailure(
+                edge_id=eid, src_node_id=real_src_id,
+                dst_node_id=real_dst_id,
+                reason="missing port candidate",
+            ))
+            continue
+
+        existing = tuple(assignments.values())
+        result: "RouteCandidate | None" = None
+
+        # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
+        per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
+
+        # Multi-rank forward: try local channel first.
+        src_node = nodes.get(real_src_id)
+        dst_node = nodes.get(real_dst_id)
+        _is_backward = eid in _back_eids
+
+        if _is_backward and src_node and dst_node:
+            # Backward edges in TB: route EX.right → corridor → OT.bottom.
+            # Pivot x = just right of source group boundary so the path clears
+            # the group interior (avoids routing back through node rows).
+            _bsx, _bsy = src_pc.point  # EX.right
+            _bdx, _bdy = dst_pc.point  # OT.bottom center
+            _back_grp = src_node.group
+            _corr_x = _bsx  # fallback
+            if _back_grp and _back_grp in grp_bboxes:
+                _, _, _sg_x1, _ = grp_bboxes[_back_grp]
+                _corr_x = _sg_x1 + COL_GAP / 2.0
+            if _bsx < _corr_x < _bdx:
+                _bpts: "tuple" = ((_bsx, _bsy), (_corr_x, _bsy), (_corr_x, _bdy), (_bdx, _bdy))
+            else:
+                _bpts = ((_bsx, _bsy), (_bdx, _bsy), (_bdx, _bdy))
+            _blen = sum(
+                abs(_bpts[i + 1][0] - _bpts[i][0]) + abs(_bpts[i + 1][1] - _bpts[i][1])
+                for i in range(len(_bpts) - 1)
+            )
+            result = RouteCandidate(
+                edge_id=eid, source_port=src_pc, target_port=dst_pc,
+                points=_bpts, bend_count=len(_bpts) - 2,
+                length=_blen, crossing_count=0, shared_segment_length=0.0, cost=_blen,
+            )
+        elif (not _is_backward
+                and src_node and dst_node
+                and not src_node.is_dummy and not dst_node.is_dummy
+                and abs(src_node.rank - dst_node.rank) > 1):
+            lb = _local_bounds_for(src_node.rank, dst_node.rank)
+            if lb is not None:
+                result = local_channel_route(eid, src_pc, dst_pc, lb, existing)
+                # Reject channels that land within 8px of the canvas boundary
+                if result is not None:
+                    _CANVAS_MARGIN = 8.0
+                    _mid = result.points[1:-1]
+                    if any(
+                        p[0] < _CANVAS_MARGIN or p[0] > canvas_w - _CANVAS_MARGIN
+                        or p[1] < _CANVAS_MARGIN or p[1] > canvas_h - _CANVAS_MARGIN
+                        for p in _mid
+                    ):
+                        result = None
+
+        if result is None:
+            result = route_edge(eid, src_pc, dst_pc, per_obs, existing)
+
+        if result is not None:
+            assignments[eid] = result
+        else:
+            failures_list.append(RoutingFailure(
+                edge_id=eid, src_node_id=real_src_id, dst_node_id=real_dst_id,
+                reason="no valid route",
+            ))
+
+    # Convert RouteCandidate assignments to route dicts; prepend pre-built self-loop dicts
+    routed_dicts: "list[dict]" = list(self_loop_dicts)
+    for eid, rc in assignments.items():
+        e = edge_by_real.get(eid)
+        if e is None:
+            continue
+        # Compute marker_id the same way _route_edges() does — ini-005 left this
+        # as None, which emptied <defs> and removed all arrowheads (regression).
+        if e.style == "thick":
+            _cmid = "arrow-thick"
+            _cmarker_id: "str | None" = _cmid if e.arrow else None
+        else:
+            _cmid = "arrow-open" if e.style == "dotted" else "arrow-normal"
+            _cmarker_id = _cmid if e.arrow else None
+        # Compute lx/ly for labeled edges — ini-005 omitted these, leaving labels
+        # at the canvas origin (0,0). Use arc-length midpoint via _label_on_longest.
+        _pts = list(rc.points)
+        if e.label and len(_pts) >= 2:
+            _lx, _ly = _label_on_longest(_pts, e.label, int(canvas_w), [], [])
+        else:
+            _lx, _ly = 0.0, 0.0
+        routed_dicts.append({
+            "waypoints": _pts,
+            "edge_id": eid,
+            "src": e.orig_src or e.src,
+            "dst": e.orig_dst or e.dst,
+            "style": e.style,
+            "label": e.label,
+            "ah": e.arrow,
+            "source_marker": e.source_marker,
+            "target_marker": e.target_marker,
+            "extra_css": e.extra_css,
+            "marker_id": _cmarker_id,
+            "bidir": getattr(e, "bidir", False),
+            "lx": _lx,
+            "ly": _ly,
+            "d": "",
+            "_is_backward": eid in _back_eids,
+        })
+
+    return RouteBatch(routed=tuple(routed_dicts), failures=tuple(failures_list))
+
+
 def layout_flowchart_with_python_fallback(
     semantics: FlowchartSemantics,
 ) -> "tuple[FinalizedLayout, LayoutMetadata]":
@@ -1371,7 +2055,7 @@ def layout_flowchart_with_python_fallback(
     height_hint = semantics.height_hint
 
     _break_cycles(nodes, edges)
-    _assign_ranks(nodes, edges)
+    _assign_ranks(nodes, edges, direction=direction)
     _minimize_crossings(nodes, edges)
 
     # Auto-select direction (TB vs LR) when both size hints are given
@@ -1401,6 +2085,7 @@ def layout_flowchart_with_python_fallback(
 
     if groups:
         _group_coherent_cols(nodes, groups)
+        _snap_isolated_rank_cols(nodes, groups)
         _compact_group_columns(nodes, groups)
 
     canvas_w, canvas_h = _assign_coordinates(
@@ -1414,6 +2099,33 @@ def layout_flowchart_with_python_fallback(
     if direction.upper() not in ("LR", "RL"):
         from ._layout import _center_isolated_nodes  # noqa: PLC0415
         _center_isolated_nodes(nodes, edges)
+
+    # Snap rank-isolated group members to their group's x range (TB only).
+    # A node alone at its rank within its group (e.g. BD/LLM API in Store Layer
+    # at rank 6 while NP/OS are at rank 5) can land far left of all other group
+    # members due to Sugiyama parent-alignment, stretching the group's bbox
+    # unnecessarily and triggering false conflict cascades in _separate_groups_tb.
+    if groups and direction.upper() not in ("LR", "RL"):
+        for _gid, _grp in groups.items():
+            _mbrs = [nid for nid in _grp.members if nid in nodes and not nodes[nid].is_dummy]
+            # Require ≥3 members (same guard as _snap_isolated_rank_cols):
+            # with only 2 members each node is necessarily alone at its rank,
+            # so the snap reference is too thin and misaligns layouts.
+            if len(_mbrs) < 3:
+                continue
+            _rank_to_mbrs: dict[int, list[str]] = {}
+            for _nid in _mbrs:
+                _rank_to_mbrs.setdefault(nodes[_nid].rank, []).append(_nid)
+            for _rank, _rank_mbrs in _rank_to_mbrs.items():
+                if len(_rank_mbrs) != 1:
+                    continue
+                _solo = nodes[_rank_mbrs[0]]
+                _others = [nodes[m] for m in _mbrs if nodes[m].rank != _rank]
+                if len(_others) < 2:
+                    continue
+                _min_other_x = min(o.x for o in _others)
+                if _solo.x < _min_other_x - COL_GAP:
+                    _solo.x = _min_other_x
 
     # Recursive compound layout (replaces _recursive_group_layout + post-layout
     # coordinate corrections). Returns boundary_gates for cross-boundary edges.
@@ -1466,6 +2178,13 @@ def layout_flowchart_with_python_fallback(
             if _grp_bboxes:
                 _grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
 
+    # First-class empty groups (AC1): an empty subgraph is a measured proxy that
+    # must not sit at the origin or touch a sibling group. Place it in clear space.
+    if groups and not semantics.is_state_diagram and _grp_bboxes:
+        canvas_w, canvas_h = _place_empty_groups(
+            groups, _grp_bboxes, nodes, canvas_w, canvas_h
+        )
+
     # Build scope_bbox_map for state-diagram composite back-edge routing
     _scope_bbox_map: "dict" = (
         {
@@ -1476,12 +2195,18 @@ def layout_flowchart_with_python_fallback(
         if _sm_composite_gates else {}
     )
 
-    # Route edges via Python A*
-    route_batch = _route_edges(
-        nodes, edges, canvas_w, direction,
-        group_bboxes=_grp_bboxes,
-        scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None,
-    )
+    # Route edges: new path (ini-005) or legacy _route_edges
+    if not _USE_LEGACY_ROUTE_EDGES and not semantics.is_state_diagram:
+        route_batch = _flowchart_route_new_path(
+            nodes, edges, _grp_bboxes or {}, direction,
+            float(canvas_w), float(canvas_h), semantics,
+        )
+    else:
+        route_batch = _route_edges(
+            nodes, edges, canvas_w, direction,
+            group_bboxes=_grp_bboxes,
+            scope_bbox_map=_scope_bbox_map if _scope_bbox_map else None,
+        )
 
     # Gate restoration: merge split route-dicts back into single route-dicts
     if _gate_to_orig:
@@ -1503,6 +2228,41 @@ def layout_flowchart_with_python_fallback(
     }
     if _src_group_map:
         _clip_cross_scope_exit_waypoints(_restored_routes, _src_group_map, _grp_bboxes)
+
+    # Boundary-gate routing (Task 4/5): route cross-boundary flowchart edges
+    # through explicit gates on group boundaries, derive gate records from the
+    # real crossings, and keep the routes clear of unrelated groups/labels.
+    # State diagrams keep their own composite-gate machinery untouched.
+    if groups and not semantics.is_state_diagram and _grp_bboxes:
+        _cbe_gates = _reroute_cross_boundary_edges(
+            _restored_routes, nodes, _grp_bboxes, canvas_w, canvas_h,
+            direction=direction,
+        )
+        if _cbe_gates:
+            # Merge, don't replace: the reroute emits gates only for edges it
+            # actually re-routed (A* may bail on an un-routable edge). Keep the
+            # recursive_compound_layout gate for any real routed edge the reroute
+            # did not cover, so AC7 ("a gate for every cross-scope edge") still
+            # holds. Filter to real routed edge_ids so stale gate-split records
+            # (e.g. "…_out" halves) never leak into the finalized layout.
+            _covered_edges = {g.edge_id for g in _cbe_gates}
+            _routed_edge_ids = {
+                (r.get("edge_id") or f"{r.get('src')}->{r.get('dst')}")
+                for r in _restored_routes
+            }
+            _boundary_gates = _cbe_gates + tuple(
+                g for g in _boundary_gates
+                if g.edge_id not in _covered_edges and g.edge_id in _routed_edge_ids
+            )
+        # Canvas is finalized AFTER route construction so every rerouted waypoint
+        # is inside it (spec AC2).
+        _pad = float(_init_cfg.get("diagram_padding") or CANVAS_PAD)
+        for _r in _restored_routes:
+            for _wx, _wy in (_r.get("waypoints") or []):
+                if _wx + _pad > canvas_w:
+                    canvas_w = _wx + _pad
+                if _wy + _pad > canvas_h:
+                    canvas_h = _wy + _pad
 
     routed_edges_ir = _build_routed_edges_ir(
         _restored_routes,
@@ -1565,9 +2325,15 @@ def _compile_flowchart(
     """Orchestrate the full flowchart layout pipeline using composable functions.
 
     Parse → build graph → ELK layout → enrich (or Python fallback) → validate.
-    Inner-direction compound layouts are routed to the Python path directly.
-    Only ElkUnavailable and ElkInvalidResult trigger a typed Python fallback;
-    all other exceptions propagate with context.
+
+    Inner-direction compound layouts are routed to the bottom-up Python compound
+    path directly. That path is the one that emits explicit ``BoundaryGate``
+    records for cross-scope edges (spec AC7) and honours the eight-case harness's
+    non-forced ``min_gates`` contract; ELK's native compound result carries no such
+    gate metadata, so consuming it directly (spec AC5) would leave cross-scope
+    edges gate-less. Non-compound flowcharts attempt ELK first and consume a
+    successful result directly. Only ElkUnavailable and ElkInvalidResult trigger a
+    typed Python fallback; all other exceptions propagate with context.
     """
     from ._geometry import CompiledFlowchart, LayoutMetadata  # noqa: PLC0415
     from .elk_adapter import ElkUnavailable, ElkInvalidResult  # noqa: PLC0415
@@ -1579,9 +2345,6 @@ def _compile_flowchart(
         height_hint=height_hint,
     )
 
-    # AC1: inner-direction compound layout → Python path.
-    # ELK + re-route would violate the prohibition on calling _route_edges
-    # after a successful ELK result.  Compound layout improvement is out of scope.
     if semantics.has_inner_dir:
         finalized, py_metadata = layout_flowchart_with_python_fallback(semantics)
         metadata = dataclasses.replace(py_metadata, fallback_reason="inner-direction")
@@ -1991,3 +2754,373 @@ def recursive_compound_layout(
 
     return grp_bboxes, tuple(boundary_gates)
 
+
+# ── Compound layout: boundary-gate routing (Task 4/5) ─────────────────────────
+
+# Title-band height (px) reserved at the top of every compound group. Boundary
+# gates never sit on the top edge and internal segments never enter this band.
+# Reuses the compound-layout title-band height (_TITLE_BAND_H) so the routing
+# band tracks the group chrome. It intentionally exceeds the obstruction
+# validator's DEFAULT_TITLE_BAND_H (24px) — routing conservatively avoids a band
+# at least as tall as the one the validator checks, so a route this pass accepts
+# can never be rejected by _layout_validation.validate_segment_obstruction.
+_GATE_TITLE_BAND_H: float = _TITLE_BAND_H
+
+# Clearance (px) placed around a first-class empty group so it never touches a
+# sibling group or node (spec AC1 forbids overlap *or* touch).
+_EMPTY_GROUP_GAP: float = 24.0
+
+
+def _place_empty_groups(
+    groups: "dict[str, _Group]",
+    grp_bboxes: "dict[str, list]",
+    nodes: "dict[str, _Node]",
+    canvas_w: float,
+    canvas_h: float,
+) -> "tuple[float, float]":
+    """Give every empty group a clear, non-origin slot (spec AC1 / Task 3).
+
+    ``_compute_group_bboxes`` sizes an empty group but parks it at ``(0, 0)`` with
+    no members to anchor it. Here each empty group is repositioned (keeping its
+    measured width/height) below all populated content, stacked with a fixed gap,
+    so it has nonzero bounds, is off the origin, and neither overlaps nor touches
+    any sibling group. Returns the (possibly grown) canvas size.
+    """
+    def _recursive_members(gid: str) -> "list[str]":
+        out = list(groups[gid].members)
+        for cgid, cgrp in groups.items():
+            if cgrp.parent_group == gid:
+                out.extend(_recursive_members(cgid))
+        return out
+
+    empty_gids = [
+        gid for gid, grp in groups.items()
+        # Only reposition *top-level* empty groups. A nested empty group is
+        # positioned within its parent's packing region by _compute_group_bboxes;
+        # relocating it below global content would break parent containment.
+        if (not grp.parent_group or grp.parent_group not in groups)
+        and not [m for m in _recursive_members(gid)
+                 if m in nodes and not nodes[m].is_dummy]
+    ]
+    if not empty_gids:
+        return canvas_w, canvas_h
+
+    # Bottom of all populated content (non-empty group boxes + real node cards).
+    content_bottom = 0.0
+    for gid, b in grp_bboxes.items():
+        if gid not in empty_gids:
+            content_bottom = max(content_bottom, b[3])
+    for n in nodes.values():
+        if not n.is_dummy:
+            content_bottom = max(content_bottom, n.y + _node_render_h(n))
+    if content_bottom <= 0.0:
+        content_bottom = float(CANVAS_PAD)
+
+    cursor_y = content_bottom + _EMPTY_GROUP_GAP
+    x0 = float(CANVAS_PAD)
+    for gid in empty_gids:
+        b = grp_bboxes[gid]
+        w = b[2] - b[0]
+        h = b[3] - b[1]
+        grp_bboxes[gid] = [x0, cursor_y, x0 + w, cursor_y + h]
+        cursor_y += h + _EMPTY_GROUP_GAP
+        canvas_w = max(canvas_w, x0 + w + CANVAS_PAD)
+    canvas_h = max(canvas_h, cursor_y + CANVAS_PAD - _EMPTY_GROUP_GAP)
+    return canvas_w, canvas_h
+
+
+def _cbe_node_face(n: "_Node", toward: "tuple[float, float]") -> "tuple[float, float]":
+    """Point on node ``n``'s outer boundary on the side facing ``toward``."""
+    w = _node_render_w(n)
+    h = _node_render_h(n)
+    cx = n.x + w / 2.0
+    cy = n.y + h / 2.0
+    dx = toward[0] - cx
+    dy = toward[1] - cy
+    if abs(dx) >= abs(dy):
+        return (cx + (w / 2.0 if dx > 0 else -w / 2.0), cy)
+    return (cx, cy + (h / 2.0 if dy > 0 else -h / 2.0))
+
+
+def _cbe_build_grid(
+    nodes: "dict[str, _Node]",
+    grp_bboxes: "dict[str, tuple]",
+    extra: "list[tuple[float, float]]",
+    canvas_w: float,
+    canvas_h: float,
+) -> "tuple[list[int], list[int]]":
+    """Sparse orthogonal routing grid: node edges, group boundaries, gate points."""
+    xs: "set[int]" = {0, int(canvas_w)}
+    ys: "set[int]" = {0, int(canvas_h)}
+    for n in nodes.values():
+        if n.is_dummy:
+            continue
+        w, h = _node_render_w(n), _node_render_h(n)
+        for off in (-9, 0, w, w + 9):
+            xs.add(int(n.x + off))
+        for off in (-9, 0, h, h + 9):
+            ys.add(int(n.y + off))
+    for (x0, y0, x1, y1) in grp_bboxes.values():
+        for off in (-9, 0, 9, int(_GATE_TITLE_BAND_H)):
+            xs.add(int(x0 + off))
+            xs.add(int(x1 + off))
+            ys.add(int(y0 + off))
+            ys.add(int(y1 + off))
+    for p in extra:
+        xs.add(int(p[0]))
+        ys.add(int(p[1]))
+    return sorted(x for x in xs if x >= -9), sorted(y for y in ys if y >= -9)
+
+
+def _cbe_boundary_crossings(
+    poly: "list[tuple[float, float]]", bbox: "tuple[float, float, float, float]"
+) -> "list[tuple[int, float, float]]":
+    """Boundary crossings of an orthogonal polyline against a rectangle.
+
+    A crossing is a segment whose endpoints straddle the interior/exterior of
+    ``bbox``; each result is ``(segment_index, x, y)`` with the point snapped onto
+    the rectangle edge that was crossed. Order follows the polyline direction.
+    """
+    x0, y0, x1, y1 = bbox
+
+    def _inside(p: "tuple[float, float]") -> bool:
+        return x0 < p[0] < x1 and y0 < p[1] < y1
+
+    res: "list[tuple[int, float, float]]" = []
+    for i in range(len(poly) - 1):
+        a, b = poly[i], poly[i + 1]
+        if _inside(a) == _inside(b):
+            continue
+        if a[0] == b[0]:  # vertical segment → crosses a horizontal edge
+            yb = y0 if abs(a[1] - y0) + abs(b[1] - y0) <= abs(a[1] - y1) + abs(b[1] - y1) else y1
+            res.append((i, float(a[0]), float(yb)))
+        else:             # horizontal segment → crosses a vertical edge
+            xb = x0 if abs(a[0] - x0) + abs(b[0] - x0) <= abs(a[0] - x1) + abs(b[0] - x1) else x1
+            res.append((i, float(xb), float(a[1])))
+    return res
+
+
+def _cbe_place_label(
+    waypoints: "list[tuple[float, float]]",
+    lw: float,
+    lh: float,
+    obstacles: "list[tuple[float, float, float, float]]",
+) -> "tuple[float, float] | None":
+    """Pick a label origin (x, y) on the route minimising obstacle overlap.
+
+    Samples points along each segment and four offset placements per point;
+    returns the first zero-overlap placement, else the minimum-overlap one.
+    """
+    best: "tuple[float, float] | None" = None
+    best_score = float("inf")
+    for i in range(len(waypoints) - 1):
+        a, b = waypoints[i], waypoints[i + 1]
+        for t in (0.5, 0.33, 0.66):
+            px = a[0] + (b[0] - a[0]) * t
+            py = a[1] + (b[1] - a[1]) * t
+            for ox, oy in ((-lw / 2, -lh - 3), (-lw / 2, 3), (3, -lh / 2), (-lw - 3, -lh / 2)):
+                rx, ry = px + ox, py + oy
+                score = sum(
+                    1
+                    for (kx0, ky0, kx1, ky1) in obstacles
+                    if not (rx + lw < kx0 or rx > kx1 or ry + lh < ky0 or ry > ky1)
+                )
+                if score < best_score:
+                    best_score = score
+                    best = (rx, ry)
+                if score == 0:
+                    return best
+    return best
+
+
+def _reroute_cross_boundary_edges(
+    routed: "list[dict]",
+    nodes: "dict[str, _Node]",
+    grp_bboxes: "dict[str, tuple]",
+    canvas_w: float,
+    canvas_h: float,
+    direction: str = "TB",
+) -> "tuple":
+    """Route every cross-boundary flowchart edge through explicit boundary gates.
+
+    For each edge whose endpoints live in different scopes (at least one grouped):
+
+    1. Route the whole edge with one obstacle-aware A* pass. Obstacles are every
+       unrelated node interior, every group title band, and every *unrelated*
+       group interior. The endpoint groups' interiors stay traversable so the
+       route can reach the node and cross the boundary exactly once.
+    2. Derive a ``BoundaryGate`` from the point where the finished route actually
+       crosses each endpoint group's boundary (EXIT at the source group, ENTRY at
+       the destination group) — the gate is on the boundary and on the route by
+       construction, so it survives the compound-gate validator.
+    3. Re-place the edge's label clear of other routes, nodes and title bands.
+
+    Mutates each rerouted dict's ``waypoints``/``lx``/``ly`` and stamps the scope
+    fields (``source_scope``/``target_scope`` plus semantic/routing endpoint ids)
+    so the harness's compound-gate validator engages. Returns the tuple of
+    ``BoundaryGate`` records.
+    """
+    from ._geometry import BoundaryGate, BoundaryGateKind, PortSide, Point  # noqa: PLC0415
+
+    band = _GATE_TITLE_BAND_H
+    real_ids = [nid for nid, n in nodes.items() if not n.is_dummy]
+    node_rects = {
+        nid: (nodes[nid].x, nodes[nid].y,
+              nodes[nid].x + _node_render_w(nodes[nid]),
+              nodes[nid].y + _node_render_h(nodes[nid]))
+        for nid in real_ids
+    }
+    band_rects = [(x0, y0, x1, y0 + band) for (x0, y0, x1, y1) in grp_bboxes.values()]
+
+    gates: "list[BoundaryGate]" = []
+    gate_ctr = 0
+
+    for r in routed:
+        s = r.get("src")
+        d = r.get("dst")
+        sn = nodes.get(s)
+        dn = nodes.get(d)
+        if sn is None or dn is None or sn.is_dummy or dn.is_dummy:
+            continue
+        sg = sn.group if sn.group in grp_bboxes else None
+        dg = dn.group if dn.group in grp_bboxes else None
+        # Cross-boundary iff endpoints differ in deepest scope and at least one
+        # is a laid-out group. Intra-group and fully free edges are untouched.
+        # Backward edges (rank inverted) are pre-routed with right→bottom ports
+        # and should not be re-routed by the A* pass which ignores port direction.
+        if sn.group == dn.group or (sg is None and dg is None):
+            continue
+        if r.get("_is_backward"):
+            continue
+
+        scx = sn.x + _node_render_w(sn) / 2.0
+        scy = sn.y + _node_render_h(sn) / 2.0
+        dcx = dn.x + _node_render_w(dn) / 2.0
+        dcy = dn.y + _node_render_h(dn) / 2.0
+        a = _cbe_node_face(sn, (dcx, dcy))
+        b = _cbe_node_face(dn, (scx, scy))
+        # Backward edges in TB mode (src.rank > dst.rank): src exits RIGHT,
+        # dst is entered from BOTTOM so the route avoids the group interior.
+        _is_tb = direction.upper() not in ("LR", "RL")
+        if _is_tb and sn.rank > dn.rank:
+            dw = _node_render_w(dn)
+            dh = _node_render_h(dn)
+            b = (dn.x + dw / 2.0, dn.y + dh)
+
+        endpoint_groups = {sn.group, dn.group}
+        obstacles: "list[tuple]" = [
+            rect for nid, rect in node_rects.items() if nid not in (s, d)
+        ]
+        for gid, (x0, y0, x1, y1) in grp_bboxes.items():
+            obstacles.append((x0, y0, x1, y0 + band))       # title band
+            if gid not in endpoint_groups:
+                obstacles.append((x0, y0, x1, y1))           # unrelated interior
+
+        # Block A* from routing within 5px of canvas edges (_blocked_segs CLEAR=4,
+        # so obstacle spanning ±9px around the edge blocks the edge grid line itself)
+        _cs = 9
+        obstacles.extend([
+            (-_cs, -_cs, _cs, canvas_h + _cs),                     # left edge strip
+            (canvas_w - _cs, -_cs, canvas_w + _cs, canvas_h + _cs),  # right edge strip
+            (-_cs, -_cs, canvas_w + _cs, _cs),                     # top edge strip
+            (-_cs, canvas_h - _cs, canvas_w + _cs, canvas_h + _cs),  # bottom edge strip
+        ])
+
+        gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b], canvas_w, canvas_h)
+        blocked = _blocked_segs(gx, gy, obstacles)
+        path = _astar_route(int(a[0]), int(a[1]), int(b[0]), int(b[1]), gx, gy, blocked)
+        if not path or len(path) < 2:
+            continue  # keep the original route if A* cannot improve it
+
+        poly = [(float(x), float(y)) for x, y in path]
+        poly[0] = (float(a[0]), float(a[1]))
+        poly[-1] = (float(b[0]), float(b[1]))
+        # A* snaps the endpoints to grid rows/columns; substituting the exact node
+        # faces back can leave the first/last segment diagonal, so re-orthogonalize
+        # (same invariant the main router enforces) before deriving gates.
+        poly = _ensure_orthogonal(poly)
+        out = [poly[0]]
+        for p in poly[1:]:
+            if (round(p[0], 2), round(p[1], 2)) != (round(out[-1][0], 2), round(out[-1][1], 2)):
+                out.append(p)
+
+        eid = r.get("edge_id") or f"{s}->{d}"
+        # Pick the boundary crossing per endpoint group (EXIT = last time the route
+        # leaves the source group; ENTRY = first time it enters the destination),
+        # then insert each gate point into the route as an explicit waypoint (AC2).
+        inserts: "list[tuple[int, tuple[float, float], str, str]]" = []
+        if sg:
+            cs = _cbe_boundary_crossings(out, grp_bboxes[sg])
+            if cs:
+                seg, gx_, gy_ = cs[-1]
+                inserts.append((seg, (gx_, gy_), sg, "exit"))
+        if dg:
+            cs = _cbe_boundary_crossings(out, grp_bboxes[dg])
+            if cs:
+                seg, gx_, gy_ = cs[0]
+                inserts.append((seg, (gx_, gy_), dg, "entry"))
+        # Sort: segment index descending (so later segments are inserted first and
+        # don't shift earlier segment indices), then within the same segment sort by
+        # Manhattan distance from segment start descending (so the gate farthest from
+        # the segment start is inserted first — each subsequent insert at `seg+1`
+        # pushes it forward, placing the nearest-to-start gate earliest in the path).
+        # This prevents the same-segment EXIT/ENTRY gate pair from being inserted in
+        # reverse order, which would create a visible backtrack in the routed path.
+        for seg, pt, gid, role in sorted(
+            inserts,
+            key=lambda t: (
+                -t[0],
+                -(abs(t[1][0] - out[t[0]][0]) + abs(t[1][1] - out[t[0]][1]))
+                if t[0] < len(out) else 0.0
+            ),
+        ):
+            if (round(pt[0], 2), round(pt[1], 2)) not in {(round(w[0], 2), round(w[1], 2)) for w in out}:
+                out.insert(seg + 1, (float(pt[0]), float(pt[1])))
+        for seg, pt, gid, role in inserts:
+            is_exit = role == "exit"
+            gates.append(BoundaryGate(
+                gate_id=f"_bgate_{gate_ctr}_{role}", group_id=gid, side=PortSide.AUTO,
+                point=Point(float(pt[0]), float(pt[1])),
+                semantic_node_id=s if is_exit else d, edge_id=eid,
+                kind=BoundaryGateKind.EXIT if is_exit else BoundaryGateKind.ENTRY,
+            ))
+            gate_ctr += 1
+
+        r["waypoints"] = [(float(x), float(y)) for x, y in out]
+        r["_cbe_rerouted"] = True
+
+        # Scope tagging (harness compound-gate validator + AC11 in-pipeline check).
+        r["source_scope"] = sn.group if sg else ""
+        r["target_scope"] = dn.group if dg else ""
+        r["semantic_source_id"] = s
+        r["semantic_target_id"] = d
+        r["routing_source_id"] = s
+        r["routing_target_id"] = d
+
+    # Second pass: place labels of rerouted edges clear of every other route.
+    all_segs: "list[tuple]" = []
+    for r in routed:
+        wps = r.get("waypoints") or []
+        for i in range(len(wps) - 1):
+            all_segs.append((r.get("edge_id"), wps[i], wps[i + 1]))
+    for r in routed:
+        if not r.get("_cbe_rerouted") or not r.get("label"):
+            continue
+        wps = r["waypoints"]
+        eid = r.get("edge_id")
+        lw = max(30.0, len(str(r["label"])) * 7.0)
+        lh = 18.0
+        others = [
+            (min(x1[0], x2[0]) - 1, min(x1[1], x2[1]) - 1,
+             max(x1[0], x2[0]) + 1, max(x1[1], x2[1]) + 1)
+            for (oeid, x1, x2) in all_segs if oeid != eid
+        ]
+        obs = others + list(node_rects.values()) + band_rects
+        pos = _cbe_place_label(wps, lw, lh, obs)
+        if pos:
+            r["lx"], r["ly"] = pos
+
+    for r in routed:
+        r.pop("_cbe_rerouted", None)
+
+    return tuple(gates)

@@ -309,7 +309,7 @@ Each CSS variable in the `.diagram` contract maps to a specific architectural ro
 
 A diagram's visual vocabulary must stay **consistent within a single diagram and across all diagrams in the same deck**. Each visual channel carries exactly one meaning; if a channel carries two meanings, the reader must re-learn the code mid-diagram.
 
-### Channel → meaning table (enforce this mapping, do not re-purpose)
+### Channel → meaning table — enforce this mapping, do not re-purpose
 
 | Visual channel | Assigned meaning | Must NOT be used for |
 |---|---|---|
@@ -336,7 +336,7 @@ A diagram's visual vocabulary must stay **consistent within a single diagram and
    - *Semantically suggestive* — shape and icon choices borrow from domain conventions (cylinder = storage, diamond = decision, dashed border = external/optional).
    - *Audience-adapted* — for an executive deck, use 2–3 shapes max; for a technical review, C4 stereotypes and icon classes are appropriate.
 
-### Self-check (add to QA pass for any diagram with ≥2 element kinds or ≥2 edge styles)
+### Self-check — add to QA pass for any diagram with ≥2 element kinds or ≥2 edge styles
 
 - [ ] No color carries two different meanings within the same diagram
 - [ ] Edge styles follow the legend exactly — dashed is not used for grouping when it is already used for async

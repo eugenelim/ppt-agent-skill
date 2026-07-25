@@ -1,0 +1,14 @@
+sequenceDiagram
+    participant C as AI Workflow
+    participant M as MCP Server
+    participant NP as Neptune SPARQL
+    participant OS as OpenSearch
+    participant BD as Bedrock
+
+    C->>M: get_policies("generating IaC", domain="security")
+    M->>NP: SELECT all policies in normative graph matching domain + date filter
+    NP-->>M: ALL matching policies (no top-k limit)
+    M->>BD: embed(context)
+    M->>OS: threshold filter(vector, threshold=0.7, partition=normative)
+    OS-->>M: additional policies above similarity threshold
+    M-->>C: union of SPARQL and vector results (exhaustive, fail if unavailable)

@@ -502,8 +502,12 @@ class TestCompileClassdiagram:
             self._compile("classDiagram\n")
 
 
-    def test_compile_clearance_applied(self):
-        """_compile_classdiagram: Animal->Dog source waypoint is 12px past Animal face."""
+    def test_connector_starts_at_animal_boundary(self):
+        """_compile_classdiagram: Animal->Dog source waypoint is at Animal's bottom face.
+
+        Connectors must start at the node boundary so SVG markers (placed at
+        the waypoint) visually touch the card edge with no gap.
+        """
         from mermaid_render.layout._strategies import _compile_classdiagram
         src = "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog"
         result = _compile_classdiagram(src)
@@ -518,11 +522,11 @@ class TestCompileClassdiagram:
         assert edge is not None, "Animal->Dog edge not found in routed_edges"
         assert edge.waypoints, "Animal->Dog edge has no waypoints"
         src_y = edge.waypoints[0].y
-        # HOLLOW_TRIANGLE source clearance=12: first waypoint must be >= 10px past
-        # Animal's bottom face (into the path interior).
-        assert src_y >= animal_bottom + 10, (
-            f"clearance not applied: src waypoint y={src_y:.1f}, "
-            f"animal bottom={animal_bottom:.1f}"
+        # Source waypoint must be at Animal's bottom face so the SVG marker tip
+        # lands on the boundary without a gap.
+        assert abs(src_y - animal_bottom) <= 2, (
+            f"src waypoint not at Animal boundary: src_y={src_y:.1f}, "
+            f"animal_bottom={animal_bottom:.1f}"
         )
 
     def test_end_to_end_to_html(self):
@@ -674,8 +678,12 @@ class TestRouteShortening:
         # pts[0] should move 12px downward (toward pts[1])
         assert result[0] == (100, 62)
 
-    def test_goal_based_clearance_in_rendered_html(self):
-        """Source waypoint in FinalizedLayout IR is >= 12px past Animal card bottom face."""
+    def test_goal_based_boundary_attachment_in_rendered_html(self):
+        """Source waypoint in FinalizedLayout IR is at Animal card bottom face.
+
+        Connectors start at the node boundary so the SVG marker tip touches
+        the card edge with no gap.
+        """
         from mermaid_render.layout._strategies import _compile_classdiagram
         result = _compile_classdiagram(
             "classDiagram\n  class Animal\n  class Dog\n  Animal <|-- Dog"
@@ -692,11 +700,10 @@ class TestRouteShortening:
         assert edge is not None, "Animal->Dog edge not found in routed_edges"
         assert edge.waypoints, "Animal->Dog edge has no waypoints"
         src_y = edge.waypoints[0].y
-        # HOLLOW_TRIANGLE source clearance=12; first waypoint must be >= 10px past
-        # Animal's bottom face (into the path interior).
-        assert src_y >= animal_bottom + 10, (
-            f"source waypoint y={src_y:.1f} too close to Animal bottom y={animal_bottom:.1f}; "
-            f"expected >= {animal_bottom + 10:.1f} (clearance=12)"
+        # Source waypoint must be at Animal's bottom face (no gap before marker).
+        assert abs(src_y - animal_bottom) <= 2, (
+            f"src waypoint not at Animal boundary: src_y={src_y:.1f}, "
+            f"animal_bottom={animal_bottom:.1f}"
         )
 
 
@@ -777,13 +784,13 @@ class TestLabelPlacement:
         assert html1 == html2, "render not deterministic"
 
     def test_shelf_fallback_on_short_span(self):
-        """When eligible span < 40px after shortening, shelf label fires at a deterministic position."""
+        """When eligible span < 40px, shelf label fires at a deterministic position."""
         from mermaid_render.layout._constants import _Node, _Edge
         from mermaid_render.layout._routing import _route_edges, _cls_eligible_span
         from mermaid_render.layout._strategies import _class_rel_markers
-        # src card bottom=90, dst card top=130 → gap=40px, after clearance=12 → span=28px < 40.
+        # src card bottom=90, dst card top=120 -> gap=30px < 40 (no clearance shortening).
         src_n = _Node(id="A", x=46, y=48, width=80)   # bottom = 48+42 = 90
-        dst_n = _Node(id="B", x=46, y=130, width=80)  # top = 130
+        dst_n = _Node(id="B", x=46, y=120, width=80)  # top = 120
         src_spec, tgt_spec, line_style = _class_rel_markers("<|--")
         edge = _Edge(src="A", dst="B", label="shelf", style=line_style,
                      source_marker=src_spec, target_marker=tgt_spec)

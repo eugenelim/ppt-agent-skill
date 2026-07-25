@@ -56,7 +56,7 @@ def _break_cycles(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
 
 # ── rank assignment (longest path, then dummy insertion) ──────────────────────
 
-def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
+def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge], direction: str = "TB") -> None:
     """Longest-path rank assignment; inserts dummy nodes for multi-rank edges."""
     # Build effective successors (skip reversed edges for rank calc)
     succ: dict[str, list[str]] = {nid: [] for nid in nodes}
@@ -91,19 +91,27 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
             nodes[v].rank = max(nodes[v].rank, nodes[u].rank + 1)
 
     # Isolated-source promotion: grouped nodes with no predecessors whose
-    # outgoing edges ALL go to interior nodes (rank ≥ 1). Promote to
-    # max(target_rank)+1 so they render RIGHT of their targets in LR layout,
-    # with edges routed as back-edges. Ungrouped nodes (e.g. the main CLIENT)
-    # are left at rank 0; only group-bounded side-feeder clusters are promoted.
+    # outgoing edges ALL go to interior nodes (rank ≥ 1). Ungrouped nodes
+    # (e.g. the main CLIENT) are left at rank 0; only group-bounded side-feeder
+    # clusters are promoted.
+    #
+    # Direction matters:
+    #   LR/RL — promote to max(target_rank)+1 so the source renders to the RIGHT
+    #            of its targets, with edges routed as back-edges.
+    #   TB/TD — promote to min(target_rank)-1 so the source renders just ABOVE
+    #            its nearest target, with edges flowing downward (forward).
+    #            Using max+1 here causes back-edges that route upward, which looks
+    #            visually wrong in a top-to-bottom diagram.
     #
     # Guard: only promote when at least one target has predecessors from OUTSIDE
     # the group. If ALL predecessors of a target are from within the same group,
     # the group is a genuine source cluster (entry points of the flow) and should
-    # stay at rank 0 — promoting would make edges run right→left.
+    # stay at rank 0.
     _target_preds: dict[str, set[str]] = {nid: set() for nid in nodes}
     for e in edges:
         if e.dst in _target_preds and not e.reversed_:
             _target_preds[e.dst].add(e.src)
+    _is_lr = direction.upper() in ("LR", "RL")
     for nid, n in list(nodes.items()):
         if pred_count.get(nid, 0) != 0 or n.is_dummy or not n.group:
             continue
@@ -115,7 +123,50 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge]) -> None:
             (_target_preds[v] - group_members) for v in out_targets
         )
         if has_external_pred:
-            n.rank = max(nodes[v].rank for v in out_targets) + 1
+            if _is_lr:
+                n.rank = max(nodes[v].rank for v in out_targets) + 1
+            else:
+                n.rank = max(0, min(nodes[v].rank for v in out_targets) - 1)
+
+    # Sink-satellite placement (TB only): single-node groups that are pure sinks
+    # (no outgoing edges, only incoming) get co-ranked with their highest predecessor.
+    #
+    # Rationale: a pure-sink satellite like "Observability" receives monitoring
+    # spans from many layers (MCP at rank 1, EX at rank 4).  The longest-path
+    # rule places it at rank 5 — competing for horizontal space with the Store
+    # Layer nodes at rank 5.  ELK avoids this by co-ranking the satellite with its
+    # highest predecessor (rank 4 = EX.rank), making the EX→OT edge a short
+    # same-rank horizontal connector and routing MCP→OT as a long forward path.
+    #
+    # Guard: only fire when (a) TB direction, (b) no outgoing edges, (c) belongs
+    # to a single-node group, (d) has predecessors at multiple ranks, and (e)
+    # max(pred_ranks) is strictly lower than the current rank.
+    if not _is_lr:
+        for nid, n in list(nodes.items()):
+            if n.is_dummy or not n.group:
+                continue
+            # Must be a pure sink (no outgoing non-reversed edges)
+            if any(e.src == nid and not e.reversed_ for e in edges):
+                continue
+            # Must be the only member of its group (true satellite)
+            grp_mbrs = [m for m, nm in nodes.items() if nm.group == n.group and not nm.is_dummy]
+            if len(grp_mbrs) != 1:
+                continue
+            # Collect real predecessors (non-dummy, non-reversed)
+            preds_real = [
+                e.src for e in edges
+                if e.dst == nid and not e.reversed_
+                and e.src in nodes and not nodes[e.src].is_dummy
+            ]
+            if not preds_real:
+                continue
+            # Must have predecessors at multiple distinct ranks (fan-in satellite)
+            pred_ranks = {nodes[p].rank for p in preds_real}
+            if len(pred_ranks) < 2:
+                continue
+            new_rank = max(pred_ranks)
+            if new_rank < n.rank:
+                n.rank = new_rank
 
     # Insert dummy nodes for edges spanning more than 1 rank
     new_nodes: dict[str, _Node] = {}
@@ -406,6 +457,46 @@ def _assign_coordinates(
     return canvas_w, canvas_h
 
 
+# ── snap rank-isolated outlier cols before compact ───────────────────────────
+
+def _snap_isolated_rank_cols(
+    nodes: dict[str, _Node],
+    groups: dict[str, _Group],
+) -> None:
+    """Snap rank-isolated group members to the group's minimum col at other ranks.
+
+    A node alone at its rank within its group (e.g. BD at rank=6 in Store Layer
+    while NP/OS are at rank=5) is assigned col=0 by _group_coherent_cols, because
+    it is the only node at its rank.  This inflates the group's col-range to include
+    col=0, which then conflicts with Retrieval Layer's col=0 in _compact_group_columns
+    and triggers a cascade that pushes Observability (OT) far to the right.
+
+    Fix: snap such outlier nodes' cols up to the group's minimum col at other ranks
+    so the group's effective col-range is not artificially widened.  Two nodes at the
+    same col but at different ranks do not collide visually (they are at different y).
+    """
+    for gid, grp in groups.items():
+        mbrs = [nid for nid in grp.members if nid in nodes and not nodes[nid].is_dummy]
+        # Require ≥3 members: with only 2 members each node is necessarily alone at
+        # its rank, so the snap has no meaningful reference and misaligns layouts.
+        if len(mbrs) < 3:
+            continue
+        rank_to_mbrs: dict[int, list[str]] = {}
+        for nid in mbrs:
+            rank_to_mbrs.setdefault(nodes[nid].rank, []).append(nid)
+        for rank, rank_mbrs in rank_to_mbrs.items():
+            if len(rank_mbrs) != 1:
+                continue
+            solo = nodes[rank_mbrs[0]]
+            others = [nodes[m] for m in mbrs if nodes[m].rank != rank]
+            # Require ≥2 reference nodes so the min_other_col is meaningful.
+            if len(others) < 2:
+                continue
+            min_other_col = min(o.col for o in others)
+            if solo.col < min_other_col:
+                solo.col = min_other_col
+
+
 # ── group column compaction (dagre-inspired cluster column separation) ─────────
 
 def _compact_group_columns(
@@ -521,104 +612,3 @@ def _center_isolated_nodes(nodes: "dict", edges: "list") -> None:
         updates.append((n, max(0, int(round(bary_x)) - nw // 2)))
     for n, new_x in updates:
         n.x = new_x
-
-
-# ── inner-direction recursive position fixup ─────────────────────────────────
-
-def _apply_inner_direction_positions(
-    nodes: dict[str, _Node],
-    edges: list[_Edge],
-    groups: dict[str, _Group],
-    outer_direction: str,
-    col_gap: int | None = None,
-) -> None:
-    """Post-process inner-direction subgraph member positions after outer layout.
-
-    Replaces the rank-flattening hack: after `_assign_coordinates` places all
-    nodes in pixel space, for each group whose declared direction differs from
-    the outer direction, re-orders its members' x (or y) positions according to
-    the topological ordering of intra-group edges rather than leaving them in
-    bary-sort order.
-
-    TB outer + LR inner: members share the same y (from rank-flattening); this
-    re-assigns x positions so data-flow goes left-to-right within the group.
-
-    LR outer + TB inner: members share the same x; re-assigns y positions.
-
-    Processes groups bottom-up (leaf groups first) so nested inner groups get
-    positioned before their parents pick up their corrected positions.
-    """
-    _col_gap = col_gap if col_gap is not None else COL_GAP
-    is_outer_tb = outer_direction.upper() in ("TB", "TD")
-
-    def _topo_order(member_ids: list[str], intra_edges: list[tuple[str, str]]) -> list[str]:
-        """Topological sort of members by intra-group forward-edge flow."""
-        in_degree: dict[str, int] = {m: 0 for m in member_ids}
-        adj: dict[str, list[str]] = {m: [] for m in member_ids}
-        for src, dst in intra_edges:
-            adj[src].append(dst)
-            in_degree[dst] += 1
-        queue = [m for m in member_ids if in_degree[m] == 0]
-        result: list[str] = []
-        while queue:
-            queue.sort(key=lambda n: nodes[n].x if is_outer_tb else nodes[n].y)
-            cur = queue.pop(0)
-            result.append(cur)
-            for nb in adj[cur]:
-                in_degree[nb] -= 1
-                if in_degree[nb] == 0:
-                    queue.append(nb)
-        # Append any nodes not reached (cycles) in stable order
-        seen = set(result)
-        for m in member_ids:
-            if m not in seen:
-                result.append(m)
-        return result
-
-    # Build group tree to process bottom-up
-    def _is_leaf_group(gid: str) -> bool:
-        return not any(g.parent_group == gid for g in groups.values())
-
-    def _process_group(gid: str) -> None:
-        grp = groups[gid]
-        if not grp.members or not grp.direction:
-            return
-        inner_dir = grp.direction.upper()
-        if is_outer_tb and inner_dir not in ("LR", "RL"):
-            return
-        if not is_outer_tb and inner_dir not in ("TB", "TD"):
-            return
-
-        member_set = set(grp.members)
-        member_ids = [m for m in grp.members if m in nodes and not nodes[m].is_dummy]
-        if len(member_ids) < 2:
-            return
-
-        intra = [
-            (e.src, e.dst) for e in edges
-            if e.src in member_set and e.dst in member_set and not e.reversed_
-        ]
-        ordered = _topo_order(member_ids, intra)
-        if inner_dir in ("RL", "BT"):
-            ordered = list(reversed(ordered))
-
-        if is_outer_tb:
-            # Re-assign x positions; y stays the same (from rank-flattening)
-            start_x = min(nodes[m].x for m in member_ids)
-            for i, m in enumerate(ordered):
-                nw = nodes[m].width or NODE_W
-                nodes[m].x = start_x + i * (nw + _col_gap)
-        else:
-            # Re-assign y positions; x stays the same
-            start_y = min(nodes[m].y for m in member_ids)
-            for i, m in enumerate(ordered):
-                nh = _node_render_h(nodes[m])
-                nodes[m].y = start_y + i * (nh + _col_gap)
-
-    # Process groups: leaf groups first (bottom-up)
-    all_gids = list(groups.keys())
-    # Leaf groups first
-    leaves = [g for g in all_gids if _is_leaf_group(g)]
-    non_leaves = [g for g in all_gids if not _is_leaf_group(g)]
-    for gid in leaves + non_leaves:
-        _process_group(gid)

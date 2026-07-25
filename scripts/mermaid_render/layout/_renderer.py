@@ -128,6 +128,32 @@ _DEPTH_TINTS = [
 
 _LEGEND_H = 44  # px reserved below the diagram canvas for the legend strip
 
+_NEUTRAL_STROKE = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
+
+
+def _edge_stroke_attrs(
+    edge_style: str,
+    faithful: bool = False,
+) -> tuple[str, str, str]:
+    """Return (stroke_color, stroke_w, dash) for an edge.
+
+    ``faithful`` suppresses style-derived accent colors so only geometry
+    (thickness, dash pattern) encodes the Mermaid line kind.
+    ``dash`` uses the superset endswith check so raw-style values like
+    ``cls-dotted`` (graph-fragment painter) are handled correctly.
+    """
+    if edge_style == "thick":
+        stroke_color = _NEUTRAL_STROKE if faithful else "var(--edge-strong,var(--accent-1,#60a5fa))"
+        stroke_w = "2"
+    elif edge_style == "dotted":
+        stroke_color = _NEUTRAL_STROKE if faithful else "var(--accent-4,var(--amber,#E8924A))"
+        stroke_w = "1.5"
+    else:
+        stroke_color = _NEUTRAL_STROKE
+        stroke_w = "1.5"
+    dash = ' stroke-dasharray="6 4"' if (edge_style == "dotted" or edge_style.endswith("-dotted")) else ""
+    return stroke_color, stroke_w, dash
+
 
 def _render_graph_fragment(
     nodes: dict[str, _Node],
@@ -140,6 +166,8 @@ def _render_graph_fragment(
     style_overrides: str = "",
     group_bboxes: dict[str, tuple[int, int, int, int]] | None = None,
     show_legend: bool = True,
+    *,
+    faithful: bool = False,
 ) -> str:
     """Render an HTML fragment for a positioned graph.
 
@@ -207,6 +235,9 @@ def _render_graph_fragment(
             _node_grp_idx[_nid] = _gi
 
     # Group containers (subgraphs) — dashed border + subtle tint per accent slot.
+    # Labels are collected here and appended AFTER node divs so they appear above
+    # node cards in DOM z-order (node cards would otherwise cover the label text).
+    _grp_label_overlays: list[str] = []
     for _gi, (gid, grp) in enumerate(groups.items()):
         if gid not in _grp_bboxes:
             continue
@@ -216,6 +247,7 @@ def _render_graph_fragment(
         glabel = _h(grp.label)
         _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
         _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
+        # Group boundary (no embedded label — label rendered below as overlay)
         parts.append(
             f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{glabel}" style="'
             f'position:absolute; left:{gx}px; top:{gy}px; '
@@ -223,16 +255,21 @@ def _render_graph_fragment(
             f'border:1.5px dashed {_accent}; '
             f'background:{_tint}; '
             f'border-radius:var(--group-radius,12px); '
-            f'box-sizing:border-box; overflow:visible;">'
-            f'<span class="group-label" style="'
-            f'position:absolute; top:8px; left:10px; '
-            f'font-size:11px; color:{_accent}; '
-            f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
-            f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
-            f'display:block; overflow-wrap:break-word; word-break:break-word; '
-            f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-            f'{glabel}</span></div>'
+            f'box-sizing:border-box; overflow:visible;"></div>'
         )
+        # Collect label overlay for post-node rendering
+        if glabel:
+            _grp_label_overlays.append(
+                f'<div class="group-label" data-for-group="{_h(gid)}" style="'
+                f'position:absolute; top:{gy + 8}px; left:{gx + 10}px; '
+                f'font-size:11px; color:{_accent}; '
+                f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
+                f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
+                f'display:block; overflow-wrap:break-word; word-break:break-word; '
+                f'pointer-events:none; '
+                f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
+                f'{glabel}</div>'
+            )
 
     # Depth wash: rank-to-tint index for architectural layer encoding
     _real_ranks = [n.rank for n in nodes.values() if not n.is_dummy]
@@ -475,6 +512,10 @@ def _render_graph_fragment(
             if _html is not None:
                 parts.append(_html)
 
+    # Group label overlays — rendered AFTER node divs so they appear on top of
+    # node card backgrounds (nodes are higher in DOM z-order than group boundaries).
+    parts.extend(_grp_label_overlays)
+
     # SVG overlay — paths and arrowheads only; edge labels as HTML siblings below.
     # clip-path:inset(0) keeps edges inside the diagram area so they cannot
     # bleed down into the legend strip when overflow:visible is set.
@@ -589,17 +630,7 @@ def _render_graph_fragment(
     for _ei, spec in enumerate(routed):
         d = spec["d"]
         style = spec["style"]
-        if style == "thick":
-            stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
-        elif style in ("dotted",) or style.endswith("-dotted"):
-            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-        else:
-            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-        if style == "dotted":
-            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
-        is_dashed = style == "dotted" or style.endswith("-dotted")
-        dash = ' stroke-dasharray="6 4"' if is_dashed else ""
-        stroke_w = "2" if style == "thick" else "1.5"
+        stroke_color, stroke_w, dash = _edge_stroke_attrs(style, faithful)
         # Apply linkStyle overrides: extract stroke color and stroke-width.
         # Values are sanitized to safe CSS color/length tokens only.
         _ecss = spec.get("extra_css", "")
@@ -924,8 +955,8 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10">'
             '<rect x="0" y="1" width="20" height="8" rx="2" '
-            'fill="none" stroke="var(--accent-1,#60a5fa)" '
-            'stroke-dasharray="3 2" stroke-width="1"/>'
+            'fill="#ffffde" stroke="#aaaa33" '
+            'stroke-width="1"/>'
             '</svg>'
             'Service boundary</span>'
         )
@@ -999,7 +1030,7 @@ def _separate_groups_lr(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]  # type: ignore[index]
+                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] <= b1["gx_right"]  # type: ignore[index]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
                 if x_overlap and y_overlap:
                     shift = b1["gy_bot"] - b2["gy"] + COL_GAP  # type: ignore[index]
@@ -1024,6 +1055,11 @@ def _separate_groups_tb(
     When two groups overlap in both x and y, the right-er group is shifted right by
     the X overlap + COL_GAP. Returns updated canvas_w (shifted nodes may extend it).
     Runs up to GROUP_CAP passes; stops early when stable.
+
+    Y-overlap is tested against node-content bounds (no padding) so that vertically-
+    stacked groups in a TB hierarchy are never pushed apart just because their chrome
+    padding overlaps — only groups whose actual node content shares y-space are
+    considered to conflict and need horizontal separation.
     """
     def _bbox(gid: str) -> dict | None:
         mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
@@ -1032,9 +1068,86 @@ def _separate_groups_tb(
         return {
             "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
             "gx_right": max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X,
-            "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
-            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+            # Content-only y bounds (no padding) so vertically-stacked groups whose
+            # chrome padding overlaps are never considered to y-conflict.
+            "gy":       min(n.y for n in mbrs),
+            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs),
         }
+
+    def _effective_x_bbox(gid: str, y_lo: float, y_hi: float) -> tuple[float, float] | None:
+        """gx, gx_right restricted to nodes whose content-y overlaps [y_lo, y_hi).
+
+        Nodes outside the y-overlap zone (e.g. BD in Store Layer at a rank below
+        all Retrieval Layer nodes) would otherwise drag the group's left edge far
+        left, triggering false x-conflict and a cascading rightward displacement.
+        """
+        relevant = [
+            nodes[m] for m in groups[gid].members
+            if m in nodes and not nodes[m].is_dummy
+            and nodes[m].y < y_hi
+            and nodes[m].y + _node_render_h(nodes[m]) > y_lo
+        ]
+        if not relevant:
+            return None
+        return (
+            min(n.x for n in relevant) - GROUP_PAD_X,
+            max(n.x + _node_render_w(n) for n in relevant) + GROUP_PAD_X,
+        )
+
+    def _full_y_bbox(gid: str) -> tuple[float, float] | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return (
+            min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+        )
+
+    def _content_x(gid: str) -> tuple[float, float] | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return (
+            min(n.x for n in mbrs),
+            max(n.x + _node_render_w(n) for n in mbrs),
+        )
+
+    # Y-direction de-overlap: push the lower group down when two non-nested sibling
+    # groups' full bboxes (including chrome padding) overlap in y. Uses content-only X
+    # to avoid cascading into side-by-side groups that legitimately share y-space.
+    for _yp in range(GROUP_CAP):
+        _ybs = {gid: _full_y_bbox(gid) for gid in groups}
+        _cxs = {gid: _content_x(gid) for gid in groups}
+        _ybs = {gid: b for gid, b in _ybs.items() if b is not None}
+        _cxs = {gid: x for gid, x in _cxs.items() if x is not None}
+        _yp_sorted = sorted(_ybs, key=lambda g: _ybs[g][0])
+        _yp_moved = False
+        for _i, _gid1 in enumerate(_yp_sorted):
+            _yb1 = _ybs[_gid1]
+            _cx1 = _cxs.get(_gid1)
+            if _cx1 is None:
+                continue
+            for _gid2 in _yp_sorted[_i + 1:]:
+                if _is_nested_groups(_gid1, _gid2, groups):
+                    continue
+                _yb2 = _ybs[_gid2]
+                _cx2 = _cxs.get(_gid2)
+                if _cx2 is None:
+                    continue
+                if not (_yb1[0] < _yb2[1] and _yb2[0] < _yb1[1]):
+                    continue
+                if not (_cx1[0] < _cx2[1] and _cx2[0] < _cx1[1]):
+                    continue
+                _yshift = int(_yb1[1] - _yb2[0] + COL_GAP)
+                for _nid in groups[_gid2].members:
+                    if _nid in nodes:
+                        nodes[_nid].y += _yshift
+                _yp_moved = True
+                break
+            if _yp_moved:
+                break
+        if not _yp_moved:
+            break
 
     for _pass in range(GROUP_CAP):
         boxes = {gid: _bbox(gid) for gid in groups}
@@ -1049,10 +1162,20 @@ def _separate_groups_tb(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] < b1["gx_right"]  # type: ignore[index]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
-                if x_overlap and y_overlap:
-                    shift = int(b1["gx_right"] - b2["gx"] + COL_GAP)  # type: ignore[index]
+                if not y_overlap:
+                    continue
+                # Restrict x-bbox to the y-overlap zone to avoid false positives
+                # from nodes at ranks outside the zone dragging the group bbox.
+                y_lo = max(b1["gy"], b2["gy"])
+                y_hi = min(b1["gy_bot"], b2["gy_bot"])
+                eff1 = _effective_x_bbox(gid1, y_lo, y_hi)
+                eff2 = _effective_x_bbox(gid2, y_lo, y_hi)
+                if eff1 is None or eff2 is None:
+                    continue
+                x_overlap = eff1[0] < eff2[1] and eff2[0] <= eff1[1]
+                if x_overlap:
+                    shift = int(eff1[1] - eff2[0] + COL_GAP)
                     for nid in groups[gid2].members:
                         if nid in nodes:
                             nodes[nid].x += shift
@@ -1062,6 +1185,266 @@ def _separate_groups_tb(
                 break
         if not moved:
             break
+
+    # ── Shared recursive bbox helpers ───────────────────────────────────────────
+    # Simulate what _compute_group_bboxes will produce so the pre-processing
+    # passes can use consistent containment tests before the real bbox run.
+
+    def _grp_bottom(gid: str) -> float:
+        """Simulate _compute_group_bboxes bottom for gid (recursive)."""
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _bs = [float(n.y + _node_render_h(n)) for n in _dm]
+        _bs += [_grp_bottom(cgid) for cgid in _ch]
+        return (max(_bs) if _bs else 0.0) + GROUP_PAD_Y_BOT
+
+    def _grp_top(gid: str) -> float:
+        """Simulate _compute_group_bboxes top for gid (recursive)."""
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _ts = [float(n.y) for n in _dm]
+        _ts += [_grp_top(cgid) for cgid in _ch]
+        return (min(_ts) if _ts else 0.0) - GROUP_PAD_Y_TOP
+
+    def _grp_x0(gid: str) -> float:
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _xs = [float(n.x) for n in _dm]
+        _xs += [_grp_x0(cgid) for cgid in _ch]
+        return (min(_xs) if _xs else 0.0) - GROUP_PAD_X
+
+    def _grp_x1(gid: str) -> float:
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _xs = [float(n.x + _node_render_w(n)) for n in _dm]
+        _xs += [_grp_x1(cgid) for cgid in _ch]
+        return (max(_xs) if _xs else 0.0) + GROUP_PAD_X
+
+    # ── Pre-second-pass: push parent direct-members outside pure-container ──────
+    # Example: AWS Account has direct nodes BUD, EB, APIGW, FU plus a pure-
+    # container child VPC.  VPC's rendered bbox spans most of the canvas.
+    # Without this pass, BUD/EB/APIGW/FU land inside VPC's visual box.
+    #
+    # Strategy: for each pure-container child C of a parent P, find P's direct
+    # member nodes that fall within C's simulated bbox.  Shift them to columns
+    # just right of C's x1, preserving original y to keep rank order; use extra
+    # columns only when y-ranges collide within a single column.
+
+    def _pack_cols(nds: "list[tuple[str,object]]", col_x_start: int) -> None:
+        """Place each node in the leftmost column where it doesn't y-overlap."""
+        cols: "list[list[tuple[str,object]]]" = []
+        for _nid, _nd in sorted(nds, key=lambda kv: kv[1].y):
+            _placed = False
+            for _col in cols:
+                _col_y1 = max(_cn.y + _node_render_h(_cn) for _, _cn in _col)
+                if _nd.y >= _col_y1 + COL_GAP:
+                    _col.append((_nid, _nd))
+                    _placed = True
+                    break
+            if not _placed:
+                cols.append([(_nid, _nd)])
+        for _ci, _col in enumerate(cols):
+            _x = col_x_start + _ci * (NODE_W + COL_GAP)
+            for _nid, _nd in _col:
+                _nd.x = _x
+
+    for _pp_pgid in list(groups.keys()):
+        _pp_pg = groups[_pp_pgid]
+        _pp_pure_ch = [
+            cgid for cgid, cg in groups.items()
+            if cg.parent_group == _pp_pgid
+            and not any(m in nodes and not nodes[m].is_dummy for m in cg.members)
+            and any(_cg2.parent_group == cgid for _cg2 in groups.values())
+        ]
+        if not _pp_pure_ch:
+            continue
+        _pp_direct = [
+            (nid, nodes[nid]) for nid in groups[_pp_pgid].members
+            if nid in nodes and not nodes[nid].is_dummy
+        ]
+        if not _pp_direct:
+            continue
+        _max_pc_x1 = max(_grp_x1(_pc) for _pc in _pp_pure_ch)
+        _max_pc_x0 = min(_grp_x0(_pc) for _pc in _pp_pure_ch)
+        _max_pc_y0 = min(_grp_top(_pc) for _pc in _pp_pure_ch)
+        _max_pc_y1 = max(_grp_bottom(_pc) for _pc in _pp_pure_ch)
+        _displaced = [
+            (nid, nd) for nid, nd in _pp_direct
+            if (float(nd.x) < _max_pc_x1
+                and float(nd.x + _node_render_w(nd)) > _max_pc_x0
+                and float(nd.y) < _max_pc_y1
+                and float(nd.y + _node_render_h(nd)) > _max_pc_y0)
+        ]
+        if not _displaced:
+            continue
+        _pack_cols(_displaced, int(_max_pc_x1 + COL_GAP))
+
+    # Second pass: root-level group de-overlap.
+    #
+    # Problem: a root-level group A (e.g. "External Consumers") may have its
+    # direct-member nodes sitting inside another root-level group B's (e.g. "AWS
+    # Account") RECURSIVE x-extent — because B's child groups (VPC Endpoints)
+    # extend far right.  The direct-member x-ranges of A and B don't conflict, so
+    # the first pass leaves them untouched.  But `_compute_group_bboxes` then
+    # computes recursive-member bboxes for B that engulf A, triggering a midpoint
+    # split that produces a tiny, incorrectly-positioned group box for B.
+    #
+    # Fix: after the x-conflict pass, check every pair of root-level groups whose
+    # direct members don't x-conflict.  If group A's direct-member x-extent falls
+    # entirely within group B's RECURSIVE x-extent, shift A's nodes to the right
+    # of B's recursive extent so the two groups become spatially separate.
+    def _recursive_x_extent(gid: str) -> "tuple[float, float] | None":
+        """Full x-extent from ALL recursive (direct + nested) member nodes."""
+        all_ids: list[str] = list(groups[gid].members)
+        for _cgid, _cgrp in groups.items():
+            _cur = _cgid
+            while _cur:
+                _cur = groups[_cur].parent_group if _cur in groups else None
+                if _cur == gid:
+                    all_ids.extend(groups[_cgid].members)
+                    break
+        _ns = [nodes[m] for m in all_ids if m in nodes and not nodes[m].is_dummy]
+        if not _ns:
+            return None
+        return (
+            float(min(n.x for n in _ns) - GROUP_PAD_X),
+            float(max(n.x + _node_render_w(n) for n in _ns) + GROUP_PAD_X),
+        )
+
+    _root_gids = [gid for gid in groups if not groups[gid].parent_group]
+    if len(_root_gids) >= 2:
+        _shifted: set[str] = set()
+        for _ga in list(_root_gids):
+            if _ga in _shifted:
+                continue
+            _dm_a = [nodes[m] for m in groups[_ga].members if m in nodes and not nodes[m].is_dummy]
+            if not _dm_a:
+                continue
+            _ax0 = float(min(n.x for n in _dm_a) - GROUP_PAD_X)
+            _ax1 = float(max(n.x + _node_render_w(n) for n in _dm_a) + GROUP_PAD_X)
+            for _gb in _root_gids:
+                if _gb == _ga or _gb in _shifted:
+                    continue
+                _dm_b = [nodes[m] for m in groups[_gb].members if m in nodes and not nodes[m].is_dummy]
+                if not _dm_b:
+                    continue
+                _bx0 = float(min(n.x for n in _dm_b) - GROUP_PAD_X)
+                _bx1 = float(max(n.x + _node_render_w(n) for n in _dm_b) + GROUP_PAD_X)
+                # Skip if direct members already x-conflict (handled by first pass)
+                if _ax0 < _bx1 and _bx0 < _ax1:
+                    continue
+                # Check if A's direct extent falls within B's recursive extent
+                _rb = _recursive_x_extent(_gb)
+                if _rb is None:
+                    continue
+                if _ax0 >= _rb[0] and _ax1 <= _rb[1]:
+                    # A is engulfed by B's recursive bbox; shift A to the right of B
+                    _shift = int(_rb[1] + COL_GAP - _ax0)
+                    if _shift > 0:
+                        for _nid in groups[_ga].members:
+                            if _nid in nodes:
+                                nodes[_nid].x += _shift
+                        _shifted.add(_ga)
+                    break
+
+    # Third part: shift standalone non-member nodes that fall inside any group's
+    # recursive x+y bbox to the right of the current rightmost node.
+    # This handles nodes like "Git repository" that land inside a leaf group's
+    # bbox (e.g. VPC Endpoints) after the group-shift passes above.
+    _all_member_ids = {nid for grp in groups.values() for nid in grp.members}
+    _standalone_to_shift = []
+    for _nid, _nd in nodes.items():
+        if _nd.is_dummy or _nid in _all_member_ids:
+            continue
+        _nx0 = float(_nd.x)
+        _nx1 = float(_nd.x + _node_render_w(_nd))
+        _ny0 = float(_nd.y)
+        _ny1 = float(_nd.y + _node_render_h(_nd))
+        for _gid in groups:
+            _rx = _recursive_x_extent(_gid)
+            if _rx is None:
+                continue
+            # Check x-containment and y-containment vs DIRECT members of the group
+            _dm_g = [nodes[m] for m in groups[_gid].members
+                     if m in nodes and not nodes[m].is_dummy]
+            if not _dm_g:
+                continue
+            _gy0 = float(min(n.y for n in _dm_g) - GROUP_PAD_Y_TOP)
+            _gy1 = float(max(n.y + _node_render_h(n) for n in _dm_g) + GROUP_PAD_Y_BOT)
+            if _nx0 < _rx[1] and _nx1 > _rx[0] and _ny0 < _gy1 and _ny1 > _gy0:
+                _standalone_to_shift.append((_nid, _nd))
+                break
+    if _standalone_to_shift:
+        _current_max_x = max(
+            n.x + _node_render_w(n)
+            for n in nodes.values()
+            if not n.is_dummy
+        )
+        _next_x = int(_current_max_x + COL_GAP)
+        for _nid, _nd in sorted(_standalone_to_shift, key=lambda x: x[1].x):
+            _nd.x = _next_x
+            _next_x += int(_node_render_w(_nd) + COL_GAP)
+
+    # Fourth pass: push sibling groups of pure-container groups below the
+    # container's y-bottom.  Example: Amazon Bedrock (LLM) and Observability
+    # (Obs) are children of AWS Account at the same level as VPC.  VPC is a
+    # pure container (no direct members) whose recursive bbox is tall and wide.
+    # Without this pass those sibling groups' nodes land inside VPC's rendered
+    # rectangle, falsely implying they are VPC children.
+    # (_grp_bottom/_grp_top/_grp_x0/_grp_x1 are defined before the second pass.)
+
+    for _pgid in list(groups.keys()):
+        _pg = groups[_pgid]
+        # Only act on pure containers that have a parent (non-root containers
+        # are handled by the root-level de-overlap second pass above).
+        if _pg.parent_group is None:
+            continue
+        _pg_dm = [nodes[m] for m in _pg.members
+                  if m in nodes and not nodes[m].is_dummy]
+        if _pg_dm:
+            continue  # not a pure container
+        _child_gids_of_pg = [cgid for cgid, cg in groups.items()
+                              if cg.parent_group == _pgid]
+        if not _child_gids_of_pg:
+            continue
+        _container_y0 = _grp_top(_pgid)
+        _container_y1 = _grp_bottom(_pgid)
+        _container_x0 = _grp_x0(_pgid)
+        _container_x1 = _grp_x1(_pgid)
+
+        # Siblings: groups with the same parent that are NOT nested inside
+        # the pure container.
+        _sibling_gids = [
+            gid for gid, g in groups.items()
+            if g.parent_group == _pg.parent_group
+            and gid != _pgid
+            and not _is_nested_groups(gid, _pgid, groups)
+        ]
+        for _sgid in _sibling_gids:
+            _sib_dm = [nodes[m] for m in groups[_sgid].members
+                       if m in nodes and not nodes[m].is_dummy]
+            if not _sib_dm:
+                continue
+            # Check if any sibling member overlaps with the container's bbox
+            # (simple rectangle intersection test).
+            _inside = [
+                n for n in _sib_dm
+                if (float(n.x) < _container_x1
+                    and float(n.x + _node_render_w(n)) > _container_x0
+                    and float(n.y) < _container_y1
+                    and float(n.y + _node_render_h(n)) > _container_y0)
+            ]
+            if not _inside:
+                continue
+            # Shift ALL sibling nodes to just below the container's bottom.
+            _target_y = int(_container_y1 + GROUP_PAD_Y_TOP)
+            for _mid in groups[_sgid].members:
+                if _mid in nodes:
+                    nodes[_mid].y = _target_y
 
     # Recompute canvas_w from the furthest non-dummy node right edge + CANVAS_PAD
     all_non_dummy = [n for n in nodes.values() if not n.is_dummy]
@@ -1243,9 +1626,42 @@ def _compute_group_bboxes(
                 "y1": max(m.y + _node_render_h(m) for m in mbrs),
             }
 
+    # Pre-compute RECURSIVE member coordinate extremes per group for Step 3 split
+    # containment checks.  Unlike _grp_mc (direct members only), this covers members
+    # inside nested child groups so a sibling-split can't push a group boundary past
+    # a deeply-nested node.
+    _grp_mc_rec: dict[str, dict] = {}
+    for gid in groups:
+        _all_rec_ids = _recursive_members(gid)
+        _rec_mbrs = [nodes[m] for m in _all_rec_ids if m in nodes and not nodes[m].is_dummy]
+        if _rec_mbrs:
+            _grp_mc_rec[gid] = {
+                "x0": float(min(m.x for m in _rec_mbrs)),
+                "x1": float(max(m.x + _node_render_w(m) for m in _rec_mbrs)),
+                "y0": float(min(m.y for m in _rec_mbrs)),
+                "y1": float(max(m.y + _node_render_h(m) for m in _rec_mbrs)),
+            }
+
+    # Pre-compute direct child-group bbox extents per group.
+    # Step 2's _safe check must also account for child group extents — otherwise
+    # a parent's bbox edge can be shrunk past a child group's extent (e.g. _g1's
+    # right edge shrunk to exclude a standalone node, breaking containment of _g2).
+    _child_extents: dict[str, dict] = {}
+    for _pgid in groups:
+        _cbbs = [bboxes[_cgid] for _cgid, _cgrp in groups.items()
+                 if _cgrp.parent_group == _pgid and _cgid in bboxes]
+        if _cbbs:
+            _child_extents[_pgid] = {
+                "x0": min(b[0] for b in _cbbs),
+                "x1": max(b[2] for b in _cbbs),
+                "y0": min(b[1] for b in _cbbs),
+                "y1": max(b[3] for b in _cbbs),
+            }
+
     # Step 2: non-member node exclusion — shrink the closest group edge, but only
-    # when the shrink won't exclude any group member. If no safe direction exists,
-    # accept the visual overlap rather than corrupting the group bbox.
+    # when the shrink won't exclude any group member or child-group bbox. If no
+    # safe direction exists, accept the visual overlap rather than corrupting the
+    # group bbox.
     for nid, nd in nodes.items():
         if nd.is_dummy or nid in member_ids:
             continue
@@ -1255,18 +1671,26 @@ def _compute_group_bboxes(
             if not (b[0] < nx1 and nx0 < b[2] and b[1] < ny1 and ny0 < b[3]):
                 continue
             mc = _grp_mc.get(gid, {})
-            # A shrink is safe if it doesn't push the edge past any member coord
+            ce = _child_extents.get(gid, {})
+            # A shrink is safe if it doesn't push the edge past any direct member
+            # coord OR past any child-group bbox extent.
             def _safe(axis: str, new_val: float) -> bool:
-                if not mc:
-                    return True
                 if axis == "x0":  # raise left edge
-                    return mc["x0"] >= new_val
+                    if mc and mc["x0"] < new_val: return False
+                    if ce and ce["x0"] < new_val: return False
+                    return True
                 if axis == "x1":  # lower right edge
-                    return mc["x1"] <= new_val
+                    if mc and mc["x1"] > new_val: return False
+                    if ce and ce["x1"] > new_val: return False
+                    return True
                 if axis == "y0":  # raise top edge
-                    return mc["y0"] >= new_val
+                    if mc and mc["y0"] < new_val: return False
+                    if ce and ce["y0"] < new_val: return False
+                    return True
                 if axis == "y1":  # lower bottom edge
-                    return mc["y1"] <= new_val
+                    if mc and mc["y1"] > new_val: return False
+                    if ce and ce["y1"] > new_val: return False
+                    return True
                 return True
             x_intrude = min(nx1 - b[0], b[2] - nx0)
             y_intrude = min(ny1 - b[1], b[3] - ny0)
@@ -1313,13 +1737,89 @@ def _compute_group_bboxes(
 
     # Step 3: pairwise overlap resolution (iterative, up to GROUP_CAP passes)
     # Skip nested pairs — their bboxes overlap by design (parent wraps child).
+    # Also skip empty groups: their [0,0] origin placeholder would damage non-empty
+    # group bboxes; empty groups are repositioned later by _place_empty_groups.
+    # Also skip pairs where either group has no direct members (pure containers like
+    # VPC) — midpoint splitting a pure-container corrupts its child containment, and
+    # _separate_groups_tb already handles the physical node-level separation.
+    _empty_gids = {
+        gid for gid in groups
+        if not any(
+            m in nodes and not nodes[m].is_dummy
+            for m in _recursive_members(gid)
+        )
+    }
     gids = list(bboxes)
     for _ in range(GROUP_CAP):
         changed = False
         for i, g1 in enumerate(gids):
+            if g1 in _empty_gids:
+                continue
             b1 = bboxes[g1]
             for g2 in gids[i + 1:]:
                 if _is_nested_groups(g1, g2, groups):
+                    continue
+                if g2 in _empty_gids:
+                    continue
+                # Skip if either group has no direct members — pure-container
+                # groups (like a VPC that only contains child subgraphs) cannot
+                # be safely midpoint-split against siblings.
+                if not _grp_mc.get(g1) or not _grp_mc.get(g2):
+                    continue
+                b2 = bboxes[g2]
+                ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
+                oy = min(b1[3], b2[3]) - max(b1[1], b2[1])
+                if ox > 0 and oy > 0:
+                    mc1 = _grp_mc_rec.get(g1, {})
+                    mc2 = _grp_mc_rec.get(g2, {})
+                    if ox <= oy:
+                        mid = (max(b1[0], b2[0]) + min(b1[2], b2[2])) / 2
+                        if b1[0] < b2[0]:
+                            if (not mc1 or mc1["x1"] <= mid) and (not mc2 or mc2["x0"] >= mid):
+                                b1[2] = mid
+                                b2[0] = mid
+                                changed = True
+                        else:
+                            if (not mc2 or mc2["x1"] <= mid) and (not mc1 or mc1["x0"] >= mid):
+                                b2[2] = mid
+                                b1[0] = mid
+                                changed = True
+                    else:
+                        mid = (max(b1[1], b2[1]) + min(b1[3], b2[3])) / 2
+                        if b1[1] < b2[1]:
+                            if (not mc1 or mc1["y1"] <= mid) and (not mc2 or mc2["y0"] >= mid):
+                                b1[3] = mid
+                                b2[1] = mid
+                                changed = True
+                        else:
+                            if (not mc2 or mc2["y1"] <= mid) and (not mc1 or mc1["y0"] >= mid):
+                                b2[3] = mid
+                                b1[1] = mid
+                                changed = True
+                    if changed:
+                        break
+            if changed:
+                break
+        if not changed:
+            break
+
+    # Step 3b: force-resolve any remaining overlaps (unconditional midpoint split).
+    # Step 3's contained-midpoint split can fail when member nodes overlap so
+    # severely that every midpoint falls within a member's extent. This pass
+    # splits the overlap region at the midpoint regardless of member containment.
+    for _ in range(GROUP_CAP):
+        changed = False
+        for i, g1 in enumerate(gids):
+            if g1 in _empty_gids:
+                continue
+            b1 = bboxes[g1]
+            for g2 in gids[i + 1:]:
+                if _is_nested_groups(g1, g2, groups):
+                    continue
+                if g2 in _empty_gids:
+                    continue
+                # Same pure-container guard as Step 3
+                if not _grp_mc.get(g1) or not _grp_mc.get(g2):
                     continue
                 b2 = bboxes[g2]
                 ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
@@ -1327,7 +1827,7 @@ def _compute_group_bboxes(
                 if ox > 0 and oy > 0:
                     if ox <= oy:
                         mid = (max(b1[0], b2[0]) + min(b1[2], b2[2])) / 2
-                        if b1[0] < b2[0]:
+                        if b1[0] <= b2[0]:
                             b1[2] = mid
                             b2[0] = mid
                         else:
@@ -1335,7 +1835,7 @@ def _compute_group_bboxes(
                             b1[0] = mid
                     else:
                         mid = (max(b1[1], b2[1]) + min(b1[3], b2[3])) / 2
-                        if b1[1] < b2[1]:
+                        if b1[1] <= b2[1]:
                             b1[3] = mid
                             b2[1] = mid
                         else:
@@ -1369,8 +1869,21 @@ def _compute_group_bboxes(
 
 # ── Serialization-only renderer (Stage 9) ────────────────────────────────────
 
-def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-defined]
+def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str:  # type: ignore[name-defined]
     """Serialize a FinalizedLayout to an HTML fragment.
+
+    ``faithful`` mirrors ``RenderOptions.faithful_mermaid``. When True, edge
+    stroke and arrowhead colors are held to the neutral edge color for every
+    line style — thickness and dash pattern still convey the ``==>`` / ``-.->``
+    distinction, but no semantic color is derived from the line style (spec
+    flowchart-arrow-style-conformance AC9). Default False preserves the
+    editorial palette (thick → accent, dotted → amber) for existing callers.
+
+    Because flowchart, graph, and stateDiagram sources all serialize through
+    this shared painter (see ``_strategies._render_flowchart_fragment``), the
+    faithful guard also neutralizes stateDiagram edge colors in faithful mode.
+    That is spec-aligned and effectively a no-op: stateDiagram transition edges
+    are already emitted with the neutral edge color.
 
     This function MUST NOT perform any geometry work:
       - no _route_edges call
@@ -1400,38 +1913,54 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         f' style="position:relative; width:{cw}px; height:{ch}px;">'
     )
 
-    # Group boundaries first (rendered behind nodes)
+    # Group boundaries first (rendered behind nodes).
+    # Labels are collected here and appended AFTER node divs so they appear above
+    # node card backgrounds in DOM z-order.
+    # Architecture layouts use accent cycling; flowchart/state use the Mermaid
+    # default cluster style (#aaaa33 border, #ffffde fill) to match mmdc output.
+    _is_arch_layout = any(
+        nl.semantic_shape == "arch-service"
+        for nl in layout.node_layouts.values()
+    )
+    _rf_label_overlays: list[str] = []
     for _gi, (gid, gl) in enumerate(layout.group_layouts.items()):
         b = gl.boundary_bounds
         gw, gh = max(1, int(b.w)), max(1, int(b.h))
-        _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
-        _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
         lbl = (
             _h(gl.label_layout.lines[0].runs[0].text)
             if gl.label_layout and gl.label_layout.lines and gl.label_layout.lines[0].runs
             else ""
         )
+        if _is_arch_layout:
+            _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
+            _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
+            _grp_border = f'border:1.5px dashed {_accent}; background:{_tint};'
+            _lbl_color = _accent
+        else:
+            _grp_border = 'border:1px solid #aaaa33; background:#ffffde;'
+            _lbl_color = '#333'
+        # Group boundary only (no embedded label)
         parts.append(
             f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{lbl}" style="'
             f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
             f'width:{gw}px; height:{gh}px; '
-            f'border:1.5px dashed {_accent}; '
-            f'background:{_tint}; '
+            f'{_grp_border} '
             f'border-radius:var(--group-radius,12px); '
-            f'box-sizing:border-box; overflow:visible;">'
+            f'box-sizing:border-box; overflow:visible;"></div>'
         )
+        # Collect label overlay for post-node rendering
         if lbl:
-            parts.append(
-                f'<span class="group-label" style="'
-                f'position:absolute; top:8px; left:10px; '
-                f'font-size:11px; color:{_accent}; '
+            _rf_label_overlays.append(
+                f'<div class="group-label" data-for-group="{_h(gid)}" style="'
+                f'position:absolute; top:{int(b.y) + 8}px; left:{int(b.x) + 10}px; '
+                f'font-size:11px; color:{_lbl_color}; '
                 f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
                 f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
                 f'display:block; overflow-wrap:break-word; word-break:break-word; '
+                f'pointer-events:none; '
                 f'font-family:var(--label-font,var(--font-primary,-apple-system,Inter,sans-serif));">'
-                f'{lbl}</span>'
+                f'{lbl}</div>'
             )
-        parts.append("</div>")
 
     # Nodes
     for nid, nl in layout.node_layouts.items():
@@ -1620,6 +2149,10 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             if _html is not None:
                 parts.append(_html)
 
+    # Group label overlays — rendered AFTER node divs so they appear on top of
+    # node card backgrounds (nodes are higher in DOM z-order than group boundaries).
+    parts.extend(_rf_label_overlays)
+
     # SVG overlay for routed edges (geometry pre-computed, no routing calls)
     parts.append(
         f'<svg style="position:absolute; inset:0;'
@@ -1659,19 +2192,25 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
             '<polygon points="0,-4 9,0 0,4"'
             ' fill="var(--edge,rgba(100,116,139,0.7))"/></marker>'
         )
+    # Neutral edge color; used for every arrowhead in faithful mode so the
+    # marker fill/stroke never encodes a semantic meaning derived from the line
+    # style (spec flowchart-arrow-style-conformance AC9).
+    _neutral_edge = "var(--edge,rgba(100,116,139,0.7))"
     if "arrow-thick" in _needed_markers:
+        _thick_fill = _neutral_edge if faithful else "var(--edge-strong,var(--accent-1,#60a5fa))"
         defs_parts.append(
             '<marker id="arrow-thick" viewBox="0 -5 11 10" refX="11" refY="0"'
             ' markerWidth="11" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">'
             '<polygon points="0,-5 11,0 0,5"'
-            ' fill="var(--edge-strong,var(--accent-1,#60a5fa))"/></marker>'
+            f' fill="{_thick_fill}"/></marker>'
         )
     if "arrow-open" in _needed_markers:
+        _open_stroke = _neutral_edge if faithful else "var(--accent-4,var(--amber,#E8924A))"
         defs_parts.append(
             '<marker id="arrow-open" viewBox="0 -4 9 8" refX="9" refY="0"'
             ' markerWidth="9" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto">'
             '<path d="M 0,-4 L 9,0 L 0,4" fill="none"'
-            ' stroke="var(--accent-4,var(--amber,#E8924A))" stroke-width="1.5"/></marker>'
+            f' stroke="{_open_stroke}" stroke-width="1.5"/></marker>'
         )
     _cls_edge_color = "var(--edge,rgba(100,116,139,0.7))"
     for _base_id, _base_def, _rev_def in [
@@ -1732,16 +2271,7 @@ def render_finalized(layout: "FinalizedLayout") -> str:  # type: ignore[name-def
         marker_end = f' marker-end="url(#{_mid})"' if re_obj.has_marker_end else ""
         marker_start = (f' marker-start="url(#{_mid_start})"'
                         if re_obj.has_marker_start else "")
-        if re_obj.edge_style == "thick":
-            stroke_color = "var(--edge-strong,var(--accent-1,#60a5fa))"
-            stroke_w = "2"
-        elif re_obj.edge_style == "dotted":
-            stroke_color = "var(--accent-4,var(--amber,#E8924A))"
-            stroke_w = "1.5"
-        else:
-            stroke_color = "var(--edge,var(--node-fg-dim,rgba(100,116,139,0.7)))"
-            stroke_w = "1.5"
-        dash = ' stroke-dasharray="6 4"' if re_obj.edge_style == "dotted" else ""
+        stroke_color, stroke_w, dash = _edge_stroke_attrs(re_obj.edge_style, faithful)
         _re_rel_id = f'{_h(re_obj.src_node_id)}__{_h(re_obj.dst_node_id)}__{_rei}'
         _re_arrow = _mid if re_obj.has_marker_end else "none"
         parts.append(

@@ -68,6 +68,48 @@ open = [
   # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
   {slug = "gpu-benchmark"},
 
+  # ── ini-005 routing regression — self-loop and diamond clipping ──────────────
+  # test_lr_self_loop_exits_top_or_bottom: LR self-loop ys all inside node bounds.
+  # test_four_loops_tb_non_overlapping: 4 TB self-loops expected but only 1 path
+  # produced — new _flowchart_route_new_path skips or merges some self-loop edges.
+  # test_diamond_clipping_uses_registry: SHAPE_REGISTRY['diamond'].boundary_intersection
+  # never called — new port_planner path bypasses _routing.py's diamond clipping.
+  # All three were introduced by ini-005 switching _USE_LEGACY_ROUTE_EDGES=False.
+  # Also: test_tb_self_loop_exits_right, test_all_validators_clean,
+  # test_scoped_fixture_geometry_clean[flowchart-groups-complex] — same root cause.
+  {slug = "pre-existing-ini005-self-loop-regression", source = "pre-flight/2026-07-24"},
+  {slug = "pre-existing-ini005-diamond-clipping-bypass", source = "pre-flight/2026-07-24"},
+
+  # ── pre-existing label-placement failures (pre-flight 2026-07-24) ─────────────
+  # test_graph_fixture_no_overlap[flowchart-diamond-branch]: label collision —
+  # "Check->Process" label overlaps "Check->Error", etc. Labels all rendered at
+  # (0,0) for diamond-branch edges — _best_label_pos returns None box for
+  # diamond-branching edges. Fix: Area B (connector label alignment).
+  {slug = "pre-existing-diamond-branch-label-collision", source = "pre-flight/2026-07-24"},
+  # test_native_svg_backend.py::TestToSvgIntegration — NativeRenderError due to
+  # label collision in the native SVG path for flowchart with overlapping labels.
+  # Same root cause as diamond-branch label placement.
+  {slug = "pre-existing-native-svg-label-collision", source = "pre-flight/2026-07-24"},
+  # test_mermaid_layout::TestComputeGroupBboxes::test_compute_group_bboxes_no_overlap —
+  # group bboxes overlap in the old mermaid_layout module (separate codebase from
+  # mermaid_render). Fix: group separation pass in the old module.
+  {slug = "pre-existing-mermaid-layout-group-bbox-overlap", source = "pre-flight/2026-07-24"},
+
+  # ── ini-005 routing regression — flowchart-groups-complex ────────────────────
+  # test_live_flowchart_geometry_clean[flowchart-groups-complex] fails:
+  # UI→API edge crosses group boundary 3 times (expected 1). Introduced by
+  # 87b0538 (ini-005 _USE_LEGACY_ROUTE_EDGES=False). Fix: correct the local-channel
+  # route for cross-group edges with same-rank src/dst in adjacent groups.
+  # Unblock: fix Area B (connector alignment) routing fixes.
+  {slug = "flowchart-groups-complex-routing-boundary-regression", source = "pre-flight/2026-07-24"},
+
+  # ── flowchart compound layout deferred sub-check ─────────────────────────────
+  # AC4/AC5: attempt ELK first for inner-direction compound fixtures and consume
+  # the ELK result directly, deriving BoundaryGate records from the ELK-produced
+  # routes (engine-agnostic _cbe_boundary_crossings). Deferred until an
+  # elkjs-enabled environment can verify ELK's compound geometry + gate parity.
+  {slug = "flowchart-compound-elk-gate-derivation", source = "spec/flowchart-compound-layout-and-boundary-gates AC4/AC5"},
+
   # ── flowchart-conformance deferred sub-checks ────────────────────────────────
   # AC1: verify edge labels fit within node content_bounds (usable interior).
   # Requires content_bounds export from the pipeline — deferred until that lands.
@@ -76,6 +118,18 @@ open = [
   # Covered for non-diamond shapes by mermaid-shape-boundary-exactness; diamond
   # needs the same on-segment check wired into the conformance tests.
   {slug = "flowchart-diamond-endpoint-on-segment"},
+
+  # ── architecture-fixed-port-integration deferred sub-check (ini-003 item 5) ──
+  # spec/architecture-fixed-port-integration AC9: on the ELK path the api→cache
+  # route clips queue's interior for the architecture-complex fixture, and ELK's
+  # fixed-side port positions sit ~12px inside the visual node face (surfaces the
+  # pre-existing test_arch_port_acceptance / test_no_edge_waypoint_inside_service
+  # / TestBiRelEdge::test_birel_with_label failures that only appear when elkjs is
+  # installed). Holds on the Python fallback (segment-aware validators clean).
+  # Fixing requires ELK-side architecture edge-routing + port-snapping work, which
+  # the spec forbids ("do not redesign the successful ELK path"). Unblock: a follow-on
+  # ELK-architecture-geometry spec in an elkjs-enabled environment.
+  {slug = "arch-elk-edge-interior-crossing", source = "spec/architecture-fixed-port-integration AC9"},
 
     # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
   # These slugs remain here only to satisfy (deferred: <slug>) references in shipped
@@ -97,6 +151,30 @@ open = [
   {slug = "oracle-ac6-unsupported-reference-feature", source = "spec/mermaid-oracle-runtime-unification AC6"},
   {slug = "oracle-ac10-emit-report-runner-wiring", source = "spec/mermaid-oracle-runtime-unification AC10"},
   {slug = "oracle-fixture-minimums-migrate-to-contract", source = "spec/mermaid-oracle-runtime-unification"},
+
+  # ── ini-003 item 6 carry-forwards (eight-case-parity-ci-and-cleanup) ─────────
+  # The dual edge_id reconstruction in architecture ELK→spec mapping can desync for
+  # duplicate (src,dst) architecture edges → false ArchitectureLayoutError. Not hit
+  # by the 4-distinct-pair architecture-complex fixture; guarded now by
+  # tests/test_architecture_conformance.py::test_duplicate_src_dst_both_survive and
+  # ::test_fallback_duplicate_pair_keeps_per_edge_sides. Fix: single authoritative
+  # edge_id keyed source in the ELK route→spec mapping.
+  {slug = "arch-dual-edge-id-desync", source = "review/architecture-fixed-port-integration"},
+  # AC5 cleanup was scoped to the dead inner-direction fixup only. The Python
+  # Sugiyama-fallback group-correction helpers (_push_nonmembers_out_of_groups_lr,
+  # _separate_groups, _compute_group_bboxes) are RETAINED — they remain load-bearing
+  # for the Python fallback path (frozen by spec/compound-layout-elk-first-class), so
+  # removing them would regress the Python compound layout. Unblock: an ELK-first
+  # compound path that makes the Sugiyama correction unreachable.
+  {slug = "cleanup-python-fallback-group-correction-retained", source = "spec/eight-case-parity-ci-and-cleanup AC5"},
+
+  # ── brand-shell-extraction deferred item ─────────────────────────────────
+  # Wire --brand-deck into the Step 0 interview QA so the main agent accepts a
+  # brand PPTX path during the interview and runs brand_extract.py before Step 3.5.
+  # Requires prompt template changes; deferred from brand-shell-extraction spec.
+  # Fix: update tpl-interview.md and contract_validator.py interview contract.
+  # Unblock: a multi-loop spec covering prompt template changes.
+  {slug = "brand-shell-interview-wiring", source = "spec/brand-shell-extraction"},
 ]
 
 # ── Initiative: Mermaid Rendering Correctness Follow-on — boston-v1 ──────────
@@ -129,3 +207,75 @@ status = "shipped"
 queue = []
 active = []
 shipped = ["docs/specs/mermaid-oracle-runtime-unification", "docs/specs/mmdc-browser-geometry-capture", "docs/specs/mermaid-text-measurement-adoption", "docs/specs/flowchart-elk-finalized-layout-consumption", "docs/specs/mermaid-recursive-compound-layout", "docs/specs/mermaid-requirement-text-layout-conformance", "docs/specs/mermaid-shape-boundary-exactness", "docs/specs/mermaid-er-compiler-consolidation-and-routing", "docs/specs/mermaid-class-semantic-conformance", "docs/specs/mermaid-flowchart-conformance", "docs/specs/mermaid-architecture-metadata-preservation", "docs/specs/mermaid-state-conformance", "docs/specs/mermaid-parity-ci-and-maintainability-cleanup"]
+
+# ── Initiative: Eight-Case Mermaid Compound and Sequence Parity — davao-v1 ────
+#
+# 6-item closure initiative. Logical build queue execution order:
+#
+#   1. eight-case-validation-and-provenance   — gates every subsequent item
+#   2. sequence-shared-compiler-and-native-scene  — sequence only; safe after 1
+#   3. flowchart-compound-layout-and-boundary-gates — flowchart layout; safe after 1
+#      (sequential after 2 to avoid concurrent flowchart/sequence shared-code edits)
+#   4. flowchart-arrow-style-conformance      — flowchart edge parsing; sequential
+#      after 3 to prevent conflicts on shared _geometry.py / _parser.py edits
+#   5. architecture-fixed-port-integration   — architecture only; safe after 4
+#      (sequenced last of the 2–5 group to give a clean base for CI in item 6)
+#   6. eight-case-parity-ci-and-cleanup       — requires 2–5 all complete
+#
+# Items 2–5 are DAG-parallel (all depend only on item 1) but are sequenced
+# above for practical reasons: items 3 and 4 both touch flowchart code in
+# _geometry.py, _parser.py, and _pipeline.py, so concurrent edits would
+# conflict. The sequential order matches the source document's recommendation.
+#
+# Fixtures in scope:
+#   architecture-complex, flowchart-arrows-defs, flowchart-cross-scope-edge,
+#   flowchart-empty-subgraph, flowchart-groups-complex, flowchart-inner-direction,
+#   sequence-box-unsupported, sequence-nested-fragments
+
+["ini-003"]
+name = "Eight-Case Mermaid Compound and Sequence Parity"
+milestone = "davao-v1"
+status = "shipped"
+
+["ini-003".work]
+queue = []
+active = []
+shipped = ["docs/specs/eight-case-validation-and-provenance", "docs/specs/sequence-shared-compiler-and-native-scene", "docs/specs/flowchart-compound-layout-and-boundary-gates", "docs/specs/flowchart-arrow-style-conformance", "docs/specs/architecture-fixed-port-integration", "docs/specs/eight-case-parity-ci-and-cleanup"]
+
+# ── Initiative: Shared Orthogonal Routing Foundation — maputo-v1 ──────────────
+#
+# 5-item foundation initiative. Dependency order:
+#
+#   1. routing-port-planner-foundation  — data model + planning functions; gates all
+#   2. routing-search-and-assignment    — depends on 1; parallel with 3
+#   3. routing-endpoint-marker-geometry — depends on 1; parallel with 2
+#   4. routing-node-ordering-refinement — depends on 2
+#   5. routing-validation-invariants    — depends on 4
+
+["ini-004"]
+name = "Shared Orthogonal Routing Foundation"
+milestone = "maputo-v1"
+status = "shipped"
+
+["ini-004".work]
+queue = []
+active = []
+shipped = [
+  "docs/specs/routing-port-planner-foundation",
+  "docs/specs/routing-search-and-assignment",
+  "docs/specs/routing-endpoint-marker-geometry",
+  "docs/specs/routing-node-ordering-refinement",
+  "docs/specs/routing-validation-invariants",
+]
+
+["ini-005"]
+name = "Flowchart Routing Closure"
+milestone = "nukualofa-v1"
+status = "shipped"
+
+["ini-005".work]
+queue = []
+active = []
+shipped = [
+  "docs/specs/flowchart-routing-closure",
+]

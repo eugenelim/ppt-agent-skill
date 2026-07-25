@@ -617,7 +617,7 @@ class TestRenderOptions:
         assert opts.faithful_mermaid is False
         assert opts.infer_icons is True
         assert opts.auto_direction is True
-        assert opts.inferred_legend is True
+        assert opts.inferred_legend is False
 
     def test_faithful_mermaid_preserves_declared_direction(self):
         """With faithful_mermaid=True, declared LR direction is preserved even with hints."""

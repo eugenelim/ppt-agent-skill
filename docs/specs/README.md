@@ -36,6 +36,7 @@ docs/specs/<feature>/
 | [`mermaid-source-bridge`](mermaid-source-bridge/spec.md) | Implementing | `diagram-consistency-system` | Extract Mermaid fences from any source document into planning JSON; native Python layout engine (`mermaid_layout.py`) renders all Mermaid diagram types to pipeline-safe HTML/CSS, bypassing dagre |
 | [`mermaid-renderer-uplift`](mermaid-renderer-uplift/spec.md) | Draft | none | 9-area renderer quality uplift: pixel-accurate text metrics, diamond clipping, 6 new node shapes, inline label formatting, SVG marker defs, sequence/ER/class notation, visual fixture corpus + screenshot baseline |
 | [`mermaid-unified-layout-pipeline`](mermaid-unified-layout-pipeline/spec.md) | Shipped | ADR-001 | ELK-layered algorithm via elkjs 0.12.0 Node subprocess for flowchart/stateDiagram; Python fallback for inner-direction groups, terminal circles, self-loops; strict layout validation; fidelity oracle entity-mismatch classification |
+| [`flowchart-routing-closure`](flowchart-routing-closure/spec.md) | Shipped | `routing-validation-invariants`, `routing-port-planner-foundation`, `routing-search-and-assignment` | Fan-slot face-spanning, local multi-rank channel routing, and cross-boundary gate routing for flowchart-parallel-links, flowchart-arrows-defs, and flowchart-inner-direction |
 
 ## Shipped specs (archived)
 
@@ -51,6 +52,7 @@ docs/specs/<feature>/
 | [`persistent-chrome-flag`](persistent-chrome-flag/spec.md) | Shipped | none | Deck-global `persistent_chrome` flag (default off) — masthead + runbook footer on every content page for reference decks, reusing worksheet.md group-C chrome recipes |
 | [`assimilate-slides-skill`](assimilate-slides-skill/spec.md) | Shipped | none | Internal `assimilate-slides` authoring skill (ingest→scrub→classify→extract style/primitives/icons→narrative→mock→gates→ship) + searchable SVG icon library + deterministic `deck_probe.py`/`build_pdf.py`; dogfooded on a maintainer-supplied deck |
 | [`architecture-diagram-primitives`](architecture-diagram-primitives/spec.md) | Shipped | none | Dogfood run of `assimilate-slides`: architecture-canvas primitives + seed icons under `schematic_blueprint` (no new style) |
+| [`arch-renderer-maintainability-cleanup`](arch-renderer-maintainability-cleanup/spec.md) | Shipped | `docs/specs/eight-case-parity-ci-and-cleanup`, `docs/specs/architecture-fixed-port-integration` | Three backlog anchors from ini-003: shared `_edge_stroke_attrs` resolver, `_build_arch_layout` extraction, and `content_bounds`/`diagnostics` round-trip carry-through |
 
 ## Adding a new spec
 

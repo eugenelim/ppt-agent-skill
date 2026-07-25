@@ -152,6 +152,26 @@ python tools/smoke_skill.py     # Step 3/4 end-to-end smoke (validators + visual
 python tools/check_skill.py     # doc↔code contract-drift check — run after editing SKILL.md / prompts / validators
 ```
 
+**Mermaid layout visual check** — mandatory after any change to `_layout.py`, `_pipeline.py`, or `_renderer.py`. Render the biz-ops architecture fixtures to PNG and read each one with the Read tool to visually inspect node positions, group boundaries, and edge routing:
+
+```bash
+python3 - << 'EOF'
+import sys; sys.path.insert(0, 'scripts')
+from mermaid_render.png import _to_png_from_html_string
+import mermaid_render as mr
+for stem in ['biz-ops-component-architecture', 'biz-ops-infrastructure-topology']:
+    src = open(f'tests/fixtures/{stem}.mmd').read()
+    html = mr.to_html(src)
+    full = f'<!DOCTYPE html><html><head><style>body{{background:white;margin:20px;}}</style></head><body>{html}</body></html>'
+    open(f'/tmp/{stem}.png', 'wb').write(_to_png_from_html_string(full))
+    print(f'{stem}: done')
+EOF
+# Then: Read /tmp/biz-ops-component-architecture.png
+# Then: Read /tmp/biz-ops-infrastructure-topology.png
+```
+
+Look for: group boxes overlapping, backward-edge Z-routes (a line going up then sideways), groups pushed off-screen, and edge labels stacked on top of nodes.
+
 **Mermaid test tiers** (cost-aware; run the narrowest tier that covers your change):
 
 ```bash
@@ -186,6 +206,14 @@ pytest tests/ -m parity_fast --timeout=60
 make parity-browser
 # — or equivalently —
 pytest --run-browser tests/ -m browser -p no:xdist
+
+# Eight-case parity gate (8 scoped fixtures × output × presentation × backend +
+# hard-failure-condition gates). ELK-required lanes need Node + elkjs
+# (npm install --prefix scripts/mermaid_render/layout); they skip cleanly without.
+# Writes structured artifacts to test-artifacts/ (gitignored). CI job: eight-case-parity.
+make eight-case-ci
+# — or equivalently —
+pytest -m eight_case --timeout=120
 ```
 
 `parity_fast` tests cover: parser correctness, semantic counts, `FinalizedLayout`
