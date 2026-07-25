@@ -68,6 +68,29 @@ open = [
   # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
   {slug = "gpu-benchmark"},
 
+  # ── pre-existing label-placement failures (pre-flight 2026-07-24) ─────────────
+  # test_graph_fixture_no_overlap[flowchart-diamond-branch]: label collision —
+  # "Check->Process" label overlaps "Check->Error", etc. Labels all rendered at
+  # (0,0) for diamond-branch edges — _best_label_pos returns None box for
+  # diamond-branching edges. Fix: Area B (connector label alignment).
+  {slug = "pre-existing-diamond-branch-label-collision", source = "pre-flight/2026-07-24"},
+  # test_native_svg_backend.py::TestToSvgIntegration — NativeRenderError due to
+  # label collision in the native SVG path for flowchart with overlapping labels.
+  # Same root cause as diamond-branch label placement.
+  {slug = "pre-existing-native-svg-label-collision", source = "pre-flight/2026-07-24"},
+  # test_mermaid_layout::TestComputeGroupBboxes::test_compute_group_bboxes_no_overlap —
+  # group bboxes overlap in the old mermaid_layout module (separate codebase from
+  # mermaid_render). Fix: group separation pass in the old module.
+  {slug = "pre-existing-mermaid-layout-group-bbox-overlap", source = "pre-flight/2026-07-24"},
+
+  # ── ini-005 routing regression — flowchart-groups-complex ────────────────────
+  # test_live_flowchart_geometry_clean[flowchart-groups-complex] fails:
+  # UI→API edge crosses group boundary 3 times (expected 1). Introduced by
+  # 87b0538 (ini-005 _USE_LEGACY_ROUTE_EDGES=False). Fix: correct the local-channel
+  # route for cross-group edges with same-rank src/dst in adjacent groups.
+  # Unblock: fix Area B (connector alignment) routing fixes.
+  {slug = "flowchart-groups-complex-routing-boundary-regression", source = "pre-flight/2026-07-24"},
+
   # ── flowchart compound layout deferred sub-check ─────────────────────────────
   # AC4/AC5: attempt ELK first for inner-direction compound fixtures and consume
   # the ELK result directly, deriving BoundaryGate records from the ELK-produced
