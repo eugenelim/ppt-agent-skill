@@ -495,7 +495,9 @@ def _label_on_longest(
     ]
     _lp = _best_label_pos(cands, label, obstacles, placed, canvas_w, y_range=y_range)
     if _lp.box is None:
-        return 0, 0
+        # All candidates blocked; use the above-midpoint position rather than (0,0)
+        # so the label stays on the edge even when obstacle-free placement fails.
+        return mid_x - w // 2, mid_y - _LABEL_CHIP_H - 4
     return int(_lp.box.x), int(_lp.box.y + _lp.box.h)
 
 

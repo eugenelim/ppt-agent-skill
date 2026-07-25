@@ -32,7 +32,7 @@ from ._layout import (
 )
 from ._routing import (
     _route_edges, _node_render_w, _finalize_self_loop_offsets,
-    _astar_route, _blocked_segs, _ensure_orthogonal,
+    _astar_route, _blocked_segs, _ensure_orthogonal, _label_on_longest,
 )
 from ._renderer import (
     _render_legend,
@@ -1758,8 +1758,15 @@ def _flowchart_route_new_path(
         else:
             _cmid = "arrow-open" if e.style == "dotted" else "arrow-normal"
             _cmarker_id = _cmid if e.arrow else None
+        # Compute lx/ly for labeled edges — ini-005 omitted these, leaving labels
+        # at the canvas origin (0,0). Use arc-length midpoint via _label_on_longest.
+        _pts = list(rc.points)
+        if e.label and len(_pts) >= 2:
+            _lx, _ly = _label_on_longest(_pts, e.label, int(canvas_w), [], [])
+        else:
+            _lx, _ly = 0.0, 0.0
         routed_dicts.append({
-            "waypoints": list(rc.points),
+            "waypoints": _pts,
             "edge_id": eid,
             "src": e.orig_src or e.src,
             "dst": e.orig_dst or e.dst,
@@ -1771,6 +1778,8 @@ def _flowchart_route_new_path(
             "extra_css": e.extra_css,
             "marker_id": _cmarker_id,
             "bidir": getattr(e, "bidir", False),
+            "lx": _lx,
+            "ly": _ly,
             "d": "",
         })
 

@@ -68,6 +68,18 @@ open = [
   # Benchmark --disable-gpu vs hardware-GPU per-fixture Chromium render times when CI has a stable timing baseline + Playwright
   {slug = "gpu-benchmark"},
 
+  # ── ini-005 routing regression — self-loop and diamond clipping ──────────────
+  # test_lr_self_loop_exits_top_or_bottom: LR self-loop ys all inside node bounds.
+  # test_four_loops_tb_non_overlapping: 4 TB self-loops expected but only 1 path
+  # produced — new _flowchart_route_new_path skips or merges some self-loop edges.
+  # test_diamond_clipping_uses_registry: SHAPE_REGISTRY['diamond'].boundary_intersection
+  # never called — new port_planner path bypasses _routing.py's diamond clipping.
+  # All three were introduced by ini-005 switching _USE_LEGACY_ROUTE_EDGES=False.
+  # Also: test_tb_self_loop_exits_right, test_all_validators_clean,
+  # test_scoped_fixture_geometry_clean[flowchart-groups-complex] — same root cause.
+  {slug = "pre-existing-ini005-self-loop-regression", source = "pre-flight/2026-07-24"},
+  {slug = "pre-existing-ini005-diamond-clipping-bypass", source = "pre-flight/2026-07-24"},
+
   # ── pre-existing label-placement failures (pre-flight 2026-07-24) ─────────────
   # test_graph_fixture_no_overlap[flowchart-diamond-branch]: label collision —
   # "Check->Process" label overlaps "Check->Error", etc. Labels all rendered at
