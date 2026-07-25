@@ -250,19 +250,38 @@ def local_channel_route(
 
     z_candidates: list[RouteCandidate] = []
 
+    # Inflate ONLY the left side of leaf-node obstacles for TB Z-route checks.
+    # TB routes use src_x as the vertical channel: inflating left faces rejects
+    # routes that hug a node's left face (e.g. VP→OS at x=545 alongside ING left=550)
+    # while leaving the right edge unchanged so valid routes outside a right face
+    # (e.g. VP→BD at x=775 outside ING right=770) are preserved.
+    # LR routes use un-inflated obstacles so mid_x values just outside a node's
+    # left face (e.g. ING→BD mid_x=140 outside OS left=144) remain valid.
+    _NODE_CLEARANCE_PX: float = 5.0
+    _tb_obs: tuple[RoutingObstacle, ...] = tuple(
+        RoutingObstacle(
+            ob.obstacle_id, ob.kind,
+            (ob.bounds[0] - _NODE_CLEARANCE_PX,  # left edge inflated leftward
+             ob.bounds[1],                         # top unchanged
+             ob.bounds[2] + _NODE_CLEARANCE_PX,   # width += clearance, right = x+w (unchanged)
+             ob.bounds[3]),                        # height unchanged
+            ob.scope_id, ob.title_bounds, ob.permitted_gate_ids,
+        ) if ob.kind in ("NODE_INTERIOR", "node") else ob
+        for ob in obstacles
+    )
+
     # TB-style Z-route: vertical first at sx, horizontal near dst, vertical to dst.
-    # Each edge uses its own fanned sx as the vertical channel → no tramlines.
     for mid_y in (dy - LOCAL_LANE_GAP, sy + LOCAL_LANE_GAP, (sy + dy) / 2.0):
         pts: tuple[tuple[float, float], ...] = (
             (sx, sy), (sx, mid_y), (dx, mid_y), (dx, dy)
         )
         if _within_bounds(pts):
             rc = _make_rc(edge_id, src_port, dst_port, pts, 2, existing_routes)
-            if _is_valid_route(rc, obstacles):
+            if _is_valid_route(rc, _tb_obs):
                 z_candidates.append(rc)
 
     # LR-style Z-route: horizontal first at sy, vertical near dst, horizontal to dst.
-    # Each edge uses its own fanned sy as the horizontal channel → no tramlines.
+    # Uses un-inflated obstacles so routes near a node's left face aren't over-rejected.
     for mid_x in (dx - LOCAL_LANE_GAP, sx + LOCAL_LANE_GAP, (sx + dx) / 2.0):
         pts = ((sx, sy), (mid_x, sy), (mid_x, dy), (dx, dy))
         if _within_bounds(pts):

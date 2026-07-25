@@ -1418,6 +1418,25 @@ def flowchart_route_adapter(
             return (bx + off * bw, by + bh)
         return (bx + off * bw, by)  # top
 
+    def _peer_center(eid: str, peer_map: "dict[str, str]") -> float:
+        """Return the position of the peer node center used for port ordering.
+
+        For TB layout: peer center X (maps left→left ports, right→right ports).
+        For LR layout: peer center Y (maps top→top ports, bottom→bottom ports).
+        Unknown edges default to 0.0 so they sort to the front without crashing.
+        """
+        peer_id = peer_map.get(eid)
+        peer = nodes.get(peer_id) if peer_id else None
+        if peer is None:
+            return 0.0
+        if _horiz:
+            return float(peer.y) + float(_node_render_h(peer)) / 2.0
+        return float(peer.x) + float(_node_render_w(peer)) / 2.0
+
+    # Edge→peer lookups for port ordering
+    _edge_dst: "dict[str, str]" = {e.edge_id: e.dst for e in edges if e.edge_id}
+    _edge_src: "dict[str, str]" = {e.edge_id: e.src for e in edges if e.edge_id}
+
     # PortCandidates for source endpoints (fan-distributed)
     src_ports: "dict[str, PortCandidate]" = {}
     for node_id, eids in outgoing.items():
@@ -1426,7 +1445,8 @@ def flowchart_route_adapter(
             continue
         bx, by, bw, bh = _nb(node)
         face_len = bh if _horiz else bw
-        for eid, off in fan_slots(eids, src_face, face_length=face_len):
+        ordered = sorted(eids, key=lambda e: _peer_center(e, _edge_dst))
+        for eid, off in fan_slots(ordered, src_face, face_length=face_len):
             pt = _port_point(src_face, bx, by, bw, bh, off)
             src_ports[eid] = PortCandidate(
                 edge_id=eid,
@@ -1447,7 +1467,8 @@ def flowchart_route_adapter(
             continue
         bx, by, bw, bh = _nb(node)
         face_len = bh if _horiz else bw
-        for eid, off in fan_slots(eids, dst_face, face_length=face_len):
+        ordered = sorted(eids, key=lambda e: _peer_center(e, _edge_src))
+        for eid, off in fan_slots(ordered, dst_face, face_length=face_len):
             pt = _port_point(dst_face, bx, by, bw, bh, off)
             dst_ports[eid] = PortCandidate(
                 edge_id=eid,
@@ -1632,13 +1653,32 @@ def _flowchart_route_new_path(
             return (bx + off * bw, by + bh)
         return (bx + off * bw, by)
 
+    def _peer_ctr(eid: str, peer_map: "dict[str, str]") -> float:
+        """Center position of the peer node for port-ordering (minimise crossings).
+
+        TB layout: peer center X  → left-going edges get left ports, right → right.
+        LR layout: peer center Y  → top-going edges get top ports, bottom → bottom.
+        Unknown edges return 0.0 so they sort first without crashing.
+        """
+        peer_id = peer_map.get(eid)
+        peer = nodes.get(peer_id) if peer_id else None
+        if peer is None:
+            return 0.0
+        if _horiz:
+            return float(peer.y) + float(_node_render_h(peer)) / 2.0
+        return float(peer.x) + float(_node_render_w(peer)) / 2.0
+
+    _eid_dst: "dict[str, str]" = {eid: (e.orig_dst or e.dst) for eid, e in edge_by_real.items()}
+    _eid_src: "dict[str, str]" = {eid: (e.orig_src or e.src) for eid, e in edge_by_real.items()}
+
     sp: "dict[str, PortCandidate]" = {}
     for node_id, eids in out_map.items():
         node = nodes.get(node_id)
         if node is None or node.is_dummy:
             continue
         bx, by, bw, bh = _nb(node)
-        for eid, off in fan_slots(eids, src_face, face_length=(bh if _horiz else bw)):
+        ordered = sorted(eids, key=lambda e: _peer_ctr(e, _eid_dst))
+        for eid, off in fan_slots(ordered, src_face, face_length=(bh if _horiz else bw)):
             pt = _pp(src_face, bx, by, bw, bh, off)
             sp[eid] = PortCandidate(
                 edge_id=eid, node_id=node_id, side=src_face,
@@ -1664,7 +1704,8 @@ def _flowchart_route_new_path(
             if node is None or node.is_dummy:
                 continue
         bx, by, bw, bh = _nb(node)
-        for eid, off in fan_slots(eids, dst_face, face_length=(bh if _horiz else bw)):
+        ordered = sorted(eids, key=lambda e: _peer_ctr(e, _eid_src))
+        for eid, off in fan_slots(ordered, dst_face, face_length=(bh if _horiz else bw)):
             pt = _pp(dst_face, bx, by, bw, bh, off)
             dp[eid] = PortCandidate(
                 edge_id=eid, node_id=node_id, side=dst_face,
@@ -1974,6 +2015,25 @@ def _flowchart_route_new_path(
         if result is None:
             result = route_edge(eid, src_pc, dst_pc, per_obs, existing)
 
+        # Last-resort: if route_edge found nothing and the nodes are far apart
+        # vertically (same or adjacent DAG rank but large y-gap), the standard
+        # L/Z shapes miss the clear corridor.  Try local_channel_route which
+        # includes a channel-outside-local-bounds fallback that routes around
+        # the obstacle cluster.
+        if result is None and src_node and dst_node and not src_node.is_dummy and not dst_node.is_dummy:
+            if abs(src_node.y - dst_node.y) > 400:
+                _lb2 = _local_bounds_for(src_node.rank, dst_node.rank)
+                if _lb2 is not None:
+                    result = local_channel_route(eid, src_pc, dst_pc, _lb2, existing, obstacles=per_obs)
+                    if result is not None:
+                        _CANVAS_MARGIN2 = 8.0
+                        if any(
+                            p[0] < _CANVAS_MARGIN2 or p[0] > canvas_w - _CANVAS_MARGIN2
+                            or p[1] < _CANVAS_MARGIN2 or p[1] > canvas_h - _CANVAS_MARGIN2
+                            for p in result.points[1:-1]
+                        ):
+                            result = None
+
         if result is not None:
             assignments[eid] = result
         else:
@@ -2020,6 +2080,10 @@ def _flowchart_route_new_path(
             "ly": _ly,
             "d": "",
             "_is_backward": eid in _back_eids,
+            # Fanned port positions from main routing; used by _reroute_cross_boundary_edges
+            # so that each edge exits from its own assigned port rather than a shared face centre.
+            "_src_port": rc.source_port.point,
+            "_dst_port": rc.target_port.point,
         })
 
     return RouteBatch(routed=tuple(routed_dicts), failures=tuple(failures_list))
@@ -2975,6 +3039,41 @@ def _reroute_cross_boundary_edges(
     gates: "list[BoundaryGate]" = []
     gate_ctr = 0
 
+    # World-coordinate segments from already-routed CBE edges (horizontal and vertical).
+    # Passed as soft-cost `occupied` to each A* call so subsequent routes avoid
+    # running parallel to an existing one on the same row or column.
+    _cbe_done_hsegs: "list[tuple[float, float, float]]" = []  # (y, x_min, x_max)
+    _cbe_done_vsegs: "list[tuple[float, float, float]]" = []  # (x, y_min, y_max)
+
+    def _build_occupied(gx: "list[int]", gy: "list[int]") -> "set[tuple]":
+        """Convert world-coord segments to grid-index step tuples for A*.
+
+        Horizontal: marks the occupied y row ±2 rows so routes stay at least two
+        grid rows away from an existing horizontal segment.
+        Vertical: marks the occupied x column ±1 col so routes stay at least one
+        grid column away from an existing vertical segment.
+        """
+        occ: "set[tuple]" = set()
+        for (hy, hx0, hx1) in _cbe_done_hsegs:
+            yi = min(range(len(gy)), key=lambda i: abs(gy[i] - hy))
+            xi0 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx0))
+            xi1 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx1))
+            for dyi in range(-2, 3):  # exact row + two rows above + two rows below
+                byi = yi + dyi
+                if 0 <= byi < len(gy):
+                    for xi in range(min(xi0, xi1), max(xi0, xi1)):
+                        occ.add((xi, byi, xi + 1, byi))
+        for (vx, vy0, vy1) in _cbe_done_vsegs:
+            xi = min(range(len(gx)), key=lambda i: abs(gx[i] - vx))
+            yi0 = min(range(len(gy)), key=lambda i: abs(gy[i] - vy0))
+            yi1 = min(range(len(gy)), key=lambda i: abs(gy[i] - vy1))
+            for dxi in range(-1, 2):  # exact col + one adjacent on each side
+                bxi = xi + dxi
+                if 0 <= bxi < len(gx):
+                    for yi in range(min(yi0, yi1), max(yi0, yi1)):
+                        occ.add((bxi, yi, bxi, yi + 1))
+        return occ
+
     for r in routed:
         s = r.get("src")
         d = r.get("dst")
@@ -2997,8 +3096,15 @@ def _reroute_cross_boundary_edges(
         scy = sn.y + _node_render_h(sn) / 2.0
         dcx = dn.x + _node_render_w(dn) / 2.0
         dcy = dn.y + _node_render_h(dn) / 2.0
-        a = _cbe_node_face(sn, (dcx, dcy))
-        b = _cbe_node_face(dn, (scx, scy))
+        # Use the fanned port position from the main routing pass when available.
+        # _cbe_node_face() returns the node-face centre — identical for all edges
+        # from the same node — which causes every route to share the same initial
+        # segment.  The pre-computed fanned port preserves per-edge port diversity
+        # so the A* routes diverge immediately from their assigned port positions.
+        _sp_pt = r.get("_src_port")
+        _dp_pt = r.get("_dst_port")
+        a = (float(_sp_pt[0]), float(_sp_pt[1])) if _sp_pt else _cbe_node_face(sn, (dcx, dcy))
+        b = (float(_dp_pt[0]), float(_dp_pt[1])) if _dp_pt else _cbe_node_face(dn, (scx, scy))
         # Backward edges in TB mode (src.rank > dst.rank): src exits RIGHT,
         # dst is entered from BOTTOM so the route avoids the group interior.
         _is_tb = direction.upper() not in ("LR", "RL")
@@ -3028,9 +3134,19 @@ def _reroute_cross_boundary_edges(
 
         gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b], canvas_w, canvas_h)
         blocked = _blocked_segs(gx, gy, obstacles)
-        path = _astar_route(int(a[0]), int(a[1]), int(b[0]), int(b[1]), gx, gy, blocked)
+        occupied = _build_occupied(gx, gy)
+        path = _astar_route(int(a[0]), int(a[1]), int(b[0]), int(b[1]), gx, gy, blocked, occupied=occupied or None)
         if not path or len(path) < 2:
             continue  # keep the original route if A* cannot improve it
+
+        # Record significant segments so subsequent routes avoid running alongside them.
+        for _pi in range(len(path) - 1):
+            _px, _py = path[_pi]
+            _qx, _qy = path[_pi + 1]
+            if _py == _qy and abs(_qx - _px) > 20:
+                _cbe_done_hsegs.append((float(_py), float(min(_px, _qx)), float(max(_px, _qx))))
+            elif _px == _qx and abs(_qy - _py) > 20:
+                _cbe_done_vsegs.append((float(_px), float(min(_py, _qy)), float(max(_py, _qy))))
 
         poly = [(float(x), float(y)) for x, y in path]
         poly[0] = (float(a[0]), float(a[1]))
@@ -3122,5 +3238,7 @@ def _reroute_cross_boundary_edges(
 
     for r in routed:
         r.pop("_cbe_rerouted", None)
+        r.pop("_src_port", None)
+        r.pop("_dst_port", None)
 
     return tuple(gates)
