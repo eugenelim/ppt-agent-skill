@@ -1486,24 +1486,35 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
     # Group boundaries first (rendered behind nodes).
     # Labels are collected here and appended AFTER node divs so they appear above
     # node card backgrounds in DOM z-order.
+    # Architecture layouts use accent cycling; flowchart/state use the Mermaid
+    # default cluster style (#aaaa33 border, #ffffde fill) to match mmdc output.
+    _is_arch_layout = any(
+        nl.semantic_shape == "arch-service"
+        for nl in layout.node_layouts.values()
+    )
     _rf_label_overlays: list[str] = []
     for _gi, (gid, gl) in enumerate(layout.group_layouts.items()):
         b = gl.boundary_bounds
         gw, gh = max(1, int(b.w)), max(1, int(b.h))
-        _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
-        _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
         lbl = (
             _h(gl.label_layout.lines[0].runs[0].text)
             if gl.label_layout and gl.label_layout.lines and gl.label_layout.lines[0].runs
             else ""
         )
+        if _is_arch_layout:
+            _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
+            _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
+            _grp_border = f'border:1.5px dashed {_accent}; background:{_tint};'
+            _lbl_color = _accent
+        else:
+            _grp_border = 'border:1px solid #aaaa33; background:#ffffde;'
+            _lbl_color = '#333'
         # Group boundary only (no embedded label)
         parts.append(
             f'<div class="diagram-group" data-group-id="{_h(gid)}" data-group-label="{lbl}" style="'
             f'position:absolute; left:{int(b.x)}px; top:{int(b.y)}px; '
             f'width:{gw}px; height:{gh}px; '
-            f'border:1.5px dashed {_accent}; '
-            f'background:{_tint}; '
+            f'{_grp_border} '
             f'border-radius:var(--group-radius,12px); '
             f'box-sizing:border-box; overflow:visible;"></div>'
         )
@@ -1512,7 +1523,7 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
             _rf_label_overlays.append(
                 f'<div class="group-label" data-for-group="{_h(gid)}" style="'
                 f'position:absolute; top:{int(b.y) + 8}px; left:{int(b.x) + 10}px; '
-                f'font-size:11px; color:{_accent}; '
+                f'font-size:11px; color:{_lbl_color}; '
                 f'font-weight:600; letter-spacing:0.04em; text-transform:uppercase; '
                 f'max-width:{max(60, gw - 20)}px; line-height:1.3; '
                 f'display:block; overflow-wrap:break-word; word-break:break-word; '
