@@ -38,6 +38,7 @@
 - `language_mode`（落盘归一化到 `language`）: 中文 / 英文 / 中英混排
 - `imagery_strategy`（落盘归一化到 `imagery`）: decorate / generate / provided / manual_slot
 - `brand_constraints`（落盘归一化到 `brand`）: 品牌视觉禁忌、主色、字体偏好、Logo 使用边界
+  - 若用户提供了组织的 `.pptx` 模板文件，将路径额外记录为 `brand_deck_path: <absolute_path>`（可选维度；不写盘也不报错）
 
 ### D. 构建环境与工程卡口
 
@@ -64,6 +65,7 @@
 | `page_density` | `page_density` |
 | `visual_style` | `style` |
 | `brand_constraints` | `brand` |
+| `brand_deck_path` | `brand_deck_path`（可选，路径原样落盘） |
 | `must_include` | `must_include` |
 | `must_avoid` | `must_avoid` |
 | `language_mode` | `language` |
