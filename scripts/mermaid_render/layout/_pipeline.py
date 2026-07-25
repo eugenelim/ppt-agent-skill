@@ -1750,6 +1750,14 @@ def _flowchart_route_new_path(
         e = edge_by_real.get(eid)
         if e is None:
             continue
+        # Compute marker_id the same way _route_edges() does — ini-005 left this
+        # as None, which emptied <defs> and removed all arrowheads (regression).
+        if e.style == "thick":
+            _cmid = "arrow-thick"
+            _cmarker_id: "str | None" = _cmid if e.arrow else None
+        else:
+            _cmid = "arrow-open" if e.style == "dotted" else "arrow-normal"
+            _cmarker_id = _cmid if e.arrow else None
         routed_dicts.append({
             "waypoints": list(rc.points),
             "edge_id": eid,
@@ -1761,7 +1769,8 @@ def _flowchart_route_new_path(
             "source_marker": e.source_marker,
             "target_marker": e.target_marker,
             "extra_css": e.extra_css,
-            "marker_id": None,
+            "marker_id": _cmarker_id,
+            "bidir": getattr(e, "bidir", False),
             "d": "",
         })
 
