@@ -1094,6 +1094,61 @@ def _separate_groups_tb(
             max(n.x + _node_render_w(n) for n in relevant) + GROUP_PAD_X,
         )
 
+    def _full_y_bbox(gid: str) -> tuple[float, float] | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return (
+            min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
+            max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+        )
+
+    def _content_x(gid: str) -> tuple[float, float] | None:
+        mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
+        if not mbrs:
+            return None
+        return (
+            min(n.x for n in mbrs),
+            max(n.x + _node_render_w(n) for n in mbrs),
+        )
+
+    # Y-direction de-overlap: push the lower group down when two non-nested sibling
+    # groups' full bboxes (including chrome padding) overlap in y. Uses content-only X
+    # to avoid cascading into side-by-side groups that legitimately share y-space.
+    for _yp in range(GROUP_CAP):
+        _ybs = {gid: _full_y_bbox(gid) for gid in groups}
+        _cxs = {gid: _content_x(gid) for gid in groups}
+        _ybs = {gid: b for gid, b in _ybs.items() if b is not None}
+        _cxs = {gid: x for gid, x in _cxs.items() if x is not None}
+        _yp_sorted = sorted(_ybs, key=lambda g: _ybs[g][0])
+        _yp_moved = False
+        for _i, _gid1 in enumerate(_yp_sorted):
+            _yb1 = _ybs[_gid1]
+            _cx1 = _cxs.get(_gid1)
+            if _cx1 is None:
+                continue
+            for _gid2 in _yp_sorted[_i + 1:]:
+                if _is_nested_groups(_gid1, _gid2, groups):
+                    continue
+                _yb2 = _ybs[_gid2]
+                _cx2 = _cxs.get(_gid2)
+                if _cx2 is None:
+                    continue
+                if not (_yb1[0] < _yb2[1] and _yb2[0] < _yb1[1]):
+                    continue
+                if not (_cx1[0] < _cx2[1] and _cx2[0] < _cx1[1]):
+                    continue
+                _yshift = int(_yb1[1] - _yb2[0] + COL_GAP)
+                for _nid in groups[_gid2].members:
+                    if _nid in nodes:
+                        nodes[_nid].y += _yshift
+                _yp_moved = True
+                break
+            if _yp_moved:
+                break
+        if not _yp_moved:
+            break
+
     for _pass in range(GROUP_CAP):
         boxes = {gid: _bbox(gid) for gid in groups}
         boxes = {gid: b for gid, b in boxes.items() if b is not None}
