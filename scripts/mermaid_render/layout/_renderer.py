@@ -1455,6 +1455,48 @@ def _compute_group_bboxes(
         if not changed:
             break
 
+    # Step 3b: force-resolve any remaining overlaps (unconditional midpoint split).
+    # Step 3's contained-midpoint split can fail when member nodes overlap so
+    # severely that every midpoint falls within a member's extent. This pass
+    # splits the overlap region at the midpoint regardless of member containment.
+    for _ in range(GROUP_CAP):
+        changed = False
+        for i, g1 in enumerate(gids):
+            if g1 in _empty_gids:
+                continue
+            b1 = bboxes[g1]
+            for g2 in gids[i + 1:]:
+                if _is_nested_groups(g1, g2, groups):
+                    continue
+                if g2 in _empty_gids:
+                    continue
+                b2 = bboxes[g2]
+                ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
+                oy = min(b1[3], b2[3]) - max(b1[1], b2[1])
+                if ox > 0 and oy > 0:
+                    if ox <= oy:
+                        mid = (max(b1[0], b2[0]) + min(b1[2], b2[2])) / 2
+                        if b1[0] <= b2[0]:
+                            b1[2] = mid
+                            b2[0] = mid
+                        else:
+                            b2[2] = mid
+                            b1[0] = mid
+                    else:
+                        mid = (max(b1[1], b2[1]) + min(b1[3], b2[3])) / 2
+                        if b1[1] <= b2[1]:
+                            b1[3] = mid
+                            b2[1] = mid
+                        else:
+                            b2[3] = mid
+                            b1[1] = mid
+                    changed = True
+                    break
+            if changed:
+                break
+        if not changed:
+            break
+
     # Expand canvas to include all group extents BEFORE clipping so that
     # step 4 clips to the expanded (correct) dimensions, not the node-only canvas.
     # This fixes the case where nesting expansion pushes a parent group wider/taller

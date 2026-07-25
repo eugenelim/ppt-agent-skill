@@ -351,12 +351,23 @@ def validate_topics_coverage(text: str, result: ValidationResult, label: str) ->
     return matched
 
 
+def _check_brand_deck_path(anchors: dict, result: ValidationResult) -> None:
+    """Optional brand_deck_path field: warn if present and not a .pptx path."""
+    val = (anchors.get("brand_deck_path") or "").strip()
+    if val and not val.lower().endswith(".pptx"):
+        result.warn(
+            "brand_deck_path: value does not end in .pptx — "
+            "brand shell extraction requires a PPTX file"
+        )
+
+
 def validate_interview(path: Path) -> tuple[ValidationResult, dict[str, Any]]:
     result, summary, text = basic_text_gate(path, "interview-qa", min_chars=120, min_lines=8)
     matched = validate_topics_coverage(text, result, "interview-qa")
     anchors = extract_anchor_fields(text)
     matched_anchors = validate_required_anchor_fields(anchors, REQUIRED_INTERVIEW_ANCHORS, result, "interview-qa")
     validate_grounding_mode(anchors, result, "interview-qa")
+    _check_brand_deck_path(anchors, result)
     density_bias = derive_density_bias_from_page_density(anchors.get("density_bias") or anchors.get("page_density"))
     summary["matched_dimensions"] = matched
     summary["matched_anchor_fields"] = matched_anchors
@@ -373,6 +384,7 @@ def validate_requirements_interview(path: Path) -> tuple[ValidationResult, dict[
     anchors = extract_anchor_fields(text)
     matched_anchors = validate_required_anchor_fields(anchors, REQUIRED_INTERVIEW_ANCHORS, result, "requirements-interview")
     validate_grounding_mode(anchors, result, "requirements-interview")
+    _check_brand_deck_path(anchors, result)
     density_bias = derive_density_bias_from_page_density(anchors.get("density_bias") or anchors.get("page_density"))
 
     if not contains_any(text, ["branch", "分支", "research", "直接制作", "现有资料"]):

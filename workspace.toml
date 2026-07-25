@@ -167,6 +167,14 @@ open = [
   # removing them would regress the Python compound layout. Unblock: an ELK-first
   # compound path that makes the Sugiyama correction unreachable.
   {slug = "cleanup-python-fallback-group-correction-retained", source = "spec/eight-case-parity-ci-and-cleanup AC5"},
+
+  # ── brand-shell-extraction deferred item ─────────────────────────────────
+  # Wire --brand-deck into the Step 0 interview QA so the main agent accepts a
+  # brand PPTX path during the interview and runs brand_extract.py before Step 3.5.
+  # Requires prompt template changes; deferred from brand-shell-extraction spec.
+  # Fix: update tpl-interview.md and contract_validator.py interview contract.
+  # Unblock: a multi-loop spec covering prompt template changes.
+  {slug = "brand-shell-interview-wiring", source = "spec/brand-shell-extraction"},
 ]
 
 # ── Initiative: Mermaid Rendering Correctness Follow-on — boston-v1 ──────────

@@ -1827,6 +1827,7 @@ def _flowchart_route_new_path(
     # Route each edge: multi-rank → try local channel first, else standard route_edge
     assignments: "dict[str, RouteCandidate]" = {}
     failures_list: "list[RoutingFailure]" = []
+    self_loop_dicts: "list[dict]" = []  # pre-built route dicts for self-loops
 
     def _local_bounds_for(src_rank: int, dst_rank: int) -> "tuple[float, float, float, float] | None":
         min_r, max_r = min(src_rank, dst_rank), max(src_rank, dst_rank)
@@ -1844,12 +1845,75 @@ def _flowchart_route_new_path(
         return (bx, by, max(x2) - bx, max(y2) - by)
 
     for eid, e in real_edges:
+        real_src_id = e.orig_src or e.src
+        real_dst_id = e.orig_dst or e.dst
+
+        # Self-loop: produce a rectangular bump outside the node; skip generic routing
+        # which produces a degenerate same-node direct route with the label inside the node.
+        if real_src_id == real_dst_id:
+            s = nodes.get(real_src_id)
+            if s is None or s.is_dummy:
+                failures_list.append(RoutingFailure(
+                    edge_id=eid, src_node_id=real_src_id, dst_node_id=real_dst_id,
+                    reason="self-loop node not found",
+                ))
+                continue
+            from ._constants import BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD  # noqa: PLC0415
+            _SL_CHIP_H = 17  # label chip height (matches _LABEL_CHIP_H in _routing.py)
+            nw = float(_node_render_w(s))
+            nh = float(_node_render_h(s))
+            _label_w = len(e.label or "") * 7
+            extent = max(BASE_LOOP_EXTENT, _label_w + 2 * LABEL_PAD, int(0.35 * max(nw, nh)))
+            if _horiz:
+                x_out = float(s.x) + nw * 0.33
+                x_ret = float(s.x) + nw * 0.67
+                y_face = float(s.y)
+                loop_y = y_face - extent
+                sl_pts: "list[tuple[float, float]]" = [
+                    (x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face),
+                ]
+                mid_x = (x_out + x_ret) / 2
+                _lx = mid_x - _label_w / 2
+                _ly = loop_y - _SL_CHIP_H - 4
+            else:
+                y_out = float(s.y) + nh * 0.33
+                y_ret = float(s.y) + nh * 0.67
+                x_face = float(s.x) + nw
+                loop_x = x_face + extent
+                sl_pts = [
+                    (x_face, y_out), (loop_x, y_out), (loop_x, y_ret), (x_face, y_ret),
+                ]
+                _lx = loop_x + 4.0
+                _ly = (y_out + y_ret) / 2 - _SL_CHIP_H
+            if e.style == "thick":
+                _sl_marker_id: "str | None" = "arrow-thick" if e.arrow else None
+            else:
+                _sl_marker_id = ("arrow-open" if e.style == "dotted" else "arrow-normal") if e.arrow else None
+            self_loop_dicts.append({
+                "waypoints": sl_pts,
+                "edge_id": eid,
+                "src": real_src_id,
+                "dst": real_dst_id,
+                "style": e.style,
+                "label": e.label,
+                "ah": e.arrow,
+                "source_marker": e.source_marker,
+                "target_marker": e.target_marker,
+                "extra_css": e.extra_css,
+                "marker_id": _sl_marker_id,
+                "bidir": getattr(e, "bidir", False),
+                "lx": _lx,
+                "ly": _ly,
+                "d": "",
+            })
+            continue
+
         src_pc = sp.get(eid)
         dst_pc = dp.get(eid)
         if src_pc is None or dst_pc is None:
             failures_list.append(RoutingFailure(
-                edge_id=eid, src_node_id=e.orig_src or e.src,
-                dst_node_id=e.orig_dst or e.dst,
+                edge_id=eid, src_node_id=real_src_id,
+                dst_node_id=real_dst_id,
                 reason="missing port candidate",
             ))
             continue
@@ -1858,8 +1922,6 @@ def _flowchart_route_new_path(
         result: "RouteCandidate | None" = None
 
         # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
-        real_src_id = e.orig_src or e.src
-        real_dst_id = e.orig_dst or e.dst
         per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
 
         # Multi-rank forward: try local channel first.
@@ -1920,8 +1982,8 @@ def _flowchart_route_new_path(
                 reason="no valid route",
             ))
 
-    # Convert RouteCandidate assignments to route dicts
-    routed_dicts: "list[dict]" = []
+    # Convert RouteCandidate assignments to route dicts; prepend pre-built self-loop dicts
+    routed_dicts: "list[dict]" = list(self_loop_dicts)
     for eid, rc in assignments.items():
         e = edge_by_real.get(eid)
         if e is None:

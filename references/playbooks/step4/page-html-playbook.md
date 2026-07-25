@@ -204,6 +204,12 @@ body {
 5. **连线间距**：多条平行连线（fan-in / fan-out）在同一节点边沿的间隔不小于 **12px**；若连线太多导致 12px 无法满足，改用**总线**（汇集成一根，再在目标侧分叉）。如果水平宽度放不下所有列，**缩小节点（`--node-w`）而非压缩列间距**——列间距优先保证 32px。
 6. 连线拓扑严格照 `blocks/diagram.md` §3.1：终点**夹进目标节点包围盒**（禁止照抄源 center-y）、多对一 fan-in 沿目标边 `a+(b−a)·i/(N+1)` 均匀铺开、稠密同组多对多改**总线**。
 
+> **品牌外壳主题属性（brand_mode 联动）**：若 `style.json` 含 `brand_mode`，在 diagram 卡的外层
+> wrapper `<div>` 上设置 `data-theme` 属性：`brand_mode="dark"` → `data-theme="dark"`；
+> `"light"` → `data-theme="light"`；`"neutral"` 或字段不存在 → 不设置。
+> 颜色本身已由 CSS 变量（`bg_primary`、`accent_1` 等）覆盖；此属性为未来 Mermaid 兼容
+> 组件提供显式深浅信号（当前 diagram 卡无运行时消费者，属前向钩子）。
+
 ## Phase 8：完成条件
 
 写入目标 HTML 文件后：
