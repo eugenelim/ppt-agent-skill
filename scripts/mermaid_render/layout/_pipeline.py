@@ -28,7 +28,7 @@ from ._constants import (
 from ._parser import _parse_graph_source, _detect_directive, _strip_frontmatter, _parse_init_config
 from ._layout import (
     _break_cycles, _assign_ranks, _minimize_crossings, _assign_coordinates,
-    _compact_group_columns, _group_coherent_cols,
+    _compact_group_columns, _group_coherent_cols, _snap_isolated_rank_cols,
 )
 from ._routing import (
     _route_edges, _node_render_w, _finalize_self_loop_offsets,
@@ -1735,6 +1735,93 @@ def _flowchart_route_new_path(
                     )
                     break
 
+    # Backward edges in TB mode: src exits RIGHT, dst enters BOTTOM.
+    # Default bottom→top creates a U-shaped loop that routes through group interiors.
+    # right→bottom routes via the open corridor to the right of src, entering dst
+    # from below — consistent with how ELK handles back-edges in TB flowcharts.
+    if not _horiz:
+        _back_eids: "set[str]" = set()
+        for eid, e in real_edges:
+            _rsrc = e.orig_src or e.src
+            _rdst = e.orig_dst or e.dst
+            _sn = nodes.get(_rsrc)
+            _dn = nodes.get(_rdst)
+            # Only override port faces for backward edges whose endpoints are
+            # both in groups.  Ungrouped backward edges (e.g. self-loops in a
+            # flat flowchart) are handled adequately by the standard router and
+            # the override would route them through unrelated nodes.
+            if (_sn and _dn and not _sn.is_dummy and not _dn.is_dummy
+                    and _sn.rank > _dn.rank
+                    and _sn.group and _dn.group):
+                _back_eids.add(eid)
+
+        if _back_eids:
+            # Override src: right face; recompute forward edges on bottom face
+            _back_src_nodes: "set[str]" = {
+                sp[eid].node_id for eid in _back_eids if eid in sp
+            }
+            for _snid in _back_src_nodes:
+                _sn2 = nodes.get(_snid)
+                if not _sn2:
+                    continue
+                _bx, _by, _bw, _bh = _nb(_sn2)
+                _back_out = [eid for eid in _back_eids
+                             if sp.get(eid) and sp[eid].node_id == _snid]
+                for _idx, _beid in enumerate(_back_out):
+                    _off = (_idx + 0.5) / max(len(_back_out), 1)
+                    _pt = _pp("right", _bx, _by, _bw, _bh, _off)
+                    sp[_beid] = sp[_beid]._replace(
+                        side="right", point=_pt, normalized_offset=_off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get("right", (0.0, 0.0)),
+                    )
+                # Recompute forward bottom fan without the backward edges
+                _fwd_out = [
+                    eid for eid, e in real_edges
+                    if (e.orig_src or e.src) == _snid
+                    and eid not in _back_eids
+                    and eid in sp and sp[eid].node_id == _snid
+                ]
+                if _fwd_out:
+                    for _feid, _foff in fan_slots(_fwd_out, "bottom", face_length=_bw):
+                        _fpt = _pp("bottom", _bx, _by, _bw, _bh, _foff)
+                        sp[_feid] = sp[_feid]._replace(
+                            side="bottom", point=_fpt, normalized_offset=_foff,
+                        )
+
+            # Override dst: bottom face; recompute forward edges on top face
+            _back_dst_nodes: "set[str]" = {
+                dp[eid].node_id for eid in _back_eids if eid in dp
+            }
+            for _dnid in _back_dst_nodes:
+                _dn2 = nodes.get(_dnid)
+                if not _dn2:
+                    continue
+                _bx, _by, _bw, _bh = _nb(_dn2)
+                _back_in = [eid for eid in _back_eids
+                            if dp.get(eid) and dp[eid].node_id == _dnid]
+                for _idx, _beid in enumerate(_back_in):
+                    _off = (_idx + 0.5) / max(len(_back_in), 1)
+                    _pt = _pp("bottom", _bx, _by, _bw, _bh, _off)
+                    dp[_beid] = dp[_beid]._replace(
+                        side="bottom", point=_pt, normalized_offset=_off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get("bottom", (0.0, 0.0)),
+                    )
+                # Recompute forward top fan without the backward edges
+                _fwd_in = [
+                    eid for eid, e in real_edges
+                    if (e.orig_dst or e.dst) == _dnid
+                    and eid not in _back_eids
+                    and eid in dp and dp[eid].node_id == _dnid
+                ]
+                if _fwd_in:
+                    for _feid, _foff in fan_slots(_fwd_in, "top", face_length=_bw):
+                        _fpt = _pp("top", _bx, _by, _bw, _bh, _foff)
+                        dp[_feid] = dp[_feid]._replace(
+                            side="top", point=_fpt, normalized_offset=_foff,
+                        )
+    else:
+        _back_eids = set()
+
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
     # Route each edge: multi-rank → try local channel first, else standard route_edge
@@ -1837,10 +1924,37 @@ def _flowchart_route_new_path(
         # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
         per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
 
-        # Multi-rank: try local channel first
+        # Multi-rank forward: try local channel first.
         src_node = nodes.get(real_src_id)
         dst_node = nodes.get(real_dst_id)
-        if (src_node and dst_node
+        _is_backward = eid in _back_eids
+
+        if _is_backward and src_node and dst_node:
+            # Backward edges in TB: route EX.right → corridor → OT.bottom.
+            # Pivot x = just right of source group boundary so the path clears
+            # the group interior (avoids routing back through node rows).
+            _bsx, _bsy = src_pc.point  # EX.right
+            _bdx, _bdy = dst_pc.point  # OT.bottom center
+            _back_grp = src_node.group
+            _corr_x = _bsx  # fallback
+            if _back_grp and _back_grp in grp_bboxes:
+                _, _, _sg_x1, _ = grp_bboxes[_back_grp]
+                _corr_x = _sg_x1 + COL_GAP / 2.0
+            if _bsx < _corr_x < _bdx:
+                _bpts: "tuple" = ((_bsx, _bsy), (_corr_x, _bsy), (_corr_x, _bdy), (_bdx, _bdy))
+            else:
+                _bpts = ((_bsx, _bsy), (_bdx, _bsy), (_bdx, _bdy))
+            _blen = sum(
+                abs(_bpts[i + 1][0] - _bpts[i][0]) + abs(_bpts[i + 1][1] - _bpts[i][1])
+                for i in range(len(_bpts) - 1)
+            )
+            result = RouteCandidate(
+                edge_id=eid, source_port=src_pc, target_port=dst_pc,
+                points=_bpts, bend_count=len(_bpts) - 2,
+                length=_blen, crossing_count=0, shared_segment_length=0.0, cost=_blen,
+            )
+        elif (not _is_backward
+                and src_node and dst_node
                 and not src_node.is_dummy and not dst_node.is_dummy
                 and abs(src_node.rank - dst_node.rank) > 1):
             lb = _local_bounds_for(src_node.rank, dst_node.rank)
@@ -1905,6 +2019,7 @@ def _flowchart_route_new_path(
             "lx": _lx,
             "ly": _ly,
             "d": "",
+            "_is_backward": eid in _back_eids,
         })
 
     return RouteBatch(routed=tuple(routed_dicts), failures=tuple(failures_list))
@@ -1940,7 +2055,7 @@ def layout_flowchart_with_python_fallback(
     height_hint = semantics.height_hint
 
     _break_cycles(nodes, edges)
-    _assign_ranks(nodes, edges)
+    _assign_ranks(nodes, edges, direction=direction)
     _minimize_crossings(nodes, edges)
 
     # Auto-select direction (TB vs LR) when both size hints are given
@@ -1970,6 +2085,7 @@ def layout_flowchart_with_python_fallback(
 
     if groups:
         _group_coherent_cols(nodes, groups)
+        _snap_isolated_rank_cols(nodes, groups)
         _compact_group_columns(nodes, groups)
 
     canvas_w, canvas_h = _assign_coordinates(
@@ -1983,6 +2099,33 @@ def layout_flowchart_with_python_fallback(
     if direction.upper() not in ("LR", "RL"):
         from ._layout import _center_isolated_nodes  # noqa: PLC0415
         _center_isolated_nodes(nodes, edges)
+
+    # Snap rank-isolated group members to their group's x range (TB only).
+    # A node alone at its rank within its group (e.g. BD/LLM API in Store Layer
+    # at rank 6 while NP/OS are at rank 5) can land far left of all other group
+    # members due to Sugiyama parent-alignment, stretching the group's bbox
+    # unnecessarily and triggering false conflict cascades in _separate_groups_tb.
+    if groups and direction.upper() not in ("LR", "RL"):
+        for _gid, _grp in groups.items():
+            _mbrs = [nid for nid in _grp.members if nid in nodes and not nodes[nid].is_dummy]
+            # Require ≥3 members (same guard as _snap_isolated_rank_cols):
+            # with only 2 members each node is necessarily alone at its rank,
+            # so the snap reference is too thin and misaligns layouts.
+            if len(_mbrs) < 3:
+                continue
+            _rank_to_mbrs: dict[int, list[str]] = {}
+            for _nid in _mbrs:
+                _rank_to_mbrs.setdefault(nodes[_nid].rank, []).append(_nid)
+            for _rank, _rank_mbrs in _rank_to_mbrs.items():
+                if len(_rank_mbrs) != 1:
+                    continue
+                _solo = nodes[_rank_mbrs[0]]
+                _others = [nodes[m] for m in _mbrs if nodes[m].rank != _rank]
+                if len(_others) < 2:
+                    continue
+                _min_other_x = min(o.x for o in _others)
+                if _solo.x < _min_other_x - COL_GAP:
+                    _solo.x = _min_other_x
 
     # Recursive compound layout (replaces _recursive_group_layout + post-layout
     # coordinate corrections). Returns boundary_gates for cross-boundary edges.
@@ -2093,6 +2236,7 @@ def layout_flowchart_with_python_fallback(
     if groups and not semantics.is_state_diagram and _grp_bboxes:
         _cbe_gates = _reroute_cross_boundary_edges(
             _restored_routes, nodes, _grp_bboxes, canvas_w, canvas_h,
+            direction=direction,
         )
         if _cbe_gates:
             # Merge, don't replace: the reroute emits gates only for edges it
@@ -2795,6 +2939,7 @@ def _reroute_cross_boundary_edges(
     grp_bboxes: "dict[str, tuple]",
     canvas_w: float,
     canvas_h: float,
+    direction: str = "TB",
 ) -> "tuple":
     """Route every cross-boundary flowchart edge through explicit boundary gates.
 
@@ -2841,7 +2986,11 @@ def _reroute_cross_boundary_edges(
         dg = dn.group if dn.group in grp_bboxes else None
         # Cross-boundary iff endpoints differ in deepest scope and at least one
         # is a laid-out group. Intra-group and fully free edges are untouched.
+        # Backward edges (rank inverted) are pre-routed with right→bottom ports
+        # and should not be re-routed by the A* pass which ignores port direction.
         if sn.group == dn.group or (sg is None and dg is None):
+            continue
+        if r.get("_is_backward"):
             continue
 
         scx = sn.x + _node_render_w(sn) / 2.0
@@ -2850,6 +2999,13 @@ def _reroute_cross_boundary_edges(
         dcy = dn.y + _node_render_h(dn) / 2.0
         a = _cbe_node_face(sn, (dcx, dcy))
         b = _cbe_node_face(dn, (scx, scy))
+        # Backward edges in TB mode (src.rank > dst.rank): src exits RIGHT,
+        # dst is entered from BOTTOM so the route avoids the group interior.
+        _is_tb = direction.upper() not in ("LR", "RL")
+        if _is_tb and sn.rank > dn.rank:
+            dw = _node_render_w(dn)
+            dh = _node_render_h(dn)
+            b = (dn.x + dw / 2.0, dn.y + dh)
 
         endpoint_groups = {sn.group, dn.group}
         obstacles: "list[tuple]" = [

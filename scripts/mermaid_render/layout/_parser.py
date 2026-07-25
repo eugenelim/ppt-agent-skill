@@ -427,14 +427,18 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
             # remove trailing [direction] if present
             rest = re.sub(r'\s*\[[A-Z]{2,3}\]\s*$', '', rest).strip()
             # extract label from id["label"] or id[label] — strip surrounding quotes
-            _m_bracket = re.match(r'^[A-Za-z_][A-Za-z0-9_\-\.]*\[([^\[\]]*)\]\s*$', rest)
+            _m_bracket = re.match(r'^([A-Za-z_][A-Za-z0-9_\-\.]*)\[([^\[\]]*)\]\s*$', rest)
             if _m_bracket:
-                label = _m_bracket.group(1).strip().strip('"\'')
+                _sg_src_id = _m_bracket.group(1)
+                label = _m_bracket.group(2).strip().strip('"\'')
             else:
+                _sg_src_id = None
                 label = rest.strip('"\'')
             gid = f"_g{len(groups)}"
             parent_gid = stack[-1] if stack else None
             groups[gid] = _Group(id=gid, label=label or gid, parent_group=parent_gid)
+            if _sg_src_id:
+                groups[gid].src_id = _sg_src_id  # type: ignore[attr-defined]
             stack.append(gid)
             continue
         if line.lower().strip() in ("end", "end;"):
@@ -493,6 +497,55 @@ def _parse_graph_source(lines: list[str]) -> tuple[dict[str, _Node], list[_Edge]
                 _e.src = _exit
             if _e.dst == _cs_name:
                 _e.dst = _entry
+
+    # Resolve subgraph-ID references in edges: an edge like `ING --> LLM` where
+    # LLM is a subgraph identifier (not a node) creates a phantom node.  We
+    # must remove the phantom and either:
+    #   (a) redirect the edge to the first real member of the named group, OR
+    #   (b) drop the edge entirely if the source is already inside that group
+    #       (self-referential: ADOT --> Obs where ADOT is in Obs).
+    _sg_id_to_gid: dict[str, str] = {
+        getattr(grp, "src_id", ""): gid
+        for gid, grp in groups.items()
+        if getattr(grp, "src_id", None)
+    }
+    _phantom_ids = set(_sg_id_to_gid) & set(nodes)
+    if _phantom_ids:
+        for _pid in _phantom_ids:
+            del nodes[_pid]
+        _fixed_edges: list[_Edge] = []
+        for _e in edges:
+            _resolve_src = _sg_id_to_gid.get(_e.src)
+            _resolve_dst = _sg_id_to_gid.get(_e.dst)
+            if _resolve_src is None and _resolve_dst is None:
+                _fixed_edges.append(_e)
+                continue
+            # Find a redirect target: first real member of the referenced group
+            # that is not also a phantom or itself a group ID.
+            def _first_member(gid: str) -> "str | None":
+                for _m in groups[gid].members:
+                    if _m in nodes:
+                        return _m
+                return None
+            _new_src = _e.src
+            _new_dst = _e.dst
+            if _resolve_dst is not None:
+                _new_dst = _first_member(_resolve_dst) or ""
+            if _resolve_src is not None:
+                _new_src = _first_member(_resolve_src) or ""
+            if not _new_src or not _new_dst:
+                continue  # drop: empty group or self-referential
+            # Drop self-referential: src inside the same group as the resolved dst
+            _src_node = nodes.get(_new_src)
+            _dst_node = nodes.get(_new_dst)
+            if _src_node and _dst_node and _src_node.group == _dst_node.group:
+                continue
+            _fixed_edges.append(_Edge(
+                src=_new_src, dst=_new_dst,
+                label=_e.label, style=_e.style,
+                source_marker=_e.source_marker, target_marker=_e.target_marker,
+            ))
+        edges[:] = _fixed_edges
 
     # Assign stable parse-time edge IDs.  Duplicates get a #N suffix so every
     # edge has a unique ID that survives across layout stages.

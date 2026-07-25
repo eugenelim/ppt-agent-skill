@@ -1,0 +1,68 @@
+flowchart TB
+    subgraph Consumers["External consumers"]
+        IDE["AI IDE<br/>(Claude Code · Cursor · Windsurf)<br/>+ local mcp_proxy subprocess"]
+        AGC["Bedrock AgentCore<br/>managed custom agents<br/>(connectivity design only)"]
+        AUTO["Automation / AI workflow<br/>AWS SDK · IAM role · SigV4"]
+    end
+
+    subgraph AWS["AWS account · one region · stack GraphragBizOps"]
+        APIGW["API Gateway HTTP API<br/>API key auth (usage plan)<br/>IDE / human ingress"]
+        FU["IAM-auth Function URL<br/>AuthType=AWS_IAM · SigV4<br/>automation + AgentCore ingress"]
+        BUD["Budgets alarm<br/>$250/mo · 80% · email"]
+        EB["EventBridge Rule<br/>git push webhook / scheduled"]
+
+        subgraph VPC["VPC — private isolated subnets · 2 AZs · NO NAT / NO IGW"]
+            direction TB
+
+            subgraph Compute["Compute (scale-to-zero)"]
+                ML["MCP Lambda<br/>FastMCP + Mangum<br/>query · routing · synthesis<br/>512 MB · 120 s · 10 concurrent · ADOT"]
+                ING["Fargate ingestion task<br/>format router · extract · cleanse<br/>RDF emit · embed · Neptune load<br/>2048 CPU / 8192 MiB"]
+                SP["SPARQL smoke probe<br/>Neptune round-trip"]
+                VP["Vector smoke probe<br/>OpenSearch embed-knn round-trip"]
+            end
+
+            subgraph Stores["Stores (standing cost)"]
+                NEP[("Neptune Serverless<br/>SPARQL/RDF · min 1 NCU<br/>normative · descriptive<br/>taxonomy · ontology · quarantine")]
+                OS[("OpenSearch<br/>t3.small.search · Lucene HNSW<br/>named_graph filter · encrypted")]
+                S3[("S3<br/>commit SHA manifest<br/>Silver artifacts · Gold artifacts")]
+            end
+
+            subgraph Endpoints["VPC Endpoints (no NAT)"]
+                EPS["s3(gw) · ecr.api · ecr.dkr<br/>logs · sts · bedrock-runtime<br/>otlp · xray · textract · comprehend"]
+            end
+        end
+
+        subgraph LLM["Amazon Bedrock (via VPC endpoint)"]
+            BD["LLM API<br/>embed · synthesise · route"]
+        end
+
+        subgraph Obs["Observability"]
+            ADOT["ADOT layer<br/>OTLP to CloudWatch Logs · X-Ray"]
+        end
+    end
+
+    Git["Git repository<br/>(source of truth · Bronze)"]
+
+    IDE -->|"x-api-key header"| APIGW
+    AGC -->|"SigV4 · IAM role"| FU
+    AUTO -->|"SigV4 · IAM role"| FU
+
+    APIGW -->|"proxies to"| ML
+    FU -->|"invokes"| ML
+
+    Git -->|"webhook / scheduled"| EB
+    EB --> ING
+    ING --> S3
+    ING --> NEP
+    ING --> OS
+    ING --> LLM
+
+    ML --> NEP
+    ML --> OS
+    ML --> LLM
+    ML --> ADOT
+    ADOT --> Obs
+
+    SP --> NEP
+    VP --> OS
+    VP --> LLM

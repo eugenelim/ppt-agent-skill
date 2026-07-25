@@ -1055,6 +1055,11 @@ def _separate_groups_tb(
     When two groups overlap in both x and y, the right-er group is shifted right by
     the X overlap + COL_GAP. Returns updated canvas_w (shifted nodes may extend it).
     Runs up to GROUP_CAP passes; stops early when stable.
+
+    Y-overlap is tested against node-content bounds (no padding) so that vertically-
+    stacked groups in a TB hierarchy are never pushed apart just because their chrome
+    padding overlaps — only groups whose actual node content shares y-space are
+    considered to conflict and need horizontal separation.
     """
     def _bbox(gid: str) -> dict | None:
         mbrs = [nodes[m] for m in groups[gid].members if m in nodes and not nodes[m].is_dummy]
@@ -1063,9 +1068,31 @@ def _separate_groups_tb(
         return {
             "gx":       min(n.x for n in mbrs) - GROUP_PAD_X,
             "gx_right": max(n.x + _node_render_w(n) for n in mbrs) + GROUP_PAD_X,
-            "gy":       min(n.y for n in mbrs) - GROUP_PAD_Y_TOP,
-            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs) + GROUP_PAD_Y_BOT,
+            # Content-only y bounds (no padding) so vertically-stacked groups whose
+            # chrome padding overlaps are never considered to y-conflict.
+            "gy":       min(n.y for n in mbrs),
+            "gy_bot":   max(n.y + _node_render_h(n) for n in mbrs),
         }
+
+    def _effective_x_bbox(gid: str, y_lo: float, y_hi: float) -> tuple[float, float] | None:
+        """gx, gx_right restricted to nodes whose content-y overlaps [y_lo, y_hi).
+
+        Nodes outside the y-overlap zone (e.g. BD in Store Layer at a rank below
+        all Retrieval Layer nodes) would otherwise drag the group's left edge far
+        left, triggering false x-conflict and a cascading rightward displacement.
+        """
+        relevant = [
+            nodes[m] for m in groups[gid].members
+            if m in nodes and not nodes[m].is_dummy
+            and nodes[m].y < y_hi
+            and nodes[m].y + _node_render_h(nodes[m]) > y_lo
+        ]
+        if not relevant:
+            return None
+        return (
+            min(n.x for n in relevant) - GROUP_PAD_X,
+            max(n.x + _node_render_w(n) for n in relevant) + GROUP_PAD_X,
+        )
 
     for _pass in range(GROUP_CAP):
         boxes = {gid: _bbox(gid) for gid in groups}
@@ -1080,10 +1107,20 @@ def _separate_groups_tb(
                 if _is_nested_groups(gid1, gid2, groups):
                     continue
                 b2 = boxes[gid2]
-                x_overlap = b1["gx"] < b2["gx_right"] and b2["gx"] <= b1["gx_right"]  # type: ignore[index]
                 y_overlap = b1["gy"] < b2["gy_bot"] and b2["gy"] < b1["gy_bot"]  # type: ignore[index]
-                if x_overlap and y_overlap:
-                    shift = int(b1["gx_right"] - b2["gx"] + COL_GAP)  # type: ignore[index]
+                if not y_overlap:
+                    continue
+                # Restrict x-bbox to the y-overlap zone to avoid false positives
+                # from nodes at ranks outside the zone dragging the group bbox.
+                y_lo = max(b1["gy"], b2["gy"])
+                y_hi = min(b1["gy_bot"], b2["gy_bot"])
+                eff1 = _effective_x_bbox(gid1, y_lo, y_hi)
+                eff2 = _effective_x_bbox(gid2, y_lo, y_hi)
+                if eff1 is None or eff2 is None:
+                    continue
+                x_overlap = eff1[0] < eff2[1] and eff2[0] <= eff1[1]
+                if x_overlap:
+                    shift = int(eff1[1] - eff2[0] + COL_GAP)
                     for nid in groups[gid2].members:
                         if nid in nodes:
                             nodes[nid].x += shift
