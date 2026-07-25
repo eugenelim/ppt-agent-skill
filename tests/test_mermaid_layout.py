@@ -3002,15 +3002,16 @@ class TestFixtureCorpus:
         except ValueError:
             pytest.skip(f"{fixture.stem}: unsupported diagram type")
         # The overlay SVG spans the whole canvas and carries both width and height.
-        # Match the outermost SVG that has overflow:visible and a non-trivial height.
+        # Take the tallest SVG (the canvas overlay) — node-interior shape SVGs
+        # (e.g. database cylinders) can appear first and have height > 100 too.
         svgs = list(_re.finditer(r'<svg\b[^>]*style="[^"]*"[^>]*>', html))
         canvas_height: int | None = None
         for tag_m in svgs:
             tag = tag_m.group()
             h_m = _re.search(r'\bheight:(\d+)px', tag)
             if h_m and int(h_m.group(1)) > 100:
-                canvas_height = int(h_m.group(1))
-                break
+                if canvas_height is None or int(h_m.group(1)) > canvas_height:
+                    canvas_height = int(h_m.group(1))
         if canvas_height is None:
             pytest.skip(f"{fixture.stem}: no overlay SVG height found — diagram type may not produce overlay")
         # Node divs carry 'top:Npx' and 'min-height:Npx' in their inline style.
