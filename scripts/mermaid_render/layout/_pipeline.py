@@ -2779,7 +2779,21 @@ def _reroute_cross_boundary_edges(
             if cs:
                 seg, gx_, gy_ = cs[0]
                 inserts.append((seg, (gx_, gy_), dg, "entry"))
-        for seg, pt, gid, role in sorted(inserts, key=lambda t: -t[0]):
+        # Sort: segment index descending (so later segments are inserted first and
+        # don't shift earlier segment indices), then within the same segment sort by
+        # Manhattan distance from segment start descending (so the gate farthest from
+        # the segment start is inserted first — each subsequent insert at `seg+1`
+        # pushes it forward, placing the nearest-to-start gate earliest in the path).
+        # This prevents the same-segment EXIT/ENTRY gate pair from being inserted in
+        # reverse order, which would create a visible backtrack in the routed path.
+        for seg, pt, gid, role in sorted(
+            inserts,
+            key=lambda t: (
+                -t[0],
+                -(abs(t[1][0] - out[t[0]][0]) + abs(t[1][1] - out[t[0]][1]))
+                if t[0] < len(out) else 0.0
+            ),
+        ):
             if (round(pt[0], 2), round(pt[1], 2)) not in {(round(w[0], 2), round(w[1], 2)) for w in out}:
                 out.insert(seg + 1, (float(pt[0]), float(pt[1])))
         for seg, pt, gid, role in inserts:
