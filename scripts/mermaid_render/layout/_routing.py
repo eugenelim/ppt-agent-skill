@@ -216,6 +216,10 @@ def _blocked_segs(
 
     A segment is blocked when it passes through any obstacle AABB interior
     (more than 4 px inside a boundary in the perpendicular direction).
+
+    Horizontal segments at exactly y = oy2 (the obstacle bottom boundary) are also
+    blocked so routes cannot run along the visible bottom edge of a group box or node.
+    The 4 px clearance still applies at the top boundary (y ≤ oy1 + CLEAR is free).
     """
     CLEAR = 4
     blocked: set = set()
@@ -227,7 +231,7 @@ def _blocked_segs(
         for xi in range(nx - 1):
             xl, xr = grid_xs[xi], grid_xs[xi + 1]
             for ox1, oy1, ox2, oy2 in obstacles:
-                if oy1 + CLEAR < y < oy2 - CLEAR:
+                if oy1 + CLEAR < y <= oy2:
                     if ox1 < xr and ox2 > xl:
                         blocked.add((xi, yi, xi + 1, yi))
                         break
