@@ -1166,7 +1166,7 @@ class CylinderGeometry:
             f'<ellipse cx="{cyl_cx}" cy="{int(h) - cyl_ry}" rx="{cyl_rx}" ry="{cyl_ry}"'
             f' fill="none" stroke="{accent}" stroke-width="1.5" opacity="0.6"/>'
             f'<ellipse cx="{cyl_cx}" cy="{cyl_ry}" rx="{cyl_rx}" ry="{cyl_ry}"'
-            f' fill="var(--node-bg-from,var(--card-bg-from,#ffffff))" stroke="{accent}" stroke-width="1.5"/>'
+            f' fill="none" stroke="{accent}" stroke-width="1.5"/>'
             f'</svg>'
         )
         return (

@@ -164,7 +164,7 @@ def _assign_ranks(nodes: dict[str, _Node], edges: list[_Edge], direction: str = 
             pred_ranks = {nodes[p].rank for p in preds_real}
             if len(pred_ranks) < 2:
                 continue
-            new_rank = min(pred_ranks) + 1
+            new_rank = max(pred_ranks)
             if new_rank < n.rank:
                 n.rank = new_rank
 
