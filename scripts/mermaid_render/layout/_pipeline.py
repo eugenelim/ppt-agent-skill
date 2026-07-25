@@ -1959,7 +1959,7 @@ def _flowchart_route_new_path(
                 and abs(src_node.rank - dst_node.rank) > 1):
             lb = _local_bounds_for(src_node.rank, dst_node.rank)
             if lb is not None:
-                result = local_channel_route(eid, src_pc, dst_pc, lb, existing)
+                result = local_channel_route(eid, src_pc, dst_pc, lb, existing, obstacles=per_obs)
                 # Reject channels that land within 8px of the canvas boundary
                 if result is not None:
                     _CANVAS_MARGIN = 8.0
