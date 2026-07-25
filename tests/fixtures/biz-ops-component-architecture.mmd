@@ -1,0 +1,47 @@
+flowchart TB
+    subgraph Consumers["Consumers"]
+        HU["Human<br/>(AI IDE)"]
+        AG["AI Agent<br/>/ Workflow"]
+    end
+
+    subgraph Interface["Interface Layer"]
+        MCP["MCP Tool Server<br/>ask · search · search_graph<br/>get_policies · query · summarize"]
+    end
+
+    subgraph Retrieval["Retrieval Layer"]
+        QA["Question Analyzer<br/>NER → typed URIs<br/>query type · specificity"]
+        SR["Strategy Router<br/>rules-first · LLM fallback<br/>normative-first principle"]
+        EX["Retrieval Executor<br/>vector · hybrid_graph · graph_expand<br/>structured · global · normative"]
+        SY["Synthesizer<br/>LLM API call<br/>ask and get_policies only"]
+    end
+
+    subgraph Stores["Store Layer"]
+        OS["OpenSearch<br/>vector index (Lucene HNSW)<br/>keyed by RDF URI + named_graph"]
+        NP["Neptune SPARQL<br/>named graphs<br/>normative · descriptive · taxonomy"]
+        BD["LLM API<br/>embed · synthesise · route"]
+    end
+
+    subgraph Ingestion["Ingestion Layer"]
+        GI["Git Ingestion<br/>delta diff · RDF emit<br/>partition graph upsert/drop"]
+    end
+
+    subgraph Observability["Observability"]
+        OT["OTEL Spans<br/>AWS ADOT → CloudWatch"]
+    end
+
+    HU -->|"natural language via IDE LLM"| MCP
+    AG -->|"tool call"| MCP
+    MCP --> QA
+    QA --> SR
+    SR --> EX
+    EX --> OS
+    EX --> NP
+    EX --> BD
+    EX --> SY
+    SY --> BD
+    MCP -.->|"span per call"| OT
+    EX -.->|"span per leg"| OT
+
+    GI --> NP
+    GI --> OS
+    GI --> BD

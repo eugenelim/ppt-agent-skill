@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant C as Caller (agent/IDE LLM)
+    participant M as MCP Server
+    participant A as Question Analyzer
+    participant R as Strategy Router
+    participant OS as OpenSearch
+    participant NP as Neptune SPARQL
+    participant BD as Bedrock
+
+    C->>M: ask("What SOPs apply to incident response?")
+    M->>A: analyze(question)
+    A->>BD: embed(question)
+    A-->>R: entities=none, type=factual, specificity=narrow
+    R-->>M: strategy=hybrid_graph
+    M->>OS: knn(vector, k=5, partition=descriptive)
+    OS-->>M: chunk results with scores
+    M->>NP: graph expand(chunk URIs, hops=1, partition=descriptive)
+    NP-->>M: subgraph triples
+    M->>BD: synthesize(chunks, graph facts, question)
+    BD-->>M: answer with citations
+    M-->>C: answer, citations, strategy=hybrid_graph, trace

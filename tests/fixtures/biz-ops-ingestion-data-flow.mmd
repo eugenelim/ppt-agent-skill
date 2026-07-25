@@ -1,0 +1,47 @@
+sequenceDiagram
+    participant G as Git Repo (Bronze)
+    participant F as Fargate Ingestion Task
+    participant S as S3 (Silver + Gold + manifest)
+    participant TX as Textract (scanned PDFs)
+    participant NP as Neptune SPARQL
+    participant OS as OpenSearch
+    participant BD as Bedrock
+
+    F->>G: git pull / clone
+    F->>S: load last_commit_sha
+    F->>G: git diff last_sha..HEAD --name-status
+    G-->>F: list of added, modified, and deleted files
+
+    loop for each added/modified file [Silver gate]
+        F->>F: route to extractor by format (pandoc/docling/markitdown/Textract)
+        alt scanned PDF
+            F->>TX: OCR extract
+            TX-->>F: text blocks
+        end
+        F->>F: cleanse (strip headers, detect PII, quality gates)
+        alt quality gate failed
+            F->>NP: write quarantine record with reason
+        else gate passed
+            F->>S: write Silver artifact (Markdown + cleansing report)
+            Note over F,S: Gold layer
+            F->>F: classify rdf:type, emit RDF triples + PROV-O triples
+            F->>F: SHACL validate RDF triples against shape library (pyshacl)
+            alt SHACL violation
+                F->>NP: write quarantine record with SHACL violation report
+            else SHACL valid
+                F->>BD: LLM API call for chunk embeddings
+                F->>S: write Gold artifact (chunks + vectors)
+                F->>NP: INSERT triples into partition graph + taxonomy index
+                F->>OS: upsert chunks with doc_uri, partition, pii_flagged
+            end
+        end
+    end
+
+    loop for each deleted file
+        F->>NP: lookup partition from taxonomy index
+        NP-->>F: partition graph URI
+        F->>NP: DELETE doc triples and chunk triples from partition graph
+        F->>OS: delete by doc_uri
+    end
+
+    F->>S: store new commit_sha
