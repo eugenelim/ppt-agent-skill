@@ -1131,6 +1131,103 @@ def _separate_groups_tb(
         if not moved:
             break
 
+    # ── Shared recursive bbox helpers ───────────────────────────────────────────
+    # Simulate what _compute_group_bboxes will produce so the pre-processing
+    # passes can use consistent containment tests before the real bbox run.
+
+    def _grp_bottom(gid: str) -> float:
+        """Simulate _compute_group_bboxes bottom for gid (recursive)."""
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _bs = [float(n.y + _node_render_h(n)) for n in _dm]
+        _bs += [_grp_bottom(cgid) for cgid in _ch]
+        return (max(_bs) if _bs else 0.0) + GROUP_PAD_Y_BOT
+
+    def _grp_top(gid: str) -> float:
+        """Simulate _compute_group_bboxes top for gid (recursive)."""
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _ts = [float(n.y) for n in _dm]
+        _ts += [_grp_top(cgid) for cgid in _ch]
+        return (min(_ts) if _ts else 0.0) - GROUP_PAD_Y_TOP
+
+    def _grp_x0(gid: str) -> float:
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _xs = [float(n.x) for n in _dm]
+        _xs += [_grp_x0(cgid) for cgid in _ch]
+        return (min(_xs) if _xs else 0.0) - GROUP_PAD_X
+
+    def _grp_x1(gid: str) -> float:
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _xs = [float(n.x + _node_render_w(n)) for n in _dm]
+        _xs += [_grp_x1(cgid) for cgid in _ch]
+        return (max(_xs) if _xs else 0.0) + GROUP_PAD_X
+
+    # ── Pre-second-pass: push parent direct-members outside pure-container ──────
+    # Example: AWS Account has direct nodes BUD, EB, APIGW, FU plus a pure-
+    # container child VPC.  VPC's rendered bbox spans most of the canvas.
+    # Without this pass, BUD/EB/APIGW/FU land inside VPC's visual box.
+    #
+    # Strategy: for each pure-container child C of a parent P, find P's direct
+    # member nodes that fall within C's simulated bbox.  Shift them to columns
+    # just right of C's x1, preserving original y to keep rank order; use extra
+    # columns only when y-ranges collide within a single column.
+
+    def _pack_cols(nds: "list[tuple[str,object]]", col_x_start: int) -> None:
+        """Place each node in the leftmost column where it doesn't y-overlap."""
+        cols: "list[list[tuple[str,object]]]" = []
+        for _nid, _nd in sorted(nds, key=lambda kv: kv[1].y):
+            _placed = False
+            for _col in cols:
+                _col_y1 = max(_cn.y + _node_render_h(_cn) for _, _cn in _col)
+                if _nd.y >= _col_y1 + COL_GAP:
+                    _col.append((_nid, _nd))
+                    _placed = True
+                    break
+            if not _placed:
+                cols.append([(_nid, _nd)])
+        for _ci, _col in enumerate(cols):
+            _x = col_x_start + _ci * (NODE_W + COL_GAP)
+            for _nid, _nd in _col:
+                _nd.x = _x
+
+    for _pp_pgid in list(groups.keys()):
+        _pp_pg = groups[_pp_pgid]
+        _pp_pure_ch = [
+            cgid for cgid, cg in groups.items()
+            if cg.parent_group == _pp_pgid
+            and not any(m in nodes and not nodes[m].is_dummy for m in cg.members)
+            and any(_cg2.parent_group == cgid for _cg2 in groups.values())
+        ]
+        if not _pp_pure_ch:
+            continue
+        _pp_direct = [
+            (nid, nodes[nid]) for nid in groups[_pp_pgid].members
+            if nid in nodes and not nodes[nid].is_dummy
+        ]
+        if not _pp_direct:
+            continue
+        _max_pc_x1 = max(_grp_x1(_pc) for _pc in _pp_pure_ch)
+        _max_pc_x0 = min(_grp_x0(_pc) for _pc in _pp_pure_ch)
+        _max_pc_y0 = min(_grp_top(_pc) for _pc in _pp_pure_ch)
+        _max_pc_y1 = max(_grp_bottom(_pc) for _pc in _pp_pure_ch)
+        _displaced = [
+            (nid, nd) for nid, nd in _pp_direct
+            if (float(nd.x) < _max_pc_x1
+                and float(nd.x + _node_render_w(nd)) > _max_pc_x0
+                and float(nd.y) < _max_pc_y1
+                and float(nd.y + _node_render_h(nd)) > _max_pc_y0)
+        ]
+        if not _displaced:
+            continue
+        _pack_cols(_displaced, int(_max_pc_x1 + COL_GAP))
+
     # Second pass: root-level group de-overlap.
     #
     # Problem: a root-level group A (e.g. "External Consumers") may have its
@@ -1243,39 +1340,7 @@ def _separate_groups_tb(
     # pure container (no direct members) whose recursive bbox is tall and wide.
     # Without this pass those sibling groups' nodes land inside VPC's rendered
     # rectangle, falsely implying they are VPC children.
-    def _grp_bottom(gid: str) -> float:
-        """Simulate _compute_group_bboxes bottom for gid (recursive)."""
-        _dm = [nodes[m] for m in groups[gid].members
-               if m in nodes and not nodes[m].is_dummy]
-        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
-        _bs = [float(n.y + _node_render_h(n)) for n in _dm]
-        _bs += [_grp_bottom(cgid) for cgid in _ch]
-        return (max(_bs) if _bs else 0.0) + GROUP_PAD_Y_BOT
-
-    def _grp_top(gid: str) -> float:
-        """Simulate _compute_group_bboxes top for gid (recursive)."""
-        _dm = [nodes[m] for m in groups[gid].members
-               if m in nodes and not nodes[m].is_dummy]
-        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
-        _ts = [float(n.y) for n in _dm]
-        _ts += [_grp_top(cgid) for cgid in _ch]
-        return (min(_ts) if _ts else 0.0) - GROUP_PAD_Y_TOP
-
-    def _grp_x0(gid: str) -> float:
-        _dm = [nodes[m] for m in groups[gid].members
-               if m in nodes and not nodes[m].is_dummy]
-        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
-        _xs = [float(n.x) for n in _dm]
-        _xs += [_grp_x0(cgid) for cgid in _ch]
-        return (min(_xs) if _xs else 0.0) - GROUP_PAD_X
-
-    def _grp_x1(gid: str) -> float:
-        _dm = [nodes[m] for m in groups[gid].members
-               if m in nodes and not nodes[m].is_dummy]
-        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
-        _xs = [float(n.x + _node_render_w(n)) for n in _dm]
-        _xs += [_grp_x1(cgid) for cgid in _ch]
-        return (max(_xs) if _xs else 0.0) + GROUP_PAD_X
+    # (_grp_bottom/_grp_top/_grp_x0/_grp_x1 are defined before the second pass.)
 
     for _pgid in list(groups.keys()):
         _pg = groups[_pgid]
