@@ -955,8 +955,8 @@ def _render_legend(edges: list[_Edge], groups: dict) -> str:
             '<span style="display:flex;align-items:center;gap:4px;">'
             '<svg width="20" height="10">'
             '<rect x="0" y="1" width="20" height="8" rx="2" '
-            'fill="none" stroke="var(--accent-1,#60a5fa)" '
-            'stroke-dasharray="3 2" stroke-width="1"/>'
+            'fill="#ffffde" stroke="#aaaa33" '
+            'stroke-width="1"/>'
             '</svg>'
             'Service boundary</span>'
         )
