@@ -1673,6 +1673,68 @@ def _flowchart_route_new_path(
                 fixed_side=False, preference_penalty=0.0,
             )
 
+    # Correct port faces for intra-group edges whose subgraph uses a different direction
+    # from the outer flowchart (e.g. "direction TB" inside an outer LR flowchart).
+    # The initial port building uses the outer direction for all edges; re-compute
+    # using the inner direction for any edge where both endpoints share an inner group.
+    _inner_group_dirs: "dict[str, str]" = {
+        gid: g.direction.upper()
+        for gid, g in semantics.groups.items()
+        if g.direction and g.direction.upper() != _dir
+    }
+    if _inner_group_dirs:
+        def _node_group(nid: str) -> "str | None":
+            n = nodes.get(nid)
+            return n.group if n else None
+
+        for eid, e in real_edges:
+            real_src = e.orig_src or e.src
+            real_dst = e.orig_dst or e.dst
+            sn = nodes.get(real_src)
+            dn = nodes.get(real_dst)
+            if not (sn and dn and sn.group and sn.group == dn.group
+                    and sn.group in _inner_group_dirs):
+                continue
+            gdir = _inner_group_dirs[sn.group]
+            g_horiz = gdir in ("LR", "RL")
+            g_src_face = "right" if g_horiz else "bottom"
+            g_dst_face = "left" if g_horiz else "top"
+
+            # All intra-group edges from the same src (for fan distribution)
+            intra_src = [
+                e2_id for e2_id, e2 in real_edges
+                if (e2.orig_src or e2.src) == real_src
+                and _node_group(e2.orig_dst or e2.dst) == sn.group
+            ]
+            # All intra-group edges into the same dst
+            intra_dst = [
+                e2_id for e2_id, e2 in real_edges
+                if (e2.orig_dst or e2.dst) == real_dst
+                and _node_group(e2.orig_src or e2.src) == dn.group
+            ]
+
+            bx, by, bw, bh = _nb(sn)
+            face_len_s = bh if g_horiz else bw
+            for e3_id, off in fan_slots(intra_src, g_src_face, face_length=face_len_s):
+                if e3_id == eid and eid in sp:
+                    pt = _pp(g_src_face, bx, by, bw, bh, off)
+                    sp[eid] = sp[eid]._replace(
+                        side=g_src_face, point=pt, normalized_offset=off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get(g_src_face, (0.0, 0.0)),
+                    )
+                    break
+
+            bx, by, bw, bh = _nb(dn)
+            face_len_d = bh if g_horiz else bw
+            for e3_id, off in fan_slots(intra_dst, g_dst_face, face_length=face_len_d):
+                if e3_id == eid and eid in dp:
+                    pt = _pp(g_dst_face, bx, by, bw, bh, off)
+                    dp[eid] = dp[eid]._replace(
+                        side=g_dst_face, point=pt, normalized_offset=off,
+                        outward_normal=_SIDE_NORMALS_LOCAL.get(g_dst_face, (0.0, 0.0)),
+                    )
+                    break
+
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
     # Route each edge: multi-rank → try local channel first, else standard route_edge
