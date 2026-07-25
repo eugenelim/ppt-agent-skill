@@ -1131,6 +1131,201 @@ def _separate_groups_tb(
         if not moved:
             break
 
+    # Second pass: root-level group de-overlap.
+    #
+    # Problem: a root-level group A (e.g. "External Consumers") may have its
+    # direct-member nodes sitting inside another root-level group B's (e.g. "AWS
+    # Account") RECURSIVE x-extent — because B's child groups (VPC Endpoints)
+    # extend far right.  The direct-member x-ranges of A and B don't conflict, so
+    # the first pass leaves them untouched.  But `_compute_group_bboxes` then
+    # computes recursive-member bboxes for B that engulf A, triggering a midpoint
+    # split that produces a tiny, incorrectly-positioned group box for B.
+    #
+    # Fix: after the x-conflict pass, check every pair of root-level groups whose
+    # direct members don't x-conflict.  If group A's direct-member x-extent falls
+    # entirely within group B's RECURSIVE x-extent, shift A's nodes to the right
+    # of B's recursive extent so the two groups become spatially separate.
+    def _recursive_x_extent(gid: str) -> "tuple[float, float] | None":
+        """Full x-extent from ALL recursive (direct + nested) member nodes."""
+        all_ids: list[str] = list(groups[gid].members)
+        for _cgid, _cgrp in groups.items():
+            _cur = _cgid
+            while _cur:
+                _cur = groups[_cur].parent_group if _cur in groups else None
+                if _cur == gid:
+                    all_ids.extend(groups[_cgid].members)
+                    break
+        _ns = [nodes[m] for m in all_ids if m in nodes and not nodes[m].is_dummy]
+        if not _ns:
+            return None
+        return (
+            float(min(n.x for n in _ns) - GROUP_PAD_X),
+            float(max(n.x + _node_render_w(n) for n in _ns) + GROUP_PAD_X),
+        )
+
+    _root_gids = [gid for gid in groups if not groups[gid].parent_group]
+    if len(_root_gids) >= 2:
+        _shifted: set[str] = set()
+        for _ga in list(_root_gids):
+            if _ga in _shifted:
+                continue
+            _dm_a = [nodes[m] for m in groups[_ga].members if m in nodes and not nodes[m].is_dummy]
+            if not _dm_a:
+                continue
+            _ax0 = float(min(n.x for n in _dm_a) - GROUP_PAD_X)
+            _ax1 = float(max(n.x + _node_render_w(n) for n in _dm_a) + GROUP_PAD_X)
+            for _gb in _root_gids:
+                if _gb == _ga or _gb in _shifted:
+                    continue
+                _dm_b = [nodes[m] for m in groups[_gb].members if m in nodes and not nodes[m].is_dummy]
+                if not _dm_b:
+                    continue
+                _bx0 = float(min(n.x for n in _dm_b) - GROUP_PAD_X)
+                _bx1 = float(max(n.x + _node_render_w(n) for n in _dm_b) + GROUP_PAD_X)
+                # Skip if direct members already x-conflict (handled by first pass)
+                if _ax0 < _bx1 and _bx0 < _ax1:
+                    continue
+                # Check if A's direct extent falls within B's recursive extent
+                _rb = _recursive_x_extent(_gb)
+                if _rb is None:
+                    continue
+                if _ax0 >= _rb[0] and _ax1 <= _rb[1]:
+                    # A is engulfed by B's recursive bbox; shift A to the right of B
+                    _shift = int(_rb[1] + COL_GAP - _ax0)
+                    if _shift > 0:
+                        for _nid in groups[_ga].members:
+                            if _nid in nodes:
+                                nodes[_nid].x += _shift
+                        _shifted.add(_ga)
+                    break
+
+    # Third part: shift standalone non-member nodes that fall inside any group's
+    # recursive x+y bbox to the right of the current rightmost node.
+    # This handles nodes like "Git repository" that land inside a leaf group's
+    # bbox (e.g. VPC Endpoints) after the group-shift passes above.
+    _all_member_ids = {nid for grp in groups.values() for nid in grp.members}
+    _standalone_to_shift = []
+    for _nid, _nd in nodes.items():
+        if _nd.is_dummy or _nid in _all_member_ids:
+            continue
+        _nx0 = float(_nd.x)
+        _nx1 = float(_nd.x + _node_render_w(_nd))
+        _ny0 = float(_nd.y)
+        _ny1 = float(_nd.y + _node_render_h(_nd))
+        for _gid in groups:
+            _rx = _recursive_x_extent(_gid)
+            if _rx is None:
+                continue
+            # Check x-containment and y-containment vs DIRECT members of the group
+            _dm_g = [nodes[m] for m in groups[_gid].members
+                     if m in nodes and not nodes[m].is_dummy]
+            if not _dm_g:
+                continue
+            _gy0 = float(min(n.y for n in _dm_g) - GROUP_PAD_Y_TOP)
+            _gy1 = float(max(n.y + _node_render_h(n) for n in _dm_g) + GROUP_PAD_Y_BOT)
+            if _nx0 < _rx[1] and _nx1 > _rx[0] and _ny0 < _gy1 and _ny1 > _gy0:
+                _standalone_to_shift.append((_nid, _nd))
+                break
+    if _standalone_to_shift:
+        _current_max_x = max(
+            n.x + _node_render_w(n)
+            for n in nodes.values()
+            if not n.is_dummy
+        )
+        _next_x = int(_current_max_x + COL_GAP)
+        for _nid, _nd in sorted(_standalone_to_shift, key=lambda x: x[1].x):
+            _nd.x = _next_x
+            _next_x += int(_node_render_w(_nd) + COL_GAP)
+
+    # Fourth pass: push sibling groups of pure-container groups below the
+    # container's y-bottom.  Example: Amazon Bedrock (LLM) and Observability
+    # (Obs) are children of AWS Account at the same level as VPC.  VPC is a
+    # pure container (no direct members) whose recursive bbox is tall and wide.
+    # Without this pass those sibling groups' nodes land inside VPC's rendered
+    # rectangle, falsely implying they are VPC children.
+    def _grp_bottom(gid: str) -> float:
+        """Simulate _compute_group_bboxes bottom for gid (recursive)."""
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _bs = [float(n.y + _node_render_h(n)) for n in _dm]
+        _bs += [_grp_bottom(cgid) for cgid in _ch]
+        return (max(_bs) if _bs else 0.0) + GROUP_PAD_Y_BOT
+
+    def _grp_top(gid: str) -> float:
+        """Simulate _compute_group_bboxes top for gid (recursive)."""
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _ts = [float(n.y) for n in _dm]
+        _ts += [_grp_top(cgid) for cgid in _ch]
+        return (min(_ts) if _ts else 0.0) - GROUP_PAD_Y_TOP
+
+    def _grp_x0(gid: str) -> float:
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _xs = [float(n.x) for n in _dm]
+        _xs += [_grp_x0(cgid) for cgid in _ch]
+        return (min(_xs) if _xs else 0.0) - GROUP_PAD_X
+
+    def _grp_x1(gid: str) -> float:
+        _dm = [nodes[m] for m in groups[gid].members
+               if m in nodes and not nodes[m].is_dummy]
+        _ch = [cgid for cgid, cg in groups.items() if cg.parent_group == gid]
+        _xs = [float(n.x + _node_render_w(n)) for n in _dm]
+        _xs += [_grp_x1(cgid) for cgid in _ch]
+        return (max(_xs) if _xs else 0.0) + GROUP_PAD_X
+
+    for _pgid in list(groups.keys()):
+        _pg = groups[_pgid]
+        # Only act on pure containers that have a parent (non-root containers
+        # are handled by the root-level de-overlap second pass above).
+        if _pg.parent_group is None:
+            continue
+        _pg_dm = [nodes[m] for m in _pg.members
+                  if m in nodes and not nodes[m].is_dummy]
+        if _pg_dm:
+            continue  # not a pure container
+        _child_gids_of_pg = [cgid for cgid, cg in groups.items()
+                              if cg.parent_group == _pgid]
+        if not _child_gids_of_pg:
+            continue
+        _container_y0 = _grp_top(_pgid)
+        _container_y1 = _grp_bottom(_pgid)
+        _container_x0 = _grp_x0(_pgid)
+        _container_x1 = _grp_x1(_pgid)
+
+        # Siblings: groups with the same parent that are NOT nested inside
+        # the pure container.
+        _sibling_gids = [
+            gid for gid, g in groups.items()
+            if g.parent_group == _pg.parent_group
+            and gid != _pgid
+            and not _is_nested_groups(gid, _pgid, groups)
+        ]
+        for _sgid in _sibling_gids:
+            _sib_dm = [nodes[m] for m in groups[_sgid].members
+                       if m in nodes and not nodes[m].is_dummy]
+            if not _sib_dm:
+                continue
+            # Check if any sibling member overlaps with the container's bbox
+            # (simple rectangle intersection test).
+            _inside = [
+                n for n in _sib_dm
+                if (float(n.x) < _container_x1
+                    and float(n.x + _node_render_w(n)) > _container_x0
+                    and float(n.y) < _container_y1
+                    and float(n.y + _node_render_h(n)) > _container_y0)
+            ]
+            if not _inside:
+                continue
+            # Shift ALL sibling nodes to just below the container's bottom.
+            _target_y = int(_container_y1 + GROUP_PAD_Y_TOP)
+            for _mid in groups[_sgid].members:
+                if _mid in nodes:
+                    nodes[_mid].y = _target_y
+
     # Recompute canvas_w from the furthest non-dummy node right edge + CANVAS_PAD
     all_non_dummy = [n for n in nodes.values() if not n.is_dummy]
     if all_non_dummy:
@@ -1327,9 +1522,26 @@ def _compute_group_bboxes(
                 "y1": float(max(m.y + _node_render_h(m) for m in _rec_mbrs)),
             }
 
+    # Pre-compute direct child-group bbox extents per group.
+    # Step 2's _safe check must also account for child group extents — otherwise
+    # a parent's bbox edge can be shrunk past a child group's extent (e.g. _g1's
+    # right edge shrunk to exclude a standalone node, breaking containment of _g2).
+    _child_extents: dict[str, dict] = {}
+    for _pgid in groups:
+        _cbbs = [bboxes[_cgid] for _cgid, _cgrp in groups.items()
+                 if _cgrp.parent_group == _pgid and _cgid in bboxes]
+        if _cbbs:
+            _child_extents[_pgid] = {
+                "x0": min(b[0] for b in _cbbs),
+                "x1": max(b[2] for b in _cbbs),
+                "y0": min(b[1] for b in _cbbs),
+                "y1": max(b[3] for b in _cbbs),
+            }
+
     # Step 2: non-member node exclusion — shrink the closest group edge, but only
-    # when the shrink won't exclude any group member. If no safe direction exists,
-    # accept the visual overlap rather than corrupting the group bbox.
+    # when the shrink won't exclude any group member or child-group bbox. If no
+    # safe direction exists, accept the visual overlap rather than corrupting the
+    # group bbox.
     for nid, nd in nodes.items():
         if nd.is_dummy or nid in member_ids:
             continue
@@ -1339,18 +1551,26 @@ def _compute_group_bboxes(
             if not (b[0] < nx1 and nx0 < b[2] and b[1] < ny1 and ny0 < b[3]):
                 continue
             mc = _grp_mc.get(gid, {})
-            # A shrink is safe if it doesn't push the edge past any member coord
+            ce = _child_extents.get(gid, {})
+            # A shrink is safe if it doesn't push the edge past any direct member
+            # coord OR past any child-group bbox extent.
             def _safe(axis: str, new_val: float) -> bool:
-                if not mc:
-                    return True
                 if axis == "x0":  # raise left edge
-                    return mc["x0"] >= new_val
+                    if mc and mc["x0"] < new_val: return False
+                    if ce and ce["x0"] < new_val: return False
+                    return True
                 if axis == "x1":  # lower right edge
-                    return mc["x1"] <= new_val
+                    if mc and mc["x1"] > new_val: return False
+                    if ce and ce["x1"] > new_val: return False
+                    return True
                 if axis == "y0":  # raise top edge
-                    return mc["y0"] >= new_val
+                    if mc and mc["y0"] < new_val: return False
+                    if ce and ce["y0"] < new_val: return False
+                    return True
                 if axis == "y1":  # lower bottom edge
-                    return mc["y1"] <= new_val
+                    if mc and mc["y1"] > new_val: return False
+                    if ce and ce["y1"] > new_val: return False
+                    return True
                 return True
             x_intrude = min(nx1 - b[0], b[2] - nx0)
             y_intrude = min(ny1 - b[1], b[3] - ny0)
@@ -1399,6 +1619,9 @@ def _compute_group_bboxes(
     # Skip nested pairs — their bboxes overlap by design (parent wraps child).
     # Also skip empty groups: their [0,0] origin placeholder would damage non-empty
     # group bboxes; empty groups are repositioned later by _place_empty_groups.
+    # Also skip pairs where either group has no direct members (pure containers like
+    # VPC) — midpoint splitting a pure-container corrupts its child containment, and
+    # _separate_groups_tb already handles the physical node-level separation.
     _empty_gids = {
         gid for gid in groups
         if not any(
@@ -1417,6 +1640,11 @@ def _compute_group_bboxes(
                 if _is_nested_groups(g1, g2, groups):
                     continue
                 if g2 in _empty_gids:
+                    continue
+                # Skip if either group has no direct members — pure-container
+                # groups (like a VPC that only contains child subgraphs) cannot
+                # be safely midpoint-split against siblings.
+                if not _grp_mc.get(g1) or not _grp_mc.get(g2):
                     continue
                 b2 = bboxes[g2]
                 ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
@@ -1469,6 +1697,9 @@ def _compute_group_bboxes(
                 if _is_nested_groups(g1, g2, groups):
                     continue
                 if g2 in _empty_gids:
+                    continue
+                # Same pure-container guard as Step 3
+                if not _grp_mc.get(g1) or not _grp_mc.get(g2):
                     continue
                 b2 = bboxes[g2]
                 ox = min(b1[2], b2[2]) - max(b1[0], b2[0])
