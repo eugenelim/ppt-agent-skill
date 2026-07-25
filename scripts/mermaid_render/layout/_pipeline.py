@@ -62,7 +62,7 @@ class RenderOptions:
     faithful_mermaid: bool = False
     infer_icons: bool = True
     auto_direction: bool = True
-    inferred_legend: bool = True
+    inferred_legend: bool = False
 
 # ── label-based icon inference ────────────────────────────────────────────────
 

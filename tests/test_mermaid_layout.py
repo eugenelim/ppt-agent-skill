@@ -16,6 +16,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from mermaid_layout._strategies import _infer_label_icons
 from mermaid_render.layout._geometry import MarkerKind, MarkerSpec
+from mermaid_render.layout._pipeline import RenderOptions
 
 _ARROW_TGT = MarkerSpec(kind=MarkerKind.ARROW, end="TARGET")
 
@@ -830,7 +831,7 @@ class TestTitleAccentColor:
             "  A --> B\n"
             "  B -.-> A\n"
         )
-        html = _dispatch(src, None, 600)
+        html = _dispatch(src, None, 600, opts=RenderOptions(inferred_legend=True))
         assert html.count("diagram-legend") == 1
 
     def test_source_group_stays_leftmost_in_lr(self):
@@ -881,20 +882,20 @@ class TestTitleAccentColor:
         # Neutral tint is rgba(0,0,0,0) — transparent — should appear in bg of rank-1 node
         assert "rgba(0,0,0,0)" in html, "rank-1 neutral depth tint not found"
 
-    def test_legend_service_boundary_uses_accent_color(self):
-        """Legend 'Service boundary' swatch must use accent-1 to match actual group box borders."""
+    def test_legend_service_boundary_uses_cluster_color(self):
+        """Legend 'Service boundary' swatch must use #aaaa33 to match actual cluster borders."""
         src = (
             "flowchart LR\n"
             "  subgraph G\n    A[Alpha]\n  end\n"
             "  B[Beta]\n  A --> B\n"
         )
-        html = _dispatch(src, None, 500)
+        html = _dispatch(src, None, 500, opts=RenderOptions(inferred_legend=True))
         import re
         legend_match = re.search(r'class="diagram-legend"(.*?)(?=</div>)', html, re.DOTALL)
         assert legend_match, "no diagram-legend found"
         legend_html = legend_match.group(1)
-        # Must use accent-1 to match the actual group box border color
-        assert "accent-1" in legend_html, "legend service boundary swatch must use --accent-1"
+        # Must use #aaaa33 to match the actual cluster border color
+        assert "#aaaa33" in legend_html, "legend service boundary swatch must use #aaaa33"
         assert "group-border" not in legend_html, "legend service boundary must not reference --group-border"
 
     def test_icon_node_label_uses_title_accent_var(self):
