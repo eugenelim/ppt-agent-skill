@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import dataclasses
-import math
 import re
 import types as _types
 import warnings
 from dataclasses import dataclass
-from html import escape as _h
 from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from ._geometry import (
-        ArrowSpec, CompiledFlowchart, FinalizedLayout,
+        CompiledFlowchart, FinalizedLayout,
         TextLayout, NodeLayout, GroupLayout, Point, PortSide,
         RoutedEdge, LayoutGraph, ValidationResult,
+        RouteBatch, LayoutMetadata, CompoundNode,
     )
 
 from ._constants import (
@@ -974,7 +973,7 @@ def _build_layout_graph(
     Node sizes come from _node_render_h / _node_render_w (the same metrics the
     Python pipeline uses), so ELK receives accurate measured bounds.
     """
-    from ._geometry import LayoutGraph, LayoutNode, LayoutGroup, LayoutEdge, MarkerKind
+    from ._geometry import LayoutGraph, LayoutNode, LayoutGroup, LayoutEdge
     from ._routing import _node_render_w
 
     layout_nodes = []
@@ -1559,6 +1558,148 @@ def flowchart_route_adapter(
     return all_ports, obstacles, permissions, apertures
 
 
+def _assign_lanes(
+    assignments: "dict",
+    obstacles: "tuple",
+    lane_gap: float = 12.0,
+) -> "dict":
+    """Separate route pairs sharing a segment by shifting the later route ±lane_gap px.
+
+    Detects all (i < j) assignment pairs with a shared vertical or horizontal
+    segment longer than 8 px.  Tries to move route j by +lane_gap first, then
+    -lane_gap.  Skips the shift when the displaced segment would enter any
+    NODE_INTERIOR obstacle.  Single O(n²) pass; earlier routes are unchanged.
+    """
+    def _segs(pts: "tuple") -> "list":
+        return [(pts[k], pts[k + 1]) for k in range(len(pts) - 1)]
+
+    def _axis_ov(ax1: float, ay1: float, ax2: float, ay2: float,
+                 bx1: float, by1: float, bx2: float, by2: float) -> float:
+        if abs(ay1 - ay2) < 1e-9 and abs(by1 - by2) < 1e-9 and abs(ay1 - by1) < 2.0:
+            a0, a1 = min(ax1, ax2), max(ax1, ax2)
+            b0, b1 = min(bx1, bx2), max(bx1, bx2)
+            return max(0.0, min(a1, b1) - max(a0, b0))
+        if abs(ax1 - ax2) < 1e-9 and abs(bx1 - bx2) < 1e-9 and abs(ax1 - bx1) < 2.0:
+            a0, a1 = min(ay1, ay2), max(ay1, ay2)
+            b0, b1 = min(by1, by2), max(by1, by2)
+            return max(0.0, min(a1, b1) - max(a0, b0))
+        return 0.0
+
+    def _v_clear(new_x: float, y_lo: float, y_hi: float) -> bool:
+        for ob in obstacles:
+            if ob.kind not in ("NODE_INTERIOR", "node"):
+                continue
+            ox, oy, ow, oh = ob.bounds
+            if ox < new_x < ox + ow and oy < y_hi and oy + oh > y_lo:
+                return False
+        # Also reject positions already occupied by another route's vertical segment
+        # so cascading shifts (route-a pushed route-b into route-c's channel) are avoided.
+        for rc in result.values():
+            for k in range(len(rc.points) - 1):
+                rx1, ry1 = rc.points[k]
+                rx2, ry2 = rc.points[k + 1]
+                if abs(rx1 - rx2) < 1.0 and abs(rx1 - new_x) < 2.0:
+                    s_lo, s_hi = min(ry1, ry2), max(ry1, ry2)
+                    if s_lo < y_hi and s_hi > y_lo:
+                        return False
+        return True
+
+    def _h_clear(new_y: float, x_lo: float, x_hi: float) -> bool:
+        for ob in obstacles:
+            if ob.kind not in ("NODE_INTERIOR", "node"):
+                continue
+            ox, oy, ow, oh = ob.bounds
+            if oy < new_y < oy + oh and ox < x_hi and ox + ow > x_lo:
+                return False
+        return True
+
+    result: "dict" = dict(assignments)
+    eids: "list" = list(assignments.keys())
+
+    for i in range(len(eids)):
+        eid_a = eids[i]
+        rc_a = result[eid_a]
+        for j in range(i + 1, len(eids)):
+            eid_b = eids[j]
+            rc_b = result[eid_b]
+            done = False
+            for (ax1, ay1), (ax2, ay2) in _segs(rc_a.points):
+                if done:
+                    break
+                for (bx1, by1), (bx2, by2) in _segs(rc_b.points):
+                    ov = _axis_ov(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2)
+                    if ov <= 8.0:
+                        continue
+                    # Vertical shared channel: shift ALL route-b interior waypoints
+                    # at x≈sx so the full vertical chain moves together (preserving
+                    # orthogonality when the shared overlap doesn't cover all segments).
+                    if abs(ax1 - ax2) < 1.0 and abs(bx1 - bx2) < 1.0:
+                        sx = (ax1 + bx1) / 2.0
+                        y_lo = max(min(ay1, ay2), min(by1, by2))
+                        y_hi = min(max(ay1, ay2), max(by1, by2))
+                        for delta in (lane_gap, -lane_gap):
+                            nx = sx + delta
+                            if _v_clear(nx, y_lo, y_hi):
+                                pts_list = list(rc_b.points)
+                                for _k in range(1, len(pts_list) - 1):
+                                    _px, _py = pts_list[_k]
+                                    if abs(_px - sx) < 2.0:
+                                        pts_list[_k] = (nx, _py)
+                                result[eid_b] = rc_b._replace(points=tuple(pts_list))
+                                rc_b = result[eid_b]
+                                done = True
+                                break
+                    # Horizontal shared channel: shift route-b interior waypoints in y.
+                    # Use x-range filter to avoid shifting bend points outside the
+                    # shared segment that would create non-orthogonal segments.
+                    # Special case: when route-b's source endpoint is itself at y≈sy_val
+                    # (i.e. the first segment is the shared horizontal), a plain bend
+                    # shift would produce a diagonal.  Convert to a Z-route instead by
+                    # inserting a short vertical stub at the source.
+                    elif abs(ay1 - ay2) < 1.0 and abs(by1 - by2) < 1.0:
+                        sy_val = (ay1 + by1) / 2.0
+                        x_lo = max(min(ax1, ax2), min(bx1, bx2))
+                        x_hi = min(max(ax1, ax2), max(bx1, bx2))
+                        for delta in (lane_gap, -lane_gap):
+                            ny = sy_val + delta
+                            pts_list = list(rc_b.points)
+                            # Stub path: source endpoint at y≈sy_val means the first
+                            # segment is horizontal.  Inserting a stub converts L→Z.
+                            if len(pts_list) >= 3 and abs(pts_list[0][1] - sy_val) < 2.0:
+                                sx0 = pts_list[0][0]
+                                bx_bend = pts_list[1][0]
+                                h_lo = min(sx0, bx_bend)
+                                h_hi = max(sx0, bx_bend)
+                                if not _h_clear(ny, h_lo, h_hi):
+                                    continue
+                                if not _v_clear(sx0, min(sy_val, ny), max(sy_val, ny)):
+                                    continue
+                                # Shift all interior points at y≈sy_val, then prepend stub.
+                                for _k in range(1, len(pts_list) - 1):
+                                    _px, _py = pts_list[_k]
+                                    if abs(_py - sy_val) < 2.0:
+                                        pts_list[_k] = (_px, ny)
+                                pts_list.insert(1, (sx0, ny))
+                                result[eid_b] = rc_b._replace(points=tuple(pts_list))
+                                rc_b = result[eid_b]
+                                done = True
+                                break
+                            # Standard path: shared segment is interior — shift in y.
+                            if not _h_clear(ny, x_lo, x_hi):
+                                continue
+                            for _k in range(1, len(pts_list) - 1):
+                                _px, _py = pts_list[_k]
+                                if abs(_py - sy_val) < 2.0 and x_lo - 2.0 <= _px <= x_hi + 2.0:
+                                    pts_list[_k] = (_px, ny)
+                            result[eid_b] = rc_b._replace(points=tuple(pts_list))
+                            rc_b = result[eid_b]
+                            done = True
+                            break
+                    if done:
+                        break
+    return result
+
+
 def _flowchart_route_new_path(
     nodes: "dict[str, _Node]",
     edges: "list[_Edge]",
@@ -1577,12 +1718,8 @@ def _flowchart_route_new_path(
     from .route_search import route_edge, local_channel_route  # noqa: PLC0415
     from .port_planner import PortCandidate, RoutingObstacle, RouteCandidate  # noqa: PLC0415
 
-    edge_ids_in_order = [e.edge_id for e in edges if e.edge_id]
-    edge_by_id: "dict[str, _Edge]" = {e.edge_id: e for e in edges if e.edge_id}
-
     # Build NODE_INTERIOR obstacles for leaf nodes only (group boundary
     # enforcement happens post-routing in _reroute_cross_boundary_edges).
-    from .port_planner import RoutingObstacle  # noqa: PLC0415
     obstacles = [
         RoutingObstacle(
             obstacle_id=nid,
@@ -1899,7 +2036,7 @@ def _flowchart_route_new_path(
                     reason="self-loop node not found",
                 ))
                 continue
-            from ._constants import BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD  # noqa: PLC0415
+            from ._constants import BASE_LOOP_EXTENT, LABEL_PAD  # noqa: PLC0415
             _SL_CHIP_H = 17  # label chip height (matches _LABEL_CHIP_H in _routing.py)
             nw = float(_node_render_w(s))
             nh = float(_node_render_h(s))
@@ -2041,6 +2178,9 @@ def _flowchart_route_new_path(
                 edge_id=eid, src_node_id=real_src_id, dst_node_id=real_dst_id,
                 reason="no valid route",
             ))
+
+    # Separate parallel routes that share a segment into adjacent lanes.
+    assignments = _assign_lanes(assignments, obs_tuple)
 
     # Convert RouteCandidate assignments to route dicts; prepend pre-built self-loop dicts
     routed_dicts: "list[dict]" = list(self_loop_dicts)
@@ -2351,7 +2491,6 @@ def layout_flowchart_with_python_fallback(
         boundary_gates=_boundary_gates,
     )
 
-    from ._geometry import LayoutMetadata  # noqa: PLC0415
     metadata = LayoutMetadata(
         direction=direction,
         node_count=_real_nodes_count,
@@ -3046,32 +3185,26 @@ def _reroute_cross_boundary_edges(
     _cbe_done_vsegs: "list[tuple[float, float, float]]" = []  # (x, y_min, y_max)
 
     def _build_occupied(gx: "list[int]", gy: "list[int]") -> "set[tuple]":
-        """Convert world-coord segments to grid-index step tuples for A*.
+        """Convert world-coord horizontal segments to grid-index step tuples for A*.
 
-        Horizontal: marks the occupied y row ±2 rows so routes stay at least two
-        grid rows away from an existing horizontal segment.
-        Vertical: marks the occupied x column ±1 col so routes stay at least one
-        grid column away from an existing vertical segment.
+        Marks the occupied y row ±2 rows so routes stay at least two grid rows away
+        from an existing horizontal segment.  Vertical segment occupancy is not
+        tracked here: the sparse CBE grid means column soft-cost propagates
+        unpredictably across edges with different endpoint sets, producing routes
+        that zigzag across group boundaries (e.g. flowchart-groups-complex
+        Cache→DB) or detour far past the destination.  CBE vertical tramlines are
+        accepted as a layout constraint when multiple routes share the same gate.
         """
         occ: "set[tuple]" = set()
         for (hy, hx0, hx1) in _cbe_done_hsegs:
             yi = min(range(len(gy)), key=lambda i: abs(gy[i] - hy))
             xi0 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx0))
             xi1 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx1))
-            for dyi in range(-2, 3):  # exact row + two rows above + two rows below
+            for dyi in range(-2, 3):  # exact row ± two rows
                 byi = yi + dyi
                 if 0 <= byi < len(gy):
                     for xi in range(min(xi0, xi1), max(xi0, xi1)):
                         occ.add((xi, byi, xi + 1, byi))
-        for (vx, vy0, vy1) in _cbe_done_vsegs:
-            xi = min(range(len(gx)), key=lambda i: abs(gx[i] - vx))
-            yi0 = min(range(len(gy)), key=lambda i: abs(gy[i] - vy0))
-            yi1 = min(range(len(gy)), key=lambda i: abs(gy[i] - vy1))
-            for dxi in range(-1, 2):  # exact col + one adjacent on each side
-                bxi = xi + dxi
-                if 0 <= bxi < len(gx):
-                    for yi in range(min(yi0, yi1), max(yi0, yi1)):
-                        occ.add((bxi, yi, bxi, yi + 1))
         return occ
 
     for r in routed:
