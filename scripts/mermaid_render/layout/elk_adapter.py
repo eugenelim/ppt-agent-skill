@@ -205,6 +205,8 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
 
     node_layouts: dict[str, NodeLayout] = {}
     group_layouts: dict[str, GroupLayout] = {}
+    # Accumulated global (x, y) for each group: filled during _visit.
+    group_global_origin: dict[str, tuple[float, float]] = {}
 
     def _visit(children: list, offset_x: float, offset_y: float) -> None:
         for child in children:
@@ -262,6 +264,7 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
             g_orig = group_map.get(cid)
             if g_orig is not None:
                 boundary = Rect(x=cx, y=cy, w=cw, h=ch)
+                group_global_origin[cid] = (cx, cy)
                 member_ids = tuple(n.id for n in graph.nodes if n.parent_id == cid)
                 child_group_ids = tuple(g.id for g in graph.groups if g.parent_id == cid)
                 # T8: build GroupLayout.label_layout from LayoutGroup.label
@@ -306,32 +309,37 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
             result.extend(_collect_edges(child))
         return result
 
+    # ELK routes cross-boundary edges in the LCA group's local coordinate system
+    # even when the edge appears at root level in the output JSON.  Compute the
+    # LCA group for each edge and apply its global origin as a waypoint offset.
+    _node_parent: dict[str, str] = {n.id: (n.parent_id or "") for n in graph.nodes}
+    _grp_parent: dict[str, str] = {g.id: (g.parent_id or "") for g in graph.groups}
+
+    def _ancestor_set(node_id: str) -> list:
+        """Ancestor group IDs from immediate parent to root, deepest first."""
+        chain: list[str] = []
+        gid = _node_parent.get(node_id, "")
+        while gid:
+            chain.append(gid)
+            gid = _grp_parent.get(gid, "")
+        return chain
+
+    def _edge_lca_offset(src_id: str, dst_id: str) -> tuple[float, float]:
+        """Return the global (ox, oy) offset of the LCA group for this edge."""
+        if not group_global_origin:
+            return (0.0, 0.0)
+        src_anc = _ancestor_set(src_id)
+        dst_anc_set = set(_ancestor_set(dst_id))
+        for gid in src_anc:
+            if gid in dst_anc_set:
+                return group_global_origin.get(gid, (0.0, 0.0))
+        return (0.0, 0.0)
+
     edge_map = {e.id: e for e in graph.edges}
     routed_edges: list[RoutedEdge] = []
     for elk_edge in _collect_edges(out):
         eid = elk_edge.get("id", "")
         orig_edge = edge_map.get(eid)
-
-        # T1: collect waypoints and junction_points from all sections
-        waypoints: list[Point] = []
-        jpts: list[Point] = []
-        for section in elk_edge.get("sections", []):
-            sp = section.get("startPoint", {})
-            if sp:
-                new_pt = Point(float(sp["x"]), float(sp["y"]))
-                if not waypoints or waypoints[-1] != new_pt:
-                    waypoints.append(new_pt)
-            for bp in section.get("bendPoints", []):
-                new_pt = Point(float(bp["x"]), float(bp["y"]))
-                if not waypoints or waypoints[-1] != new_pt:
-                    waypoints.append(new_pt)
-            ep = section.get("endPoint", {})
-            if ep:
-                new_pt = Point(float(ep["x"]), float(ep["y"]))
-                if not waypoints or waypoints[-1] != new_pt:
-                    waypoints.append(new_pt)
-            for jp in section.get("junctionPoints", []):
-                jpts.append(Point(float(jp["x"]), float(jp["y"])))
 
         # T3: semantic src/dst IDs from orig_edge (not port IDs from ELK)
         src_ids = list(elk_edge.get("sources", []))
@@ -344,6 +352,34 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
         else:
             src_id = port_to_node.get(src_ref) or (src_ref.split(":")[0] if ":" in src_ref else src_ref)
             dst_id = port_to_node.get(dst_ref) or (dst_ref.split(":")[0] if ":" in dst_ref else dst_ref)
+
+        # T1: collect waypoints and junction_points from all sections.
+        # ELK encodes cross-boundary edge coordinates in the LCA group's local
+        # space; add the LCA's global origin to convert to canvas coordinates.
+        edge_ox, edge_oy = _edge_lca_offset(src_id, dst_id)
+
+        def _gpt(raw: dict) -> Point:
+            return Point(float(raw["x"]) + edge_ox, float(raw["y"]) + edge_oy)
+
+        waypoints: list[Point] = []
+        jpts: list[Point] = []
+        for section in elk_edge.get("sections", []):
+            sp = section.get("startPoint", {})
+            if sp:
+                new_pt = _gpt(sp)
+                if not waypoints or waypoints[-1] != new_pt:
+                    waypoints.append(new_pt)
+            for bp in section.get("bendPoints", []):
+                new_pt = _gpt(bp)
+                if not waypoints or waypoints[-1] != new_pt:
+                    waypoints.append(new_pt)
+            ep = section.get("endPoint", {})
+            if ep:
+                new_pt = _gpt(ep)
+                if not waypoints or waypoints[-1] != new_pt:
+                    waypoints.append(new_pt)
+            for jp in section.get("junctionPoints", []):
+                jpts.append(_gpt(jp))
 
         # T5: tangent-based port direction and side from actual route geometry
         if len(waypoints) >= 2:
@@ -368,8 +404,8 @@ def _from_elk_result(out: dict, graph: LayoutGraph) -> FinalizedLayout:
         elk_labels = elk_edge.get("labels", [])
         if elk_labels and orig_edge and orig_edge.label:
             lbl = elk_labels[0]
-            lx = float(lbl.get("x", 0))
-            ly = float(lbl.get("y", 0))
+            lx = float(lbl.get("x", 0)) + edge_ox
+            ly = float(lbl.get("y", 0)) + edge_oy
             lw = float(lbl.get("width", 0))
             lh = float(lbl.get("height", 0))
             anchor = waypoints[len(waypoints) // 2] if waypoints else Point(lx, ly)

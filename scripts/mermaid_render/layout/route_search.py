@@ -214,6 +214,7 @@ def local_channel_route(
     existing_routes: tuple[RouteCandidate, ...] = (),
     lane_index: int = 0,
     obstacles: tuple[RoutingObstacle, ...] = (),
+    group_border_ys: tuple[float, ...] = (),
 ) -> RouteCandidate | None:
     """Try a bounded channel route between two ports.
 
@@ -270,8 +271,15 @@ def local_channel_route(
         for ob in obstacles
     )
 
+    _BORDER_CLEAR: float = 8.0
+
+    def _near_border(y: float) -> bool:
+        return any(abs(y - gy) < _BORDER_CLEAR for gy in group_border_ys)
+
     # TB-style Z-route: vertical first at sx, horizontal near dst, vertical to dst.
     for mid_y in (dy - LOCAL_LANE_GAP, sy + LOCAL_LANE_GAP, (sy + dy) / 2.0):
+        if _near_border(mid_y):
+            continue
         pts: tuple[tuple[float, float], ...] = (
             (sx, sy), (sx, mid_y), (dx, mid_y), (dx, dy)
         )
