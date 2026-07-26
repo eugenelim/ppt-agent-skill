@@ -213,16 +213,20 @@ def local_channel_route(
     local_bounds: tuple[float, float, float, float],  # (x, y, w, h) bounding the obstruction
     existing_routes: tuple[RouteCandidate, ...] = (),
     lane_index: int = 0,
+    obstacles: tuple[RoutingObstacle, ...] = (),
 ) -> RouteCandidate | None:
-    """Try a bounded left or right local channel route between two ports.
+    """Try a bounded channel route between two ports.
 
-    Computes left_x and right_x as channel x-coordinates relative to local_bounds,
-    then builds an orthogonal 4-point route via each channel. Rejects any candidate
-    containing a waypoint outside local_bounds inflated by MAX_LOCAL_EXCURSION.
-    Returns the lower-cost valid candidate, or None if no valid channel exists.
+    Prefers Z-routes that use each edge's own port coordinate as the primary
+    axis of travel (TB: vertical first via sx; LR: horizontal first via sy),
+    so fanned ports diverge immediately rather than collapsing to a shared
+    channel that creates tramlines. Z-routes are validated against ``obstacles``
+    (src/dst nodes excluded at call site); only obstacle-clear Z-routes are
+    returned. Falls back to the original left/right channel routes when no
+    obstacle-clear Z-route fits within the inflated local_bounds.
 
-    Route shape (TB direction example):
-        src_port.point → (channel_x, src_y) → (channel_x, dst_y) → dst_port.point
+    Rejects any candidate containing a waypoint outside local_bounds inflated
+    by MAX_LOCAL_EXCURSION. Returns the lower-cost valid candidate, or None.
     """
     bx, by, bw, bh = local_bounds
     inflate = MAX_LOCAL_EXCURSION
@@ -244,14 +248,60 @@ def local_channel_route(
     sx, sy = src_port.point
     dx, dy = dst_port.point
 
-    candidates: list[RouteCandidate] = []
+    z_candidates: list[RouteCandidate] = []
+
+    # Inflate ONLY the left side of leaf-node obstacles for TB Z-route checks.
+    # TB routes use src_x as the vertical channel: inflating left faces rejects
+    # routes that hug a node's left face (e.g. VP→OS at x=545 alongside ING left=550)
+    # while leaving the right edge unchanged so valid routes outside a right face
+    # (e.g. VP→BD at x=775 outside ING right=770) are preserved.
+    # LR routes use un-inflated obstacles so mid_x values just outside a node's
+    # left face (e.g. ING→BD mid_x=140 outside OS left=144) remain valid.
+    _NODE_CLEARANCE_PX: float = 5.0
+    _tb_obs: tuple[RoutingObstacle, ...] = tuple(
+        RoutingObstacle(
+            ob.obstacle_id, ob.kind,
+            (ob.bounds[0] - _NODE_CLEARANCE_PX,  # left edge inflated leftward
+             ob.bounds[1],                         # top unchanged
+             ob.bounds[2] + _NODE_CLEARANCE_PX,   # width += clearance, right = x+w (unchanged)
+             ob.bounds[3]),                        # height unchanged
+            ob.scope_id, ob.title_bounds, ob.permitted_gate_ids,
+        ) if ob.kind in ("NODE_INTERIOR", "node") else ob
+        for ob in obstacles
+    )
+
+    # TB-style Z-route: vertical first at sx, horizontal near dst, vertical to dst.
+    for mid_y in (dy - LOCAL_LANE_GAP, sy + LOCAL_LANE_GAP, (sy + dy) / 2.0):
+        pts: tuple[tuple[float, float], ...] = (
+            (sx, sy), (sx, mid_y), (dx, mid_y), (dx, dy)
+        )
+        if _within_bounds(pts):
+            rc = _make_rc(edge_id, src_port, dst_port, pts, 2, existing_routes)
+            if _is_valid_route(rc, _tb_obs):
+                z_candidates.append(rc)
+
+    # LR-style Z-route: horizontal first at sy, vertical near dst, horizontal to dst.
+    # Uses un-inflated obstacles so routes near a node's left face aren't over-rejected.
+    for mid_x in (dx - LOCAL_LANE_GAP, sx + LOCAL_LANE_GAP, (sx + dx) / 2.0):
+        pts = ((sx, sy), (mid_x, sy), (mid_x, dy), (dx, dy))
+        if _within_bounds(pts):
+            rc = _make_rc(edge_id, src_port, dst_port, pts, 2, existing_routes)
+            if _is_valid_route(rc, obstacles):
+                z_candidates.append(rc)
+
+    if z_candidates:
+        return min(z_candidates, key=lambda c: c.cost)
+
+    # Fallback: left/right channel outside local_bounds (original behaviour).
+    # These routes detour beyond the rank span so they avoid intermediate nodes.
+    channel_candidates: list[RouteCandidate] = []
     for side in ("left", "right"):
         if side == "left":
             channel_x = bx - LOCAL_LANE_GAP - lane_index * LANE_PITCH
         else:
             channel_x = bx + bw + LOCAL_LANE_GAP + lane_index * LANE_PITCH
 
-        pts: tuple[tuple[float, float], ...] = (
+        pts = (
             (sx, sy),
             (channel_x, sy),
             (channel_x, dy),
@@ -259,12 +309,11 @@ def local_channel_route(
         )
         if not _within_bounds(pts):
             continue
-        rc = _make_rc(edge_id, src_port, dst_port, pts, 2, existing_routes)
-        candidates.append(rc)
+        channel_candidates.append(_make_rc(edge_id, src_port, dst_port, pts, 2, existing_routes))
 
-    if not candidates:
+    if not channel_candidates:
         return None
-    return min(candidates, key=lambda c: c.cost)
+    return min(channel_candidates, key=lambda c: c.cost)
 
 
 # ── Validity check ────────────────────────────────────────────────────────────

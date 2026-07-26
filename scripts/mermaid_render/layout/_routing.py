@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ._constants import (
     _Node, _Edge, _marker_kind,
-    NODE_W, NODE_H, SELF_LOOP_DX, MIN_FAN_STEP,
+    NODE_W, MIN_FAN_STEP,
     BASE_LOOP_EXTENT, LOOP_LANE_GAP, LABEL_PAD, CANVAS_PAD,
     GROUP_PAD_Y_TOP,
     _node_render_h, _is_terminal_circle, _TERMINAL_NODE_SIZE,
@@ -50,8 +50,10 @@ def _tarjan_sccs(nodes: "list[str]", edges: "list[tuple[str, str]]") -> "list[li
     for root in nodes:
         if root in idx:
             continue
-        idx[root] = low[root] = ctr[0]; ctr[0] += 1
-        stk.append(root); on_stk.add(root)
+        idx[root] = low[root] = ctr[0]
+        ctr[0] += 1
+        stk.append(root)
+        on_stk.add(root)
         call: "list[list]" = [[root, 0]]
         while call:
             frame = call[-1]
@@ -61,8 +63,10 @@ def _tarjan_sccs(nodes: "list[str]", edges: "list[tuple[str, str]]") -> "list[li
                 frame[1] += 1
                 w = nbrs[ci]
                 if w not in idx:
-                    idx[w] = low[w] = ctr[0]; ctr[0] += 1
-                    stk.append(w); on_stk.add(w)
+                    idx[w] = low[w] = ctr[0]
+                    ctr[0] += 1
+                    stk.append(w)
+                    on_stk.add(w)
                     call.append([w, 0])
                 elif w in on_stk:
                     low[v] = min(low[v], idx[w])
@@ -73,7 +77,8 @@ def _tarjan_sccs(nodes: "list[str]", edges: "list[tuple[str, str]]") -> "list[li
                 if low[v] == idx[v]:
                     scc: "list[str]" = []
                     while True:
-                        w = stk.pop(); on_stk.discard(w)
+                        w = stk.pop()
+                        on_stk.discard(w)
                         scc.append(w)
                         if w == v:
                             break
@@ -216,6 +221,10 @@ def _blocked_segs(
 
     A segment is blocked when it passes through any obstacle AABB interior
     (more than 4 px inside a boundary in the perpendicular direction).
+
+    Horizontal segments at exactly y = oy2 (the obstacle bottom boundary) are also
+    blocked so routes cannot run along the visible bottom edge of a group box or node.
+    The 4 px clearance still applies at the top boundary (y ≤ oy1 + CLEAR is free).
     """
     CLEAR = 4
     blocked: set = set()
@@ -227,7 +236,7 @@ def _blocked_segs(
         for xi in range(nx - 1):
             xl, xr = grid_xs[xi], grid_xs[xi + 1]
             for ox1, oy1, ox2, oy2 in obstacles:
-                if oy1 + CLEAR < y < oy2 - CLEAR:
+                if oy1 + CLEAR < y <= oy2:
                     if ox1 < xr and ox2 > xl:
                         blocked.add((xi, yi, xi + 1, yi))
                         break
