@@ -1826,25 +1826,21 @@ def _flowchart_route_new_path(
     def _edge_src_face(eid: str) -> str:
         """Choose source port face based on target direction.
 
-        Cross-rank edges always use the global face (bottom for TB) so they exit
-        perpendicularly. Same-rank edges with a primarily-horizontal offset use
-        right or left, giving direct horizontal connections instead of U-shapes.
+        Cross-rank edges that are clearly horizontal (3:1 dominance) use the
+        side face so they exit perpendicular to the flow direction instead of
+        taking a long detour down before sweeping across.  All other cross-rank
+        edges use the global face (bottom for TB).  Same-rank edges with a
+        primarily-horizontal offset (2:1) use right or left.
         """
         sn = nodes.get(_eid_src.get(eid, ""))
         dn = nodes.get(_eid_dst.get(eid, ""))
         if sn is None or dn is None or sn.is_dummy or dn.is_dummy:
-            return src_face
-        if getattr(sn, "rank", None) != getattr(dn, "rank", None):
             return src_face
         scx = float(sn.x) + float(_node_render_w(sn)) / 2.0
         scy = float(sn.y) + float(_node_render_h(sn)) / 2.0
         dcx = float(dn.x) + float(_node_render_w(dn)) / 2.0
         dcy = float(dn.y) + float(_node_render_h(dn)) / 2.0
         dx_v, dy_v = dcx - scx, dcy - scy
-        # Require clearly dominant horizontal offset (2:1) before switching to
-        # a horizontal face. Co-ranked satellite nodes (e.g. ML→BD after sink-
-        # satellite co-rank) can have large vertical displacement at the same
-        # rank; a 1:1 threshold misclassifies those as horizontal connections.
         if abs(dx_v) < 2.0 * abs(dy_v):
             return src_face
         if _horiz:
@@ -2320,6 +2316,19 @@ def _flowchart_route_new_path(
         # Compute lx/ly for labeled edges — ini-005 omitted these, leaving labels
         # at the canvas origin (0,0). Use arc-length midpoint via _label_on_longest.
         _pts = list(rc.points)
+        # Collapse intermediate collinear waypoints so straight segments render
+        # as two endpoints rather than a series of grid-snapped intermediates.
+        if len(_pts) > 2:
+            _cd: "list[tuple]" = [_pts[0]]
+            for _ci in range(1, len(_pts) - 1):
+                _pp, _cp, _np_ = _cd[-1], _pts[_ci], _pts[_ci + 1]
+                if not (
+                    (abs(_pp[0] - _cp[0]) < 0.5 and abs(_cp[0] - _np_[0]) < 0.5) or
+                    (abs(_pp[1] - _cp[1]) < 0.5 and abs(_cp[1] - _np_[1]) < 0.5)
+                ):
+                    _cd.append(_cp)
+            _cd.append(_pts[-1])
+            _pts = _cd
         if e.label and len(_pts) >= 2:
             _lx, _ly = _label_on_longest(_pts, e.label, int(canvas_w), [], [])
         else:
@@ -3381,6 +3390,33 @@ def _reroute_cross_boundary_edges(
             dw = _node_render_w(dn)
             dh = _node_render_h(dn)
             b = (dn.x + dw / 2.0, dn.y + dh)
+
+        # Bottom-to-side face lift: when the main router assigned a bottom face
+        # port but the actual destination node is primarily horizontal (1.25:1)
+        # from the source, remap start to the side face.  The fanned x-fraction
+        # from the bottom port is mapped to a y-offset on the right/left face so
+        # each edge still gets a unique start position (no tramlines).
+        if _is_tb and _sp_pt:
+            _sn_bot = sn.y + _node_render_h(sn)
+            if abs(float(_sp_pt[1]) - _sn_bot) < 2.0:     # port is on the bottom face
+                _adx = abs(dcx - scx)
+                _ady = abs(dcy - scy)
+                if _adx >= 1.25 * _ady and _adx > 0:      # primarily horizontal
+                    _sw2 = _node_render_w(sn)
+                    _sh2 = _node_render_h(sn)
+                    _frac = min(1.0, max(0.0, (float(_sp_pt[0]) - sn.x) / max(_sw2, 1.0)))
+                    _side_y = float(int(sn.y + _frac * _sh2))  # snap to grid int, avoids float/int stub
+                    a = (sn.x + _sw2 if dcx > scx else sn.x, _side_y)
+                    # When dest port is on dest top face, redirect to the facing horizontal
+                    # face so the route goes side→side rather than side→top (which forces a
+                    # downward U-turn before reaching the destination).
+                    if _dp_pt and abs(float(_dp_pt[1]) - dn.y) < 2.0:
+                        _dw2 = _node_render_w(dn)
+                        _dh2 = _node_render_h(dn)
+                        if dcx > scx:
+                            b = (dn.x, dn.y + _dh2 / 2.0)        # dest LEFT face center
+                        else:
+                            b = (dn.x + _dw2, dn.y + _dh2 / 2.0)  # dest RIGHT face center
 
         # Layout-overlap: forward TB edge (src.rank < dst.rank) where the source
         # bottom port sits below the destination top port.  Routing BOTTOM→TOP

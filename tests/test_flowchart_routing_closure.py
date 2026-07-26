@@ -483,13 +483,24 @@ class TestFixtureGeometry:
             for e in layout.routed_edges
             if e.src_port.node_id == "A"
         ]
-        if len(gw_pts) >= 2:
-            xs = sorted(p[0] for p in gw_pts)
-            for i in range(len(xs) - 1):
-                sep = xs[i + 1] - xs[i]
-                assert sep >= FAN_MIN_PORT_PITCH - 0.5, (
-                    f"Gateway port separation {sep:.1f}px < {FAN_MIN_PORT_PITCH}px minimum"
-                )
+        # Check fan separation within the same face only.  _edge_src_face may route
+        # some edges to a side face (right/left) when the target is far horizontal;
+        # ports on different faces don't overlap and comparing their x values across
+        # faces produces spurious failures.
+        for i in range(len(gw_pts)):
+            for j in range(i + 1, len(gw_pts)):
+                xi, yi = gw_pts[i]
+                xj, yj = gw_pts[j]
+                if abs(yi - yj) < 4.0:      # same horizontal face (bottom/top)
+                    sep = abs(xi - xj)
+                    assert sep >= FAN_MIN_PORT_PITCH - 0.5, (
+                        f"Gateway port x-separation {sep:.1f}px < {FAN_MIN_PORT_PITCH}px minimum"
+                    )
+                elif abs(xi - xj) < 4.0:    # same vertical face (right/left)
+                    sep = abs(yi - yj)
+                    assert sep >= FAN_MIN_PORT_PITCH - 0.5, (
+                        f"Gateway port y-separation {sep:.1f}px < {FAN_MIN_PORT_PITCH}px minimum"
+                    )
 
     def test_parallel_links_agg_pitch(self):
         layout = _compile("flowchart-parallel-links")
