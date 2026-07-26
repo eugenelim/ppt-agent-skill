@@ -1808,46 +1808,91 @@ def _flowchart_route_new_path(
     _eid_dst: "dict[str, str]" = {eid: (e.orig_dst or e.dst) for eid, e in edge_by_real.items()}
     _eid_src: "dict[str, str]" = {eid: (e.orig_src or e.src) for eid, e in edge_by_real.items()}
 
-    sp: "dict[str, PortCandidate]" = {}
+    _OPPOSITE_FACE: "dict[str, str]" = {
+        "bottom": "top", "top": "bottom", "right": "left", "left": "right",
+    }
+
+    def _edge_src_face(eid: str) -> str:
+        """Choose source port face based on target direction.
+
+        Cross-rank edges always use the global face (bottom for TB) so they exit
+        perpendicularly. Same-rank edges with a primarily-horizontal offset use
+        right or left, giving direct horizontal connections instead of U-shapes.
+        """
+        sn = nodes.get(_eid_src.get(eid, ""))
+        dn = nodes.get(_eid_dst.get(eid, ""))
+        if sn is None or dn is None or sn.is_dummy or dn.is_dummy:
+            return src_face
+        if getattr(sn, "rank", None) != getattr(dn, "rank", None):
+            return src_face
+        scx = float(sn.x) + float(_node_render_w(sn)) / 2.0
+        scy = float(sn.y) + float(_node_render_h(sn)) / 2.0
+        dcx = float(dn.x) + float(_node_render_w(dn)) / 2.0
+        dcy = float(dn.y) + float(_node_render_h(dn)) / 2.0
+        dx_v, dy_v = dcx - scx, dcy - scy
+        if abs(dx_v) <= abs(dy_v):
+            return src_face
+        if _horiz:
+            return "bottom" if dy_v >= 0 else "top"
+        return "right" if dx_v >= 0 else "left"
+
+    # Group source edges by (node, per-edge face) for per-face fan distribution.
+    _src_face_groups: "dict[tuple[str, str], list[str]]" = _dd(list)
     for node_id, eids in out_map.items():
+        for eid in eids:
+            _src_face_groups[(node_id, _edge_src_face(eid))].append(eid)
+
+    sp: "dict[str, PortCandidate]" = {}
+    for (node_id, face), eids in _src_face_groups.items():
         node = nodes.get(node_id)
         if node is None or node.is_dummy:
             continue
         bx, by, bw, bh = _nb(node)
+        face_len = bh if face in ("left", "right") else bw
         ordered = sorted(eids, key=lambda e: _peer_ctr(e, _eid_dst))
-        for eid, off in fan_slots(ordered, src_face, face_length=(bh if _horiz else bw)):
-            pt = _pp(src_face, bx, by, bw, bh, off)
+        for eid, off in fan_slots(ordered, face, face_length=face_len):
+            pt = _pp(face, bx, by, bw, bh, off)
             sp[eid] = PortCandidate(
-                edge_id=eid, node_id=node_id, side=src_face,
+                edge_id=eid, node_id=node_id, side=face,
                 normalized_offset=off, point=pt,
-                outward_normal=_SIDE_NORMALS_LOCAL.get(src_face, (0.0, 0.0)),
+                outward_normal=_SIDE_NORMALS_LOCAL.get(face, (0.0, 0.0)),
                 fixed_side=False, preference_penalty=0.0,
             )
 
-    dp: "dict[str, PortCandidate]" = {}
+    # Group destination edges by (node, per-edge face) for per-face fan distribution.
+    _dst_face_groups: "dict[tuple[str, str], list[str]]" = _dd(list)
     for node_id, eids in in_map.items():
+        for eid in eids:
+            _dst_face = _OPPOSITE_FACE.get(_edge_src_face(eid), dst_face)
+            _dst_face_groups[(node_id, _dst_face)].append(eid)
+
+    dp: "dict[str, PortCandidate]" = {}
+    for (node_id, face), eids in _dst_face_groups.items():
         # For dummy-chained edges, real destination node resolved via in_map key
         node = nodes.get(node_id)
         if node is None or node.is_dummy:
             # Try to find the real destination node from the edge
+            _resolved_node_id = node_id
             for eid in eids:
                 e = edge_by_real.get(eid)
                 if e:
                     real_dst_id = e.orig_dst or e.dst
                     node = nodes.get(real_dst_id)
                     if node and not node.is_dummy:
-                        node_id = real_dst_id
+                        _resolved_node_id = real_dst_id
                         break
             if node is None or node.is_dummy:
                 continue
+            node_id = _resolved_node_id
         bx, by, bw, bh = _nb(node)
+        face_len = bh if face in ("left", "right") else bw
         ordered = sorted(eids, key=lambda e: _peer_ctr(e, _eid_src))
-        for eid, off in fan_slots(ordered, dst_face, face_length=(bh if _horiz else bw)):
-            pt = _pp(dst_face, bx, by, bw, bh, off)
+        for eid, off in fan_slots(ordered, face, face_length=face_len):
+            pt = _pp(face, bx, by, bw, bh, off)
             dp[eid] = PortCandidate(
-                edge_id=eid, node_id=node_id, side=dst_face,
+                edge_id=eid, node_id=node_id, side=face,
                 normalized_offset=off, point=pt,
-                outward_normal=_SIDE_NORMALS_LOCAL.get(dst_face, (0.0, 0.0)),
+                outward_normal=_SIDE_NORMALS_LOCAL.get(face, (0.0, 0.0)),
                 fixed_side=False, preference_penalty=0.0,
             )
 
@@ -2002,6 +2047,12 @@ def _flowchart_route_new_path(
 
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
+    # Collect group border y-coordinates so local_channel_route can avoid landing
+    # Z-route horizontal segments on group box top/bottom edges.
+    _grp_border_ys: "tuple[float, ...]" = tuple(
+        y for bbox in grp_bboxes.values() for y in (bbox[1], bbox[3])
+    )
+
     # Route each edge: multi-rank → try local channel first, else standard route_edge
     assignments: "dict[str, RouteCandidate]" = {}
     failures_list: "list[RoutingFailure]" = []
@@ -2137,7 +2188,7 @@ def _flowchart_route_new_path(
                 and abs(src_node.rank - dst_node.rank) > 1):
             lb = _local_bounds_for(src_node.rank, dst_node.rank)
             if lb is not None:
-                result = local_channel_route(eid, src_pc, dst_pc, lb, existing, obstacles=per_obs)
+                result = local_channel_route(eid, src_pc, dst_pc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                 # Reject channels that land within 8px of the canvas boundary
                 if result is not None:
                     _CANVAS_MARGIN = 8.0
@@ -2161,7 +2212,7 @@ def _flowchart_route_new_path(
             if abs(src_node.y - dst_node.y) > 400:
                 _lb2 = _local_bounds_for(src_node.rank, dst_node.rank)
                 if _lb2 is not None:
-                    result = local_channel_route(eid, src_pc, dst_pc, _lb2, existing, obstacles=per_obs)
+                    result = local_channel_route(eid, src_pc, dst_pc, _lb2, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                     if result is not None:
                         _CANVAS_MARGIN2 = 8.0
                         if any(
