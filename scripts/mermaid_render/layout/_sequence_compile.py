@@ -1159,8 +1159,7 @@ def _compile_sequence_model(
             parts.append(
                 f'<path d="M {ax_right} {loop_top} C {ax_right + loop_w} {loop_top} '
                 f'{ax_right + loop_w} {loop_bot} {ax_right} {loop_bot}" '
-                f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}'
-                f' data-src="{_h(_msg_src)}" data-dst="{_h(_msg_dst)}"/>'
+                f'stroke="{_seq_edge}" fill="none" stroke-width="1.5"{dash}/>'
             )
             parts.append(_draw_marker(spec["end_m"], ax_right, loop_bot, -1))
             if spec.get("start_m"):  # bidirectional self-message (AC-5.6)

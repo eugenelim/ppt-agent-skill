@@ -1756,9 +1756,14 @@ def _flowchart_route_new_path(
         real_src = e.orig_src or e.src
         real_dst = e.orig_dst or e.dst
         pair_key = f"{real_src}->{real_dst}"
-        if pair_key in seen_real:
+        # Use edge_id as dedup key when available so distinct parallel or
+        # self-loop edges (same pair_key, different edge_id) are all routed.
+        # Fall back to pair_key only for edges without an id (dummy chains
+        # whose final segment might otherwise produce duplicate paths).
+        dedup_key = e.edge_id if e.edge_id else pair_key
+        if dedup_key in seen_real:
             continue  # dedup dummy chains that converge to same pair
-        seen_real.add(pair_key)
+        seen_real.add(dedup_key)
         # Use existing edge_id if set, else synthesize from real endpoints
         eid = e.edge_id or pair_key
         if eid in eid_counters:
@@ -1830,10 +1835,19 @@ def _flowchart_route_new_path(
         dcx = float(dn.x) + float(_node_render_w(dn)) / 2.0
         dcy = float(dn.y) + float(_node_render_h(dn)) / 2.0
         dx_v, dy_v = dcx - scx, dcy - scy
-        if abs(dx_v) <= abs(dy_v):
+        # Require clearly dominant horizontal offset (2:1) before switching to
+        # a horizontal face. Co-ranked satellite nodes (e.g. ML→BD after sink-
+        # satellite co-rank) can have large vertical displacement at the same
+        # rank; a 1:1 threshold misclassifies those as horizontal connections.
+        if abs(dx_v) < 2.0 * abs(dy_v):
             return src_face
         if _horiz:
             return "bottom" if dy_v >= 0 else "top"
+        # TB: when target is above, exit top so the path reaches destination
+        # bottom at right angles instead of a vertical segment parallel to a
+        # side face.
+        if dy_v < 0:
+            return "top"
         return "right" if dx_v >= 0 else "left"
 
     # Group source edges by (node, per-edge face) for per-face fan distribution.
@@ -2047,6 +2061,28 @@ def _flowchart_route_new_path(
 
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
+    # Refine port positions for non-rectangular shapes using boundary_intersection.
+    # Ports computed via _pp land on the rectangular bounding-box face; for shapes
+    # like diamond, hexagon, trapezoid etc. the actual outline differs.  Clipping
+    # each endpoint from the node centre in the port direction gives the exact
+    # intersection with the shape outline, matching the legacy _route_edges behaviour.
+    from ._routing import _POLY_CLIP_SHAPES  # noqa: PLC0415
+    from .shape_geometry import SHAPE_REGISTRY as _SR_port  # noqa: PLC0415
+    for _pc_dict in (sp, dp):
+        for _pe_id, _pc in list(_pc_dict.items()):
+            _pn = nodes.get(_pc.node_id)
+            if _pn is None or getattr(_pn, "shape", None) not in _POLY_CLIP_SHAPES:
+                continue
+            _pbx, _pby, _pbw, _pbh = _nb(_pn)
+            _pcx, _pcy = _pbx + _pbw / 2.0, _pby + _pbh / 2.0
+            _ppx, _ppy = _pc.point
+            _pdx, _pdy = _ppx - _pcx, _ppy - _pcy
+            if _pdx == 0.0 and _pdy == 0.0:
+                continue
+            _sg = _SR_port.get(_pn.shape, _SR_port["rect"])
+            _rx, _ry = _sg.boundary_intersection(_pcx, _pcy, _pbw, _pbh, _pdx, _pdy)
+            _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry))
+
     # Collect group border y-coordinates so local_channel_route can avoid landing
     # Z-route horizontal segments on group box top/bottom edges.
     _grp_border_ys: "tuple[float, ...]" = tuple(
@@ -2057,6 +2093,7 @@ def _flowchart_route_new_path(
     assignments: "dict[str, RouteCandidate]" = {}
     failures_list: "list[RoutingFailure]" = []
     self_loop_dicts: "list[dict]" = []  # pre-built route dicts for self-loops
+    _self_loop_lanes: "dict[str, int]" = {}  # per-node lane counter for multiple self-loops
 
     def _local_bounds_for(src_rank: int, dst_rank: int) -> "tuple[float, float, float, float] | None":
         min_r, max_r = min(src_rank, dst_rank), max(src_rank, dst_rank)
@@ -2087,33 +2124,60 @@ def _flowchart_route_new_path(
                     reason="self-loop node not found",
                 ))
                 continue
-            from ._constants import BASE_LOOP_EXTENT, LABEL_PAD  # noqa: PLC0415
+            from ._constants import BASE_LOOP_EXTENT, LABEL_PAD, LOOP_LANE_GAP  # noqa: PLC0415
             _SL_CHIP_H = 17  # label chip height (matches _LABEL_CHIP_H in _routing.py)
             nw = float(_node_render_w(s))
             nh = float(_node_render_h(s))
             _label_w = len(e.label or "") * 7
-            extent = max(BASE_LOOP_EXTENT, _label_w + 2 * LABEL_PAD, int(0.35 * max(nw, nh)))
+            lane_idx = _self_loop_lanes.get(real_src_id, 0)
+            _self_loop_lanes[real_src_id] = lane_idx + 1
+            lane_num = lane_idx // 2  # stack same-face loops
+            extent = (max(BASE_LOOP_EXTENT, _label_w + 2 * LABEL_PAD, int(0.35 * max(nw, nh)))
+                      + lane_num * LOOP_LANE_GAP)
             if _horiz:
                 x_out = float(s.x) + nw * 0.33
                 x_ret = float(s.x) + nw * 0.67
-                y_face = float(s.y)
-                loop_y = y_face - extent
-                sl_pts: "list[tuple[float, float]]" = [
-                    (x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face),
-                ]
-                mid_x = (x_out + x_ret) / 2
-                _lx = mid_x - _label_w / 2
-                _ly = loop_y - _SL_CHIP_H - 4
+                if lane_idx % 2 == 0:
+                    # top face
+                    y_face = float(s.y)
+                    loop_y = y_face - extent
+                    sl_pts: "list[tuple[float, float]]" = [
+                        (x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face),
+                    ]
+                    mid_x = (x_out + x_ret) / 2
+                    _lx = mid_x - _label_w / 2
+                    _ly = loop_y - _SL_CHIP_H - 4
+                else:
+                    # bottom face
+                    y_face = float(s.y) + nh
+                    loop_y = y_face + extent
+                    sl_pts = [
+                        (x_out, y_face), (x_out, loop_y), (x_ret, loop_y), (x_ret, y_face),
+                    ]
+                    mid_x = (x_out + x_ret) / 2
+                    _lx = mid_x - _label_w / 2
+                    _ly = loop_y + 4
             else:
                 y_out = float(s.y) + nh * 0.33
                 y_ret = float(s.y) + nh * 0.67
-                x_face = float(s.x) + nw
-                loop_x = x_face + extent
-                sl_pts = [
-                    (x_face, y_out), (loop_x, y_out), (loop_x, y_ret), (x_face, y_ret),
-                ]
-                _lx = loop_x + 4.0
-                _ly = (y_out + y_ret) / 2 - _SL_CHIP_H
+                if lane_idx % 2 == 0:
+                    # right face
+                    x_face = float(s.x) + nw
+                    loop_x = x_face + extent
+                    sl_pts = [
+                        (x_face, y_out), (loop_x, y_out), (loop_x, y_ret), (x_face, y_ret),
+                    ]
+                    _lx = loop_x + 4.0
+                    _ly = (y_out + y_ret) / 2 - _SL_CHIP_H
+                else:
+                    # left face
+                    x_face = float(s.x)
+                    loop_x = x_face - extent
+                    sl_pts = [
+                        (x_face, y_out), (loop_x, y_out), (loop_x, y_ret), (x_face, y_ret),
+                    ]
+                    _lx = loop_x - _label_w - 4.0
+                    _ly = (y_out + y_ret) / 2 - _SL_CHIP_H
             if e.style == "thick":
                 _sl_marker_id: "str | None" = "arrow-thick" if e.arrow else None
             else:
@@ -3235,7 +3299,10 @@ def _reroute_cross_boundary_edges(
     _cbe_done_hsegs: "list[tuple[float, float, float]]" = []  # (y, x_min, x_max)
     _cbe_done_vsegs: "list[tuple[float, float, float]]" = []  # (x, y_min, y_max)
 
-    def _build_occupied(gx: "list[int]", gy: "list[int]") -> "set[tuple]":
+    def _build_occupied(
+        gx: "list[int]", gy: "list[int]",
+        exclude_ys: "tuple[float, float] | None" = None,
+    ) -> "set[tuple]":
         """Convert world-coord horizontal segments to grid-index step tuples for A*.
 
         Marks the occupied y row ±2 rows so routes stay at least two grid rows away
@@ -3245,7 +3312,19 @@ def _reroute_cross_boundary_edges(
         that zigzag across group boundaries (e.g. flowchart-groups-complex
         Cache→DB) or detour far past the destination.  CBE vertical tramlines are
         accepted as a layout constraint when multiple routes share the same gate.
+
+        `exclude_ys` — the current edge's source and destination Y coordinates.
+        Those exact grid rows are never marked occupied so the edge's own port rows
+        remain free; without this, a tightly spaced port-pair (e.g. SY.bottom=1144
+        and BD.top=1148, one grid step apart) can be blocked by a previous edge's
+        congestion zone and the A* routes backward to escape it.
         """
+        # Grid indices for the current edge's port rows — never occupy these.
+        _excl: "set[int]" = set()
+        if exclude_ys:
+            for _ey in exclude_ys:
+                _excl.add(min(range(len(gy)), key=lambda i: abs(gy[i] - _ey)))
+
         occ: "set[tuple]" = set()
         for (hy, hx0, hx1) in _cbe_done_hsegs:
             yi = min(range(len(gy)), key=lambda i: abs(gy[i] - hy))
@@ -3253,7 +3332,7 @@ def _reroute_cross_boundary_edges(
             xi1 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx1))
             for dyi in range(-2, 3):  # exact row ± two rows
                 byi = yi + dyi
-                if 0 <= byi < len(gy):
+                if 0 <= byi < len(gy) and byi not in _excl:
                     for xi in range(min(xi0, xi1), max(xi0, xi1)):
                         occ.add((xi, byi, xi + 1, byi))
         return occ
@@ -3297,13 +3376,32 @@ def _reroute_cross_boundary_edges(
             dh = _node_render_h(dn)
             b = (dn.x + dw / 2.0, dn.y + dh)
 
+        # Layout-overlap: forward TB edge (src.rank < dst.rank) where the source
+        # bottom port sits below the destination top port.  Routing BOTTOM→TOP
+        # forces an unavoidable upward kink; override to RIGHT→LEFT so the path
+        # is monotone horizontal.  Only applies when source is strictly below the
+        # destination in rank (same-rank edges are handled by _edge_src_face) and
+        # the source group is to the left of the destination group.
+        if (
+            _is_tb
+            and sn.rank < dn.rank     # strictly lower rank → forward cross-rank edge
+            and a[1] > b[1]           # source port Y is below dest port Y (overlap)
+            and sn.x + _node_render_w(sn) < dn.x  # source group is to the left
+        ):
+            _sw = _node_render_w(sn)
+            _sh = _node_render_h(sn)
+            _dw = _node_render_w(dn)
+            _dh = _node_render_h(dn)
+            a = (sn.x + _sw, sn.y + _sh / 2.0)   # source RIGHT center
+            b = (dn.x, dn.y + _dh / 2.0)          # dest LEFT center
+
         endpoint_groups = {sn.group, dn.group}
         obstacles: "list[tuple]" = [
             rect for nid, rect in node_rects.items() if nid not in (s, d)
         ]
         for gid, (x0, y0, x1, y1) in grp_bboxes.items():
-            obstacles.append((x0, y0, x1, y0 + band))       # title band
             if gid not in endpoint_groups:
+                obstacles.append((x0, y0, x1, y0 + band))   # title band
                 obstacles.append((x0, y0, x1, y1))           # unrelated interior
 
         # Block A* from routing within 5px of canvas edges (_blocked_segs CLEAR=4,
@@ -3318,7 +3416,7 @@ def _reroute_cross_boundary_edges(
 
         gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b], canvas_w, canvas_h)
         blocked = _blocked_segs(gx, gy, obstacles)
-        occupied = _build_occupied(gx, gy)
+        occupied = _build_occupied(gx, gy, exclude_ys=(a[1], b[1]))
         path = _astar_route(int(a[0]), int(a[1]), int(b[0]), int(b[1]), gx, gy, blocked, occupied=occupied or None)
         if not path or len(path) < 2:
             continue  # keep the original route if A* cannot improve it
@@ -3385,6 +3483,25 @@ def _reroute_cross_boundary_edges(
                 kind=BoundaryGateKind.EXIT if is_exit else BoundaryGateKind.ENTRY,
             ))
             gate_ctr += 1
+
+        # Remove intermediate collinear waypoints introduced by the grid or
+        # orthogonaliser.  Gate points must be preserved as exact waypoints
+        # because test_gate_is_route_waypoint requires a waypoint within 1 px.
+        _gate_pts = {
+            (round(_gpt[0], 1), round(_gpt[1], 1))
+            for _, _gpt, _, _ in inserts
+        }
+        _deduped: "list[tuple[float, float]]" = [out[0]]
+        for _ci in range(1, len(out) - 1):
+            _pp, _cp, _np = _deduped[-1], out[_ci], out[_ci + 1]
+            _col_x = abs(_pp[0] - _cp[0]) < 0.5 and abs(_cp[0] - _np[0]) < 0.5
+            _col_y = abs(_pp[1] - _cp[1]) < 0.5 and abs(_cp[1] - _np[1]) < 0.5
+            _is_gate = (round(_cp[0], 1), round(_cp[1], 1)) in _gate_pts
+            if not (_col_x or _col_y) or _is_gate:
+                _deduped.append(_cp)
+        if out:
+            _deduped.append(out[-1])
+        out = _deduped
 
         r["waypoints"] = [(float(x), float(y)) for x, y in out]
         r["_cbe_rerouted"] = True
