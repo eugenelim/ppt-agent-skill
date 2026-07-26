@@ -747,6 +747,12 @@ def _restore_gate_edges(
             "source_marker": (_orig_sm.kind if hasattr(_orig_sm, "kind") else _orig_sm),
             "target_marker": (_orig_tm.kind if hasattr(_orig_tm, "kind") else _orig_tm),
             "edge_id": orig.edge_id,
+            # Preserve fanned port positions so _reroute_cross_boundary_edges can
+            # use per-edge port diversity rather than falling back to the shared
+            # node-face centre, which causes every route from the same node to
+            # share the same initial segment (tramlines).
+            "_src_port": first.get("_src_port"),
+            "_dst_port": second.get("_dst_port"),
         }
         to_remove.add(first_idx)
         to_remove.add(second_idx)
@@ -3382,8 +3388,12 @@ def _reroute_cross_boundary_edges(
         # is monotone horizontal.  Only applies when source is strictly below the
         # destination in rank (same-rank edges are handled by _edge_src_face) and
         # the source group is to the left of the destination group.
+        # Skip the override when _src_port was explicitly provided: the fanned port
+        # is already diverse per-edge, so overriding to the shared face centre would
+        # collapse all edges from the same source face back into tramlines.
         if (
             _is_tb
+            and _sp_pt is None        # only override when no explicit fanned port
             and sn.rank < dn.rank     # strictly lower rank → forward cross-rank edge
             and a[1] > b[1]           # source port Y is below dest port Y (overlap)
             and sn.x + _node_render_w(sn) < dn.x  # source group is to the left
