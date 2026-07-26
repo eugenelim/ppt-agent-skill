@@ -341,8 +341,7 @@ def validate_segment_obstruction(
         for gid, gl in layout.group_layouts.items():
             if gid not in endpoint_groups:
                 obstacles.append(("group-interior", gid, gl.boundary_bounds))
-            # Title band is an obstruction even for the endpoint's own group.
-            obstacles.append(("group-title", gid, _group_title_band(gl, title_band_h)))
+                obstacles.append(("group-title", gid, _group_title_band(gl, title_band_h)))
         for other in layout.routed_edges:
             if other.edge_id == e.edge_id:
                 continue
