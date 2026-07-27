@@ -110,6 +110,85 @@ if __name__ == "__main__":
     empty_html = H.build_preview([], title="Empty")
     check(empty_html.startswith('<!DOCTYPE'), "build_preview([]) returns valid HTML")
 
+    # --- build_notes_stub ---
+    with tempfile.TemporaryDirectory() as t:
+        d = Path(t)
+        (d / "slide-1.html").write_text(
+            "<html><head><title>Roadmap Overview</title></head><body></body></html>"
+        )
+        (d / "slide-2.html").write_text(
+            "<html><body><h1>Key Findings</h1></body></html>"
+        )
+        stubs_slides = [str(s) for s in H.collect_slides(d)]
+        stub = H.build_notes_stub(stubs_slides)
+        check(stub["schema_version"] == "1", "build_notes_stub: schema_version=1")
+        check("_comment" in stub, "build_notes_stub: _comment present")
+        check(len(stub["slides"]) == 2, "build_notes_stub: 2 slide entries")
+        check(stub["slides"][0]["slide_number"] == 1, "build_notes_stub: slide_number=1")
+        check(stub["slides"][0]["title"] == "Roadmap Overview", "build_notes_stub: title from <title>")
+        check(stub["slides"][0]["notes"] == "", "build_notes_stub: empty notes string")
+        check(stub["slides"][1]["title"] == "Key Findings", "build_notes_stub: title from <h1>")
+        check(
+            stub["_comment"] == "Fill in facilitation notes here; pass --notes to html_packager.py to embed them.",
+            "build_notes_stub: _comment literal matches",
+        )
+
+    # --- build_preview with notes ---
+    with tempfile.TemporaryDirectory() as t:
+        d = Path(t)
+        (d / "slide-1.html").write_text(
+            "<html><head><title>Intro</title></head><body></body></html>"
+        )
+        (d / "slide-2.html").write_text("<html><body></body></html>")
+        notes_slides = [str(s) for s in H.collect_slides(d)]
+
+        notes_data = [
+            {"slide_number": 1, "notes": "Welcome everyone."},
+            {"slide_number": 2, "notes": ""},
+        ]
+        html_with = H.build_preview(notes_slides, title="T", notes=notes_data)
+        html_without = H.build_preview(notes_slides, title="T")
+
+        check(
+            'data-notes="Welcome everyone."' in html_with,
+            "build_preview notes: data-notes injected for slide with notes",
+        )
+        check(
+            "data-notes=" not in html_without,
+            "build_preview no notes: data-notes absent when notes=None",
+        )
+        check("id=\"notesPanel\"" in html_with, "build_preview notes: notesPanel element present")
+        check(
+            html_with.index('id="stage"') < html_with.index('id="notesPanel"'),
+            "build_preview notes: notesPanel after stage open tag",
+        )
+        check(
+            html_with.index('id="notesPanel"') < html_with.index('</div>\n<div class="controls"'),
+            "build_preview notes: notesPanel inside stage (before stage close + controls)",
+        )
+        check("id=\"notesBtn\"" in html_with, "build_preview notes: Notes button present")
+        check(
+            "=== 'n'" in html_with or '=== "n"' in html_with,
+            "build_preview notes: N key binding present",
+        )
+
+        # HTML-escaping test (XSS defense on data-notes attribute)
+        special_notes = [{"slide_number": 1, "notes": 'line1\n<b>"&x"</b>'}]
+        html_special = H.build_preview(notes_slides[:1], title="T", notes=special_notes)
+        check("&lt;b&gt;" in html_special, "build_preview notes: < is HTML-escaped in data-notes")
+        check("&quot;" in html_special, "build_preview notes: \" is HTML-escaped in data-notes")
+        check("&amp;" in html_special, "build_preview notes: & is HTML-escaped in data-notes")
+        check("<b>" not in html_special, "build_preview notes: raw <b> absent from output")
+
+        # Defensive: non-dict entry and null slide_number must not crash
+        bad_notes = [None, {"slide_number": None, "notes": "x"}, {"slide_number": 1, "notes": "Safe."}]
+        html_bad = H.build_preview(notes_slides[:1], title="T", notes=bad_notes)
+        check("data-notes=\"Safe.\"" in html_bad, "build_preview notes: defensively skips bad entries")
+
+        # AC8: sandbox still preserved when notes are used
+        check('sandbox=""' in html_with, "build_preview notes: sandbox preserved")
+        check("allow-same-origin" not in html_with, "build_preview notes: allow-same-origin absent")
+
     if FAILS:
         print(f"✗ test_html_packager: {len(FAILS)} failure(s)")
         for f in FAILS:
