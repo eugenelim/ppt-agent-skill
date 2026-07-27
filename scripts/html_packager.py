@@ -92,6 +92,21 @@ def _clean_title(raw: str) -> str:
     return t
 
 
+def _slide_title(html_content: str, n: int) -> str:
+    """Extract a usable display title from a single slide's HTML.
+
+    Tries <title>, then <h1>, normalising each through _clean_title().
+    Falls back to "Slide N" when both are absent or yield a placeholder.
+    """
+    for pattern in (r"<title[^>]*>(.*?)</title>", r"<h1[^>]*>(.*?)</h1>"):
+        m = re.search(pattern, html_content, re.I | re.S)
+        if m:
+            t = _clean_title(m.group(1))
+            if t:
+                return t
+    return f"Slide {n}"
+
+
 def _title_from_outline(slides_dir: Path) -> str:
     """从 deck 的大纲文件读取权威主标题（cover.title）。
 
@@ -158,32 +173,31 @@ def derive_title(slide_files: list, slides_dir: Path) -> str:
 
 
 def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
-    """构建可翻页的预览 HTML，每页用独立 iframe 实现 CSS 隔离。"""
-    slides_srcdoc = []
+    """Build a single-file paged preview; each slide in an isolated iframe srcdoc."""
+    slides_data = []  # (srcdoc_escaped, slide_title)
 
-    for f in slide_files:
+    for i, f in enumerate(slide_files):
         html_dir = Path(f).parent
         with open(f, "r", encoding="utf-8") as fh:
             content = fh.read()
 
-        # 内联图片为 base64
         content = inline_images(content, html_dir)
-
-        # 转义为 srcdoc 安全内容（& -> &amp;  " -> &quot;）
+        slide_title = _slide_title(content, i + 1)
         escaped = html_module.escape(content, quote=True)
-        slides_srcdoc.append(escaped)
+        slides_data.append((escaped, slide_title))
 
-    total = len(slides_srcdoc)
+    total = len(slides_data)
     escaped_title = html_module.escape(title)
 
-    # 生成 iframe 列表
     iframes = []
-    for i, srcdoc in enumerate(slides_srcdoc):
+    for i, (srcdoc, slide_title) in enumerate(slides_data):
         display = "block" if i == 0 else "none"
+        escaped_slide_title = html_module.escape(slide_title, quote=True)
         # sandbox="" gives each srcdoc frame an opaque (null) origin — no allow-same-origin,
         # so a crafted slide cannot read file:// siblings or the parent document (LLM05/CWE-79).
         iframes.append(
             f'<iframe class="slide-frame" id="slide-{i}" '
+            f'data-slide-title="{escaped_slide_title}" '
             f'style="display:{display}" '
             f'srcdoc="{srcdoc}" '
             f'sandbox="" '
@@ -193,7 +207,7 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     iframes_block = '\n'.join(iframes)
 
     return f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -206,32 +220,17 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     flex-direction: column;
     align-items: center;
     min-height: 100vh;
-    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  }}
-  .toolbar {{
-    position: fixed; top: 0; left: 0; right: 0; height: 48px;
-    background: rgba(10,10,10,0.95); border-bottom: 1px solid rgba(255,255,255,0.1);
-    display: flex; align-items: center; justify-content: center; gap: 16px;
-    z-index: 1000; backdrop-filter: blur(10px);
-  }}
-  .toolbar button {{
-    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-    color: #fff; padding: 6px 16px; border-radius: 6px; cursor: pointer;
-    font-size: 14px; transition: background 0.2s;
-  }}
-  .toolbar button:hover {{ background: rgba(255,255,255,0.2); }}
-  .toolbar button:disabled {{ opacity: 0.3; cursor: not-allowed; }}
-  .page-info {{ font-size: 14px; color: rgba(255,255,255,0.7); min-width: 80px; text-align: center; }}
-  .deck-title {{
-    position: absolute; left: 16px; max-width: 40vw;
-    font-size: 14px; color: rgba(255,255,255,0.55);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   }}
   .stage {{
-    margin-top: 60px; width: 90vw; max-width: 1280px;
-    aspect-ratio: 16/9; overflow: hidden;
-    border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    background: #111; position: relative;
+    margin: 12px auto 0;
+    width: min(1280px, 90vw);
+    aspect-ratio: 16/9;
+    overflow: hidden;
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    background: #111;
+    position: relative;
   }}
   .slide-frame {{
     width: 1280px; height: 720px;
@@ -239,52 +238,207 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     position: absolute; top: 0; left: 0;
     border: none;
   }}
-  .nav-hint {{
-    position: fixed; bottom: 12px;
-    color: rgba(255,255,255,0.25); font-size: 12px;
+  .controls {{
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    width: min(1280px, 90vw);
+    margin: 8px auto 12px;
   }}
+  .nav-group {{ display: flex; gap: 8px; }}
+  .nav-btn, .utility-btn {{
+    border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.1);
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 14px;
+  }}
+  .nav-btn:hover, .utility-btn:hover {{ background: rgba(255,255,255,.18); }}
+  .nav-btn:disabled {{ opacity: .35; cursor: default; }}
+  .progress-track {{
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.15);
+    overflow: hidden;
+  }}
+  .progress-bar {{
+    height: 100%;
+    width: 0;
+    background: rgba(255,255,255,.7);
+    transition: width .18s ease;
+  }}
+  .counter {{
+    font-size: 14px;
+    color: rgba(255,255,255,.6);
+    min-width: 72px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }}
+  .slide-jump {{
+    display: none;
+    position: fixed;
+    inset: 10% 15%;
+    z-index: 40;
+    background: #1a1a1a;
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 12px;
+    padding: 20px;
+    overflow: auto;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  }}
+  .slide-jump.open {{ display: block; }}
+  .jump-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    color: #fff;
+  }}
+  .jump-grid {{
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }}
+  .jump-item {{
+    padding: 10px;
+    border: 1px solid rgba(255,255,255,.15);
+    border-radius: 8px;
+    background: rgba(255,255,255,.06);
+    color: #fff;
+    cursor: pointer;
+    text-align: left;
+    font-size: 13px;
+  }}
+  .jump-item:hover {{ background: rgba(255,255,255,.14); }}
+  .scrim {{
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 39;
+    background: rgba(0,0,0,.6);
+  }}
+  .scrim.open {{ display: block; }}
 </style>
 </head>
 <body>
-<div class="toolbar">
-  <span class="deck-title" title="{escaped_title}">{escaped_title}</span>
-  <button id="btn-prev" onclick="nav(-1)">Prev</button>
-  <span class="page-info" id="page-info">1 / {total}</span>
-  <button id="btn-next" onclick="nav(1)">Next</button>
-</div>
 <div class="stage" id="stage">
 {iframes_block}
 </div>
-<div class="nav-hint">Arrow keys to navigate</div>
+<div class="controls">
+  <div class="nav-group">
+    <button class="nav-btn" id="prevBtn" aria-label="Previous slide">&#8592;</button>
+    <button class="nav-btn" id="nextBtn" aria-label="Next slide">&#8594;</button>
+    <button class="utility-btn" id="jumpBtn">Slides</button>
+  </div>
+  <div class="progress-track" aria-hidden="true">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+  <div class="nav-group" style="justify-content:flex-end">
+    <span class="counter" id="counter">1 / {total}</span>
+  </div>
+</div>
+<div class="scrim" id="scrim"></div>
+<div class="slide-jump" id="slideJump" role="dialog" aria-modal="true" aria-label="Slide navigator">
+  <div class="jump-header">
+    <strong>Jump to slide</strong>
+    <button class="utility-btn" id="closeJump" aria-label="Close navigator">&#x2715;</button>
+  </div>
+  <div class="jump-grid" id="jumpGrid"></div>
+</div>
 <script>
-let cur = 0;
-const frames = document.querySelectorAll('.slide-frame');
-const total = frames.length;
-const info = document.getElementById('page-info');
-const stage = document.getElementById('stage');
+(function() {{
+  const frames = Array.from(document.querySelectorAll('.slide-frame'));
+  const total = frames.length;
+  let cur = 0;
+  let blanked = false;
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const jumpBtn = document.getElementById('jumpBtn');
+  const closeJumpBtn = document.getElementById('closeJump');
+  const slideJump = document.getElementById('slideJump');
+  const scrim = document.getElementById('scrim');
+  const jumpGrid = document.getElementById('jumpGrid');
+  const counter = document.getElementById('counter');
+  const progressBar = document.getElementById('progressBar');
+  const stage = document.getElementById('stage');
 
-function resize() {{
-  const sw = stage.clientWidth, sh = stage.clientHeight;
-  const scale = Math.min(sw / 1280, sh / 720);
-  frames.forEach(f => f.style.transform = 'scale(' + scale + ')');
-}}
-function show(i) {{
-  frames.forEach((f, idx) => f.style.display = idx === i ? 'block' : 'none');
-  info.textContent = (i+1) + ' / ' + total;
-  document.getElementById('btn-prev').disabled = i === 0;
-  document.getElementById('btn-next').disabled = i === total - 1;
-}}
-function nav(d) {{
-  const n = cur + d;
-  if (n >= 0 && n < total) {{ cur = n; show(cur); }}
-}}
-document.addEventListener('keydown', e => {{
-  if (e.key==='ArrowLeft'||e.key==='ArrowUp') nav(-1);
-  if (e.key==='ArrowRight'||e.key==='ArrowDown'||e.key===' ') nav(1);
-}});
-window.addEventListener('resize', resize);
-resize();
-show(0);
+  function show(i) {{
+    frames.forEach((f, idx) => {{ f.style.display = idx === i ? 'block' : 'none'; }});
+    blanked = false;
+    counter.textContent = (i + 1) + ' / ' + total;
+    progressBar.style.width = (total ? ((i + 1) / total * 100) : 100) + '%';
+    prevBtn.disabled = i === 0;
+    nextBtn.disabled = i === total - 1;
+  }}
+
+  function go(d) {{
+    if (blanked) {{ show(cur); return; }}
+    const n = Math.max(0, Math.min(total - 1, cur + d));
+    if (n !== cur) {{ cur = n; show(cur); }}
+  }}
+
+  function openJump() {{
+    slideJump.classList.add('open');
+    scrim.classList.add('open');
+    const first = jumpGrid.querySelector('.jump-item');
+    if (first) first.focus();
+  }}
+
+  function closeJump() {{
+    slideJump.classList.remove('open');
+    scrim.classList.remove('open');
+    jumpBtn.focus();
+  }}
+
+  // Populate jump grid from data-slide-title attributes
+  frames.forEach((f, i) => {{
+    const btn = document.createElement('button');
+    btn.className = 'jump-item';
+    btn.textContent = (i + 1) + '. ' + (f.dataset.slideTitle || 'Slide ' + (i + 1));
+    btn.addEventListener('click', () => {{ cur = i; show(i); closeJump(); }});
+    jumpGrid.appendChild(btn);
+  }});
+
+  prevBtn.addEventListener('click', () => go(-1));
+  nextBtn.addEventListener('click', () => go(1));
+  jumpBtn.addEventListener('click', openJump);
+  closeJumpBtn.addEventListener('click', closeJump);
+  scrim.addEventListener('click', closeJump);
+
+  document.addEventListener('keydown', e => {{
+    if (!total) return;
+    if (slideJump.classList.contains('open')) {{
+      if (e.key === 'Escape') {{ e.preventDefault(); closeJump(); }}
+      return;
+    }}
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {{
+      e.preventDefault(); go(1);
+    }} else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {{
+      e.preventDefault(); go(-1);
+    }} else if (e.key === 'Home') {{
+      e.preventDefault(); cur = 0; show(0);
+    }} else if (e.key === 'End') {{
+      e.preventDefault(); cur = total - 1; show(total - 1);
+    }} else if (e.key.toLowerCase() === 'g') {{
+      e.preventDefault(); openJump();
+    }} else if (e.key.toLowerCase() === 'b') {{
+      e.preventDefault();
+      if (blanked) {{ show(cur); }} else {{ frames[cur].style.display = 'none'; blanked = true; }}
+    }}
+  }});
+
+  function resize() {{
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const scale = Math.min(sw / 1280, sh / 720);
+    frames.forEach(f => {{ f.style.transform = 'scale(' + scale + ')'; }});
+  }}
+  window.addEventListener('resize', resize);
+  resize();
+  show(0);
+}})();
 </script>
 </body>
 </html>"""
