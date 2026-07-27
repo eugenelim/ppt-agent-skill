@@ -18,6 +18,8 @@
   CI cannot exercise. Copy each spec's section into the release PR
   description before tagging. Optional; add the file the first time a
   spec needs out-of-band verification.
+- [`DESIGN.md`](DESIGN.md) — preview HTML design system (layout, interaction,
+  visual conventions). Updated in lockstep with `scripts/html_packager.py`.
 
 ## What does NOT live here
 

@@ -44,6 +44,9 @@ Scope each change precisely to the request.
   ticket IDs, and any proprietary engagement detail. Examples and mocks use
   clearly-fabricated neutral placeholders (`Acme`, `Program`, `example.com`).
   This applies to this file too — do not name a real client anywhere in the repo.
+- **Keep DESIGN.md current.** Any PR that changes a visual or interaction
+  aspect of the preview HTML (`scripts/html_packager.py`) must update
+  `docs/product/DESIGN.md` in the same commit. See the maintenance rule there.
 
 - **Limit the diff to what the request requires — extra changes hide
   the real one from review.** If the request needs it — or would ship
@@ -77,6 +80,7 @@ For each kind of decision, there is exactly one place it lives:
 | How will we build it, step by step?       | `docs/specs/<feature>/plan.md`       |
 | How is the code organized today?          | `docs/architecture/`                 |
 | What is the product doing today?          | `docs/product/` (roadmap, changelog) |
+| What is the preview HTML designed to look/behave like? | `docs/product/DESIGN.md` |
 | How do users use the product?             | `docs/guides/` (Diátaxis: tutorials, how-to, reference, explanation) |
 | How do agents do `<repeating task>`?      | A skill file (`SKILL.md` with frontmatter); your IDE handles discovery |
 
