@@ -98,6 +98,13 @@ if __name__ == "__main__":
         check('margin-top: 60px' not in html, "old margin-top: 60px absent (controls are bottom-aligned)")
         check('.toolbar' not in html, "old .toolbar class absent from output")
 
+        # D4: print CSS and button
+        check('@media print' in html, "build_preview: @media print block present")
+        check('13.333in' in html, "build_preview: 16:9 @page size in print block")
+        check('display: block !important' in html, "build_preview: .slide-frame revealed for print")
+        check('id="printBtn"' in html, "build_preview: Print button present")
+        check('window.print()' in html, "build_preview: window.print() present")
+
         # AC6: iframe sandbox security invariant
         check('sandbox=""' in html, "sandbox=\"\" attribute preserved on iframes")
         check('allow-same-origin' not in html, "allow-same-origin absent from output")
