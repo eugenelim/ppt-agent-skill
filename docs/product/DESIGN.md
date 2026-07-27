@@ -52,13 +52,10 @@ file is moved.
 
 ## Navigation Bar
 
-### Position: bottom-aligned `[planned: preview-html-nav-bottom]`
+### Position: bottom-aligned `[current]`
 
-> **Current:** fixed top toolbar (`position: fixed; top: 0`).
-
-The target design moves controls to a **static bar below the slide stage** — not
-fixed/overlaid, so they never obscure slide content, and they follow normal
-document flow.
+Controls are a **static bar below the slide stage** — not fixed/overlaid, so they
+never obscure slide content, and they follow normal document flow.
 
 **Evidence for bottom placement** (confirmed by independent research):
 - Every major browser-based presentation tool uses bottom navigation in
@@ -89,24 +86,16 @@ present/play mode.**
 
 ---
 
-## Controls Layout
-
-### Current layout `[current]`
+## Controls Layout `[current]`
 
 ```
-[toolbar: fixed top]  ← Prev  |  N / total  |  Next →
-[stage: 90vw 16:9, margin-top:60px]
-[nav-hint: "Arrow keys to navigate" — fixed bottom, low-opacity text]
-```
-
-### Target layout `[planned: preview-html-nav-bottom]`
-
-```
-[stage: 90vw 16:9, margin-top:12px]
+[stage: width:min(1280px,90vw), margin-top:12px]
 [controls bar: static, below stage]
   Left group:  ← Prev | → Next | Slides
-  Center:      ████████░░░░░░░░  (progress bar, full width)
-  Right group: N / total | Notes | Print
+  Center:      ████████░░░░░░░░  (progress bar, full width, animated)
+  Right group: N / total
+               [Notes — planned: preview-html-notes]
+               [Print  — planned: preview-html-print]
 ```
 
 Controls bar is `display: grid; grid-template-columns: auto 1fr auto` — left
@@ -115,16 +104,7 @@ group, full-width progress track, right group. Width matches the stage
 
 ---
 
-## Keyboard Shortcuts
-
-### Current bindings `[current]`
-
-| Key | Action |
-|-----|--------|
-| `←` / `↑` | Previous slide |
-| `→` / `↓` / `Space` | Next slide |
-
-### Target bindings `[planned: preview-html-nav-bottom]`
+## Keyboard Shortcuts `[current]`
 
 | Key | Action |
 |-----|--------|
@@ -133,25 +113,24 @@ group, full-width progress track, right group. Width matches the stage
 | `Home` | First slide |
 | `End` | Last slide |
 | `G` | Open slide jump modal |
-| `N` | Toggle speaker notes panel |
-| `B` | Blank screen (hide active slide, stage goes dark) |
+| `N` | Toggle speaker notes panel `[planned: preview-html-notes]` |
+| `B` | Blank screen (hide active slide; nav or B again to restore) |
 | `Escape` | Close slide jump modal |
 
 ---
 
-## Slide Jump Modal
-
-`[planned: preview-html-nav-bottom]`
+## Slide Jump Modal `[current]`
 
 A fixed overlay dialog (`position: fixed; inset: 10% 15%`) with a dark scrim
 backdrop. Contains a 3-column grid of all slides; each cell shows the slide
-number and title (derived from `<title>` or `<h1>` in the slide HTML).
+number and title (derived from `<title>` or `<h1>` in the slide HTML via
+`_slide_title()`).
 
-- Opened by pressing `G` or clicking the "Slides" button.
+- Opened by pressing `G` or clicking the "Slides" button. Focus moves to the
+  first grid item on open; returns to "Slides" button on close.
 - Closed by pressing `Escape` or clicking a slide.
-- Keyboard accessible: `Tab` cycles cells, `Enter`/`Space` activates.
-- Cells may carry metadata badges (e.g., "Appendix", "Optional") read from
-  `data-slide-category` attributes injected by the packager.
+- `data-slide-category` metadata badges — `[planned: backlog]`
+- Tab-key focus cycling within the grid — `[planned: backlog]`
 
 ---
 
