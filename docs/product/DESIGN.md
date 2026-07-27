@@ -13,14 +13,156 @@
 
 ## Subsystem Index
 
-| Subsystem | What it does | Primary script(s) |
-|-----------|-------------|-------------------|
-| [Preview HTML](#preview-html) | Single-file browser presenter | `html_packager.py` |
-| [Planning](#planning) | Schema-validated planning.json assembly | `assemble_planning.py`, `planning_validator.py` |
-| [Rendering](#rendering) | planning.json → per-slide HTML files | SKILL.md pipeline + `prompt_harness.py` |
-| [Exports](#exports) | Slides → PNG, PDF, PPTX | `html2png.py`, `build_pdf.py`, `png2pptx.py`, `svg2pptx.py` |
-| [Assimilation](#assimilation) | External deck → repo assets | `assimilate-slides` skill |
-| [Mermaid Render](#mermaid-render) | Diagram source → SVG/PNG/HTML | `scripts/mermaid_render/` |
+| # | Subsystem | What it does | Primary script(s) |
+|---|-----------|-------------|-------------------|
+| 1 | [Invocation](#invocation) | How to start the skill; example prompts | `/ppt-agent` slash command |
+| 2 | [Planning](#planning) | Interview → outline → planning.json → proof | `assemble_planning.py`, `planning_validator.py`, `proof_worksheet.py` |
+| 3 | [Rendering](#rendering) | planning.json → per-slide HTML files | SKILL.md pipeline + `prompt_harness.py` |
+| 4 | [Preview HTML](#preview-html) | Single-file browser presenter | `html_packager.py` |
+| 5 | [Exports](#exports) | Slides → PNG, PDF, PPTX | `html2png.py`, `build_pdf.py`, `png2pptx.py`, `svg2pptx.py` |
+| 6 | [Assimilation](#assimilation) | External deck → repo assets | `assimilate-slides` skill |
+| 7 | [Mermaid Render](#mermaid-render) | Diagram source → SVG/PNG/HTML | `scripts/mermaid_render/` |
+
+---
+
+## Invocation
+
+### Entry Points
+
+The skill is activated by the `/ppt-agent` slash command or by describing a
+deck brief in natural language. Two primary modes: **deck generation** (the
+full pipeline) and **review-only** (narrative feedback without generating
+slides).
+
+**Common activation patterns:**
+
+| Intent | Example prompt |
+|--------|---------------|
+| New deck from topic | `/ppt-agent` → "Quarterly business review for the infra team, 12 slides, formal style" |
+| New deck from source material | `/ppt-agent` → "Build a deck summarising this research report: [paste or attach]" |
+| New deck from an existing outline | "Start at Step 4 planning with this outline: [attach outline.json or paste]" |
+| Narrative arc review → feedback | "Review the narrative arc of this deck and give me structured feedback on story flow, message clarity, and call-to-action" |
+| Narrative review → HTML/PDF report | "Review this presentation and produce a feedback report I can share as HTML or PDF" |
+| Quick facilitation read | "What story does this deck tell, where does it lose the audience, what's the strongest slide? [attach or paste]" |
+
+### Step 1 — Needs-gathering interview `[current]` [¹⁵]
+
+After a topic is given, the skill does a quick background search, then sends
+the user **3–7 structured questions** covering:
+
+- Scene and context (what event, what room)
+- Audience (who, what they know, what they fear)
+- Action (what the deck must move people to do)
+- Narrative arc (problem/insight/resolution or other frame)
+- Emphasis (the one thing that must land)
+- Persuasion approach (data-led, story-led, visual)
+- Logistics (page count, format constraints)
+
+The skill **hard-stops** waiting for the user's reply before proceeding —
+this step cannot be skipped. The interview output becomes the brief that
+drives all downstream planning and rendering decisions.
+
+### Narrative Arc Review Use Case [¹⁶]
+
+The skill can be used in **review-only mode** without generating any slides.
+The user provides an existing deck (as a paste, an HTML file, a PPTX, or a
+structured outline) and asks for a narrative review. The skill produces
+structured written feedback — not slides — that the user can turn into an
+HTML or PDF report.
+
+This is a first-class use case. Common patterns:
+
+- "Review this deck for narrative coherence and message clarity"
+- "Give me facilitation feedback — what story does it tell, where does it lose
+  the audience, what's the call-to-action gap"
+- "Produce a narrative arc review of [deck] formatted as a shareable feedback
+  report"
+- "Score each slide: does it advance the argument, is the headline opinionated,
+  is the evidence sufficient"
+- "Compare the stated objective from my brief against the deck that was built —
+  where is the drift"
+
+Output is structured Markdown or HTML that the user renders as a PDF via
+browser print or the Exports pipeline.
+
+---
+
+## Planning
+
+### Design Intent [⁷]
+
+The planning step validates and assembles each slide's structured data
+(`planning.json`) before rendering begins. It is a **schema gate**, not a
+design tool — it catches structural errors (wrong layout names, budget
+violations, missing required fields) at the cheapest possible point in the
+pipeline.
+
+### Key Contracts `[current]`
+
+- **`assemble_planning.py`** — consumes a minimal per-page payload from the
+  planning subagent and produces a fully schema-valid `planning.json`.
+- **`planning_validator.py`** — the single authoritative oracle for all enums,
+  budget constants, and structural rules. `assemble_planning.py` imports
+  directly from it. [⁸]
+- Outputs: one `planning<N>.json` per page (or a wrapped deck payload).
+- Cross-page checks (duplicate slide numbers, 3-consecutive-high density,
+  dashboard neighbours) are intentionally **out of scope** for per-page tools
+  — they belong to the orchestrator.
+
+### Step 4.5 — Proof Worksheet `[current]`
+
+Before rendering begins, `proof_worksheet.py` generates a deterministic,
+**zero-LLM** HTML worksheet (`runtime/proof/<deck-slug>-intent.html`) from all
+`planning/planningN.json` files plus `outline.json`. It shows each slide as a
+schematic blueprint: layout label, headline, body intent, data/chart type. The
+user can catch structural and content problems cheaply before a full LLM
+render.
+
+The user chooses one of two paths:
+- **A — Review/iterate:** revise planning JSON, re-run proof.
+- **B — Render-direct:** proceed to Step 5 slide generation.
+
+`proof_gate.py` enforces this as a hard precondition: Step 5c cannot proceed
+without a recorded decision in `runtime/proof/gate.json`.
+
+**Speaker notes in the proof worksheet** `[planned: proof-notes-display]` [¹⁷]
+
+The proof worksheet should display the per-slide speaker notes alongside the
+schematic blueprint so the user can refine facilitation intent before rendering.
+Currently the worksheet shows structural fields only; notes are not surfaced
+until the preview HTML stage.
+
+### Planning-time Speaker Notes `[planned: planning-notes-generation]` [¹⁷]
+
+Speaker notes should be generated as part of the planning step, not as an
+empty stub after rendering. During Step 4 planning, the system derives initial
+notes from each slide's `body`, `headline`, and narrative role in the outline
+— capturing the facilitation intent while the content reasoning is live.
+
+These notes populate `<deck-slug>-notes.json` at planning time. The presenter
+can then refine them in the proof worksheet (Step 4.5) and again after
+receiving the preview HTML. This replaces the current empty-stub pattern where
+notes are generated post-render with no initial content.
+
+---
+
+## Rendering
+
+### Design Intent [⁹]
+
+Rendering converts `planning.json` into per-slide HTML files. The pipeline is
+**SKILL.md-driven** (instructions layer) with Python scripts as the execution
+layer. Rendered HTML must not use CSS features that break downstream converters.
+
+### Architecture Constraints `[current]`
+
+- Output path: `ppt-output/<deck-slug>/slides/*.html`
+- CSS must comply with `references/pipeline-compat.md` prohibition list — no
+  `<text>` SVG elements, no `mask-image`, no `conic-gradient`, no
+  `background-image: url()` — to remain safely convertible by Playwright and
+  `svg2pptx.py`.
+- `resource_loader.py` routes design tokens and brand assets into render prompts
+  without hard-coding paths.
 
 ---
 
@@ -111,6 +253,9 @@ Speaker notes travel as a **separate deliverable** alongside the preview HTML.
 The packager generates a stub `<deck-slug>-notes.json` automatically; the
 presenter fills it in and passes it back via `--notes`.
 
+When planning-time speaker notes generation ships (`[planned: planning-notes-generation]`),
+the stub will be pre-populated from planning content instead of empty.
+
 ```json
 {
   "schema_version": "1",
@@ -142,50 +287,6 @@ A "Print" button calls `window.print()`.
 > Browser-native print quality is lower than Playwright PNG export for complex
 > layouts. Use Playwright export for final deliverables; Print is for quick
 > PDF sharing.
-
----
-
-## Planning
-
-### Design Intent [⁷]
-
-The planning step validates and assembles each slide's structured data
-(`planning.json`) before rendering begins. It is a **schema gate**, not a
-design tool — it catches structural errors (wrong layout names, budget
-violations, missing required fields) at the cheapest possible point in the
-pipeline.
-
-### Key Contracts `[current]`
-
-- **`assemble_planning.py`** — consumes a minimal per-page payload from the
-  planning subagent and produces a fully schema-valid `planning.json`.
-- **`planning_validator.py`** — the single authoritative oracle for all enums,
-  budget constants, and structural rules. `assemble_planning.py` imports
-  directly from it. [⁸]
-- Outputs: one `planning<N>.json` per page (or a wrapped deck payload).
-- Cross-page checks (duplicate slide numbers, 3-consecutive-high density,
-  dashboard neighbours) are intentionally **out of scope** for per-page tools
-  — they belong to the orchestrator.
-
----
-
-## Rendering
-
-### Design Intent [⁹]
-
-Rendering converts `planning.json` into per-slide HTML files. The pipeline is
-**SKILL.md-driven** (instructions layer) with Python scripts as the execution
-layer. Rendered HTML must not use CSS features that break downstream converters.
-
-### Architecture Constraints `[current]`
-
-- Output path: `ppt-output/<deck-slug>/slides/*.html`
-- CSS must comply with `references/pipeline-compat.md` prohibition list — no
-  `<text>` SVG elements, no `mask-image`, no `conic-gradient`, no
-  `background-image: url()` — to remain safely convertible by Playwright and
-  `svg2pptx.py`.
-- `resource_loader.py` routes design tokens and brand assets into render prompts
-  without hard-coding paths.
 
 ---
 
@@ -372,3 +473,26 @@ two decades of production use in IDE diagram editors. Delegating to ELK
 avoids reinventing cycle detection, Sugiyama layering, and crossing
 minimization — while keeping the Python layout engine as the thin adapter
 layer above it.
+
+[¹⁵] **Needs-gathering interview before planning:** The quality gap between
+a well-briefed deck and an under-briefed deck is large and irreversible once
+rendering starts. The interview is a forcing function: it surfaces assumptions
+(audience expertise, desired action, existing objections) that the user holds
+implicitly but the system cannot infer from a topic string alone. A hard-stop
+interview costs ~2 minutes; a full re-render costs 20–40 minutes.
+
+[¹⁶] **Narrative arc review as a first-class use case:** Deck critique is
+valuable independent of deck generation. The same reasoning capability that
+plans a deck can critique one — evaluating narrative coherence, evidence
+sufficiency, CTA sharpness, and message drift from brief. Producing a
+structured feedback document (not slides) serves a real workflow where the
+user needs a second opinion, a stakeholder-ready review artifact, or a
+quality gate before client delivery.
+
+[¹⁷] **Planning-time speaker notes:** Speaker notes have the highest value
+when they capture the facilitation intent at the moment the content reasoning
+is live — "why this slide, what question does it answer, what should the
+presenter say to bridge from the previous slide." Generating an empty stub
+post-render discards that context. Generating notes during planning, then
+surfacing them in the proof worksheet, gives the presenter a review and
+refinement loop before any LLM render cost is incurred.
