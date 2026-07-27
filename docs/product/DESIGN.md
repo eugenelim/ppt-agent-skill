@@ -93,8 +93,7 @@ present/play mode.**
 [controls bar: static, below stage]
   Left group:  ← Prev | → Next | Slides
   Center:      ████████░░░░░░░░  (progress bar, full width, animated)
-  Right group: N / total
-               [Notes — planned: preview-html-notes]
+  Right group: N / total | Notes [current]
                [Print  — planned: preview-html-print]
 ```
 
@@ -113,7 +112,7 @@ group, full-width progress track, right group. Width matches the stage
 | `Home` | First slide |
 | `End` | Last slide |
 | `G` | Open slide jump modal |
-| `N` | Toggle speaker notes panel `[planned: preview-html-notes]` |
+| `N` | Toggle speaker notes panel `[current]` |
 | `B` | Blank screen (hide active slide; nav or B again to restore) |
 | `Escape` | Close slide jump modal |
 
@@ -134,9 +133,7 @@ number and title (derived from `<title>` or `<h1>` in the slide HTML via
 
 ---
 
-## Speaker Notes
-
-`[planned: preview-html-notes]`
+## Speaker Notes `[current]`
 
 ### notes.json schema
 
@@ -147,7 +144,7 @@ presenter fills it in and passes it back via `--notes`.
 ```json
 {
   "schema_version": "1",
-  "_comment": "Fill in facilitation notes here; pass to html_packager.py --notes to embed them.",
+  "_comment": "Fill in facilitation notes here; pass --notes to html_packager.py to embed them.",
   "slides": [
     {
       "slide_number": 1,
@@ -161,12 +158,12 @@ presenter fills it in and passes it back via `--notes`.
 Notes are matched to iframes by `slide_number` (1-indexed). Empty `notes`
 strings are treated as absent — the notes panel is not shown.
 
-### Notes panel UX
+### Notes panel UX `[current]`
 
 - Absolute-positioned overlay, bottom-right corner of the stage.
-- `min-width: 320px; max-width: 40%; max-height: 60%; overflow: auto`.
+- `min-width: 320px; max-width: 40%; max-height: 60%; overflow-y: auto`.
 - Dark semi-transparent background (`rgba(15, 15, 15, 0.92)`), white text,
-  12–13 px, line-height 1.5.
+  `font-size: 13px`, `line-height: 1.5`.
 - Toggled by pressing `N` or clicking the "Notes" button.
 - Hidden automatically when navigating to a slide with no notes.
 

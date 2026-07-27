@@ -11,6 +11,7 @@
 import argparse
 import base64
 import html as html_module
+import json
 import os
 import re
 import sys
@@ -107,6 +108,27 @@ def _slide_title(html_content: str, n: int) -> str:
     return f"Slide {n}"
 
 
+def build_notes_stub(slides: list) -> dict:
+    """Return a starter notes dict for the given slide paths.
+
+    Callers write this to ``<deck-slug>-notes.json`` as a presenter fill-in
+    template; pass the filled file back via ``--notes`` to embed notes.
+    """
+    entries = []
+    for i, path in enumerate(slides):
+        content = Path(path).read_text(encoding="utf-8", errors="replace")
+        entries.append({
+            "slide_number": i + 1,
+            "title": _slide_title(content, i + 1),
+            "notes": "",
+        })
+    return {
+        "schema_version": "1",
+        "_comment": "Fill in facilitation notes here; pass --notes to html_packager.py to embed them.",
+        "slides": entries,
+    }
+
+
 def _title_from_outline(slides_dir: Path) -> str:
     """从 deck 的大纲文件读取权威主标题（cover.title）。
 
@@ -172,9 +194,27 @@ def derive_title(slide_files: list, slides_dir: Path) -> str:
     return slug.replace("-", " ").replace("_", " ").strip() or "PPT Preview"
 
 
-def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
-    """Build a single-file paged preview; each slide in an isolated iframe srcdoc."""
-    slides_data = []  # (srcdoc_escaped, slide_title)
+def build_preview(slide_files: list, title: str = "PPT Preview", notes=None) -> str:
+    """Build a single-file paged preview; each slide in an isolated iframe srcdoc.
+
+    ``notes`` is an optional list of dicts from a notes.json ``slides`` array.
+    Each entry with a non-empty ``notes`` field is injected as a ``data-notes``
+    HTML-escaped attribute on the corresponding iframe; the outer wrapper JS
+    reads it to populate the speaker notes panel.
+    """
+    # Build notes lookup: slide_number (1-indexed) → stripped text.
+    # Defensive: skip non-dict entries and entries with non-numeric slide_number.
+    notes_by_slide: dict = {}
+    for e in (notes or []):
+        if not isinstance(e, dict):
+            continue
+        try:
+            k = int(e.get("slide_number"))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        notes_by_slide[k] = str(e.get("notes") or "").strip()
+
+    slides_data = []  # (srcdoc_escaped, slide_title, note_attr)
 
     for i, f in enumerate(slide_files):
         html_dir = Path(f).parent
@@ -184,20 +224,23 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
         content = inline_images(content, html_dir)
         slide_title = _slide_title(content, i + 1)
         escaped = html_module.escape(content, quote=True)
-        slides_data.append((escaped, slide_title))
+        note_text = notes_by_slide.get(i + 1, "")
+        note_attr = f' data-notes="{html_module.escape(note_text, quote=True)}"' if note_text else ""
+        slides_data.append((escaped, slide_title, note_attr))
 
     total = len(slides_data)
     escaped_title = html_module.escape(title)
 
     iframes = []
-    for i, (srcdoc, slide_title) in enumerate(slides_data):
+    for i, (srcdoc, slide_title, note_attr) in enumerate(slides_data):
         display = "block" if i == 0 else "none"
         escaped_slide_title = html_module.escape(slide_title, quote=True)
         # sandbox="" gives each srcdoc frame an opaque (null) origin — no allow-same-origin,
         # so a crafted slide cannot read file:// siblings or the parent document (LLM05/CWE-79).
         iframes.append(
             f'<iframe class="slide-frame" id="slide-{i}" '
-            f'data-slide-title="{escaped_slide_title}" '
+            f'data-slide-title="{escaped_slide_title}"'
+            f'{note_attr} '
             f'style="display:{display}" '
             f'srcdoc="{srcdoc}" '
             f'sandbox="" '
@@ -321,11 +364,32 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     background: rgba(0,0,0,.6);
   }}
   .scrim.open {{ display: block; }}
+  .notes-panel {{
+    display: none;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    min-width: 320px;
+    max-width: 40%;
+    max-height: 60%;
+    overflow-y: auto;
+    background: rgba(15,15,15,.92);
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 12px 16px;
+    border-radius: 8px 0 0 0;
+    white-space: pre-wrap;
+    box-sizing: border-box;
+    z-index: 10;
+  }}
+  .notes-panel.open {{ display: block; }}
 </style>
 </head>
 <body>
 <div class="stage" id="stage">
 {iframes_block}
+<div id="notesPanel" class="notes-panel"></div>
 </div>
 <div class="controls">
   <div class="nav-group">
@@ -338,6 +402,7 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
   </div>
   <div class="nav-group" style="justify-content:flex-end">
     <span class="counter" id="counter">1 / {total}</span>
+    <button class="utility-btn" id="notesBtn">Notes</button>
   </div>
 </div>
 <div class="scrim" id="scrim"></div>
@@ -364,6 +429,20 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
   const counter = document.getElementById('counter');
   const progressBar = document.getElementById('progressBar');
   const stage = document.getElementById('stage');
+  const notesPanel = document.getElementById('notesPanel');
+  const notesBtn = document.getElementById('notesBtn');
+
+  function updateNotes(i) {{
+    const text = (frames[i] && frames[i].dataset.notes) || '';
+    notesPanel.textContent = text;
+    if (!text) notesPanel.classList.remove('open');
+  }}
+
+  function toggleNotes() {{
+    const text = (frames[cur] && frames[cur].dataset.notes) || '';
+    if (!text) return;
+    notesPanel.classList.toggle('open');
+  }}
 
   function show(i) {{
     frames.forEach((f, idx) => {{ f.style.display = idx === i ? 'block' : 'none'; }});
@@ -372,6 +451,7 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     progressBar.style.width = (total ? ((i + 1) / total * 100) : 100) + '%';
     prevBtn.disabled = i === 0;
     nextBtn.disabled = i === total - 1;
+    updateNotes(i);
   }}
 
   function go(d) {{
@@ -407,6 +487,7 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
   jumpBtn.addEventListener('click', openJump);
   closeJumpBtn.addEventListener('click', closeJump);
   scrim.addEventListener('click', closeJump);
+  notesBtn.addEventListener('click', toggleNotes);
 
   document.addEventListener('keydown', e => {{
     if (!total) return;
@@ -427,6 +508,8 @@ def build_preview(slide_files: list, title: str = "PPT Preview") -> str:
     }} else if (e.key.toLowerCase() === 'b') {{
       e.preventDefault();
       if (blanked) {{ show(cur); }} else {{ frames[cur].style.display = 'none'; blanked = true; }}
+    }} else if (e.key.toLowerCase() === 'n') {{
+      e.preventDefault(); toggleNotes();
     }}
   }});
 
@@ -450,6 +533,8 @@ def main():
     parser.add_argument("-o", "--output", default=None, help="Output HTML file")
     parser.add_argument("--title", default=None,
                         help="浏览器标签页标题；省略则自动从首页封面/deck 目录名推断")
+    parser.add_argument("--notes", default=None, metavar="PATH",
+                        help="Path to a notes.json file; embeds speaker notes into the HTML")
     args = parser.parse_args()
 
     slides_dir = Path(args.path)
@@ -475,12 +560,48 @@ def main():
 
     title = args.title or derive_title(html_files, slides_dir)
 
-    result = build_preview(html_files, title=title)
+    # Load notes if provided; validate before building.
+    notes = None
+    if args.notes:
+        notes_path = Path(args.notes)
+        if not notes_path.exists():
+            print(f"Error: notes file not found: {notes_path}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            notes_json = json.loads(notes_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            print(f"Error: malformed JSON in {notes_path}: {e}", file=sys.stderr)
+            sys.exit(1)
+        if not isinstance(notes_json, dict):
+            print(f"Error: notes file must be a JSON object: {notes_path}", file=sys.stderr)
+            sys.exit(1)
+        if notes_json.get("schema_version") != "1":
+            print(
+                f"Error: unsupported notes schema_version (expected '1'): {notes_path}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not isinstance(notes_json.get("slides"), list):
+            print(f"Error: 'slides' must be a list in {notes_path}", file=sys.stderr)
+            sys.exit(1)
+        notes = notes_json["slides"]
+
+    result = build_preview([str(p) for p in html_files], title=title, notes=notes)
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(result)
 
     print(f"Created: {output_path} ({len(html_files)} slides)")
+
+    # Auto-generate notes stub alongside HTML if it doesn't exist yet.
+    notes_slug = deck_slug if deck_slug else "deck"
+    notes_stub_path = Path(output_path).parent / f"{notes_slug}-notes.json"
+    if not notes_stub_path.exists():
+        stub = build_notes_stub([str(p) for p in html_files])
+        notes_stub_path.write_text(
+            json.dumps(stub, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        print(f"Created notes stub: {notes_stub_path}")
 
 
 if __name__ == "__main__":
