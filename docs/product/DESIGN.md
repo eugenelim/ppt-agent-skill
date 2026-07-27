@@ -93,8 +93,7 @@ present/play mode.**
 [controls bar: static, below stage]
   Left group:  ← Prev | → Next | Slides
   Center:      ████████░░░░░░░░  (progress bar, full width, animated)
-  Right group: N / total | Notes [current]
-               [Print  — planned: preview-html-print]
+  Right group: N / total | Notes [current] | Print [current]
 ```
 
 Controls bar is `display: grid; grid-template-columns: auto 1fr auto` — left
@@ -169,9 +168,7 @@ strings are treated as absent — the notes panel is not shown.
 
 ---
 
-## Print / PDF
-
-`[planned: preview-html-print]`
+## Print / PDF `[current]`
 
 A `@media print` block reveals all slides and hides presenter chrome, enabling
 browser-native print-to-PDF:

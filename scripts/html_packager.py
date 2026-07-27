@@ -384,6 +384,11 @@ def build_preview(slide_files: list, title: str = "PPT Preview", notes=None) -> 
     z-index: 10;
   }}
   .notes-panel.open {{ display: block; }}
+  @media print {{
+    @page {{ size: 13.333in 7.5in; margin: 0; }}
+    .slide-frame {{ display: block !important; page-break-after: always; break-after: page; }}
+    .controls, .slide-jump, .scrim, .notes-panel {{ display: none !important; }}
+  }}
 </style>
 </head>
 <body>
@@ -403,6 +408,7 @@ def build_preview(slide_files: list, title: str = "PPT Preview", notes=None) -> 
   <div class="nav-group" style="justify-content:flex-end">
     <span class="counter" id="counter">1 / {total}</span>
     <button class="utility-btn" id="notesBtn">Notes</button>
+    <button class="utility-btn" id="printBtn" onclick="window.print()">Print</button>
   </div>
 </div>
 <div class="scrim" id="scrim"></div>
