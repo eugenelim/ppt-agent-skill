@@ -325,6 +325,75 @@ def assemble_page(payload: dict, refs_dir: Path | None = None) -> tuple[dict, li
     return page, dropped
 
 
+def derive_notes_entry(page: dict, prev_page: dict | None = None) -> dict:
+    """Derive a plain-text speaker-notes entry from a planning page.
+
+    Returns {"slide_number": int, "title": str, "notes": str}.  The notes
+    string is 1–3 sentences covering: what question the slide answers
+    (page_goal), a bridge from the previous slide (narrative_role +
+    prev_page.title), and the key point (audience_takeaway / anchor headline).
+    Plain text only — no Markdown, no HTML tags.
+    """
+    slide_number = int(page.get("slide_number") or 0)
+    title = str(page.get("title") or "")
+    page_goal = str(page.get("page_goal") or "").strip()
+    narrative_role = str(page.get("narrative_role") or "").strip()
+    audience_takeaway = str(page.get("audience_takeaway") or "").strip()
+
+    anchor_headline = ""
+    for card in (page.get("cards") or []):
+        if isinstance(card, dict) and card.get("role") == "anchor":
+            h = card.get("headline")
+            if isinstance(h, str) and h.strip():
+                anchor_headline = h.strip()
+            break
+
+    parts: list[str] = []
+
+    if page_goal:
+        parts.append(f"This slide answers: {page_goal}.")
+
+    if prev_page:
+        prev_title = str(prev_page.get("title") or "").strip()
+        if prev_title:
+            bridge = f'Bridge from "{prev_title}"'
+            if narrative_role:
+                bridge += f": transition to {narrative_role}"
+            parts.append(bridge + ".")
+    elif narrative_role:
+        parts.append(f"Opening role: {narrative_role}.")
+
+    key = audience_takeaway or anchor_headline
+    if key:
+        parts.append(f"Key point: {key}.")
+
+    return {"slide_number": slide_number, "title": title, "notes": " ".join(parts)}
+
+
+def build_notes_from_pages(pages: list[dict], deck_slug: str) -> dict:
+    """Assemble a notes.json dict from a list of planning pages.
+
+    Returns a dict compatible with html_packager.py's notes.json schema
+    (schema_version "1") with one entry per page, sorted by slide_number.
+    Intended to pre-populate the notes file at planning time so the packager
+    finds content rather than writing an empty stub post-render.
+    """
+    sorted_pages = sorted(pages, key=lambda p: int(p.get("slide_number") or 0))
+    entries: list[dict] = []
+    prev: dict | None = None
+    for p in sorted_pages:
+        entries.append(derive_notes_entry(p, prev))
+        prev = p
+    return {
+        "schema_version": "1",
+        "_comment": (
+            f"Speaker notes for '{deck_slug}' generated from planning data. "
+            "Refine here, then pass --notes to html_packager.py to embed them."
+        ),
+        "slides": entries,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="Minimal page payload JSON")

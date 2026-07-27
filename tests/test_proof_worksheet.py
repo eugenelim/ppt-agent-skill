@@ -188,9 +188,14 @@ if __name__ == "__main__":
             new_files = after - before
 
             proof_root = deck6 / "runtime" / "proof"
+            notes_file = deck6 / "iso-deck-notes.json"
             check("build created at least one file", len(new_files) >= 1)
-            check("every new file is under runtime/proof/",
-                  all(str(p).startswith(str(proof_root)) for p in new_files))
+            # notes.json is the one sanctioned write outside runtime/proof/
+            non_proof = {p for p in new_files if not str(p).startswith(str(proof_root))}
+            check("new files outside runtime/proof/ are only the notes.json",
+                  non_proof == {notes_file} or non_proof == set())
+            check("every non-notes new file is under runtime/proof/",
+                  all(str(p).startswith(str(proof_root)) for p in new_files - non_proof))
             forbidden = ("references/styles", "style-gallery", "/slides/")
             check("no new file touches a forbidden repo surface",
                   not any(tok in str(p) for p in new_files for tok in forbidden))
@@ -201,6 +206,29 @@ if __name__ == "__main__":
             check("schematic_blueprint present; no proof style id leaked",
                   "schematic_blueprint" in ids_after
                   and not any("proof" in str(sid) for sid in ids_after))
+
+            # ---- notes.json generation: writes, correct schema, no overwrite ------
+            notes_deck = Path(td) / "notes-deck"
+            write_deck(notes_deck, [base_page(1), base_page(2)],
+                       outline={"ppt_outline": {"cover": {"title": "Notes Test"}}})
+            PW.build(notes_deck)
+            notes_path = notes_deck / "notes-deck-notes.json"
+            check("build() writes notes.json at deck root", notes_path.is_file())
+            if notes_path.is_file():
+                nj = json.loads(notes_path.read_text(encoding="utf-8"))
+                check("notes.json schema_version is '1'", nj.get("schema_version") == "1")
+                check("notes.json slides count matches page count",
+                      isinstance(nj.get("slides"), list) and len(nj["slides"]) == 2)
+
+            # overwrite guard: pre-write a stub with sentinel content
+            sentinel = json.dumps({"schema_version": "1", "_comment": "SENTINEL", "slides": []})
+            notes_deck2 = Path(td) / "notes-deck2"
+            write_deck(notes_deck2, [base_page(1)])
+            notes_path2 = notes_deck2 / "notes-deck2-notes.json"
+            notes_path2.write_text(sentinel, encoding="utf-8")
+            PW.build(notes_deck2)
+            check("build() does not overwrite existing notes.json",
+                  notes_path2.read_text(encoding="utf-8") == sentinel)
 
             # ---- reliability: malformed / empty / non-dict inputs ----------------
             script = str(ROOT / "scripts" / "proof_worksheet.py")
@@ -225,6 +253,105 @@ if __name__ == "__main__":
             r9 = subprocess.run([sys.executable, script, str(deck9)], capture_output=True, text=True)
             check("empty planning dir -> exit 1 with actionable stderr",
                   r9.returncode == 1 and "Traceback" not in r9.stderr)
+
+            # ---- Facilitation section: render_page() with and without notes ------
+            fac_page = base_page(1)
+            fac_html_with = PW.render_page(fac_page, notes_by_slide={1: "Test facilitation note."})
+            fac_html_without = PW.render_page(fac_page, notes_by_slide=None)
+            check("Facilitation section present when notes provided",
+                  'class="facilitation"' in fac_html_with and "Test facilitation note." in fac_html_with)
+            check("Facilitation label present when notes provided",
+                  'class="fac-label"' in fac_html_with)
+            check("Facilitation section absent when notes_by_slide is None",
+                  'class="facilitation"' not in fac_html_without)
+            fac_html_no_entry = PW.render_page(fac_page, notes_by_slide={99: "other slide"})
+            check("Facilitation section absent when slide has no matching entry",
+                  'class="facilitation"' not in fac_html_no_entry)
+
+            # HTML escaping
+            fac_html_escaped = PW.render_page(
+                fac_page, notes_by_slide={1: '<script>alert(1)</script>'}
+            )
+            check("notes text is HTML-escaped in Facilitation",
+                  "<script>" not in fac_html_escaped and "&lt;script&gt;" in fac_html_escaped)
+
+            # render_worksheet with notes_by_slide=None unchanged
+            deck_rw = Path(td) / "rw-deck"
+            write_deck(deck_rw, [base_page(1)])
+            pages_rw = PW.load_pages(deck_rw)
+            out_no_notes = PW.render_worksheet(deck_rw, pages_rw, None, None)
+            out_no_notes2 = PW.render_worksheet(deck_rw, pages_rw, None)
+            check("render_worksheet notes_by_slide=None backward compatible",
+                  out_no_notes == out_no_notes2)
+            check("render_worksheet None notes has no Facilitation section",
+                  'class="facilitation"' not in out_no_notes)
+
+            # ---- T4: build() loads notes.json and passes to render_worksheet() ---
+            bld_notes_deck = Path(td) / "bld-notes-deck"
+            write_deck(bld_notes_deck, [base_page(1)],
+                       outline={"ppt_outline": {"cover": {"title": "BldNotes"}}})
+            # pre-populate notes.json with content
+            bld_notes_path = bld_notes_deck / "bld-notes-deck-notes.json"
+            bld_notes_path.write_text(
+                json.dumps({
+                    "schema_version": "1", "_comment": "test",
+                    "slides": [{"slide_number": 1, "title": "T", "notes": "Facilitation text here."}]
+                }), encoding="utf-8"
+            )
+            bld_html = PW.build(bld_notes_deck).read_text(encoding="utf-8")
+            check("build() passes notes to worksheet when notes.json present",
+                  'class="facilitation"' in bld_html and "Facilitation text here." in bld_html)
+
+            # build() generates notes.json when absent and renders Facilitation from it
+            bld_derived_deck = Path(td) / "bld-derived-deck"
+            write_deck(bld_derived_deck, [base_page(1)])
+            bld_derived_html = PW.build(bld_derived_deck).read_text(encoding="utf-8")
+            bld_derived_notes = bld_derived_deck / "bld-derived-deck-notes.json"
+            check("build() generates notes.json from planning when absent",
+                  bld_derived_notes.is_file())
+            check("build() renders Facilitation from derived notes",
+                  'class="facilitation"' in bld_derived_html)
+
+            # build determinism with notes.json
+            bld_det_deck = Path(td) / "bld-det-deck"
+            write_deck(bld_det_deck, [base_page(1)])
+            det_path = bld_det_deck / "bld-det-deck-notes.json"
+            det_path.write_text(json.dumps({
+                "schema_version": "1", "_comment": "det",
+                "slides": [{"slide_number": 1, "title": "D", "notes": "Determinism note."}]
+            }), encoding="utf-8")
+            det_html1 = PW.build(bld_det_deck).read_text(encoding="utf-8")
+            det_html2 = PW.build(bld_det_deck).read_text(encoding="utf-8")
+            check("build() with notes.json is deterministic", det_html1 == det_html2)
+
+            # malformed notes.json: bad JSON → build proceeds, no crash
+            bld_bad_deck = Path(td) / "bld-bad-deck"
+            write_deck(bld_bad_deck, [base_page(1)])
+            bad_notes_path = bld_bad_deck / "bld-bad-deck-notes.json"
+            bad_notes_path.write_text("{ not valid json", encoding="utf-8")
+            import io, contextlib
+            stderr_buf = io.StringIO()
+            with contextlib.redirect_stderr(stderr_buf):
+                bld_bad_html = PW.build(bld_bad_deck).read_text(encoding="utf-8")
+            check("build() degrades on malformed notes.json — no crash", bld_bad_html is not None)
+            check("build() logs warning to stderr on malformed notes.json",
+                  "notes.json" in stderr_buf.getvalue() or "notes" in stderr_buf.getvalue())
+
+            # malformed entries: null slide_number + non-dict + valid → only valid renders
+            bld_mixed_deck = Path(td) / "bld-mixed-deck"
+            write_deck(bld_mixed_deck, [base_page(1)])
+            mixed_notes_path = bld_mixed_deck / "bld-mixed-deck-notes.json"
+            mixed_notes_path.write_text(json.dumps({
+                "schema_version": "1", "_comment": "mixed",
+                "slides": [
+                    {"slide_number": None, "title": "bad", "notes": "skip me"},
+                    "not a dict",
+                    {"slide_number": 1, "title": "good", "notes": "Valid note here."},
+                ]
+            }), encoding="utf-8")
+            bld_mixed_html = PW.build(bld_mixed_deck).read_text(encoding="utf-8")
+            check("build() renders valid notes entry despite malformed siblings",
+                  "Valid note here." in bld_mixed_html)
 
         if FAILS:
             print(f"\n{len(FAILS)} failure(s): {FAILS}")

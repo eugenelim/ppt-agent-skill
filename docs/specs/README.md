@@ -53,6 +53,8 @@ docs/specs/<feature>/
 | [`assimilate-slides-skill`](assimilate-slides-skill/spec.md) | Shipped | none | Internal `assimilate-slides` authoring skill (ingest→scrub→classify→extract style/primitives/icons→narrative→mock→gates→ship) + searchable SVG icon library + deterministic `deck_probe.py`/`build_pdf.py`; dogfooded on a maintainer-supplied deck |
 | [`architecture-diagram-primitives`](architecture-diagram-primitives/spec.md) | Shipped | none | Dogfood run of `assimilate-slides`: architecture-canvas primitives + seed icons under `schematic_blueprint` (no new style) |
 | [`arch-renderer-maintainability-cleanup`](arch-renderer-maintainability-cleanup/spec.md) | Shipped | `docs/specs/eight-case-parity-ci-and-cleanup`, `docs/specs/architecture-fixed-port-integration` | Three backlog anchors from ini-003: shared `_edge_stroke_attrs` resolver, `_build_arch_layout` extraction, and `content_bounds`/`diagnostics` round-trip carry-through |
+| [`planning-notes-generation`](planning-notes-generation/spec.md) | Shipped | none | `derive_notes_entry()` + `build_notes_from_pages()` in `assemble_planning.py`; `proof_worksheet.build()` writes `<deck-slug>-notes.json` at planning time (Step 4.5), deriving plain-text speaker notes from `page_goal`, `narrative_role`, `audience_takeaway`, and anchor card `headline` |
+| [`proof-notes-display`](proof-notes-display/spec.md) | Shipped | `planning-notes-generation` | Facilitation section per slide in proof worksheet HTML showing HTML-escaped speaker notes from the generated notes.json; `render_worksheet()` extended with optional `notes_by_slide` parameter |
 
 ## Adding a new spec
 

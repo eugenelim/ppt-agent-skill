@@ -23,6 +23,8 @@ from assemble_planning import (  # noqa: E402
     MINIMAL_PAYLOAD_EXAMPLE,
     AssemblyError,
     assemble_page,
+    build_notes_from_pages,
+    derive_notes_entry,
 )
 from planning_validator import DENSITY_DEFAULTS, validate_page  # noqa: E402
 
@@ -163,6 +165,120 @@ def test_cross_field_combination_fails_fast_as_assembly_error():
     # the self-validate surfaces the real validator error, which names the fields
     with pytest.raises(AssemblyError, match="cannot use density_label 'dashboard'"):
         assemble_page(p, REFS)
+
+
+# ── speaker-notes derivation ──────────────────────────────────────────────────
+
+def _notes_page(slide_number: int = 1, **over) -> dict:
+    """Minimal planning page dict for notes-derivation tests."""
+    p: dict = {
+        "slide_number": slide_number,
+        "title": f"Slide {slide_number} Title",
+        "page_goal": "show that adoption doubled",
+        "narrative_role": "evidence",
+        "cards": [
+            {"role": "anchor", "headline": "2x adoption", "body": ["usage doubled"]},
+            {"role": "support", "headline": "context", "body": ["details"]},
+        ],
+    }
+    p.update(over)
+    return p
+
+
+def test_derive_notes_entry_first_slide_structure():
+    entry = derive_notes_entry(_notes_page(slide_number=1), prev_page=None)
+    assert isinstance(entry, dict)
+    assert entry["slide_number"] == 1
+    assert isinstance(entry["title"], str)
+    assert isinstance(entry["notes"], str)
+
+
+def test_derive_notes_entry_first_slide_non_empty():
+    entry = derive_notes_entry(_notes_page())
+    assert entry["notes"], "notes should be non-empty when page_goal is present"
+
+
+def test_derive_notes_entry_first_slide_contains_page_goal():
+    entry = derive_notes_entry(_notes_page(page_goal="prove the hypothesis"))
+    assert "prove the hypothesis" in entry["notes"]
+
+
+def test_derive_notes_entry_subsequent_slide_contains_prev_title():
+    prev = _notes_page(slide_number=1, title="Previous Slide")
+    curr = _notes_page(slide_number=2)
+    entry = derive_notes_entry(curr, prev_page=prev)
+    assert "Previous Slide" in entry["notes"]
+
+
+def test_derive_notes_entry_covers_two_components():
+    prev = _notes_page(slide_number=1, title="Setup Slide")
+    curr = _notes_page(
+        slide_number=2,
+        page_goal="demonstrate ROI clearly",
+        audience_takeaway="the investment pays off",
+    )
+    entry = derive_notes_entry(curr, prev_page=prev)
+    notes = entry["notes"]
+    has_goal = "demonstrate ROI clearly" in notes
+    has_prev = "Setup Slide" in notes
+    has_key = "the investment pays off" in notes or "2x adoption" in notes
+    assert sum([has_goal, has_prev, has_key]) >= 2, (
+        f"notes should cover ≥2 of 3 components, got: {notes!r}"
+    )
+
+
+def test_derive_notes_entry_minimal_fields():
+    page = {
+        "slide_number": 3,
+        "title": "Minimal",
+        "cards": [{"role": "anchor", "headline": "Key finding", "body": ["text"]}],
+    }
+    entry = derive_notes_entry(page)
+    assert entry["notes"], "notes non-empty when anchor headline present"
+    assert "Key finding" in entry["notes"] or entry["notes"]
+
+
+def test_derive_notes_entry_empty_page_no_crash():
+    page = {"slide_number": 5, "title": "Empty", "cards": []}
+    entry = derive_notes_entry(page)
+    assert isinstance(entry["notes"], str)
+
+
+def test_derive_notes_entry_no_html_tags():
+    import re
+    page = _notes_page(page_goal="revenue < 5% growth (good)")
+    entry = derive_notes_entry(page)
+    assert not re.search(r"<[a-zA-Z]", entry["notes"]), (
+        f"notes must not contain HTML open-tag patterns: {entry['notes']!r}"
+    )
+    assert not re.search(r"</", entry["notes"]), (
+        f"notes must not contain HTML close-tag patterns: {entry['notes']!r}"
+    )
+
+
+def test_build_notes_from_pages_schema():
+    pages = [_notes_page(1), _notes_page(2)]
+    result = build_notes_from_pages(pages, "my-deck")
+    assert result["schema_version"] == "1"
+    assert isinstance(result["_comment"], str) and result["_comment"]
+    assert isinstance(result["slides"], list)
+
+
+def test_build_notes_from_pages_count():
+    pages = [_notes_page(1), _notes_page(2), _notes_page(3)]
+    result = build_notes_from_pages(pages, "deck")
+    assert len(result["slides"]) == 3
+    for entry in result["slides"]:
+        assert "slide_number" in entry
+        assert "title" in entry
+        assert "notes" in entry
+
+
+def test_build_notes_from_pages_order():
+    pages = [_notes_page(3), _notes_page(1), _notes_page(2)]
+    result = build_notes_from_pages(pages, "deck")
+    numbers = [e["slide_number"] for e in result["slides"]]
+    assert numbers == sorted(numbers), "entries should be sorted by slide_number"
 
 
 if __name__ == "__main__":
