@@ -6,12 +6,21 @@ review worksheet at ``OUTPUT_DIR/runtime/proof/<deck-slug>-intent.html``, styled
 by the owned ``assets/proof/proof.css`` (a color-muted schematic_blueprint
 derivative). It renders the *plan* as an engineering worksheet -- NOT a mock of
 the bespoke slide -- so it is fully deterministic: the same inputs (including CLI
-args) produce byte-identical output, with no LLM, no network, and no system-clock
-read (the as-of date is the explicit ``--as-of`` argument).
+args and any ``<deck-slug>-notes.json`` present at deck root) produce
+byte-identical output, with no LLM, no network, and no system-clock read (the
+as-of date is the explicit ``--as-of`` argument).
 
-Read-only review artifact: ``planning/*.json`` stays the source of truth; fixes
-land there and the worksheet is regenerated. Output is scratch under ``runtime/``
-(gitignored). This tool writes ONLY under ``OUTPUT_DIR/runtime/proof/``.
+``planning/*.json`` stays the source of truth; fixes land there and the
+worksheet is regenerated. Output is scratch under ``runtime/`` (gitignored).
+
+This tool writes two artifacts per run:
+1. ``OUTPUT_DIR/runtime/proof/<deck-slug>-intent.html`` -- the worksheet (always).
+2. ``OUTPUT_DIR/<deck-slug>-notes.json`` -- speaker notes derived from planning
+   data (only when the file does not yet exist; never overwrites).
+
+When ``<deck-slug>-notes.json`` exists (user-refined or freshly generated), its
+``notes`` entries are loaded and rendered as a "Facilitation" block in each slide
+section of the worksheet.
 
 Usage:
     python3 scripts/proof_worksheet.py <deck_dir> [--as-of DATE]
@@ -260,7 +269,7 @@ def render_aux(page: dict) -> str:
     )
 
 
-def render_page(page: dict) -> str:
+def render_page(page: dict, notes_by_slide: dict | None = None) -> str:
     slide_no = page.get("slide_number")
     cards = [c for c in as_list(page.get("cards")) if isinstance(c, dict)]
     n_cards = len(cards)
@@ -292,6 +301,14 @@ def render_page(page: dict) -> str:
             body.append(render_source_guidance(page))
         body.append(table)
         if idx == total - 1:
+            note = (notes_by_slide or {}).get(int(slide_no or 0), "")
+            if note:
+                body.append(
+                    '<div class="facilitation">'
+                    '<span class="fac-label">Facilitation</span>'
+                    f'<p class="fac-notes">{esc(note)}</p>'
+                    "</div>"
+                )
             body.append(render_aux(page))
         body.append("</section>")
         blocks.append("".join(b for b in body if b))
@@ -327,7 +344,8 @@ def render_index(pages: list[dict]) -> str:
     return "".join(rows)
 
 
-def render_worksheet(deck_dir: Path, pages: list[dict], as_of: str | None) -> str:
+def render_worksheet(deck_dir: Path, pages: list[dict], as_of: str | None,
+                     notes_by_slide: dict | None = None) -> str:
     title = deck_title(deck_dir)
     archetype = pages[0].get("narrative_archetype") if pages else None
     meta_bits = [f"{len(pages)} slides"]
@@ -342,7 +360,9 @@ def render_worksheet(deck_dir: Path, pages: list[dict], as_of: str | None) -> st
         f'<div class="deck-meta">slide-intent worksheet · {" · ".join(meta_bits)}</div>'
         "</header>"
     )
-    body = header + render_index(pages) + "".join(render_page(p) for p in pages)
+    body = header + render_index(pages) + "".join(
+        render_page(p, notes_by_slide) for p in pages
+    )
     return (
         "<!doctype html>\n"
         '<html lang="zh">\n<head>\n<meta charset="utf-8">\n'
@@ -370,10 +390,40 @@ def load_pages(deck_dir: Path) -> list[dict]:
 
 def build(deck_dir: Path, as_of: str | None = None) -> Path:
     pages = load_pages(deck_dir)
+
+    notes_path = deck_dir / f"{deck_dir.name}-notes.json"
+    if not notes_path.exists():
+        try:
+            from assemble_planning import build_notes_from_pages  # noqa: PLC0415
+            notes_json = build_notes_from_pages(pages, deck_dir.name)
+            notes_path.write_text(
+                json.dumps(notes_json, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except (ImportError, OSError, TypeError, ValueError) as exc:
+            print(f"proof_worksheet: could not write notes ({exc}); skipping", file=sys.stderr)
+
+    notes_by_slide: dict = {}
+    if notes_path.exists():
+        try:
+            nj = json.loads(notes_path.read_text(encoding="utf-8"))
+            for entry in (nj.get("slides") or []):
+                try:
+                    n = str(entry.get("notes") or "").strip()
+                    if n:
+                        notes_by_slide[int(entry["slide_number"])] = n
+                except (TypeError, AttributeError, ValueError):
+                    pass
+        except (ValueError, OSError) as exc:
+            print(f"proof_worksheet: notes.json unreadable ({exc}); proceeding without notes",
+                  file=sys.stderr)
+            notes_by_slide = {}
+
     out_dir = deck_dir / "runtime" / "proof"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"{deck_dir.name}-intent.html"
-    out_path.write_text(render_worksheet(deck_dir, pages, as_of), encoding="utf-8")
+    out_path.write_text(
+        render_worksheet(deck_dir, pages, as_of, notes_by_slide or None), encoding="utf-8"
+    )
     return out_path
 
 
