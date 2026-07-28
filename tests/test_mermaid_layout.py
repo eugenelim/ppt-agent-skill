@@ -3518,7 +3518,7 @@ class TestMultilineBrLabels:
     """<br> in node labels produces multi-line output via _render_label_html."""
 
     def test_flowchart_node_br_renders(self):
-        """<br> inside a quoted node label produces a <br> in the output HTML."""
+        """<br> inside a quoted node label produces an HTML <br> line break in the span content."""
         html = _dispatch_ok('flowchart TB\n  A["Line One<br>Line Two"]')
         assert "<br>" in html
 

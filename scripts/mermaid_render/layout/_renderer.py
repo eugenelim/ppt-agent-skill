@@ -1049,6 +1049,7 @@ def _separate_groups_tb(
     nodes: dict[str, "_Node"],
     groups: dict[str, "_Group"],
     canvas_w: int,
+    edges: "list[_Edge] | None" = None,
 ) -> int:
     """Iteratively push groups with overlapping X+Y bboxes apart horizontally (TB mode).
 
@@ -1247,10 +1248,11 @@ def _separate_groups_tb(
                     break
             if not _placed:
                 cols.append([(_nid, _nd)])
-        for _ci, _col in enumerate(cols):
-            _x = col_x_start + _ci * (NODE_W + COL_GAP)
+        _col_x = col_x_start
+        for _col in cols:
             for _nid, _nd in _col:
-                _nd.x = _x
+                _nd.x = _col_x
+            _col_x += max(_node_render_w(_nd) for _, _nd in _col) + COL_GAP
 
     for _pp_pgid in list(groups.keys()):
         _pp_pg = groups[_pp_pgid]
@@ -1281,7 +1283,68 @@ def _separate_groups_tb(
         ]
         if not _displaced:
             continue
-        _pack_cols(_displaced, int(_max_pc_x1 + COL_GAP))
+        # TB layout: place displaced nodes ABOVE the pure-container subgroup
+        # (the correct TB direction), not to its right.  Sort each node by the
+        # x-barycenter of its downstream targets so it ends up roughly above
+        # those targets, minimising the horizontal span of cross-group edges.
+        _edges_ref = edges or []
+        _disp_max_h = max(_node_render_h(_dnd) for _, _dnd in _displaced)
+        _new_y = int(_max_pc_y0 - COL_GAP - _disp_max_h)
+
+        def _disp_target_cx(nid: str) -> float:
+            _ts = [
+                nodes[_de.dst]
+                for _de in _edges_ref
+                if _de.src == nid
+                and _de.dst in nodes and not nodes[_de.dst].is_dummy
+            ]
+            return (
+                sum(_t.x + _node_render_w(_t) / 2 for _t in _ts) / len(_ts)
+                if _ts else float("inf")
+            )
+
+        _sorted_disp = sorted(_displaced, key=lambda kv: _disp_target_cx(kv[0]))
+        _cur_x: "float | None" = None
+        _displaced_ids2 = {nid for nid, _ in _displaced}
+        for _dnid, _dnd in _sorted_disp:
+            _dnd.y = _new_y
+            _cx = _disp_target_cx(_dnid)
+            _want_x = (
+                int(_cx - _node_render_w(_dnd) / 2)
+                if _cx != float("inf")
+                else int(_cur_x if _cur_x is not None else _max_pc_x0)
+            )
+            if _cur_x is not None:
+                _want_x = max(_want_x, int(_cur_x))
+            _dnd.x = _want_x
+            # If any non-displaced node sits in the vertical corridor at the
+            # same center-x between this displaced node and its target, shift
+            # this node left so the route and its label clear that obstacle.
+            _dnd_bot = float(_new_y + _node_render_h(_dnd))
+            for _de2 in _edges_ref:
+                if _de2.src != _dnid or _de2.dst not in nodes or nodes[_de2.dst].is_dummy:
+                    continue
+                _tgt2 = nodes[_de2.dst]
+                _tgt_y = float(_tgt2.y)
+                for _bid, _bn in nodes.items():
+                    if _bn.is_dummy or _bid in _displaced_ids2:
+                        continue
+                    _bn_y0 = float(_bn.y)
+                    _bn_y1 = float(_bn.y + _node_render_h(_bn))
+                    if _bn_y0 <= _dnd_bot or _bn_y1 >= _tgt_y:
+                        continue  # Not between displaced node and target
+                    _bn_cx = _bn.x + _node_render_w(_bn) / 2
+                    _dnd_cx_now = _dnd.x + _node_render_w(_dnd) / 2
+                    if abs(_bn_cx - _dnd_cx_now) > 4:
+                        continue  # Not aligned
+                    # Obstacle in path: shift displaced node left of obstacle
+                    _new_x = int(_bn.x - _node_render_w(_dnd) / 2 - COL_GAP / 2)
+                    _dnd.x = _new_x
+                    break
+                else:
+                    continue
+                break
+            _cur_x = float(_dnd.x + _node_render_w(_dnd) + COL_GAP)
 
     # Second pass: root-level group de-overlap.
     #
@@ -1453,6 +1516,172 @@ def _separate_groups_tb(
     return canvas_w
 
 
+def _stack_source_groups_above_tb(
+    nodes: "dict[str, _Node]",
+    groups: "dict[str, _Group]",
+    edges: "list[_Edge]",
+) -> None:
+    """TB layout: reposition pure-source top-level groups above their target group.
+
+    When a top-level group has only outgoing cross-group edges (no incoming), but
+    is placed beside its target group (overlapping Y ranges) rather than above it,
+    this pass moves the source group above the target and centers it horizontally.
+    Standalone ungrouped nodes that are pure sources are handled the same way.
+    All Y positions are normalized to >= 0 after repositioning.
+    """
+    top_groups = {gid for gid, g in groups.items() if g.parent_group is None}
+    if not top_groups:
+        return
+
+    def _top_group_of(nid: str) -> "str | None":
+        if nid not in nodes:
+            return None
+        pg = nodes[nid].group
+        if pg is None:
+            return None
+        while pg and pg not in top_groups:
+            pg = groups[pg].parent_group if pg in groups else None
+        return pg if pg and pg in top_groups else None
+
+    node_to_top_grp: "dict[str, str | None]" = {nid: _top_group_of(nid) for nid in nodes}
+
+    def _grp_real_nodes(gid: str) -> "list[_Node]":
+        return [n for nid, n in nodes.items()
+                if not n.is_dummy and node_to_top_grp.get(nid) == gid]
+
+    def _grp_real_nids(gid: str) -> "list[str]":
+        return [nid for nid in nodes
+                if not nodes[nid].is_dummy and node_to_top_grp.get(nid) == gid]
+
+    for gid_src in list(top_groups):
+        src_mbrs = _grp_real_nodes(gid_src)
+        if not src_mbrs:
+            continue
+
+        out_targets: "set[str]" = set()
+        has_in = False
+        for e in edges:
+            s = node_to_top_grp.get(e.src)
+            d = node_to_top_grp.get(e.dst)
+            if s == gid_src and d and d != gid_src:
+                out_targets.add(d)
+            elif d == gid_src and s and s != gid_src:
+                has_in = True
+
+        if not out_targets or has_in:
+            continue  # Not a pure source group
+
+        for gid_dst in out_targets:
+            dst_mbrs = _grp_real_nodes(gid_dst)
+            if not dst_mbrs:
+                continue
+
+            src_y_min = min(n.y for n in src_mbrs)
+            src_y_max = max(n.y + _node_render_h(n) for n in src_mbrs)
+            dst_y_min = min(n.y for n in dst_mbrs)
+            dst_y_max = max(n.y + _node_render_h(n) for n in dst_mbrs)
+
+            # Only reposition if they share Y range (are beside each other, not stacked)
+            if not (src_y_min < dst_y_max and dst_y_min < src_y_max):
+                continue
+
+            # Move source group above destination group
+            src_h = src_y_max - src_y_min
+            new_top = dst_y_min - src_h - GROUP_PAD_Y_BOT - GROUP_PAD_Y_TOP - COL_GAP
+            dy = int(new_top - src_y_min)
+            for nid in _grp_real_nids(gid_src):
+                nodes[nid].y += dy
+
+            # Center source group over the barycenter of its directly-connected targets
+            # in gid_dst. Positioning above actual targets (not the whole target group
+            # center) keeps cross-group edges primarily vertical so they exit the bottom
+            # face rather than the side face in TB layout.
+            _target_cxs = [
+                nodes[e.dst].x + _node_render_w(nodes[e.dst]) / 2
+                for e in edges
+                if node_to_top_grp.get(e.src) == gid_src
+                and node_to_top_grp.get(e.dst) == gid_dst
+                and e.dst in nodes and not nodes[e.dst].is_dummy
+            ]
+            dst_cx = (sum(_target_cxs) / len(_target_cxs) if _target_cxs
+                      else (min(n.x for n in dst_mbrs)
+                            + max(n.x + _node_render_w(n) for n in dst_mbrs)) / 2)
+            src_cx = (min(n.x for n in src_mbrs)
+                      + max(n.x + _node_render_w(n) for n in src_mbrs)) / 2
+            dx = int(dst_cx - src_cx)
+            for nid in _grp_real_nids(gid_src):
+                nodes[nid].x += dx
+            break
+
+    # Handle ungrouped root-level nodes that are pure sources to top-level groups
+    for nid, nd in list(nodes.items()):
+        if nd.is_dummy or nd.group is not None:
+            continue
+        out_tgts: "set[str]" = set()
+        hin = False
+        for e in edges:
+            if e.src == nid:
+                d = node_to_top_grp.get(e.dst)
+                if d:
+                    out_tgts.add(d)
+            elif e.dst == nid:
+                s = node_to_top_grp.get(e.src)
+                if s:
+                    hin = True
+        if not out_tgts or hin:
+            continue
+
+        for gid_dst in out_tgts:
+            dst_mbrs = _grp_real_nodes(gid_dst)
+            if not dst_mbrs:
+                continue
+            dst_y_min = min(n.y for n in dst_mbrs)
+            dst_y_max = max(n.y + _node_render_h(n) for n in dst_mbrs)
+            nd_bot = nd.y + _node_render_h(nd)
+            if not (nd.y < dst_y_max and dst_y_min < nd_bot):
+                continue
+
+            # Center ungrouped node above its connected targets in the dst group
+            connected_dst = [e.dst for e in edges
+                             if e.src == nid
+                             and node_to_top_grp.get(e.dst) == gid_dst
+                             and e.dst in nodes]
+            if connected_dst:
+                target_cx = sum(
+                    nodes[d].x + _node_render_w(nodes[d]) / 2
+                    for d in connected_dst
+                ) / len(connected_dst)
+                nd.x = int(target_cx - _node_render_w(nd) / 2)
+            nd.y = int(dst_y_min - _node_render_h(nd) - GROUP_PAD_Y_BOT - COL_GAP)
+            # De-overlap with any node already at this y-level (e.g. EC members
+            # repositioned earlier in this loop).
+            _nd_w2 = _node_render_w(nd)
+            _nd_h2 = _node_render_h(nd)
+            _changed2 = True
+            while _changed2:
+                _changed2 = False
+                for _onid2, _on2 in nodes.items():
+                    if _onid2 == nid or _on2.is_dummy:
+                        continue
+                    if (float(_on2.y) < nd.y + _nd_h2
+                            and float(_on2.y + _node_render_h(_on2)) > nd.y
+                            and float(_on2.x) < nd.x + _nd_w2
+                            and float(_on2.x + _node_render_w(_on2)) > nd.x):
+                        nd.x = int(_on2.x + _node_render_w(_on2)) + COL_GAP
+                        _changed2 = True
+                        break
+            break
+
+    # Normalize: shift all nodes so minimum Y >= 0
+    real_nodes = [n for n in nodes.values() if not n.is_dummy]
+    if real_nodes:
+        min_y = min(n.y for n in real_nodes)
+        if min_y < 0:
+            shift = -min_y
+            for n in nodes.values():
+                n.y += shift
+
+
 def _push_nonmembers_out_of_groups_lr(
     nodes: dict[str, "_Node"],
     groups: dict[str, "_Group"],
@@ -1621,7 +1850,7 @@ def _compute_group_bboxes(
         if mbrs:
             _grp_mc[gid] = {
                 "x0": min(m.x for m in mbrs),
-                "x1": max(m.x + NODE_W for m in mbrs),
+                "x1": max(m.x + _node_render_w(m) for m in mbrs),
                 "y0": min(m.y for m in mbrs),
                 "y1": max(m.y + _node_render_h(m) for m in mbrs),
             }
@@ -1926,11 +2155,15 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
     for _gi, (gid, gl) in enumerate(layout.group_layouts.items()):
         b = gl.boundary_bounds
         gw, gh = max(1, int(b.w)), max(1, int(b.h))
-        lbl = (
-            _h(gl.label_layout.lines[0].runs[0].text)
-            if gl.label_layout and gl.label_layout.lines and gl.label_layout.lines[0].runs
-            else ""
-        )
+        if gl.label_layout and gl.label_layout.lines:
+            _gl_texts = [
+                " ".join(r.text for r in _gl_line.runs)
+                for _gl_line in gl.label_layout.lines
+                if _gl_line.runs
+            ]
+            lbl = _h("<br>".join(_gl_texts))
+        else:
+            lbl = ""
         if _is_arch_layout:
             _accent = _ACCENT_CYCLE[_gi % len(_ACCENT_CYCLE)]
             _tint = _ACCENT_TINTS[_gi % len(_ACCENT_TINTS)]
@@ -1967,10 +2200,15 @@ def render_finalized(layout: "FinalizedLayout", faithful: bool = False) -> str: 
         if nl.is_dummy:
             continue
         b = nl.outer_bounds
-        raw_label = nl.title_layout.lines[0].runs[0].text if (
-            nl.title_layout and nl.title_layout.lines
-            and nl.title_layout.lines[0].runs
-        ) else ""
+        if nl.title_layout and nl.title_layout.lines:
+            _tl_line_texts = [
+                " ".join(r.text for r in _tl_line.runs)
+                for _tl_line in nl.title_layout.lines
+                if _tl_line.runs
+            ]
+            raw_label = "<br>".join(_tl_line_texts)
+        else:
+            raw_label = ""
         # Split tech sub-label on first "|"
         if "|" in raw_label:
             main_label_raw, tech_label = (p.strip() for p in raw_label.split("|", 1))
