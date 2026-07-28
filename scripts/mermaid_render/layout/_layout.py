@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 from typing import Optional
 
 from ._constants import (
@@ -349,7 +350,15 @@ def _assign_coordinates(
             # estimation matches _wrap_label, which also uses _TITLE_FS. The renderer
             # emits 14px for icon nodes (slightly less than 15px) — this overestimates
             # slightly, which is safe (extra whitespace rather than clipping).
-            _title_line = n.label.split("|")[0].split("\n")[0].strip()
+            # Normalise <br/> variants so multi-line labels are measured as the
+            # longest line, not as one long string with literal '<br/>' characters.
+            _raw_main = n.label.split("|")[0].strip()
+            _norm_main = re.sub(r'<br\s*/?>', '\n', _raw_main, flags=re.IGNORECASE).replace('\\n', '\n')
+            _title_lines = [l.strip() for l in _norm_main.split('\n') if l.strip()]
+            _title_line = (
+                max(_title_lines, key=lambda l: _measure_text_width(l, _TITLE_FS, _TITLE_FW))
+                if _title_lines else _raw_main
+            )
             _label_w = math.ceil(_measure_text_width(_title_line, _TITLE_FS, _TITLE_FW))
             if "|" in n.label:
                 # Scan all member lines (the part after the first |)

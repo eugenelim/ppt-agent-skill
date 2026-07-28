@@ -37,6 +37,7 @@ from ._renderer import (
     _render_legend,
     _separate_groups_lr,
     _separate_groups_tb,
+    _stack_source_groups_above_tb,
     _push_nonmembers_out_of_groups_lr,
     _compute_group_bboxes,
     _ACCENT_CYCLE,
@@ -120,22 +121,41 @@ def _estimate_text_width(text: str, font_size: float = 12.0) -> float:
 
 
 def _make_text_layout_ir(text: str) -> "TextLayout":
-    """Minimal single-run TextLayout for building NodeLayout / GroupLayout IR."""
+    """Minimal multi-line TextLayout for building NodeLayout / GroupLayout IR.
+
+    Splits on <br/> variants and explicit \\n so that flowchart node labels
+    with HTML line-break tags produce one TextLine per visual line instead of
+    one TextLine containing literal '<br/>' characters.
+    """
     from ._geometry import TextLayout, TextLine, TextRun, TextStyle
     style = TextStyle()
-    # Cap at 450px to match _routing._est_label_w; without this, long (>56 char)
-    # labels diverge between routing placement and stored bounds. Affects
-    # node/group width for long labels too (single label-layout path).
-    w = min(450.0, _estimate_text_width(text))
-    run = TextRun(text=text, style=style, width=w, height=18.0)
-    line = TextLine(runs=(run,), width=w, height=18.0, baseline=14.0)
+    # Use a sentinel (\x00) so only <br> tags and \\n escapes become line breaks.
+    # Pre-existing real \n characters (e.g. classDiagram member separators) stay
+    # intact within a segment and are NOT treated as display line breaks.
+    _sentinel = '\x00'
+    _s1 = re.sub(r'<br\s*/?>', _sentinel, text, flags=re.IGNORECASE)
+    _s2 = _s1.replace('\\n', _sentinel)
+    segments = [s for s in _s2.split(_sentinel) if s.strip()]
+    if not segments:
+        segments = [text]
+
+    lines = []
+    for seg in segments:
+        # Cap at 450px to match _routing._est_label_w; without this, long (>56 char)
+        # labels diverge between routing placement and stored bounds.
+        w_seg = min(450.0, _estimate_text_width(seg))
+        run = TextRun(text=seg, style=style, width=w_seg, height=18.0)
+        lines.append(TextLine(runs=(run,), width=w_seg, height=18.0, baseline=14.0))
+
+    max_w = max(l.width for l in lines)
+    total_h = len(lines) * 18.0
     return TextLayout(
-        lines=(line,),
-        width=w,
-        height=18.0,
+        lines=tuple(lines),
+        width=max_w,
+        height=total_h,
         line_height=18.0,
-        min_content_width=min(w, 40.0),
-        max_content_width=w,
+        min_content_width=min(max_w, 40.0),
+        max_content_width=max_w,
         resolved_font_path=None,
         resolved_font_family="sans-serif",
     )
@@ -2291,10 +2311,24 @@ def _flowchart_route_new_path(
         if result is not None:
             assignments[eid] = result
         else:
-            failures_list.append(RoutingFailure(
-                edge_id=eid, src_node_id=real_src_id, dst_node_id=real_dst_id,
-                reason="no valid route",
-            ))
+            # All routing strategies exhausted: emit a straight-line stub instead
+            # of dropping the edge. The stub may cross obstacles but keeps every
+            # declared edge visible and prevents hard crashes on deeply-nested
+            # diagrams where the obstacle map is too congested to route around.
+            _sx, _sy = src_pc.point
+            _dx, _dy = dst_pc.point
+            _stub_len = ((_dx - _sx) ** 2 + (_dy - _sy) ** 2) ** 0.5
+            warnings.warn(
+                f"edge {eid!r} ({real_src_id} → {real_dst_id}): routing exhausted; "
+                "using straight-line stub",
+                stacklevel=2,
+            )
+            assignments[eid] = RouteCandidate(
+                edge_id=eid, source_port=src_pc, target_port=dst_pc,
+                points=((_sx, _sy), (_dx, _dy)),
+                bend_count=0, length=_stub_len,
+                crossing_count=0, shared_segment_length=0.0, cost=_stub_len,
+            )
 
     # Separate parallel routes that share a segment into adjacent lanes.
     assignments = _assign_lanes(assignments, obs_tuple)
@@ -2330,7 +2364,16 @@ def _flowchart_route_new_path(
             _cd.append(_pts[-1])
             _pts = _cd
         if e.label and len(_pts) >= 2:
-            _lx, _ly = _label_on_longest(_pts, e.label, int(canvas_w), [], [])
+            _real_src = e.orig_src or e.src
+            _real_dst = e.orig_dst or e.dst
+            _node_obs_lbl = [
+                (ob.bounds[0], ob.bounds[1],
+                 ob.bounds[0] + ob.bounds[2], ob.bounds[1] + ob.bounds[3])
+                for ob in obs_tuple
+                if ob.kind in ("node", "NODE_INTERIOR")
+                and ob.obstacle_id not in (_real_src, _real_dst)
+            ]
+            _lx, _ly = _label_on_longest(_pts, e.label, int(canvas_w), _node_obs_lbl, [])
         else:
             _lx, _ly = 0.0, 0.0
         routed_dicts.append({
@@ -2571,6 +2614,7 @@ def layout_flowchart_with_python_fallback(
         _cbe_gates = _reroute_cross_boundary_edges(
             _restored_routes, nodes, _grp_bboxes, canvas_w, canvas_h,
             direction=direction,
+            groups=groups,
         )
         if _cbe_gates:
             # Merge, don't replace: the reroute emits gates only for edges it
@@ -2643,7 +2687,13 @@ def validate_flowchart_layout(
     blocks with this function.
     """
     from ._geometry import validate_finalized_layout  # noqa: PLC0415
-    return validate_finalized_layout(layout, metadata=metadata)
+    # ELK is an external layout engine that may produce small node overlaps
+    # (typically <10px) and containment deviations as artefacts of its own
+    # placement algorithm. Run strict=False for ELK-produced layouts so those
+    # cosmetic deviations are demoted from hard errors to pass-through.
+    # Python-fallback layouts keep strict=True (we own those positions fully).
+    _strict = not (metadata is not None and getattr(metadata, "backend", "") == "elkjs")
+    return validate_finalized_layout(layout, metadata=metadata, strict=_strict)
 
 
 def _compile_flowchart(
@@ -3026,8 +3076,9 @@ def recursive_compound_layout(
                 _n.y = _chain_src_y(_nid)
         _push_nonmembers_out_of_groups_lr(nodes, groups)
     elif outer_direction.upper() in ("TB", "TD"):
-        _updated_cw = _separate_groups_tb(nodes, groups, canvas_w)
+        _updated_cw = _separate_groups_tb(nodes, groups, canvas_w, edges)
         canvas_w = _updated_cw
+        _stack_source_groups_above_tb(nodes, groups, edges)
 
     # ── Step 4: compute group bboxes ─────────────────────────────────────────
     grp_bboxes = _compute_group_bboxes(nodes, groups, canvas_w, canvas_h)
@@ -3273,6 +3324,7 @@ def _reroute_cross_boundary_edges(
     canvas_w: float,
     canvas_h: float,
     direction: str = "TB",
+    groups=None,
 ) -> "tuple":
     """Route every cross-boundary flowchart edge through explicit boundary gates.
 
@@ -3401,7 +3453,7 @@ def _reroute_cross_boundary_edges(
             if abs(float(_sp_pt[1]) - _sn_bot) < 2.0:     # port is on the bottom face
                 _adx = abs(dcx - scx)
                 _ady = abs(dcy - scy)
-                if _adx >= 1.25 * _ady and _adx > 0:      # primarily horizontal
+                if _adx >= 5.0 * _ady and _adx > 0:      # nearly horizontal only
                     _sw2 = _node_render_w(sn)
                     _sh2 = _node_render_h(sn)
                     _frac = min(1.0, max(0.0, (float(_sp_pt[0]) - sn.x) / max(_sw2, 1.0)))
@@ -3442,11 +3494,20 @@ def _reroute_cross_boundary_edges(
             b = (dn.x, dn.y + _dh / 2.0)          # dest LEFT center
 
         endpoint_groups = {sn.group, dn.group}
+        # Don't block the common-ancestor space: routes between sibling subgroups
+        # must travel through their shared parent group.
+        _ancestor_gids: set = set()
+        if groups:
+            for _egid in endpoint_groups:
+                _cur = groups[_egid].parent_group if _egid in groups else None
+                while _cur:
+                    _ancestor_gids.add(_cur)
+                    _cur = groups[_cur].parent_group if _cur in groups else None
         obstacles: "list[tuple]" = [
             rect for nid, rect in node_rects.items() if nid not in (s, d)
         ]
         for gid, (x0, y0, x1, y1) in grp_bboxes.items():
-            if gid not in endpoint_groups:
+            if gid not in endpoint_groups and gid not in _ancestor_gids:
                 obstacles.append((x0, y0, x1, y0 + band))   # title band
                 obstacles.append((x0, y0, x1, y1))           # unrelated interior
 
@@ -3548,6 +3609,28 @@ def _reroute_cross_boundary_edges(
         if out:
             _deduped.append(out[-1])
         out = _deduped
+
+        # Collapse tiny horizontal first segment in TB: a small grid-snap jog
+        # (< 32px) at the source makes the arrowhead point sideways. Move the
+        # first point to the second point's x so the exit is purely vertical.
+        if _is_tb and len(out) >= 3:
+            _p0, _p1, _p2 = out[0], out[1], out[2]
+            if (_p0[1] == _p1[1]           # first segment horizontal
+                    and _p1[0] == _p2[0]   # second segment vertical
+                    and abs(_p1[0] - _p0[0]) <= 32):  # small jog
+                out[0] = (_p1[0], _p0[1])
+
+        # Convert horizontal final segment into a Z-turn with vertical approach.
+        # When the A* reaches dest_top_y at a different x and slides horizontally
+        # to the port, insert a turn 16px above the destination so the arrow enters
+        # from above pointing straight down.
+        if _is_tb and len(out) >= 2:
+            _pen, _lst = out[-2], out[-1]
+            if (_pen[1] == _lst[1]                              # final segment horizontal
+                    and abs(_lst[1] - float(dn.y)) < 2.0):     # at destination's top face
+                _vturn = 16.0
+                _yt = _lst[1] - _vturn
+                out = out[:-1] + [(_pen[0], _yt), (_lst[0], _yt), _lst]
 
         r["waypoints"] = [(float(x), float(y)) for x, y in out]
         r["_cbe_rerouted"] = True

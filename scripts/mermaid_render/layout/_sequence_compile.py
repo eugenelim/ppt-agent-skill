@@ -1639,7 +1639,10 @@ def sequence_geometry_to_scene(
         ))
         text = _note_texts[i] if i < len(_note_texts) else ""
         if text:
-            labels.append(SceneText(
+            # Note text must go in `notes` (same LAYER_NOTES group as the polygon),
+            # not `labels` (LAYER_LABELS). LAYER_NOTES paints after LAYER_LABELS, so
+            # a white-filled polygon in LAYER_NOTES would cover text in LAYER_LABELS.
+            notes.append(SceneText(
                 element_id=f"{scene_id}-note-lbl-{i}",
                 lines=(SceneTextLine(text=text, x=nb.cx, y=nb.cy + 4.0,
                                      font_size=10.0, fill_color=_SVG_ACTOR_TEXT),),

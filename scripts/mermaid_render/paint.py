@@ -682,8 +682,10 @@ def finalized_layout_to_scene(
         _tl = nl.title_layout
         _label_raw = ""
         if _tl and _tl.lines:
-            _runs = _tl.lines[0].runs if _tl.lines[0].runs else ()
-            _label_raw = " ".join(getattr(r, "text", "") for r in _runs)
+            _label_raw = " ".join(
+                " ".join(getattr(r, "text", "") for r in (_tl_line.runs or ()))
+                for _tl_line in _tl.lines
+            )
         _label_norm = _re_node.sub(r'<br\s*/?>', ' ', _label_raw, flags=_re_node.IGNORECASE).strip()
         _parent_id = getattr(nl, "parent_group_id", None) or ""
         _node_data_attrs: tuple = (
