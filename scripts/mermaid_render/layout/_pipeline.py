@@ -1861,7 +1861,7 @@ def _flowchart_route_new_path(
         dcx = float(dn.x) + float(_node_render_w(dn)) / 2.0
         dcy = float(dn.y) + float(_node_render_h(dn)) / 2.0
         dx_v, dy_v = dcx - scx, dcy - scy
-        if abs(dx_v) < 2.0 * abs(dy_v):
+        if abs(dx_v) < 5.0 * abs(dy_v):
             return src_face
         if _horiz:
             return "bottom" if dy_v >= 0 else "top"
@@ -3317,6 +3317,133 @@ def _cbe_place_label(
     return best
 
 
+def _equalize_corridors(routed: "list", nodes: "dict", grp_bboxes: "dict", direction: str = "TB") -> None:
+    """In-place post-processing: stagger shared horizontal exit rails and
+    separate shared vertical corridors so no two routes overlap.
+
+    Pass A — horizontal rail stagger: when multiple routes exit the same node
+    face horizontally (sharing the same exit y), each route gets a unique y
+    level via a short vertical stub, so their horizontal segments never overlap.
+
+    Pass B — vertical corridor separation: when multiple routes share the same
+    vertical x channel (within 4 px) with overlapping y ranges, their x
+    positions are redistributed with equal LANE_GAP spacing.
+    """
+    from collections import defaultdict
+
+    _is_tb = direction.upper() not in ("LR", "RL")
+    if not _is_tb:
+        return
+
+    STAGGER = 12.0   # vertical gap between staggered horizontal rails
+    LANE_GAP = 14.0  # horizontal gap between parallel vertical lanes
+
+    # ── Pass A: stagger horizontal exit rails ────────────────────────────────
+    # Group routes by (src_node_id, exit_y) when first segment is horizontal.
+    exit_groups: "dict" = defaultdict(list)
+    for i, r in enumerate(routed):
+        wps = r.get("waypoints", [])
+        if len(wps) < 3:
+            continue
+        p0, p1 = wps[0], wps[1]
+        if abs(p0[1] - p1[1]) < 1.0 and abs(p0[0] - p1[0]) > 8.0:
+            src_id = (r.get("src") or r.get("source") or
+                      r.get("routing_source_id") or "")
+            if src_id:
+                exit_groups[(src_id, round(p0[1]))].append(i)
+
+    for (src_id, exit_y_int), idxs in exit_groups.items():
+        if len(idxs) <= 1:
+            continue
+        # Sort by destination x (rightmost last) so stagger order minimises
+        # the chance of a staggered horizontal crossing its neighbours.
+        idxs.sort(key=lambda idx: routed[idx]["waypoints"][-1][0])
+        exit_y = float(exit_y_int)
+        for k, i in enumerate(idxs):
+            r = routed[i]
+            wps = list(r["waypoints"])
+            new_y = exit_y + (k + 1) * STAGGER
+            # Insert a short vertical stub: exit at (p0.x, exit_y) → (p0.x, new_y),
+            # then continue the horizontal at new_y.
+            new_wps = [wps[0]]  # keep the port point at exit_y
+            stub = (wps[0][0], new_y)
+            new_wps.append(stub)
+            for p in wps[1:]:
+                if abs(p[1] - exit_y) < 1.0:
+                    new_wps.append((p[0], new_y))
+                else:
+                    new_wps.append(p)
+            # Dedup consecutive equal points
+            deduped = [new_wps[0]]
+            for p in new_wps[1:]:
+                if p != deduped[-1]:
+                    deduped.append(p)
+            r["waypoints"] = deduped
+
+    # ── Pass B: separate shared vertical corridors ───────────────────────────
+    # Collect all vertical segments (x constant, y varying > 20 px).
+    vert_segs: "list" = []  # (route_idx, x, y_lo, y_hi)
+    for i, r in enumerate(routed):
+        wps = r.get("waypoints", [])
+        for j in range(len(wps) - 1):
+            p1, p2 = wps[j], wps[j + 1]
+            if abs(p1[0] - p2[0]) < 1.0 and abs(p1[1] - p2[1]) > 20.0:
+                y_lo = min(p1[1], p2[1])
+                y_hi = max(p1[1], p2[1])
+                vert_segs.append((i, p1[0], y_lo, y_hi))
+
+    # Group by x within 4 px buckets.
+    x_buckets: "dict" = defaultdict(list)
+    for seg in vert_segs:
+        bucket = round(seg[1] / 4.0) * 4
+        x_buckets[bucket].append(seg)
+
+    for _bucket, segs in x_buckets.items():
+        if len(segs) <= 1:
+            continue
+        # Build overlap groups: segs whose y-ranges overlap.
+        groups: "list[list]" = []
+        for seg in sorted(segs, key=lambda s: s[2]):  # sort by y_lo
+            placed = False
+            for g in groups:
+                for existing in g:
+                    if seg[2] < existing[3] and seg[3] > existing[2]:
+                        g.append(seg)
+                        placed = True
+                        break
+                if placed:
+                    break
+            if not placed:
+                groups.append([seg])
+
+        for group in groups:
+            if len(group) <= 1:
+                continue
+            # Deduplicate by route index (a route may have multiple segs in the group).
+            seen_routes: "set" = set()
+            unique: "list" = []
+            for seg in group:
+                if seg[0] not in seen_routes:
+                    unique.append(seg)
+                    seen_routes.add(seg[0])
+            if len(unique) <= 1:
+                continue
+            n = len(unique)
+            x_center = sum(s[1] for s in unique) / n
+            half_span = (n - 1) * LANE_GAP / 2.0
+            new_xs = [x_center - half_span + k * LANE_GAP for k in range(n)]
+            # Sort unique by y_lo so topmost segment gets leftmost lane —
+            # preserves left→right ordering consistent with port sort order.
+            unique.sort(key=lambda s: s[2])
+            for (route_idx, old_x, y_lo, y_hi), new_x in zip(unique, new_xs):
+                r = routed[route_idx]
+                wps = list(r["waypoints"])
+                for ki, p in enumerate(wps):
+                    if abs(p[0] - old_x) < 2.0 and y_lo - 2.0 <= p[1] <= y_hi + 2.0:
+                        wps[ki] = (new_x, p[1])
+                r["waypoints"] = wps
+
+
 def _reroute_cross_boundary_edges(
     routed: "list[dict]",
     nodes: "dict[str, _Node]",
@@ -3630,7 +3757,13 @@ def _reroute_cross_boundary_edges(
                     and abs(_lst[1] - float(dn.y)) < 2.0):     # at destination's top face
                 _vturn = 16.0
                 _yt = _lst[1] - _vturn
-                out = out[:-1] + [(_pen[0], _yt), (_lst[0], _yt), _lst]
+                # Trim all trailing points at dest.y before inserting Z-turn,
+                # otherwise out keeps a point at dest.y followed by one 16px above it
+                # (backward UP segment).
+                _trimmed = out[:]
+                while len(_trimmed) >= 2 and abs(_trimmed[-1][1] - _lst[1]) < 1.0:
+                    _trimmed = _trimmed[:-1]
+                out = _trimmed + [(_pen[0], _yt), (_lst[0], _yt), _lst]
 
         r["waypoints"] = [(float(x), float(y)) for x, y in out]
         r["_cbe_rerouted"] = True
@@ -3642,6 +3775,10 @@ def _reroute_cross_boundary_edges(
         r["semantic_target_id"] = d
         r["routing_source_id"] = s
         r["routing_target_id"] = d
+
+    # Equalise overlapping corridors: stagger shared horizontal rails and
+    # separate shared vertical lanes so no two routes overlap.
+    _equalize_corridors(routed, nodes, grp_bboxes, direction=direction)
 
     # Second pass: place labels of rerouted edges clear of every other route.
     all_segs: "list[tuple]" = []
