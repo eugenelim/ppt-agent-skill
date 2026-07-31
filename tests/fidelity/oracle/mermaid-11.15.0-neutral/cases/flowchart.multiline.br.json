@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:38:48.812702+00:00",
+  "capture_timestamp": "2026-07-31T18:15:11.802001+00:00",
   "case_id": "flowchart.multiline.br",
   "diagnostics": [],
   "environment": {
@@ -90,7 +90,7 @@
     "relations": [
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9957,
         "relation_id": "A__B__0",
         "sampled_points": [
           [
@@ -235,7 +235,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9957,
         "relation_id": "B__C__1",
         "sampled_points": [
           [

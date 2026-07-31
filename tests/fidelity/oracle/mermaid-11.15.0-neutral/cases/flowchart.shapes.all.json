@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:38:32.431654+00:00",
+  "capture_timestamp": "2026-07-31T18:14:54.998326+00:00",
   "case_id": "flowchart.shapes.all",
   "diagnostics": [],
   "environment": {
@@ -234,7 +234,7 @@
     "relations": [
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9988,
         "relation_id": "A__B__0",
         "sampled_points": [
           [
@@ -378,8 +378,153 @@
         "target_side": "T"
       },
       {
+        "bend_count": 0,
+        "path_length": 45.9988,
+        "relation_id": "B__C__1",
+        "sampled_points": [
+          [
+            156.801,
+            163.0033
+          ],
+          [
+            156.801,
+            164.4872
+          ],
+          [
+            156.801,
+            165.971
+          ],
+          [
+            156.801,
+            167.4548
+          ],
+          [
+            156.801,
+            168.9387
+          ],
+          [
+            156.801,
+            170.4225
+          ],
+          [
+            156.801,
+            171.9063
+          ],
+          [
+            156.801,
+            173.3902
+          ],
+          [
+            156.801,
+            174.874
+          ],
+          [
+            156.801,
+            176.3578
+          ],
+          [
+            156.801,
+            177.8417
+          ],
+          [
+            156.801,
+            179.3255
+          ],
+          [
+            156.801,
+            180.8093
+          ],
+          [
+            156.801,
+            182.2932
+          ],
+          [
+            156.801,
+            183.777
+          ],
+          [
+            156.801,
+            185.2608
+          ],
+          [
+            156.801,
+            186.7447
+          ],
+          [
+            156.801,
+            188.2285
+          ],
+          [
+            156.801,
+            189.7123
+          ],
+          [
+            156.801,
+            191.1961
+          ],
+          [
+            156.801,
+            192.68
+          ],
+          [
+            156.801,
+            194.1638
+          ],
+          [
+            156.801,
+            195.6476
+          ],
+          [
+            156.801,
+            197.1315
+          ],
+          [
+            156.801,
+            198.6153
+          ],
+          [
+            156.801,
+            200.0991
+          ],
+          [
+            156.801,
+            201.583
+          ],
+          [
+            156.801,
+            203.0668
+          ],
+          [
+            156.801,
+            204.5506
+          ],
+          [
+            156.801,
+            206.0345
+          ],
+          [
+            156.801,
+            207.5183
+          ],
+          [
+            156.801,
+            209.0021
+          ]
+        ],
+        "source_point": [
+          156.801,
+          163.0033
+        ],
+        "source_side": "B",
+        "target_point": [
+          156.801,
+          209.0021
+        ],
+        "target_side": "T"
+      },
+      {
         "bend_count": 3,
-        "path_length": 100.5838,
+        "path_length": 100.5754,
         "relation_id": "C__D__2",
         "sampled_points": [
           [
@@ -524,7 +669,7 @@
       },
       {
         "bend_count": 3,
-        "path_length": 92.8635,
+        "path_length": 92.8542,
         "relation_id": "C__E__3",
         "sampled_points": [
           [
@@ -669,7 +814,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 93.229,
+        "path_length": 93.2266,
         "relation_id": "D__F__4",
         "sampled_points": [
           [
@@ -814,7 +959,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9988,
         "relation_id": "E__G__5",
         "sampled_points": [
           [
@@ -959,7 +1104,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 98.8116,
+        "path_length": 98.809,
         "relation_id": "F__H__6",
         "sampled_points": [
           [
@@ -1104,7 +1249,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9988,
         "relation_id": "G__I__7",
         "sampled_points": [
           [
@@ -1249,7 +1394,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 59.5009,
+        "path_length": 59.4994,
         "relation_id": "H__J__8",
         "sampled_points": [
           [
@@ -1394,7 +1539,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46.5041,
+        "path_length": 46.5029,
         "relation_id": "I__K__9",
         "sampled_points": [
           [
@@ -1539,7 +1684,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46.006,
+        "path_length": 46.0047,
         "relation_id": "J__L__10",
         "sampled_points": [
           [
@@ -1699,7 +1844,7 @@
     "source_position": null
   },
   "quality": null,
-  "reason": "geometry for B__C__1 not captured; recapture required after chained-edge parser fix",
+  "reason": null,
   "schema_version": 1,
   "semantic": {
     "diagram_type": "flowchart",
@@ -1931,5 +2076,5 @@
     ]
   },
   "source_sha256": "c05c444fd742cf4b4dceaf46e2886499bca8710db6366029490848604315e605",
-  "status": "EXTRACTOR_GAP"
+  "status": "PASS"
 }

@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:38:53.292704+00:00",
+  "capture_timestamp": "2026-07-31T18:15:16.163087+00:00",
   "case_id": "flowchart.self.loops",
   "diagnostics": [],
   "environment": {
@@ -380,7 +380,7 @@
       },
       {
         "bend_count": 3,
-        "path_length": 92.7833,
+        "path_length": 92.7739,
         "relation_id": "A__B__2",
         "sampled_points": [
           [
@@ -525,7 +525,7 @@
       },
       {
         "bend_count": 5,
-        "path_length": 193.1191,
+        "path_length": 193.0748,
         "relation_id": "B__C__3",
         "sampled_points": [
           [

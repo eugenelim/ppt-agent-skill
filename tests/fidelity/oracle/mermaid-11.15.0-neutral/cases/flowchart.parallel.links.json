@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:38:51.066449+00:00",
+  "capture_timestamp": "2026-07-31T18:15:14.102851+00:00",
   "case_id": "flowchart.parallel.links",
   "diagnostics": [],
   "environment": {
@@ -122,7 +122,7 @@
     "relations": [
       {
         "bend_count": 4,
-        "path_length": 128.8594,
+        "path_length": 128.8081,
         "relation_id": "A__B__0",
         "sampled_points": [
           [
@@ -267,7 +267,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9985,
         "relation_id": "A__C__1",
         "sampled_points": [
           [
@@ -412,7 +412,7 @@
       },
       {
         "bend_count": 4,
-        "path_length": 129.3891,
+        "path_length": 129.3369,
         "relation_id": "A__D__2",
         "sampled_points": [
           [
@@ -557,7 +557,7 @@
       },
       {
         "bend_count": 5,
-        "path_length": 120.06,
+        "path_length": 120.0254,
         "relation_id": "B__E__3",
         "sampled_points": [
           [
@@ -702,7 +702,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9985,
         "relation_id": "C__E__4",
         "sampled_points": [
           [
@@ -847,7 +847,7 @@
       },
       {
         "bend_count": 5,
-        "path_length": 120.587,
+        "path_length": 120.5519,
         "relation_id": "D__E__5",
         "sampled_points": [
           [

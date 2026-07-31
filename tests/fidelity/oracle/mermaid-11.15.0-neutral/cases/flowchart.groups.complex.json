@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:38:37.692439+00:00",
+  "capture_timestamp": "2026-07-31T18:14:59.941215+00:00",
   "case_id": "flowchart.groups.complex",
   "diagnostics": [],
   "environment": {
@@ -211,7 +211,7 @@
     "relations": [
       {
         "bend_count": 6,
-        "path_length": 298.1031,
+        "path_length": 298.0043,
         "relation_id": "UI__API__0",
         "sampled_points": [
           [
@@ -356,7 +356,7 @@
       },
       {
         "bend_count": 3,
-        "path_length": 99.707,
+        "path_length": 99.7029,
         "relation_id": "UI__Cache__1",
         "sampled_points": [
           [
@@ -501,7 +501,7 @@
       },
       {
         "bend_count": 3,
-        "path_length": 98.9719,
+        "path_length": 98.9572,
         "relation_id": "API__Auth__2",
         "sampled_points": [
           [
@@ -646,7 +646,7 @@
       },
       {
         "bend_count": 3,
-        "path_length": 97.3902,
+        "path_length": 97.3762,
         "relation_id": "API__Worker__3",
         "sampled_points": [
           [
@@ -791,7 +791,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 118.5,
+        "path_length": 118.4987,
         "relation_id": "Worker__Queue__4",
         "sampled_points": [
           [
@@ -936,7 +936,7 @@
       },
       {
         "bend_count": 5,
-        "path_length": 409.9127,
+        "path_length": 409.8369,
         "relation_id": "API__DB__5",
         "sampled_points": [
           [
@@ -1081,7 +1081,7 @@
       },
       {
         "bend_count": 0,
-        "path_length": 46,
+        "path_length": 45.9995,
         "relation_id": "Queue__DB__6",
         "sampled_points": [
           [
@@ -1226,7 +1226,7 @@
       },
       {
         "bend_count": 7,
-        "path_length": 561.9309,
+        "path_length": 561.653,
         "relation_id": "Cache__DB__7",
         "sampled_points": [
           [

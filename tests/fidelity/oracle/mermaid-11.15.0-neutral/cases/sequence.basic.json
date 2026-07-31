@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:38:57.301404+00:00",
+  "capture_timestamp": "2026-07-31T18:15:20.469392+00:00",
   "case_id": "sequence.basic",
   "diagnostics": [],
   "environment": {
@@ -57,6 +57,7 @@
     "direction": null,
     "entities": [
       {
+        "attributes": {},
         "id": "Client",
         "kind": "participant",
         "label": "Client",
@@ -65,6 +66,7 @@
         "shape": null
       },
       {
+        "attributes": {},
         "id": "Server",
         "kind": "participant",
         "label": "Server",

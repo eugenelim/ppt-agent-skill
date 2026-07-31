@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:39:08.106388+00:00",
+  "capture_timestamp": "2026-07-31T18:15:31.953478+00:00",
   "case_id": "sequence.complex",
   "diagnostics": [],
   "environment": {
@@ -57,6 +57,7 @@
     "direction": null,
     "entities": [
       {
+        "attributes": {},
         "id": "Client",
         "kind": "participant",
         "label": "Client",
@@ -65,6 +66,7 @@
         "shape": null
       },
       {
+        "attributes": {},
         "id": "AuthService",
         "kind": "participant",
         "label": "AuthService",
@@ -73,6 +75,7 @@
         "shape": null
       },
       {
+        "attributes": {},
         "id": "API",
         "kind": "participant",
         "label": "API",
@@ -81,6 +84,7 @@
         "shape": null
       },
       {
+        "attributes": {},
         "id": "DB",
         "kind": "participant",
         "label": "DB",

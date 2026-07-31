@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T08:39:04.464743+00:00",
+  "capture_timestamp": "2026-07-31T18:15:27.854056+00:00",
   "case_id": "sequence.notes.all",
   "diagnostics": [],
   "environment": {
@@ -57,6 +57,7 @@
     "direction": null,
     "entities": [
       {
+        "attributes": {},
         "id": "Alice",
         "kind": "participant",
         "label": "Alice",
@@ -65,6 +66,7 @@
         "shape": null
       },
       {
+        "attributes": {},
         "id": "Bob",
         "kind": "participant",
         "label": "Bob",
@@ -73,6 +75,7 @@
         "shape": null
       },
       {
+        "attributes": {},
         "id": "Carol",
         "kind": "participant",
         "label": "Carol",
