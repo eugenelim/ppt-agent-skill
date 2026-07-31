@@ -193,73 +193,82 @@ def cmd_capture_reference(
 
     profile = profile_loader("mermaid-neutral")
     ref_adapter = ref_adapter_factory()
-
-    # Transactional capture: write to a sibling temp dir (same filesystem → rename-atomic),
-    # gate on zero hard errors, then replace.
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tmp_cases = output_dir / f".cases_tmp_{os.getpid()}"
-    tmp_env = output_dir / f".env_tmp_{os.getpid()}.json"
     try:
-        tmp_cases.mkdir()
-
-        errors = 0
-        for case in manifest.cases:
-            print(f"  Capturing {case.id}…", end="", flush=True)
-            obs = ref_adapter.observe(case, profile)
-            obs.capture_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            save_json(obs, tmp_cases / f"{case.id}.json")
-            status = obs.status.value
-            print(f" {status}")
-            if obs.status not in (ComparisonStatus.PASS, ComparisonStatus.EXTRACTOR_GAP):
-                errors += 1
-
-        if errors > 0:
-            shutil.rmtree(tmp_cases, ignore_errors=True)
-            print(
-                f"\n✗ {errors} observation(s) failed — oracle NOT updated; "
-                f"fix failures and retry.",
-                file=sys.stderr,
-            )
-            return 1
-
-        # Write environment.json
-        identity = ref_adapter.identity()
-        env_data = {
-            "ref_id": args.ref_id,
-            "adapter": {
-                "name": identity.name,
-                "version": identity.version,
-                "adapter_version": identity.adapter_version,
-            },
-            "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        }
-        save_json(env_data, tmp_env)
-
-        # Near-atomic replace: rename sibling temp dirs over the targets.
-        # If cases_dir already exists, rename it aside first.
-        old_cases = output_dir / f".cases_old_{os.getpid()}"
-        if cases_dir.exists():
-            cases_dir.rename(old_cases)
+        # Transactional capture: write to a sibling temp dir (same filesystem → rename-atomic),
+        # gate on zero hard errors, then replace.
+        output_dir.mkdir(parents=True, exist_ok=True)
+        tmp_cases = output_dir / f".cases_tmp_{os.getpid()}"
+        tmp_env = output_dir / f".env_tmp_{os.getpid()}.json"
         try:
-            tmp_cases.rename(cases_dir)
-        except Exception:
+            tmp_cases.mkdir()
+
+            errors = 0
+            for case in manifest.cases:
+                print(f"  Capturing {case.id}…", end="", flush=True)
+                obs = ref_adapter.observe(case, profile)
+                obs.capture_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                save_json(obs, tmp_cases / f"{case.id}.json")
+                status = obs.status.value
+                print(f" {status}")
+                is_flowchart = (
+                    obs.parse_result is not None
+                    and obs.parse_result.diagram_type in ("flowchart", "graph")
+                )
+                if obs.status not in (ComparisonStatus.PASS, ComparisonStatus.EXTRACTOR_GAP):
+                    errors += 1
+                elif obs.status == ComparisonStatus.EXTRACTOR_GAP and is_flowchart:
+                    errors += 1
+
+            if errors > 0:
+                shutil.rmtree(tmp_cases, ignore_errors=True)
+                print(
+                    f"\n✗ {errors} observation(s) failed — oracle NOT updated; "
+                    f"fix failures and retry.",
+                    file=sys.stderr,
+                )
+                return 1
+
+            # Write environment.json
+            identity = ref_adapter.identity()
+            env_data = {
+                "ref_id": args.ref_id,
+                "adapter": {
+                    "name": identity.name,
+                    "version": identity.version,
+                    "adapter_version": identity.adapter_version,
+                },
+                "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            }
+            save_json(env_data, tmp_env)
+
+            # Near-atomic replace: rename sibling temp dirs over the targets.
+            # If cases_dir already exists, rename it aside first.
+            old_cases = output_dir / f".cases_old_{os.getpid()}"
+            if cases_dir.exists():
+                cases_dir.rename(old_cases)
+            try:
+                tmp_cases.rename(cases_dir)
+            except Exception:
+                if old_cases.exists():
+                    old_cases.rename(cases_dir)  # restore original
+                raise
             if old_cases.exists():
-                old_cases.rename(cases_dir)  # restore original
+                shutil.rmtree(old_cases, ignore_errors=True)
+
+            tmp_env.rename(env_path)
+
+        except Exception:
+            if tmp_cases.exists():
+                shutil.rmtree(tmp_cases, ignore_errors=True)
+            if tmp_env.exists():
+                tmp_env.unlink(missing_ok=True)
             raise
-        if old_cases.exists():
-            shutil.rmtree(old_cases, ignore_errors=True)
 
-        tmp_env.rename(env_path)
-
-    except Exception:
-        if tmp_cases.exists():
-            shutil.rmtree(tmp_cases, ignore_errors=True)
-        if tmp_env.exists():
-            tmp_env.unlink(missing_ok=True)
-        raise
-
-    print(f"\n✓ Captured {len(manifest.cases)} cases to {output_dir}")
-    return 0
+        print(f"\n✓ Captured {len(manifest.cases)} cases to {output_dir}")
+        return 0
+    finally:
+        if hasattr(ref_adapter, 'close'):
+            ref_adapter.close()
 
 
 def cmd_determinism(

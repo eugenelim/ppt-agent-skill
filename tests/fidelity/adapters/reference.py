@@ -43,8 +43,17 @@ from mermaid_fidelity.models import (
     SemanticDiagram,
 )
 
-_MMDC_PATH = shutil.which("mmdc") or "/opt/homebrew/bin/mmdc"
-_ADAPTER_VERSION = "1.0.0"
+def _find_mmdc() -> str:
+    local = _REPO / "node_modules" / ".bin" / "mmdc"
+    if local.exists():
+        return str(local)
+    found = shutil.which("mmdc")
+    if found:
+        return found
+    return "/opt/homebrew/bin/mmdc"
+
+_MMDC_PATH = _find_mmdc()
+_ADAPTER_VERSION = "2.0.0"
 
 # Version/integrity cached after the first subprocess call so that each case
 # does not re-invoke mmdc --version and re-hash the binary.
@@ -173,12 +182,21 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
             )
             for i, (s, d, lbl) in enumerate(valid_source_edges)
         ]
+        # Parse subgraph groups from source
+        from adapters.playwright_extractor import _parse_flowchart_subgraphs
+        subgraph_data = _parse_flowchart_subgraphs(source)
+        groups_sem = [
+            Group(id=sg["id"], kind="subgraph", label=sg["label"],
+                  parent_id=sg.get("parent"), order=i, members=sg["members"])
+            for i, sg in enumerate(subgraph_data)
+        ]
         direction = _extract_direction_from_source(source)
         return SemanticDiagram(
             diagram_type="flowchart",
             direction=direction,
             entities=entities,
             relations=relations,
+            groups=groups_sem,
         )
 
     if diagram_type in ("architecture-beta", "architecture"):
@@ -239,49 +257,94 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
     return SemanticDiagram(diagram_type=diagram_type, direction=None)
 
 
-def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
-    """Extract (source, target, label) from Mermaid flowchart source in document order.
+def _find_arrow_outside_brackets(text: str) -> tuple[int, int] | None:
+    """Find first Mermaid arrow outside bracket-enclosed content."""
+    depth = 0
+    i = 0
+    while i < len(text):
+        c = text[i]
+        if c in '[({':
+            depth += 1
+            i += 1
+        elif c in '])}':
+            depth = max(0, depth - 1)
+            i += 1
+        elif depth == 0 and c == '-':
+            for arrow in ['-.->', '-->', '--->', '---']:
+                if text[i:i+len(arrow)] == arrow:
+                    return (i, i + len(arrow))
+            i += 1
+        elif depth == 0 and c == '=':
+            for arrow in ['===>', '==>', '===']:
+                if text[i:i+len(arrow)] == arrow:
+                    return (i, i + len(arrow))
+            i += 1
+        else:
+            i += 1
+    return None
 
-    Handles: A --> B, A[Shape] -->|label| B, A -- label --> B, A & B --> C (multi-target).
-    Node IDs may be followed by shape markers like [text], (text), {text}, etc.
-    Returns one tuple per edge.
+
+def _extract_node_ids_from_segment(segment: str) -> list[str]:
+    """Extract node IDs from a segment that may contain & and shape suffixes."""
+    result = []
+    for part in segment.split('&'):
+        part = part.strip()
+        m = re.match(r'([A-Za-z0-9_]+)', part)
+        if m:
+            result.append(m.group(1))
+    return result
+
+
+def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
+    """Extract (source, target, label) from Mermaid flowchart source.
+
+    Handles: A --> B, A -->|label| B, A -- label --> B,
+             A --> B & C & D (multi-target), A & B --> C (multi-source).
     """
     edges: list[tuple[str, str, str]] = []
-    _id = r'[A-Za-z0-9_]+'
-    # Optional shape suffix after node ID: [..], (..), {..}, etc. (non-greedy)
-    _shape_sfx = r'(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})*'
-    # Pipe label: A[shape] -->|label| B[shape]
-    _arrow_pipe = re.compile(
-        r'(' + _id + r')' + _shape_sfx + r'\s*(?:-+[-.=]*>|=[=]+>)\|([^|]*)\|\s*'
-        r'(' + _id + r')'
-    )
-    # Dash-text: A -- text --> B
-    _arrow_dash = re.compile(
-        r'(' + _id + r')' + _shape_sfx + r'\s*--\s+([^\-\n]+?)\s+--[->]\s*(' + _id + r')'
-    )
-    # Plain: A --> B, A -.-> B, A ==> B
-    _arrow_plain = re.compile(
-        r'(' + _id + r')' + _shape_sfx + r'\s*(?:-+[-.=]*>|=[=]+>)\s*(' + _id + r')'
-    )
 
     for line in source.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith(('%%', '//', 'subgraph', 'end', 'flowchart', 'graph')):
+        if not stripped or stripped.startswith(
+            ('%%', '//', 'subgraph', 'end', 'flowchart', 'graph', 'direction')
+        ):
             continue
-        if '-->' not in stripped and '---' not in stripped and '==>' not in stripped and '-.->' not in stripped:
+        if not any(a in stripped for a in ['-->', '-.->', '===', '---']):
             continue
 
-        m = _arrow_pipe.search(stripped)
-        if m:
-            edges.append((m.group(1), m.group(3), _strip_html(m.group(2)).strip()))
+        arrow_span = _find_arrow_outside_brackets(stripped)
+        if arrow_span is None:
             continue
-        m = _arrow_dash.search(stripped)
-        if m:
-            edges.append((m.group(1), m.group(3), _strip_html(m.group(2)).strip()))
-            continue
-        m = _arrow_plain.search(stripped)
-        if m:
-            edges.append((m.group(1), m.group(2), ""))
+
+        a_start, a_end = arrow_span
+        before = stripped[:a_start]
+        after = stripped[a_end:]
+
+        # Check for pipe label immediately after arrow
+        label = ""
+        after_stripped = after.strip()
+        if after_stripped.startswith('|'):
+            pipe_end = after_stripped.find('|', 1)
+            if pipe_end > 0:
+                label = _strip_html(after_stripped[1:pipe_end]).strip()
+                after = after_stripped[pipe_end + 1:]
+        # Also handle dash-text style: A -- text --> B
+        # (text between double-dash before the arrow)
+        elif '--' in before:
+            # Try to find inline label between -- and arrow
+            m_text = re.match(r'(.+?)\s+--\s+(.+?)\s*$', before)
+            if m_text:
+                before = m_text.group(1)
+                label = _strip_html(m_text.group(2)).strip()
+
+        sources = _extract_node_ids_from_segment(before)
+        targets = _extract_node_ids_from_segment(after)
+
+        for src in sources:
+            for tgt in targets:
+                if src and tgt:
+                    edges.append((src, tgt, label))
+
     return edges
 
 
@@ -360,66 +423,21 @@ def _extract_direction_from_source(source: str) -> str | None:
     return None
 
 
-def _extract_geometry_from_svg(svg: str) -> GeometryObservation | None:
-    """Extract bounding boxes from the SVG viewBox and element coordinates."""
+def _extract_viewbox_geometry(svg: str) -> GeometryObservation | None:
+    """Extract canvas bounds from SVG viewBox (for non-flowchart types)."""
     viewbox_m = re.search(r'viewBox="([^"]+)"', svg)
     if not viewbox_m:
         return None
-
     try:
         parts = [float(v) for v in viewbox_m.group(1).split()]
         vx, vy, vw, vh = parts
     except ValueError:
         return None
-
-    canvas_bounds = BoundingBox(x=vx, y=vy, width=vw, height=vh)
-
-    # Extract entity bboxes from SVG rect elements inside node groups
-    # Mermaid SVG: <g id="flowchart-NodeId-N" ...><rect ... x=".." y=".." width=".." height=".."/></g>
-    node_bbox_pattern = re.compile(
-        r'<g[^>]+id="flowchart-([A-Za-z0-9_.\-]+)-\d+"[^>]*>.*?'
-        r'<rect[^>]+x="([^"]+)"[^>]+y="([^"]+)"[^>]+(?:width="([^"]+)"[^>]+height="([^"]+)"|'
-        r'height="([^"]+)"[^>]+width="([^"]+)")',
-        re.DOTALL,
-    )
-    entities_geo: list[EntityGeometry] = []
-    seen: set[str] = set()
-    for m in node_bbox_pattern.finditer(svg):
-        node_id = m.group(1)
-        if node_id in seen:
-            continue
-        seen.add(node_id)
-        try:
-            x = float(m.group(2))
-            y = float(m.group(3))
-            w = float(m.group(4) or m.group(7))
-            h = float(m.group(5) or m.group(6))
-            entities_geo.append(EntityGeometry(
-                entity_id=node_id,
-                bbox=BoundingBox(x=x, y=y, width=w, height=h),
-                text_bbox=None,
-                text_lines=1,
-            ))
-        except (ValueError, TypeError):
-            continue
-
-    content_bounds = None
-    if entities_geo:
-        min_x = min(eg.bbox.x for eg in entities_geo)
-        min_y = min(eg.bbox.y for eg in entities_geo)
-        max_x = max(eg.bbox.right for eg in entities_geo)
-        max_y = max(eg.bbox.bottom for eg in entities_geo)
-        content_bounds = BoundingBox(x=min_x, y=min_y, width=max_x - min_x, height=max_y - min_y)
-
     return GeometryObservation(
-        coordinate_convention="svg-top-left",
-        content_bounds=content_bounds,
-        canvas_bounds=canvas_bounds,
+        coordinate_convention="css-top-left",
+        content_bounds=None,
+        canvas_bounds=BoundingBox(x=vx, y=vy, width=vw, height=vh),
         viewbox=viewbox_m.group(1),
-        entities=entities_geo,
-        groups=[],
-        relations=[],
-        containment=[],
     )
 
 
@@ -428,6 +446,27 @@ class ReferenceAdapter:
 
     Reference ID: mermaid-11.15.0-neutral
     """
+
+    def __init__(self) -> None:
+        from adapters.playwright_extractor import PlaywrightBrowserManager
+        self._browser_manager: "PlaywrightBrowserManager | None" = None
+
+    def _get_browser_manager(self) -> "Any":
+        from adapters.playwright_extractor import PlaywrightBrowserManager
+        if self._browser_manager is None:
+            self._browser_manager = PlaywrightBrowserManager()
+        return self._browser_manager
+
+    def close(self) -> None:
+        if self._browser_manager is not None:
+            self._browser_manager.close()
+            self._browser_manager = None
+
+    def __enter__(self) -> "ReferenceAdapter":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()
 
     def identity(self) -> ImplementationIdentity:
         return ImplementationIdentity(
@@ -441,19 +480,11 @@ class ReferenceAdapter:
     def observe(self, case: FidelityCase, profile: RenderProfile) -> Observation:
         if not shutil.which("mmdc") and not Path(_MMDC_PATH).exists():
             return Observation(
-                schema_version=1,
-                case_id=case.id,
-                implementation=self.identity(),
-                environment=_env_identity(profile),
-                parse_result=ParseObservation(
-                    accepted=False,
-                    diagram_type=None,
-                    error_category="mmdc_unavailable",
-                    source_position=None,
-                ),
-                semantic=None,
-                geometry=None,
-                quality=None,
+                schema_version=1, case_id=case.id,
+                implementation=self.identity(), environment=_env_identity(profile, self),
+                parse_result=ParseObservation(accepted=False, diagram_type=None,
+                    error_category="mmdc_unavailable", source_position=None),
+                semantic=None, geometry=None, quality=None,
                 status=ComparisonStatus.REFERENCE_RENDER_FAILURE,
                 reason="mmdc binary not found",
             )
@@ -465,23 +496,15 @@ class ReferenceAdapter:
         source_sha256 = hashlib.sha256(case.source.encode("utf-8")).hexdigest()
         svg = _mmdc_render(case.source, config_json)
         impl = self.identity()
-        env = _env_identity(profile)
+        env = _env_identity(profile, self)
 
         if svg is None:
             return Observation(
-                schema_version=1,
-                case_id=case.id,
-                implementation=impl,
-                environment=env,
-                parse_result=ParseObservation(
-                    accepted=False,
-                    diagram_type=None,
-                    error_category="render_error",
-                    source_position=None,
-                ),
-                semantic=None,
-                geometry=None,
-                quality=None,
+                schema_version=1, case_id=case.id,
+                implementation=impl, environment=env,
+                parse_result=ParseObservation(accepted=False, diagram_type=None,
+                    error_category="render_error", source_position=None),
+                semantic=None, geometry=None, quality=None,
                 status=ComparisonStatus.REFERENCE_RENDER_FAILURE,
                 reason="mmdc returned non-zero or no SVG",
                 capture_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -489,43 +512,80 @@ class ReferenceAdapter:
             )
 
         semantic = _extract_semantic_from_svg(svg, case.source)
-        geometry = _extract_geometry_from_svg(svg)
+        diagram_type = _infer_diagram_type(case.source)
+
+        geometry: GeometryObservation | None = None
+        status = ComparisonStatus.PASS
+        reason: str | None = None
+
+        if diagram_type in ("flowchart", "graph"):
+            try:
+                from adapters.playwright_extractor import extract_flowchart_geometry
+                bm = self._get_browser_manager()
+                geometry, error_reason = extract_flowchart_geometry(
+                    svg=svg,
+                    semantic=semantic,
+                    browser_manager=bm,
+                    source=case.source,
+                    viewport_width=profile.viewport_width,
+                    viewport_height=profile.viewport_height,
+                    device_scale_factor=profile.device_scale_factor,
+                    locale=profile.locale,
+                    timezone=profile.timezone,
+                    reduced_motion=profile.reduced_motion,
+                )
+                if error_reason is not None:
+                    status = ComparisonStatus.EXTRACTOR_GAP
+                    reason = error_reason
+            except Exception as exc:
+                reason = f"playwright extraction error: {exc}"
+                status = ComparisonStatus.EXTRACTOR_GAP
+                geometry = GeometryObservation(
+                    coordinate_convention="css-top-left",
+                    content_bounds=None, canvas_bounds=None, viewbox=None,
+                )
+        else:
+            # For non-flowchart types: parse viewBox from SVG for canvas bounds
+            geometry = _extract_viewbox_geometry(svg)
 
         parse_obs = ParseObservation(
-            accepted=True,
-            diagram_type=_infer_diagram_type(case.source),
-            error_category=None,
-            source_position=None,
+            accepted=True, diagram_type=diagram_type,
+            error_category=None, source_position=None,
         )
 
         return Observation(
-            schema_version=1,
-            case_id=case.id,
-            implementation=impl,
-            environment=env,
-            parse_result=parse_obs,
-            semantic=semantic,
-            geometry=geometry,
-            quality=None,
-            status=ComparisonStatus.PASS,
-            reason=None,
+            schema_version=1, case_id=case.id,
+            implementation=impl, environment=env,
+            parse_result=parse_obs, semantic=semantic,
+            geometry=geometry, quality=None,
+            status=status, reason=reason,
             capture_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             source_sha256=source_sha256,
         )
 
 
-def _env_identity(profile: RenderProfile) -> EnvironmentIdentity:
+def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = None) -> EnvironmentIdentity:
     cfg_hash = ""
     if profile.mermaid_config:
         cfg_hash = hashlib.sha256(
             json.dumps(profile.mermaid_config, sort_keys=True).encode()
         ).hexdigest()[:16]
 
+    pw_version = "unknown"
+    chromium_version = "unknown"
+    if adapter is not None:
+        try:
+            bm = adapter._get_browser_manager()
+            pw_version = bm.playwright_version()
+            chromium_version = bm.browser_version()
+        except Exception:
+            pass
+
     return EnvironmentIdentity(
         mermaid_version=_mmdc_version(),
         mermaid_integrity=_mmdc_integrity(),
-        playwright_version="bundled-in-mmdc",
-        chromium_revision="1228",
+        playwright_version=pw_version,
+        chromium_revision=chromium_version,
         viewport_width=profile.viewport_width,
         viewport_height=profile.viewport_height,
         device_scale_factor=profile.device_scale_factor,
@@ -533,6 +593,6 @@ def _env_identity(profile: RenderProfile) -> EnvironmentIdentity:
         timezone=profile.timezone,
         reduced_motion=profile.reduced_motion,
         mermaid_config_hash=cfg_hash,
-        css_profile_hash=None,
-        font_info={"requested": "Helvetica Neue, Helvetica, Arial, sans-serif"},
+        css_profile_hash="",
+        font_info={"requested": "trebuchet ms, verdana, arial, sans-serif"},
     )
