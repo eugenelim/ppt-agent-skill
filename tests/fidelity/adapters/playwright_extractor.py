@@ -89,6 +89,7 @@ def _compute_crossing_count(
     """
     crossing = 0
     n = len(relations)
+    tol_sq = endpoint_tol * endpoint_tol
     for i in range(n):
         pts_i = relations[i].sampled_points
         if len(pts_i) < 2:
@@ -98,15 +99,30 @@ def _compute_crossing_count(
             pts_j = relations[j].sampled_points
             if len(pts_j) < 2:
                 continue
+            # Skip pairs whose attachment points are within endpoint_tol — they
+            # meet at a shared node rather than crossing.
+            shared = False
+            for ep_i in (pts_i[0], pts_i[-1]):
+                for ep_j in (pts_j[0], pts_j[-1]):
+                    if (ep_i[0] - ep_j[0]) ** 2 + (ep_i[1] - ep_j[1]) ** 2 <= tol_sq:
+                        shared = True
+                        break
+                if shared:
+                    break
+            if shared:
+                continue
             segs_j = list(zip(pts_j[:-1], pts_j[1:]))
-            # Count every proper segment-segment intersection between the two
-            # polylines. _segments_intersect already excludes endpoint-only
-            # contact, so no need for a pair-level endpoint skip (which would
-            # suppress valid non-endpoint crossings between connected edges).
+            # Collect unique intersection locations (rounded to 1 SVG unit) to
+            # avoid counting the same geometric crossing multiple times when the
+            # polyline is densely sampled near a bend.
+            seen: set[tuple[int, int]] = set()
             for s1 in segs_i:
                 for s2 in segs_j:
                     if _segments_intersect(*s1, *s2):
-                        crossing += 1
+                        mx = int(round((s1[0][0] + s1[1][0] + s2[0][0] + s2[1][0]) / 4))
+                        my = int(round((s1[0][1] + s1[1][1] + s2[0][1] + s2[1][1]) / 4))
+                        seen.add((mx, my))
+            crossing += len(seen)
     return crossing
 
 
@@ -409,9 +425,16 @@ _JS_EXTRACT = """
         textBBox = svgBBox(textEl);
       }
     }
-    // text_lines is always 1 here to match the native SVG adapter; multi-line
-    // scoring is deferred until native extraction implements line counting.
-    const textLines = 1;
+    // Count rendered text lines: <br> elements inside foreignObject, or
+    // top-level <tspan> elements inside a <text> element.
+    let textLines = 1;
+    if (fo && parseFloat(fo.getAttribute('width') || '0') > 0) {
+      const brs = fo.querySelectorAll('br');
+      if (brs.length > 0) textLines = brs.length + 1;
+    } else {
+      const tspans = g.querySelectorAll('text > tspan');
+      if (tspans.length > 1) textLines = tspans.length;
+    }
 
     entities.push({entity_id: matchedId, bbox: outerBBox, text_bbox: textBBox, text_lines: textLines});
   }
@@ -822,8 +845,10 @@ def _build_observation(
     for g in groups:
         all_xs += [g.bbox.x, g.bbox.right]
         all_ys += [g.bbox.y, g.bbox.bottom]
-    # Exclude relation sampled points: native adapter derives bounds from entities+groups
-    # only, so including edge waypoints here would create asymmetric normalization.
+    for r in relations:
+        for pt in r.sampled_points:
+            all_xs.append(pt[0])
+            all_ys.append(pt[1])
 
     content_bounds: BoundingBox | None = None
     if all_xs:
@@ -867,8 +892,20 @@ def _validate_completeness(obs: GeometryObservation, semantic: SemanticDiagram) 
     sem_group_ids = {g.id for g in semantic.groups}
     obs_group_ids = {g.group_id for g in obs.groups}
     missing_groups = sem_group_ids - obs_group_ids
+    extra_groups = obs_group_ids - sem_group_ids
     if missing_groups:
         diags.append(f"missing group geometry: {sorted(missing_groups)}")
+    if extra_groups:
+        diags.append(f"extra group geometry: {sorted(extra_groups)}")
+    # Validate containment against semantic group memberships.
+    sem_containment = {(member, g.id) for g in semantic.groups for member in g.members}
+    obs_containment = set(obs.containment)
+    missing_containment = sem_containment - obs_containment
+    extra_containment = obs_containment - sem_containment
+    if missing_containment:
+        diags.append(f"missing containment: {sorted(missing_containment)}")
+    if extra_containment:
+        diags.append(f"extra containment: {sorted(extra_containment)}")
     for g in obs.groups:
         if g.bbox.width <= 0 or g.bbox.height <= 0:
             diags.append(f"zero-area bbox for group {g.group_id!r}")

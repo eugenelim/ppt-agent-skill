@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:15:16.163087+00:00",
+  "capture_timestamp": "2026-07-31T18:40:01.004101+00:00",
   "case_id": "flowchart.self.loops",
   "diagnostics": [],
   "environment": {
@@ -30,7 +30,7 @@
     "containment": [],
     "content_bounds": {
       "height": 225.0942,
-      "width": 453.5976,
+      "width": 542.5035,
       "x": 8.0025,
       "y": 7.9998
     },
