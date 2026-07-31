@@ -354,15 +354,19 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
             continue
 
         # Split on top-level semicolons so `A --> B; C --> D` produces two statements.
+        # Pipe labels like `A -->|wait; retry| B` must not be split at the inner ';'.
         stmts: list[str] = []
         _depth = 0
+        _in_pipe = False
         _start = 0
         for _i, _c in enumerate(raw):
             if _c in '[({':
                 _depth += 1
             elif _c in '])}':
                 _depth = max(0, _depth - 1)
-            elif _c == ';' and _depth == 0:
+            elif _c == '|' and _depth == 0:
+                _in_pipe = not _in_pipe
+            elif _c == ';' and _depth == 0 and not _in_pipe:
                 stmts.append(raw[_start:_i].strip())
                 _start = _i + 1
         stmts.append(raw[_start:].strip())
