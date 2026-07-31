@@ -168,9 +168,30 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     stack: list[dict] = []
     auto_idx = 0  # increments when each group CLOSES (matches mmdc's subGraphN order)
 
+    # Pre-expand single-line compact source ("flowchart LR; subgraph G; A --> B; end")
+    # into separate lines so the line-based parser processes each statement correctly.
+    _exp: list[str] = []
+    for _ln in source.splitlines():
+        _s = _ln.strip()
+        if _s.startswith(('flowchart ', 'flowchart\t', 'graph ', 'graph\t')) and ';' in _s:
+            _exp.append(_s[:_s.index(';')])
+            _rest = _s[_s.index(';') + 1:].strip()
+            _d2, _pip2, _st2 = 0, False, 0
+            for _ii, _cc in enumerate(_rest):
+                if _cc in '[({': _d2 += 1
+                elif _cc in '])}': _d2 = max(0, _d2 - 1)
+                elif _cc == '|' and _d2 == 0: _pip2 = not _pip2
+                elif _cc == ';' and _d2 == 0 and not _pip2:
+                    _exp.append(_rest[_st2:_ii].strip())
+                    _st2 = _ii + 1
+            _exp.append(_rest[_st2:].strip())
+        else:
+            _exp.append(_ln)
+    source = '\n'.join(_exp)
+
     _node_id_pat = re.compile(r'^([A-Za-z0-9_][A-Za-z0-9_-]*)')
-    # Include arrowless links (---, ===) so members on both sides are collected.
-    _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>|---+|===[=]*')
+    # Include arrowless links (---, ===) and endpoint markers (--x, --o).
+    _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>|--[xo]|---+|===[=]*')
     # Mermaid directive keywords that can appear inside subgraphs — not node IDs.
     _directive_kw = frozenset(('class', 'classDef', 'style', 'click', 'linkStyle', 'callback'))
 
@@ -512,20 +533,55 @@ _JS_EXTRACT = """
   const relationErrors = [];
 
   // Map "src|tgt" -> [path elements] in document order.
+  // When underscored node IDs produce an ambiguous data-id prefix (e.g. A_B->C and
+  // A->B_C both yield L_A_B_C_N), resolve via endpoint proximity to node centers.
+  function nodeCenterById(nid) {
+    const sel = '[id*="-flowchart-' + nid + '-"]';
+    const g = svg.querySelector(sel);
+    if (!g) return null;
+    try { const bb = g.getBBox(); return [bb.x + bb.width / 2, bb.y + bb.height / 2]; } catch(_) { return null; }
+  }
   const pairPaths = {};
   for (const path of svg.querySelectorAll('path[data-id]')) {
     const dataId = path.getAttribute('data-id') || '';
     const withoutL = dataId.startsWith('L_') ? dataId.slice(2) : null;
     if (!withoutL) continue;
+    const matches = [];
     for (const rel of relations) {
       const infix = rel.source + '_' + rel.target + '_';
       if (withoutL.startsWith(infix) && /^\\d+$/.test(withoutL.slice(infix.length))) {
-        const key = rel.source + '|' + rel.target;
-        if (!pairPaths[key]) pairPaths[key] = [];
-        pairPaths[key].push(path);
-        break;
+        matches.push(rel);
       }
     }
+    if (matches.length === 0) continue;
+    let rel;
+    if (matches.length === 1) {
+      rel = matches[0];
+    } else {
+      // Ambiguous prefix: pick relation whose source/target node centers are closest
+      // to the path's start and end points.
+      let tl = 0;
+      try { tl = path.getTotalLength(); } catch(_) {}
+      let p0 = null, p1 = null;
+      if (tl > 0) {
+        try { const pt = path.getPointAtLength(0); p0 = [pt.x, pt.y]; } catch(_) {}
+        try { const pt = path.getPointAtLength(tl); p1 = [pt.x, pt.y]; } catch(_) {}
+      }
+      rel = matches[0];
+      if (p0 && p1) {
+        let best = Infinity;
+        for (const cand of matches) {
+          const sc = nodeCenterById(cand.source);
+          const tc = nodeCenterById(cand.target);
+          if (!sc || !tc) continue;
+          const score = (p0[0]-sc[0])**2 + (p0[1]-sc[1])**2 + (p1[0]-tc[0])**2 + (p1[1]-tc[1])**2;
+          if (score < best) { best = score; rel = cand; }
+        }
+      }
+    }
+    const key = rel.source + '|' + rel.target;
+    if (!pairPaths[key]) pairPaths[key] = [];
+    pairPaths[key].push(path);
   }
 
   // Self-loop paths: {node}-cyclic-special-{1,mid,2}
