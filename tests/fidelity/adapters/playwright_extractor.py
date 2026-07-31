@@ -146,7 +146,8 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     auto_idx = 0  # increments when each group CLOSES (matches mmdc's subGraphN order)
 
     _node_id_pat = re.compile(r'^([A-Za-z0-9_][A-Za-z0-9_-]*)')
-    _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>')
+    # Include arrowless links (---, ===) so members on both sides are collected.
+    _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>|---+|===[=]*')
 
     def _close_entry(entry: dict) -> None:
         """Assign a deferred ID and increment the counter; backfill waiting children."""
@@ -206,7 +207,7 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
             # Collect all node IDs referenced on this line (node defs and edge endpoints).
             if _arrow_pat.search(stripped):
                 clean = re.sub(r'\|[^|]*\|', '', stripped)
-                parts = re.split(r'-+[-.=]*>|=[=]+>|&', clean)
+                parts = re.split(r'-+[-.=]*>|=[=]+>|---+|===[=]*|&', clean)
                 for part in parts:
                     m2 = _node_id_pat.match(part.strip())
                     if m2:
