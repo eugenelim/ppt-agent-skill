@@ -29,10 +29,10 @@ source = "../fixtures/flowchart-groups-complex.mmd"
 diagram = "flowchart"
 lifecycle = "active"
 tags = ["groups", "containment", "edges"]
-strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "edge-endpoints"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "edge-endpoints", "containment"]
 scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths", "text-lines"]
 ignored = ["palette", "shadow", "corner-radius", "raw-dom-structure", "raw-pixels"]
-notes = "containment dropped from strict: reference oracle (mmdc regex adapter) cannot extract subgraph boundaries, so extra-group comparison is always vacuous."
+notes = "containment enabled: reference oracle now extracted via Playwright DOM (_parse_flowchart_subgraphs) rather than the regex-only mmdc adapter."
 
 [[case]]
 id = "flowchart.html.entities"

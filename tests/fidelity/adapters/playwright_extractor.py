@@ -253,7 +253,9 @@ _JS_EXTRACT = """
     const [vx, vy, vw, vh] = vbParts;
     svg.setAttribute('width', vw);
     svg.setAttribute('height', vh);
-    canvasBounds = {x: vx, y: vy, width: vw, height: vh};
+    // css-top-left convention: origin is (0,0) at the rendered top-left corner.
+    // vx/vy are internal SVG coordinate offsets, not CSS canvas positions.
+    canvasBounds = {x: 0, y: 0, width: vw, height: vh};
   } else {
     const w = parseFloat(svg.getAttribute('width') || '0');
     const h = parseFloat(svg.getAttribute('height') || '0');

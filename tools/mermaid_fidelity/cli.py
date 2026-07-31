@@ -203,6 +203,7 @@ def cmd_capture_reference(
             tmp_cases.mkdir()
 
             errors = 0
+            last_env = None
             for case in manifest.cases:
                 print(f"  Capturing {case.id}…", end="", flush=True)
                 obs = ref_adapter.observe(case, profile)
@@ -218,6 +219,8 @@ def cmd_capture_reference(
                     errors += 1
                 elif obs.status == ComparisonStatus.EXTRACTOR_GAP and is_flowchart:
                     errors += 1
+                if obs.environment is not None:
+                    last_env = obs.environment
 
             if errors > 0:
                 shutil.rmtree(tmp_cases, ignore_errors=True)
@@ -228,9 +231,11 @@ def cmd_capture_reference(
                 )
                 return 1
 
-            # Write environment.json
+            # Write environment.json — include full probed identity so captures made
+            # under different environments (Chromium version, viewport, locale) are
+            # distinguishable at the oracle level.
             identity = ref_adapter.identity()
-            env_data = {
+            env_data: dict[str, Any] = {
                 "ref_id": args.ref_id,
                 "adapter": {
                     "name": identity.name,
@@ -239,6 +244,11 @@ def cmd_capture_reference(
                 },
                 "captured_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             }
+            if last_env is not None:
+                from .serialization import to_json
+                import json as _json
+                # Reuse to_json's serialization path to get a dict for the env.
+                env_data["environment"] = _json.loads(to_json(last_env))
             save_json(env_data, tmp_env)
 
             # Near-atomic replace: rename sibling temp dirs over the targets.

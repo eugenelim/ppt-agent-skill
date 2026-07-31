@@ -1699,7 +1699,7 @@
     "source_position": null
   },
   "quality": null,
-  "reason": null,
+  "reason": "geometry for B__C__1 not captured; recapture required after chained-edge parser fix",
   "schema_version": 1,
   "semantic": {
     "diagram_type": "flowchart",
@@ -1931,5 +1931,5 @@
     ]
   },
   "source_sha256": "c05c444fd742cf4b4dceaf46e2886499bca8710db6366029490848604315e605",
-  "status": "PASS"
+  "status": "EXTRACTOR_GAP"
 }
