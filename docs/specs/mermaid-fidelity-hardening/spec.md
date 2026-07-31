@@ -15,9 +15,11 @@ Harden the existing Mermaid fidelity harness (tools/mermaid_fidelity/, tests/fid
 - Reports communicate what was actually evaluated
 
 This implementation now includes browser-based geometry extraction via a Playwright DOM
-extractor (`tests/fidelity/adapters/playwright_extractor.py`). All ACs are implemented;
-none are deferred. Oracle recapture, connector path sampling, text-line measurement, and
-Playwright/Chromium provenance are all shipped in the `eugene/codex-review-muscat-v2` branch.
+extractor (`tests/fidelity/adapters/playwright_extractor.py`). Most ACs are fully
+implemented; AC14 (flowchart geometry only — architecture deferred) and AC16 (reference
+side only — native connector paths deferred) are partially complete. Oracle recapture,
+connector path sampling, text-line measurement, and Playwright/Chromium provenance are
+all shipped in this change.
 
 ## Boundaries
 

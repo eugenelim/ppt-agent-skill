@@ -367,6 +367,7 @@ class TestParseFlowchartEdgesMultiTarget:
 # ── 9. PlaywrightBrowserManager ───────────────────────────────────────────────
 
 @pytest.mark.browser
+@pytest.mark.usefixtures("browser_lock")
 class TestPlaywrightBrowserManager:
     def test_context_manager_opens_and_closes(self):
         with PlaywrightBrowserManager() as bm:
@@ -426,6 +427,7 @@ _SIMPLE_SOURCE = "flowchart LR\n  A[Node A] --> B[Node B]\n"
 
 
 @pytest.mark.browser
+@pytest.mark.usefixtures("browser_lock")
 class TestExtractFlowchartGeometrySyntheticSvg:
     def test_canvas_bounds_from_viewbox(self):
         semantic = _make_semantic([("A", "Node A"), ("B", "Node B")],
@@ -633,6 +635,7 @@ class TestValidateCompleteness:
 
 @pytest.mark.external_reference
 @pytest.mark.browser
+@pytest.mark.usefixtures("browser_lock")
 class TestRealMmdcIntegration:
     """End-to-end tests: mmdc renders → Playwright extracts geometry."""
 

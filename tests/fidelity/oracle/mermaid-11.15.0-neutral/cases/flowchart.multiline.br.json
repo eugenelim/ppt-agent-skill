@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T19:47:21.759858+00:00",
+  "capture_timestamp": "2026-07-31T20:10:06.135875+00:00",
   "case_id": "flowchart.multiline.br",
   "diagnostics": [],
   "environment": {
@@ -17,7 +17,7 @@
     "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
-    "renderer_chromium_revision": "puppeteer-core@24.43.1",
+    "renderer_chromium_revision": "Google Chrome for Testing 148.0.7778.97",
     "timezone": "UTC",
     "viewport_height": 900,
     "viewport_width": 1200

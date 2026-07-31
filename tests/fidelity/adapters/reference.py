@@ -121,23 +121,32 @@ _RENDERER_CHROMIUM_CACHE: "str | object" = _UNSET
 
 
 def _renderer_chromium_version() -> str:
-    """Best-effort: puppeteer version bundled with mmdc (proxy for its Chromium revision)."""
+    """Best-effort: actual Chromium version used by mmdc/Puppeteer for rendering."""
     global _RENDERER_CHROMIUM_CACHE
     if _RENDERER_CHROMIUM_CACHE is not _UNSET:
         return _RENDERER_CHROMIUM_CACHE  # type: ignore[return-value]
     try:
         # mmdc lives in node_modules/.bin/; node_modules is one level up
         nm_parent = str(Path(_MMDC_PATH).resolve().parent.parent)
-        # Ask Node to find puppeteer-core (used by mermaid-cli) version.
+        # Ask Puppeteer for its executable path then probe the binary version.
         script = (
             "var v='unknown';"
-            "try{v='puppeteer-core@'+require('puppeteer-core/package.json').version;}catch(e){}"
-            "if(v==='unknown'){try{v='puppeteer@'+require('puppeteer/package.json').version;}catch(e){}}"
+            "try{"
+            "  var pup=require('puppeteer');"
+            "  var exe=pup.executablePath?pup.executablePath():'';"
+            "  if(exe){"
+            "    var out=require('child_process').execSync('\"'+exe+'\" --version 2>&1',{timeout:8000}).toString().trim();"
+            "    v=out||v;"
+            "  }"
+            "}catch(e){}"
+            "if(v==='unknown'){"
+            "  try{v='puppeteer-core@'+require('puppeteer-core/package.json').version;}catch(e){}"
+            "}"
             "process.stdout.write(v+'\\n');"
         )
         result = subprocess.run(
             ["node", "-e", script],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=15,
             cwd=nm_parent,
         )
         v = result.stdout.strip() or "unknown"
