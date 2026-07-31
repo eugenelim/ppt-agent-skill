@@ -242,6 +242,7 @@ class TestManifestIntegration:
 
 # ── reference adapter (requires mmdc) ─────────────────────────────────────────
 
+@pytest.mark.browser
 @pytest.mark.skipif(not _HAVE_MMDC, reason="requires mmdc")
 class TestReferenceAdapter:
     @pytest.fixture(scope="class")

@@ -1,11 +1,11 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-22T18:05:23.037474+00:00",
+  "capture_timestamp": "2026-07-31T08:38:46.546590+00:00",
   "case_id": "flowchart.text.metrics.tb",
   "diagnostics": [],
   "environment": {
-    "chromium_revision": "1228",
-    "css_profile_hash": null,
+    "chromium_revision": "149.0.7827.55",
+    "css_profile_hash": "",
     "device_scale_factor": 1,
     "font_info": {
       "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
@@ -14,7 +14,7 @@
     "mermaid_config_hash": "ba18222622882470",
     "mermaid_integrity": "508c39b847f0460f",
     "mermaid_version": "11.15.0",
-    "playwright_version": "bundled-in-mmdc",
+    "playwright_version": "1.61.0",
     "reduced_motion": true,
     "timezone": "UTC",
     "viewport_height": 900,
@@ -23,21 +23,366 @@
   "geometry": {
     "canvas_bounds": {
       "height": 318.5,
-      "width": 276.0,
-      "x": 0.0,
-      "y": 0.0
+      "width": 276,
+      "x": 0,
+      "y": 0
     },
     "containment": [],
-    "content_bounds": null,
-    "coordinate_convention": "svg-top-left",
-    "crossing_count": null,
-    "entities": [],
+    "content_bounds": {
+      "height": 302.5,
+      "width": 260,
+      "x": 8,
+      "y": 8
+    },
+    "coordinate_convention": "css-top-left",
+    "crossing_count": 0,
+    "entities": [
+      {
+        "bbox": {
+          "height": 97.5,
+          "width": 260,
+          "x": 8,
+          "y": 8
+        },
+        "entity_id": "A",
+        "text_bbox": {
+          "height": 67.5,
+          "width": 200,
+          "x": 38,
+          "y": 23
+        },
+        "text_lines": 1
+      },
+      {
+        "bbox": {
+          "height": 52.5,
+          "width": 96.3906,
+          "x": 89.8047,
+          "y": 155.5
+        },
+        "entity_id": "B",
+        "text_bbox": {
+          "height": 22.5,
+          "width": 36.3906,
+          "x": 119.8047,
+          "y": 170.5
+        },
+        "text_lines": 1
+      },
+      {
+        "bbox": {
+          "height": 52.5,
+          "width": 205.9062,
+          "x": 35.0469,
+          "y": 258
+        },
+        "entity_id": "C",
+        "text_bbox": {
+          "height": 22.5,
+          "width": 145.9062,
+          "x": 65.0469,
+          "y": 273
+        },
+        "text_lines": 1
+      }
+    ],
     "groups": [],
-    "relations": [],
+    "relations": [
+      {
+        "bend_count": 0,
+        "path_length": 46,
+        "relation_id": "A__B__0",
+        "sampled_points": [
+          [
+            138,
+            105.5
+          ],
+          [
+            138,
+            106.9839
+          ],
+          [
+            138,
+            108.4677
+          ],
+          [
+            138,
+            109.9516
+          ],
+          [
+            138,
+            111.4355
+          ],
+          [
+            138,
+            112.9194
+          ],
+          [
+            138,
+            114.4032
+          ],
+          [
+            138,
+            115.8871
+          ],
+          [
+            138,
+            117.371
+          ],
+          [
+            138,
+            118.8548
+          ],
+          [
+            138,
+            120.3387
+          ],
+          [
+            138,
+            121.8226
+          ],
+          [
+            138,
+            123.3064
+          ],
+          [
+            138,
+            124.7903
+          ],
+          [
+            138,
+            126.2742
+          ],
+          [
+            138,
+            127.7581
+          ],
+          [
+            138,
+            129.2419
+          ],
+          [
+            138,
+            130.7258
+          ],
+          [
+            138,
+            132.2097
+          ],
+          [
+            138,
+            133.6935
+          ],
+          [
+            138,
+            135.1774
+          ],
+          [
+            138,
+            136.6613
+          ],
+          [
+            138,
+            138.1452
+          ],
+          [
+            138,
+            139.629
+          ],
+          [
+            138,
+            141.1129
+          ],
+          [
+            138,
+            142.5968
+          ],
+          [
+            138,
+            144.0806
+          ],
+          [
+            138,
+            145.5645
+          ],
+          [
+            138,
+            147.0484
+          ],
+          [
+            138,
+            148.5323
+          ],
+          [
+            138,
+            150.0161
+          ],
+          [
+            138,
+            151.5
+          ]
+        ],
+        "source_point": [
+          138,
+          105.5
+        ],
+        "source_side": "B",
+        "target_point": [
+          138,
+          151.5
+        ],
+        "target_side": "T"
+      },
+      {
+        "bend_count": 0,
+        "path_length": 46,
+        "relation_id": "B__C__1",
+        "sampled_points": [
+          [
+            138,
+            208
+          ],
+          [
+            138,
+            209.4839
+          ],
+          [
+            138,
+            210.9677
+          ],
+          [
+            138,
+            212.4516
+          ],
+          [
+            138,
+            213.9355
+          ],
+          [
+            138,
+            215.4194
+          ],
+          [
+            138,
+            216.9032
+          ],
+          [
+            138,
+            218.3871
+          ],
+          [
+            138,
+            219.871
+          ],
+          [
+            138,
+            221.3548
+          ],
+          [
+            138,
+            222.8387
+          ],
+          [
+            138,
+            224.3226
+          ],
+          [
+            138,
+            225.8065
+          ],
+          [
+            138,
+            227.2903
+          ],
+          [
+            138,
+            228.7742
+          ],
+          [
+            138,
+            230.2581
+          ],
+          [
+            138,
+            231.7419
+          ],
+          [
+            138,
+            233.2258
+          ],
+          [
+            138,
+            234.7097
+          ],
+          [
+            138,
+            236.1935
+          ],
+          [
+            138,
+            237.6774
+          ],
+          [
+            138,
+            239.1613
+          ],
+          [
+            138,
+            240.6452
+          ],
+          [
+            138,
+            242.129
+          ],
+          [
+            138,
+            243.6129
+          ],
+          [
+            138,
+            245.0968
+          ],
+          [
+            138,
+            246.5806
+          ],
+          [
+            138,
+            248.0645
+          ],
+          [
+            138,
+            249.5484
+          ],
+          [
+            138,
+            251.0323
+          ],
+          [
+            138,
+            252.5161
+          ],
+          [
+            138,
+            254
+          ]
+        ],
+        "source_point": [
+          138,
+          208
+        ],
+        "source_side": "B",
+        "target_point": [
+          138,
+          254
+        ],
+        "target_side": "T"
+      }
+    ],
     "viewbox": "0 0 276 318.5"
   },
   "implementation": {
-    "adapter_version": "1.0.0",
+    "adapter_version": "2.0.0",
     "integrity": "508c39b847f0460f",
     "name": "mermaid-cli",
     "profile_id": "mermaid-neutral",

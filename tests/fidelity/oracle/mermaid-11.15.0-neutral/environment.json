@@ -1,9 +1,9 @@
 {
   "adapter": {
-    "adapter_version": "1.0.0",
+    "adapter_version": "2.0.0",
     "name": "mermaid-cli",
     "version": "11.15.0"
   },
-  "captured_at": "2026-07-22T18:05:59.421642+00:00",
+  "captured_at": "2026-07-31T08:39:19.213880+00:00",
   "ref_id": "mermaid-11.15.0-neutral"
 }
