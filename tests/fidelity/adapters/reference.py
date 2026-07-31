@@ -458,10 +458,12 @@ def _extract_viewbox_geometry(svg: str) -> GeometryObservation | None:
         vx, vy, vw, vh = parts
     except ValueError:
         return None
+    # css-top-left convention: origin is (0,0) at the rendered top-left corner.
+    # SVG viewBox origin (vx, vy) is an internal coordinate offset, not a CSS position.
     return GeometryObservation(
         coordinate_convention="css-top-left",
         content_bounds=None,
-        canvas_bounds=BoundingBox(x=vx, y=vy, width=vw, height=vh),
+        canvas_bounds=BoundingBox(x=0.0, y=0.0, width=vw, height=vh),
         viewbox=viewbox_m.group(1),
     )
 

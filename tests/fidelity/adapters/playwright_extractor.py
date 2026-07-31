@@ -482,10 +482,13 @@ _JS_EXTRACT = """
 
     if (isSelfLoop) {
       // Consume up to 3 cyclic-special segments per self-loop relation (1 set of arcs).
-      // Multiple self-loops on the same node each get their own 3-segment group.
-      const allCyclic = (cyclicPaths[rel.source] || [])
+      // Filter first to preserve DOM occurrence order, then take the first 3 (one set)
+      // before sorting by suffix for arc traversal. Sorting all before slicing would
+      // interleave segments from different loops (1, 1, mid, mid, 2, 2 → wrong trio).
+      const unusedCyclic = (cyclicPaths[rel.source] || [])
+        .filter(e => !usedPaths.has(e.path))
+        .slice(0, 3)
         .sort((a, b) => (SUFFIX_ORDER[a.suffix] ?? 99) - (SUFFIX_ORDER[b.suffix] ?? 99));
-      const unusedCyclic = allCyclic.filter(e => !usedPaths.has(e.path)).slice(0, 3);
       if (unusedCyclic.length === 0) {
         relationErrors.push({id: rel.id, reason: 'no cyclic-special paths'});
         continue;
