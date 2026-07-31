@@ -192,7 +192,7 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
         stripped = line.strip()
 
         if stripped == 'subgraph' or stripped.startswith('subgraph '):
-            rest = stripped[len('subgraph'):].strip()
+            rest = stripped[len('subgraph'):].strip().rstrip(';').strip()
             # Single-token id (with optional [label]) anchored to end → explicit ID.
             # Anything else is a multi-word implicit title; ID deferred to close.
             _id_then_end = re.match(
@@ -212,7 +212,7 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
             stack.append(sg_entry)
             continue
 
-        if stripped == 'end' and stack:
+        if stripped.rstrip(';') == 'end' and stack:
             finished = stack.pop()
             _close_entry(finished)
 

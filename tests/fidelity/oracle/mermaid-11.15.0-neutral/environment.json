@@ -4,7 +4,7 @@
     "name": "mermaid-cli",
     "version": "11.15.0"
   },
-  "captured_at": "2026-07-31T19:25:33.158411+00:00",
+  "captured_at": "2026-07-31T19:47:54.137808+00:00",
   "environment": {
     "chromium_revision": "149.0.7827.55",
     "css_profile_hash": "",
@@ -19,6 +19,7 @@
     "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
+    "renderer_chromium_revision": "puppeteer-core@24.43.1",
     "timezone": "UTC",
     "viewport_height": 900,
     "viewport_width": 1200

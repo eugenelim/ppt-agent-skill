@@ -33,7 +33,7 @@ class EnvironmentIdentity:
     mermaid_integrity: str | None   # lockfile hash or npm integrity string
     node_version: str               # Node.js runtime used by mmdc (the renderer)
     playwright_version: str
-    chromium_revision: str          # Playwright extractor Chromium (not mmdc's Puppeteer Chromium)
+    chromium_revision: str          # Playwright extractor Chromium (geometry extraction)
     viewport_width: int
     viewport_height: int
     device_scale_factor: float
@@ -43,6 +43,7 @@ class EnvironmentIdentity:
     mermaid_config_hash: str        # SHA256 of the Mermaid config JSON
     css_profile_hash: str           # SHA256 of the CSS profile file; "" for default
     font_info: dict[str, Any]       # resolved/requested font information
+    renderer_chromium_revision: str = "unknown"  # mmdc/Puppeteer Chromium (SVG rendering)
 
 
 # ── parse observation ─────────────────────────────────────────────────────────

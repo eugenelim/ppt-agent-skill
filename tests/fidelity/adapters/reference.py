@@ -117,6 +117,36 @@ def _node_version() -> str:
     return v
 
 
+_RENDERER_CHROMIUM_CACHE: "str | object" = _UNSET
+
+
+def _renderer_chromium_version() -> str:
+    """Best-effort: puppeteer version bundled with mmdc (proxy for its Chromium revision)."""
+    global _RENDERER_CHROMIUM_CACHE
+    if _RENDERER_CHROMIUM_CACHE is not _UNSET:
+        return _RENDERER_CHROMIUM_CACHE  # type: ignore[return-value]
+    try:
+        # mmdc lives in node_modules/.bin/; node_modules is one level up
+        nm_parent = str(Path(_MMDC_PATH).resolve().parent.parent)
+        # Ask Node to find puppeteer-core (used by mermaid-cli) version.
+        script = (
+            "var v='unknown';"
+            "try{v='puppeteer-core@'+require('puppeteer-core/package.json').version;}catch(e){}"
+            "if(v==='unknown'){try{v='puppeteer@'+require('puppeteer/package.json').version;}catch(e){}}"
+            "process.stdout.write(v+'\\n');"
+        )
+        result = subprocess.run(
+            ["node", "-e", script],
+            capture_output=True, text=True, timeout=10,
+            cwd=nm_parent,
+        )
+        v = result.stdout.strip() or "unknown"
+    except Exception:
+        v = "unknown"
+    _RENDERER_CHROMIUM_CACHE = v
+    return v
+
+
 def _mmdc_integrity() -> "str | None":
     global _MMDC_INTEGRITY_CACHE
     if _MMDC_INTEGRITY_CACHE is not _UNSET:
@@ -719,6 +749,7 @@ def _env_identity(
         node_version=_node_version(),
         playwright_version=pw_version,
         chromium_revision=chromium_version,
+        renderer_chromium_revision=_renderer_chromium_version(),
         viewport_width=profile.viewport_width,
         viewport_height=profile.viewport_height,
         device_scale_factor=profile.device_scale_factor,

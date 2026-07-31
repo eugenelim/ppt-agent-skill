@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T19:25:19.153624+00:00",
+  "capture_timestamp": "2026-07-31T19:47:39.432789+00:00",
   "case_id": "sequence.messages.self",
   "diagnostics": [],
   "environment": {
@@ -17,6 +17,7 @@
     "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
+    "renderer_chromium_revision": "puppeteer-core@24.43.1",
     "timezone": "UTC",
     "viewport_height": 900,
     "viewport_width": 1200
