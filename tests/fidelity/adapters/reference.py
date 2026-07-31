@@ -285,9 +285,21 @@ def _find_arrow_outside_brackets(text: str) -> tuple[int, int] | None:
 
 
 def _extract_node_ids_from_segment(segment: str) -> list[str]:
-    """Extract node IDs from a segment that may contain & and shape suffixes."""
+    """Extract node IDs from a segment, splitting on & only outside brackets."""
     result = []
-    for part in segment.split('&'):
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for i, c in enumerate(segment):
+        if c in '[({':
+            depth += 1
+        elif c in '])}':
+            depth = max(0, depth - 1)
+        elif c == '&' and depth == 0:
+            parts.append(segment[start:i])
+            start = i + 1
+    parts.append(segment[start:])
+    for part in parts:
         part = part.strip()
         m = re.match(r'([A-Za-z0-9_]+)', part)
         if m:
@@ -309,7 +321,7 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
             ('%%', '//', 'subgraph', 'end', 'flowchart', 'graph', 'direction')
         ):
             continue
-        if not any(a in stripped for a in ['-->', '-.->', '===', '---']):
+        if not any(a in stripped for a in ['-->', '-.->', '===', '==>', '---']):
             continue
 
         arrow_span = _find_arrow_outside_brackets(stripped)
@@ -564,6 +576,19 @@ class ReferenceAdapter:
         )
 
 
+def _profile_font_family(profile: RenderProfile) -> str:
+    """Return the font-family configured in the render profile's mermaid config."""
+    try:
+        if profile.mermaid_config:
+            theme_vars = profile.mermaid_config.get("themeVariables", {})
+            font = theme_vars.get("fontFamily") or profile.mermaid_config.get("fontFamily")
+            if font:
+                return font
+    except Exception:
+        pass
+    return "trebuchet ms, verdana, arial, sans-serif"
+
+
 def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = None) -> EnvironmentIdentity:
     cfg_hash = ""
     if profile.mermaid_config:
@@ -575,9 +600,13 @@ def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = N
     chromium_version = "unknown"
     if adapter is not None:
         try:
-            bm = adapter._get_browser_manager()
-            pw_version = bm.playwright_version()
-            chromium_version = bm.browser_version()
+            bm = adapter._browser_manager  # only probe if already open; don't launch here
+            if bm is not None:
+                pw_version = bm.playwright_version()
+                chromium_version = bm.browser_version()
+            else:
+                from adapters.playwright_extractor import PlaywrightBrowserManager
+                pw_version = PlaywrightBrowserManager().playwright_version()
         except Exception:
             pass
 
@@ -594,5 +623,5 @@ def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = N
         reduced_motion=profile.reduced_motion,
         mermaid_config_hash=cfg_hash,
         css_profile_hash="",
-        font_info={"requested": "trebuchet ms, verdana, arial, sans-serif"},
+        font_info={"requested": _profile_font_family(profile)},
     )

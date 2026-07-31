@@ -154,7 +154,9 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
         r'subgraph\s+([A-Za-z0-9_.\-]+)'     # mandatory id
         r'(?:\s*\[\s*"?([^"\]]*)"?\s*\])?',   # optional ["label"]
     )
-    _node_id_pat = re.compile(r'^\s*([A-Za-z0-9_]+)\s*(?:\[|{|\(|>)')
+    # Match any bare node ID at the start of a line (with or without shape suffix)
+    _node_id_pat = re.compile(r'^([A-Za-z0-9_]+)')
+    _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>')
 
     for line in source.splitlines():
         stripped = line.strip()
@@ -175,12 +177,22 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
             continue
 
         if stack and stripped and not stripped.startswith(('%%', '//', 'flowchart', 'graph', 'direction')):
-            # Potentially a node definition inside current subgraph
-            m = _node_id_pat.match(stripped)
-            if m:
-                nid = m.group(1)
-                if nid not in stack[-1]["members"]:
-                    stack[-1]["members"].append(nid)
+            # Collect all node IDs referenced on this line (node defs and edge endpoints)
+            if _arrow_pat.search(stripped):
+                # Edge line: extract all bare IDs (split on arrows and &)
+                parts = re.split(r'-+[-.=]*>|=[=]+>|&', stripped)
+                for part in parts:
+                    m = _node_id_pat.match(part.strip())
+                    if m:
+                        nid = m.group(1)
+                        if nid not in stack[-1]["members"]:
+                            stack[-1]["members"].append(nid)
+            else:
+                m = _node_id_pat.match(stripped)
+                if m:
+                    nid = m.group(1)
+                    if nid not in stack[-1]["members"]:
+                        stack[-1]["members"].append(nid)
 
     # Close unclosed subgraphs
     while stack:
@@ -482,12 +494,12 @@ _JS_EXTRACT = """
       continue;
     }
 
-    // Regular edge.
+    // Regular edge: always take first unused path to preserve document order.
     const available = (pairPaths[key] || []).filter(p => !usedPaths.has(p));
     if (available.length === 0) {
       relationErrors.push({id: rel.id, reason: 'no path for ' + key}); continue;
     }
-    const pathEl = occ < available.length ? available[occ] : available[available.length - 1];
+    const pathEl = available[0];
     usedPaths.add(pathEl);
 
     const ctm = pathEl.getCTM();
@@ -528,12 +540,20 @@ class PlaywrightBrowserManager:
         if self._browser is not None:
             return
         from playwright.sync_api import sync_playwright
-        # Keep the PlaywrightContextManager alive so its __exit__ can clean up
-        # the event loop it owns.  Dropping it (as __enter__() would do with a
-        # one-liner) leaves the loop running and breaks subsequent launches.
-        self._pw_context = sync_playwright()
-        self._pw = self._pw_context.__enter__()
-        self._browser = self._pw.chromium.launch(headless=True)
+        pw_context = sync_playwright()
+        pw = pw_context.__enter__()
+        try:
+            browser = pw.chromium.launch(headless=True)
+        except Exception:
+            try:
+                pw_context.__exit__(None, None, None)
+            except Exception:
+                pass
+            raise
+        # Only assign after successful launch so close() is safe on partial init.
+        self._pw_context = pw_context
+        self._pw = pw
+        self._browser = browser
 
     def browser_version(self) -> str:
         self._ensure_browser()
@@ -802,6 +822,15 @@ def _validate_completeness(obs: GeometryObservation, semantic: SemanticDiagram) 
         diags.append(f"missing entity geometry: {sorted(missing_entities)}")
     if extra_entities:
         diags.append(f"extra entity geometry: {sorted(extra_entities)}")
+
+    sem_group_ids = {g.id for g in semantic.groups}
+    obs_group_ids = {g.group_id for g in obs.groups}
+    missing_groups = sem_group_ids - obs_group_ids
+    if missing_groups:
+        diags.append(f"missing group geometry: {sorted(missing_groups)}")
+    for g in obs.groups:
+        if g.bbox.width <= 0 or g.bbox.height <= 0:
+            diags.append(f"zero-area bbox for group {g.group_id!r}")
 
     sem_rel_ids = {r.id for r in semantic.relations}
     obs_rel_ids = {r.relation_id for r in obs.relations}
