@@ -145,16 +145,23 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     """Extract subgraph/cluster declarations and their member node IDs.
 
     Returns [{"id": group_id, "label": label, "members": [node_ids...]}].
-    Handles nested subgraphs by tracking open subgraph stacks.
+    Handles nested subgraphs and both explicit IDs and implicit-title subgraphs.
+
+    Mermaid subgraph ID resolution:
+      subgraph id [label]  → DOM cluster id = id
+      subgraph id          → DOM cluster id = id  (single word)
+      subgraph Multi Word  → DOM cluster id = subGraphN (auto-generated, 0-indexed)
     """
     subgraphs: list[dict] = []
-    stack: list[dict] = []  # open subgraphs (innermost last)
+    stack: list[dict] = []
+    auto_idx = 0  # counter for implicit-title subgraphs (matches mmdc's subGraphN)
 
-    _sg_open = re.compile(
-        r'subgraph\s+([A-Za-z0-9_.\-]+)'     # mandatory id
-        r'(?:\s*\[\s*"?([^"\]]*)"?\s*\])?',   # optional ["label"]
+    # id [label] form: first group is the bare ID token, second is optional label
+    _sg_explicit = re.compile(
+        r'subgraph\s+([A-Za-z0-9_.\-]+)'
+        r'(?:\s*\[\s*"?([^"\]]*)"?\s*\])?'
+        r'\s*$',
     )
-    # Match any bare node ID at the start of a line (with or without shape suffix)
     _node_id_pat = re.compile(r'^([A-Za-z0-9_]+)')
     _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>')
 
@@ -162,9 +169,33 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
         stripped = line.strip()
 
         if stripped.startswith('subgraph'):
-            m = _sg_open.match(stripped)
-            sg_id = m.group(1) if m else f"subgraph_{len(subgraphs)}"
-            sg_label = m.group(2).strip() if (m and m.group(2)) else sg_id
+            rest = stripped[len('subgraph'):].strip()
+            m = _sg_explicit.match(stripped)
+            if m:
+                first_token = m.group(1)
+                # Check if rest has a second word that isn't a bracket label
+                # e.g. "subgraph My Group" → rest = "My Group" (no brackets)
+                after_first = rest[len(first_token):].strip()
+                if after_first and not after_first.startswith('['):
+                    # Multi-word implicit title → use mmdc auto-generated ID
+                    sg_id = f"subGraph{auto_idx}"
+                    auto_idx += 1
+                    sg_label = rest  # whole remainder is the label
+                else:
+                    sg_id = first_token
+                    sg_label = m.group(2).strip() if m.group(2) else first_token
+            elif rest:
+                # Fallback: use the first token
+                fm = _node_id_pat.match(rest)
+                sg_id = fm.group(1) if fm else f"subGraph{auto_idx}"
+                sg_label = sg_id
+                if not fm:
+                    auto_idx += 1
+            else:
+                sg_id = f"subGraph{auto_idx}"
+                sg_label = sg_id
+                auto_idx += 1
+
             sg_entry: dict = {"id": sg_id, "label": sg_label, "members": [], "parent": None}
             if stack:
                 sg_entry["parent"] = stack[-1]["id"]
@@ -177,24 +208,24 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
             continue
 
         if stack and stripped and not stripped.startswith(('%%', '//', 'flowchart', 'graph', 'direction')):
-            # Collect all node IDs referenced on this line (node defs and edge endpoints)
+            # Collect all node IDs referenced on this line (node defs and edge endpoints).
             if _arrow_pat.search(stripped):
-                # Edge line: extract all bare IDs (split on arrows and &)
-                parts = re.split(r'-+[-.=]*>|=[=]+>|&', stripped)
+                # Strip pipe labels (|text|) before splitting so "A -->|yes| B" → "A --> B"
+                clean = re.sub(r'\|[^|]*\|', '', stripped)
+                parts = re.split(r'-+[-.=]*>|=[=]+>|&', clean)
                 for part in parts:
-                    m = _node_id_pat.match(part.strip())
-                    if m:
-                        nid = m.group(1)
+                    m2 = _node_id_pat.match(part.strip())
+                    if m2:
+                        nid = m2.group(1)
                         if nid not in stack[-1]["members"]:
                             stack[-1]["members"].append(nid)
             else:
-                m = _node_id_pat.match(stripped)
-                if m:
-                    nid = m.group(1)
+                m2 = _node_id_pat.match(stripped)
+                if m2:
+                    nid = m2.group(1)
                     if nid not in stack[-1]["members"]:
                         stack[-1]["members"].append(nid)
 
-    # Close unclosed subgraphs
     while stack:
         subgraphs.append(stack.pop())
 
@@ -444,10 +475,11 @@ _JS_EXTRACT = """
     const occ = pairOccurrence[key]++;
 
     if (isSelfLoop) {
-      // Combine all cyclic-special paths for this node.
+      // Consume up to 3 cyclic-special segments per self-loop relation (1 set of arcs).
+      // Multiple self-loops on the same node each get their own 3-segment group.
       const allCyclic = (cyclicPaths[rel.source] || [])
         .sort((a, b) => (SUFFIX_ORDER[a.suffix] ?? 99) - (SUFFIX_ORDER[b.suffix] ?? 99));
-      const unusedCyclic = allCyclic.filter(e => !usedPaths.has(e.path));
+      const unusedCyclic = allCyclic.filter(e => !usedPaths.has(e.path)).slice(0, 3);
       if (unusedCyclic.length === 0) {
         relationErrors.push({id: rel.id, reason: 'no cyclic-special paths'});
         continue;

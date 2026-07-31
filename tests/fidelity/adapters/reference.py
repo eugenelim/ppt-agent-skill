@@ -507,6 +507,14 @@ class ReferenceAdapter:
 
         source_sha256 = hashlib.sha256(case.source.encode("utf-8")).hexdigest()
         svg = _mmdc_render(case.source, config_json)
+        diagram_type = _infer_diagram_type(case.source)
+        # Pre-open the browser manager for flowcharts before building env identity
+        # so chromium_revision is accurate on the very first observation.
+        if diagram_type in ("flowchart", "graph"):
+            try:
+                self._get_browser_manager()
+            except Exception:
+                pass
         impl = self.identity()
         env = _env_identity(profile, self)
 
@@ -524,7 +532,6 @@ class ReferenceAdapter:
             )
 
         semantic = _extract_semantic_from_svg(svg, case.source)
-        diagram_type = _infer_diagram_type(case.source)
 
         geometry: GeometryObservation | None = None
         status = ComparisonStatus.PASS
