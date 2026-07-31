@@ -270,14 +270,15 @@ def _find_arrow_outside_brackets(text: str) -> tuple[int, int] | None:
             depth = max(0, depth - 1)
             i += 1
         elif depth == 0 and c == '-':
-            for arrow in ['-.->', '-->', '--->', '---']:
-                if text[i:i+len(arrow)] == arrow:
-                    return (i, i + len(arrow))
+            # Match the maximal Mermaid link token greedily (handles ----> etc.)
+            m = re.match(r'-[-.=]*>', text[i:])
+            if m:
+                return (i, i + len(m.group()))
             i += 1
         elif depth == 0 and c == '=':
-            for arrow in ['===>', '==>', '===']:
-                if text[i:i+len(arrow)] == arrow:
-                    return (i, i + len(arrow))
+            m = re.match(r'=[=]+>', text[i:])
+            if m:
+                return (i, i + len(m.group()))
             i += 1
         else:
             i += 1

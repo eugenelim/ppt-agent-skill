@@ -98,26 +98,15 @@ def _compute_crossing_count(
             pts_j = relations[j].sampled_points
             if len(pts_j) < 2:
                 continue
-            # Skip this relation pair entirely if they share an attachment point
-            # (i.e., any endpoint of relation i is within endpoint_tol of any
-            # endpoint of relation j — they are connected at a common node).
-            shared = any(
-                math.hypot(ei[0] - ej[0], ei[1] - ej[1]) < endpoint_tol
-                for ei in [pts_i[0], pts_i[-1]]
-                for ej in [pts_j[0], pts_j[-1]]
-            )
-            if shared:
-                continue
             segs_j = list(zip(pts_j[:-1], pts_j[1:]))
-            found = False
+            # Count every proper segment-segment intersection between the two
+            # polylines. _segments_intersect already excludes endpoint-only
+            # contact, so no need for a pair-level endpoint skip (which would
+            # suppress valid non-endpoint crossings between connected edges).
             for s1 in segs_i:
-                if found:
-                    break
                 for s2 in segs_j:
                     if _segments_intersect(*s1, *s2):
                         crossing += 1
-                        found = True
-                        break
     return crossing
 
 
@@ -169,32 +158,27 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
         stripped = line.strip()
 
         if stripped.startswith('subgraph'):
+            # Mermaid increments its internal subGraphN counter for EVERY subgraph
+            # declaration, even ones with explicit IDs. Mirror that here.
+            current_auto = auto_idx
+            auto_idx += 1
+
             rest = stripped[len('subgraph'):].strip()
-            m = _sg_explicit.match(stripped)
-            if m:
-                first_token = m.group(1)
-                # Check if rest has a second word that isn't a bracket label
-                # e.g. "subgraph My Group" → rest = "My Group" (no brackets)
-                after_first = rest[len(first_token):].strip()
-                if after_first and not after_first.startswith('['):
-                    # Multi-word implicit title → use mmdc auto-generated ID
-                    sg_id = f"subGraph{auto_idx}"
-                    auto_idx += 1
-                    sg_label = rest  # whole remainder is the label
-                else:
-                    sg_id = first_token
-                    sg_label = m.group(2).strip() if m.group(2) else first_token
+            # Match: single-token id (with optional [label]) to end of string.
+            # If the match fails, rest is a multi-word implicit title.
+            _id_then_end = re.match(
+                r'([A-Za-z0-9_.\-]+)(?:\s*\[\s*"?([^"\]]*)"?\s*\])?\s*$', rest
+            )
+            if _id_then_end:
+                sg_id = _id_then_end.group(1)
+                sg_label = (_id_then_end.group(2) or sg_id).strip()
             elif rest:
-                # Fallback: use the first token
-                fm = _node_id_pat.match(rest)
-                sg_id = fm.group(1) if fm else f"subGraph{auto_idx}"
-                sg_label = sg_id
-                if not fm:
-                    auto_idx += 1
+                # Multi-word title (no brackets): "subgraph My Group" → subGraphN
+                sg_id = f"subGraph{current_auto}"
+                sg_label = rest
             else:
-                sg_id = f"subGraph{auto_idx}"
+                sg_id = f"subGraph{current_auto}"
                 sg_label = sg_id
-                auto_idx += 1
 
             sg_entry: dict = {"id": sg_id, "label": sg_label, "members": [], "parent": None}
             if stack:
