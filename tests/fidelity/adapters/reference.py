@@ -518,20 +518,14 @@ class ReferenceAdapter:
         source_sha256 = hashlib.sha256(case.source.encode("utf-8")).hexdigest()
         svg = _mmdc_render(case.source, config_json)
         diagram_type = _infer_diagram_type(case.source)
-        # Pre-open the browser manager for flowcharts before building env identity
-        # so chromium_revision is accurate on the very first observation.
-        if diagram_type in ("flowchart", "graph"):
-            try:
-                self._get_browser_manager()
-            except Exception:
-                pass
         impl = self.identity()
-        env = _env_identity(profile, self)
 
         if svg is None:
+            # Build env without browser (chromium_revision will be "unknown"; acceptable
+            # for error observations where geometry is never captured).
             return Observation(
                 schema_version=1, case_id=case.id,
-                implementation=impl, environment=env,
+                implementation=impl, environment=_env_identity(profile, self),
                 parse_result=ParseObservation(accepted=False, diagram_type=None,
                     error_category="render_error", source_position=None),
                 semantic=None, geometry=None, quality=None,
@@ -582,6 +576,10 @@ class ReferenceAdapter:
             error_category=None, source_position=None,
         )
 
+        # Build env after geometry extraction so the browser (if opened for
+        # flowchart capture) has already populated chromium_revision.
+        env = _env_identity(profile, self)
+
         return Observation(
             schema_version=1, case_id=case.id,
             implementation=impl, environment=env,
@@ -617,10 +615,13 @@ def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = N
     chromium_version = "unknown"
     if adapter is not None:
         try:
-            bm = adapter._browser_manager  # only probe if already open; don't launch here
+            bm = adapter._browser_manager
             if bm is not None:
-                pw_version = bm.playwright_version()
-                chromium_version = bm.browser_version()
+                pw_version = bm.playwright_version()  # importlib.metadata — no browser launch
+                # Only read chromium version if the browser is already open; calling
+                # browser_version() on a fresh manager would launch Chromium unexpectedly.
+                if bm._browser is not None:
+                    chromium_version = bm.browser_version()
             else:
                 from adapters.playwright_extractor import PlaywrightBrowserManager
                 pw_version = PlaywrightBrowserManager().playwright_version()

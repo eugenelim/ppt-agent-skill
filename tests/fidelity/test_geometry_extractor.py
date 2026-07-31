@@ -645,32 +645,32 @@ class TestRealMmdcIntegration:
         "  B -->|no| D[No]\n"
     )
 
-    def _render(self, source: str) -> str | None:
-        """Run mmdc on source, return SVG or None."""
+    def _render(self, source: str) -> str:
+        """Run mmdc on source, return SVG. Skips if mmdc absent; fails on render error."""
         import shutil
         import subprocess
         import tempfile
-        mmdc = shutil.which("mmdc") or "/opt/homebrew/bin/mmdc"
+        from pathlib import Path as _P
+        mmdc_path = shutil.which("mmdc") or "/opt/homebrew/bin/mmdc"
+        if not _P(mmdc_path).exists():
+            pytest.skip("mmdc not installed")
         with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _P
             mmd = _P(tmp) / "d.mmd"
             out = _P(tmp) / "d.svg"
             mmd.write_text(source, encoding="utf-8")
             try:
                 r = subprocess.run(
-                    [mmdc, "-i", str(mmd), "-o", str(out), "--quiet"],
+                    [mmdc_path, "-i", str(mmd), "-o", str(out), "--quiet"],
                     capture_output=True, timeout=60,
                 )
-                if r.returncode != 0 or not out.exists():
-                    return None
-                return out.read_text(encoding="utf-8")
-            except Exception:
-                return None
+            except FileNotFoundError:
+                pytest.skip("mmdc not installed")
+            if r.returncode != 0 or not out.exists():
+                pytest.fail(f"mmdc render failed (rc={r.returncode}): {r.stderr.decode()[:400]}")
+            return out.read_text(encoding="utf-8")
 
     def test_simple_flowchart_entities_found(self):
         svg = self._render(self._SIMPLE_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic([("A", "Start"), ("B", "End")], [("A", "B", "")])
         with PlaywrightBrowserManager() as bm:
             obs, err = extract_flowchart_geometry(svg, sem, bm, source=self._SIMPLE_MMD)
@@ -680,8 +680,6 @@ class TestRealMmdcIntegration:
 
     def test_simple_flowchart_relation_sampled(self):
         svg = self._render(self._SIMPLE_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic([("A", "Start"), ("B", "End")], [("A", "B", "")])
         with PlaywrightBrowserManager() as bm:
             obs, err = extract_flowchart_geometry(svg, sem, bm, source=self._SIMPLE_MMD)
@@ -692,8 +690,6 @@ class TestRealMmdcIntegration:
 
     def test_three_node_bend_count_nonnegative(self):
         svg = self._render(self._THREE_NODE_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic(
             [("A", "Top"), ("B", "Mid"), ("C", "Bot")],
             [("A", "B", ""), ("B", "C", "")],
@@ -705,8 +701,6 @@ class TestRealMmdcIntegration:
 
     def test_side_inference_populated(self):
         svg = self._render(self._SIMPLE_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic([("A", "Start"), ("B", "End")], [("A", "B", "")])
         with PlaywrightBrowserManager() as bm:
             obs, err = extract_flowchart_geometry(svg, sem, bm, source=self._SIMPLE_MMD)
@@ -717,8 +711,6 @@ class TestRealMmdcIntegration:
 
     def test_diamond_crossing_count_zero(self):
         svg = self._render(self._DIAMOND_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic(
             [("A", "Start"), ("B", "Choice"), ("C", "Yes"), ("D", "No")],
             [("A", "B", ""), ("B", "C", "yes"), ("B", "D", "no")],
@@ -731,8 +723,6 @@ class TestRealMmdcIntegration:
 
     def test_error_reason_none_on_success(self):
         svg = self._render(self._SIMPLE_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic([("A", "Start"), ("B", "End")], [("A", "B", "")])
         with PlaywrightBrowserManager() as bm:
             obs, err = extract_flowchart_geometry(svg, sem, bm, source=self._SIMPLE_MMD)
@@ -742,8 +732,6 @@ class TestRealMmdcIntegration:
 
     def test_content_bounds_present_after_render(self):
         svg = self._render(self._SIMPLE_MMD)
-        if svg is None:
-            pytest.skip("mmdc render failed")
         sem = _make_semantic([("A", "Start"), ("B", "End")], [("A", "B", "")])
         with PlaywrightBrowserManager() as bm:
             obs, err = extract_flowchart_geometry(svg, sem, bm, source=self._SIMPLE_MMD)
