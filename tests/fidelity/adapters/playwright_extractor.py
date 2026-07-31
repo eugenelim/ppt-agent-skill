@@ -83,9 +83,9 @@ def _compute_crossing_count(
 ) -> int:
     """Count proper crossings between distinct relations.
 
-    Relations that share an attachment point (endpoint within endpoint_tol of
-    the other relation's endpoint) are excluded — they meet at a node rather
-    than crossing.
+    Segments near shared attachment points (endpoints within endpoint_tol of the
+    other relation's endpoint) are excluded — they meet at a node rather than
+    crossing. Segments farther from the shared node are still counted.
     """
     crossing = 0
     n = len(relations)
@@ -99,25 +99,32 @@ def _compute_crossing_count(
             pts_j = relations[j].sampled_points
             if len(pts_j) < 2:
                 continue
-            # Skip pairs whose attachment points are within endpoint_tol — they
-            # meet at a shared node rather than crossing.
-            shared = False
+            # Collect shared attachment points (endpoint pairs within tol).
+            shared_pts: list[tuple[float, float]] = []
             for ep_i in (pts_i[0], pts_i[-1]):
                 for ep_j in (pts_j[0], pts_j[-1]):
                     if (ep_i[0] - ep_j[0]) ** 2 + (ep_i[1] - ep_j[1]) ** 2 <= tol_sq:
-                        shared = True
-                        break
-                if shared:
-                    break
-            if shared:
-                continue
+                        shared_pts.append(ep_i)
             segs_j = list(zip(pts_j[:-1], pts_j[1:]))
             # Collect unique intersection locations (rounded to 1 SVG unit) to
             # avoid counting the same geometric crossing multiple times when the
             # polyline is densely sampled near a bend.
             seen: set[tuple[int, int]] = set()
             for s1 in segs_i:
+                # Skip segments whose endpoints lie within endpoint_tol of any
+                # shared attachment point — crossing there is node contact, not a
+                # topological route crossing.
+                if shared_pts and any(
+                    (pt[0] - sp[0]) ** 2 + (pt[1] - sp[1]) ** 2 <= tol_sq
+                    for pt in s1 for sp in shared_pts
+                ):
+                    continue
                 for s2 in segs_j:
+                    if shared_pts and any(
+                        (pt[0] - sp[0]) ** 2 + (pt[1] - sp[1]) ** 2 <= tol_sq
+                        for pt in s2 for sp in shared_pts
+                    ):
+                        continue
                     if _segments_intersect(*s1, *s2):
                         mx = int(round((s1[0][0] + s1[1][0] + s2[0][0] + s2[1][0]) / 4))
                         my = int(round((s1[0][1] + s1[1][1] + s2[0][1] + s2[1][1]) / 4))
@@ -164,6 +171,8 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     _node_id_pat = re.compile(r'^([A-Za-z0-9_][A-Za-z0-9_-]*)')
     # Include arrowless links (---, ===) so members on both sides are collected.
     _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>|---+|===[=]*')
+    # Mermaid directive keywords that can appear inside subgraphs — not node IDs.
+    _directive_kw = frozenset(('class', 'classDef', 'style', 'click', 'linkStyle', 'callback'))
 
     def _close_entry(entry: dict) -> None:
         """Assign a deferred ID and increment the counter; backfill waiting children."""
@@ -221,21 +230,25 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
 
         if stack and stripped and not stripped.startswith(('%%', '//', 'flowchart', 'graph', 'direction')):
             # Collect all node IDs referenced on this line (node defs and edge endpoints).
-            if _arrow_pat.search(stripped):
-                clean = re.sub(r'\|[^|]*\|', '', stripped)
-                parts = re.split(r'-+[-.=]*>|=[=]+>|---+|===[=]*|&', clean)
-                for part in parts:
-                    m2 = _node_id_pat.match(part.strip())
+            # Split on top-level semicolons first so `A --> B; C --> D` yields both A, B, C, D.
+            stmts = [s.strip() for s in stripped.split(';') if s.strip()]
+            for stmt in stmts:
+                if _arrow_pat.search(stmt):
+                    clean = re.sub(r'\|[^|]*\|', '', stmt)
+                    parts = re.split(r'-+[-.=]*>|=[=]+>|---+|===[=]*|&', clean)
+                    for part in parts:
+                        m2 = _node_id_pat.match(part.strip())
+                        if m2:
+                            nid = m2.group(1)
+                            if nid not in stack[-1]["members"]:
+                                stack[-1]["members"].append(nid)
+                else:
+                    m2 = _node_id_pat.match(stmt)
                     if m2:
                         nid = m2.group(1)
-                        if nid not in stack[-1]["members"]:
+                        # Skip Mermaid directive keywords — not node identifiers.
+                        if nid not in _directive_kw and nid not in stack[-1]["members"]:
                             stack[-1]["members"].append(nid)
-            else:
-                m2 = _node_id_pat.match(stripped)
-                if m2:
-                    nid = m2.group(1)
-                    if nid not in stack[-1]["members"]:
-                        stack[-1]["members"].append(nid)
 
     # Drain unclosed subgraphs (malformed source)
     while stack:
@@ -425,12 +438,28 @@ _JS_EXTRACT = """
         textBBox = svgBBox(textEl);
       }
     }
-    // Count rendered text lines: <br> elements inside foreignObject, or
-    // top-level <tspan> elements inside a <text> element.
+    // Count rendered text lines.
+    // For foreignObject labels: prefer explicit <br> count; fall back to counting
+    // unique rendered line-box top positions via the Range API (handles CSS wrapping).
+    // For SVG text labels: count top-level <tspan> elements.
     let textLines = 1;
     if (fo && parseFloat(fo.getAttribute('width') || '0') > 0) {
       const brs = fo.querySelectorAll('br');
-      if (brs.length > 0) textLines = brs.length + 1;
+      if (brs.length > 0) {
+        textLines = brs.length + 1;
+      } else {
+        // CSS-wrapped: count rendered line boxes via Range client rects.
+        const innerSpan = fo.querySelector('.nodeLabel') || fo.querySelector('span');
+        if (innerSpan) {
+          try {
+            const range = document.createRange();
+            range.selectNodeContents(innerSpan);
+            const rects = range.getClientRects();
+            const tops = new Set(Array.from(rects).filter(r => r.height > 2).map(r => Math.round(r.top)));
+            if (tops.size > 1) textLines = tops.size;
+          } catch(_) {}
+        }
+      }
     } else {
       const tspans = g.querySelectorAll('text > tspan');
       if (tspans.length > 1) textLines = tspans.length;
@@ -583,9 +612,25 @@ _JS_EXTRACT = """
     });
   }
 
+  // Edge label bboxes — included in content_bounds so long labels extending
+  // beyond node boxes are not clipped from the tight content region.
+  const edgeLabelBboxes = [];
+  for (const labelG of svg.querySelectorAll('g.label[data-id]')) {
+    const fo = labelG.querySelector('foreignObject');
+    if (!fo) continue;
+    const fw = parseFloat(fo.getAttribute('width') || '0');
+    const fh = parseFloat(fo.getAttribute('height') || '0');
+    if (fw <= 0 || fh <= 0) continue;
+    const bb = svgBBox(labelG);
+    if (bb && (bb.width > 0 || bb.height > 0)) {
+      edgeLabelBboxes.push(bb);
+    }
+  }
+
   return {
     canvas_bounds: canvasBounds, viewbox: vbStr,
     entities, groups, relations: extractedRelations,
+    edge_label_bboxes: edgeLabelBboxes,
     errors: {entities: entityErrors, groups: groupErrors, relations: relationErrors},
   };
 }
@@ -836,7 +881,7 @@ def _build_observation(
                 containment.append((member, sg["id"]))
     containment.sort()
 
-    # Content bounds: union of entity boxes + group boxes + relation samples
+    # Content bounds: union of entity boxes + group boxes + relation samples + edge labels
     all_xs: list[float] = []
     all_ys: list[float] = []
     for e in entities:
@@ -849,6 +894,10 @@ def _build_observation(
         for pt in r.sampled_points:
             all_xs.append(pt[0])
             all_ys.append(pt[1])
+    for lbb in raw.get("edge_label_bboxes", []):
+        lb = _to_bbox(lbb)
+        all_xs += [lb.x, lb.right]
+        all_ys += [lb.y, lb.bottom]
 
     content_bounds: BoundingBox | None = None
     if all_xs:

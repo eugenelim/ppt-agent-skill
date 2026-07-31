@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:39:43.276737+00:00",
+  "capture_timestamp": "2026-07-31T18:59:39.222285+00:00",
   "case_id": "flowchart.diamond.branch",
   "diagnostics": [],
   "environment": {
@@ -51,7 +51,7 @@
           "x": 150.1875,
           "y": 149.8281
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -67,7 +67,7 @@
           "x": 207.6328,
           "y": 578.0469
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -83,7 +83,7 @@
           "x": 38,
           "y": 314.1562
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -99,7 +99,7 @@
           "x": 285.5625,
           "y": 438.6016
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -115,7 +115,7 @@
           "x": 298.4766,
           "y": 314.1562
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -131,7 +131,7 @@
           "x": 110.4883,
           "y": 438.6016
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -147,7 +147,7 @@
           "x": 173.3984,
           "y": 15.5
         },
-        "text_lines": 1
+        "text_lines": 2
       }
     ],
     "groups": [],

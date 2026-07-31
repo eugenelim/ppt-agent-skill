@@ -14,9 +14,10 @@ Harden the existing Mermaid fidelity harness (tools/mermaid_fidelity/, tests/fid
 - Source freshness (stale oracle) is detectable
 - Reports communicate what was actually evaluated
 
-This implementation is scoped to what is achievable without live mmdc/browser access.
-Items requiring oracle recapture or browser probing (ACs 14, 15, 16, 18, 19, 20) are
-infrastructure-ready but deferred to a follow-on mmdc-access pass.
+This implementation now includes browser-based geometry extraction via a Playwright DOM
+extractor (`tests/fidelity/adapters/playwright_extractor.py`). All ACs are implemented;
+none are deferred. Oracle recapture, connector path sampling, text-line measurement, and
+Playwright/Chromium provenance are all shipped in the `eugene/codex-review-muscat-v2` branch.
 
 ## Boundaries
 
@@ -40,13 +41,13 @@ infrastructure-ready but deferred to a follow-on mmdc-access pass.
 - [x] AC11: Shape compatibility actually compared (None vs value is caught)
 - [x] AC12: Group existence, nesting, and membership compared under `containment` strict
 - [x] AC13: Containment tuples consistently use `(child_id, parent_id)` convention
-- [ ] AC14: Active reference observations contain entity/group/relation geometry (deferred: mmdc-geometry-capture)
-- [ ] AC15: Connector paths sampled (deferred: browser-geometry-capture)
-- [ ] AC16: Scored metrics use actual measured geometry (deferred: mmdc-geometry-capture)
+- [x] AC14: Active reference observations contain entity/group/relation geometry — Playwright DOM extractor captures per-entity/group/relation geometry from mmdc-rendered SVGs
+- [x] AC15: Connector paths sampled — 32-point uniform sampling via `getTotalLength`/`getPointAtLength` with CTM transformation
+- [x] AC16: Scored metrics use actual measured geometry — content_bounds, text_lines, crossing_count, path_length captured per oracle
 - [x] AC17: Native clipping/overlap/containment quality checks run on real SVG output
 - [x] AC18: All 13 active cases have fresh oracle observations — 24 cases recaptured with mmdc 11.15.0
 - [x] AC19: All active observations include `source_sha256`; stale oracle detected — recapture via mermaid-p3 Stage 13
-- [ ] AC20: Exact Mermaid/mmdc/Node/Playwright/Chromium provenance (deferred: browser-probing)
+- [x] AC20: Exact Mermaid/mmdc/Node/Playwright/Chromium provenance — `_env_identity(probe_browser=True)` captures playwright_version, chromium_revision, viewport, locale, mermaid_config_hash; stored in environment.json
 - [x] AC21: Oracle capture is transactional (temp dir → validate → atomically replace)
 - [x] AC22: Active determinism runs use only successfully rendered active cases
 - [x] AC23: CI compares native output with committed observations without live recapture
@@ -55,16 +56,14 @@ infrastructure-ready but deferred to a follow-on mmdc-access pass.
 - [x] AC26: All existing tests continue to pass
 - [x] AC27: Reports do not imply planned sequence/ER cases passed
 
-Deferred AC anchors map to follow-on work items:
-- **mmdc-oracle-recapture**: re-run `capture-reference` with mmdc available; commits new oracle JSON with `source_sha256`; enables ACs 18 and 19
-- **mmdc-geometry-capture**: extend reference adapter to extract per-entity geometry from real mmdc renders; enables ACs 14 and 16
-- **browser-geometry-capture**: extend reference adapter to sample connector paths via Playwright; enables AC 15
-- **browser-probing**: query mmdc/Playwright/Chromium version at capture time; enables AC 20
+All ACs are now implemented. No deferred anchors remain.
 
 ## Testing Strategy
 
-All tests are unit/integration tests (browser-free). Each AC that is in-scope has a
-corresponding test or is covered by a modified existing test.
+Tests are primarily unit/integration tests (browser-free, `pytest -m parity_fast`).
+Browser-dependent tests (`--run-browser`) exercise the Playwright extractor end-to-end
+but are not CI-gated in Phase 1 (oracle recapture uses `capture-reference` offline).
+Each AC has a corresponding test or is covered by a modified existing test.
 
 - Typed error regression: test that unrelated ValueError cannot produce NATIVE_UNSUPPORTED
 - Parse comparison: pure unit tests for all outcomes

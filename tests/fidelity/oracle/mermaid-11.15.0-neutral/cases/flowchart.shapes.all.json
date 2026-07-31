@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:39:40.800609+00:00",
+  "capture_timestamp": "2026-07-31T18:59:37.144420+00:00",
   "case_id": "flowchart.shapes.all",
   "diagnostics": [],
   "environment": {
@@ -51,7 +51,7 @@
           "x": 123.0547,
           "y": 23
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -67,7 +67,7 @@
           "x": 126.0938,
           "y": 125.5
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -83,7 +83,7 @@
           "x": 126.5078,
           "y": 258.2969
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -99,7 +99,7 @@
           "x": 48.8125,
           "y": 391.5078
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -115,7 +115,7 @@
           "x": 217.6953,
           "y": 391.5078
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -131,7 +131,7 @@
           "x": 40.2031,
           "y": 526.2344
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -147,7 +147,7 @@
           "x": 193.7969,
           "y": 526.2344
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -163,7 +163,7 @@
           "x": 46.6094,
           "y": 666.543
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -179,7 +179,7 @@
           "x": 209.2188,
           "y": 676.543
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -195,7 +195,7 @@
           "x": 67.1328,
           "y": 767.5392
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -211,7 +211,7 @@
           "x": 204.2266,
           "y": 767.5392
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -227,7 +227,7 @@
           "x": 34.25,
           "y": 855.0392
         },
-        "text_lines": 1
+        "text_lines": 2
       }
     ],
     "groups": [],

@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:39:54.378557+00:00",
+  "capture_timestamp": "2026-07-31T18:59:50.159684+00:00",
   "case_id": "flowchart.text.metrics.tb",
   "diagnostics": [],
   "environment": {
@@ -51,7 +51,7 @@
           "x": 38,
           "y": 23
         },
-        "text_lines": 1
+        "text_lines": 4
       },
       {
         "bbox": {
@@ -67,7 +67,7 @@
           "x": 119.8047,
           "y": 170.5
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -83,7 +83,7 @@
           "x": 65.0469,
           "y": 273
         },
-        "text_lines": 1
+        "text_lines": 2
       }
     ],
     "groups": [],

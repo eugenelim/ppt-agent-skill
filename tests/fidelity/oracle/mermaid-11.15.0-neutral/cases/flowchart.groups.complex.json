@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:39:45.459240+00:00",
+  "capture_timestamp": "2026-07-31T18:59:41.480359+00:00",
   "case_id": "flowchart.groups.complex",
   "diagnostics": [],
   "environment": {
@@ -80,7 +80,7 @@
           "x": 190.3828,
           "y": 198
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -96,7 +96,7 @@
           "x": 73,
           "y": 325.5
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -112,7 +112,7 @@
           "x": 564.4922,
           "y": 198
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -128,7 +128,7 @@
           "x": 285.7812,
           "y": 644.2086
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -144,7 +144,7 @@
           "x": 271.8828,
           "y": 521.6901
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -160,7 +160,7 @@
           "x": 533.0234,
           "y": 48
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -176,7 +176,7 @@
           "x": 288.0156,
           "y": 325.5
         },
-        "text_lines": 1
+        "text_lines": 2
       }
     ],
     "groups": [

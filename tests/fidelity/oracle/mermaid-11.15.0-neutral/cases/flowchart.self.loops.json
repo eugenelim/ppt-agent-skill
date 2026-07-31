@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:40:01.004101+00:00",
+  "capture_timestamp": "2026-07-31T18:59:57.281835+00:00",
   "case_id": "flowchart.self.loops",
   "diagnostics": [],
   "environment": {
@@ -51,7 +51,7 @@
           "x": 38,
           "y": 116.825
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -67,7 +67,7 @@
           "x": 195.4844,
           "y": 195.6
         },
-        "text_lines": 1
+        "text_lines": 2
       },
       {
         "bbox": {
@@ -83,7 +83,7 @@
           "x": 378.8281,
           "y": 23
         },
-        "text_lines": 1
+        "text_lines": 2
       }
     ],
     "groups": [],
