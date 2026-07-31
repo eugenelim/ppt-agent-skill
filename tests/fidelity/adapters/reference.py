@@ -311,7 +311,8 @@ def _extract_node_ids_from_segment(segment: str) -> list[str]:
     parts.append(segment[start:])
     for part in parts:
         part = part.strip()
-        m = re.match(r'([A-Za-z0-9_]+)', part)
+        # Mermaid node IDs may contain hyphens (e.g. api-v1, db-main)
+        m = re.match(r'([A-Za-z0-9_][A-Za-z0-9_-]*)', part)
         if m:
             result.append(m.group(1))
     return result

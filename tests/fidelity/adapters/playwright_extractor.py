@@ -145,7 +145,7 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     stack: list[dict] = []
     auto_idx = 0  # increments when each group CLOSES (matches mmdc's subGraphN order)
 
-    _node_id_pat = re.compile(r'^([A-Za-z0-9_]+)')
+    _node_id_pat = re.compile(r'^([A-Za-z0-9_][A-Za-z0-9_-]*)')
     _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>')
 
     def _close_entry(entry: dict) -> None:
@@ -317,15 +317,22 @@ _JS_EXTRACT = """
 
   function samplePath(pathEl, n, ctm) {
     const pts = [];
-    let len = 0;
-    try { len = pathEl.getTotalLength(); } catch(e) {}
-    if (len <= 0) return {points: [], length: 0};
+    let localLen = 0;
+    try { localLen = pathEl.getTotalLength(); } catch(e) {}
+    if (localLen <= 0) return {points: [], length: 0};
     for (let i = 0; i < n; i++) {
-      const t = n === 1 ? 0 : (i / (n - 1)) * len;
+      const t = n === 1 ? 0 : (i / (n - 1)) * localLen;
       const p = pathEl.getPointAtLength(t);
       pts.push(ctm ? applyCtm(p.x, p.y, ctm) : [p.x, p.y]);
     }
-    return {points: pts, length: len};
+    // Compute arc length from root-coordinate points so the result is consistent
+    // with the CTM-transformed sample positions (getTotalLength() is in local space).
+    let rootLen = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i][0] - pts[i-1][0], dy = pts[i][1] - pts[i-1][1];
+      rootLen += Math.sqrt(dx * dx + dy * dy);
+    }
+    return {points: pts, length: rootLen > 0 ? rootLen : localLen};
   }
 
   // Entity extraction -----------------------------------------------------
