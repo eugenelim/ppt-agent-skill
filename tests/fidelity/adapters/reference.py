@@ -351,6 +351,10 @@ def _find_arrow_outside_brackets(text: str) -> tuple[int, int] | None:
             m = re.match(r'-[-.=]*>', text[i:])
             if m:
                 return (i, i + len(m.group()))
+            # Endpoint markers: --x (cross), --o (circle)
+            m = re.match(r'--[xo]', text[i:])
+            if m:
+                return (i, i + len(m.group()))
             # Arrowless solid link: --- or longer (e.g. "A --- B", "A -- text --- B")
             m = re.match(r'---+', text[i:])
             if m:
@@ -406,10 +410,19 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
 
     for line in source.splitlines():
         raw = line.strip()
-        if not raw or raw.startswith(
-            ('%%', '//', 'subgraph', 'end', 'flowchart', 'graph', 'direction')
-        ):
+        if not raw or raw.startswith(('%%', '//')):
             continue
+
+        # Inline header: `flowchart LR; A --> B` — strip up to and including first ';'.
+        if raw.startswith(('flowchart ', 'flowchart\t', 'graph ', 'graph\t',
+                            'direction ', 'subgraph', 'end')):
+            if ';' in raw:
+                # Keep the part after the first semicolon for inline statement parsing.
+                raw = raw[raw.index(';') + 1:].strip()
+                if not raw:
+                    continue
+            else:
+                continue
 
         # Split on top-level semicolons so `A --> B; C --> D` produces two statements.
         # Pipe labels like `A -->|wait; retry| B` must not be split at the inner ';'.
@@ -432,7 +445,7 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
         for stripped in stmts:
             if not stripped:
                 continue
-            if not any(a in stripped for a in ['-->', '-.->', '===', '==>', '---']):
+            if not any(a in stripped for a in ['-->', '-.->', '===', '==>', '---', '--x', '--o']):
                 continue
 
             # Split the statement into node-segments and per-arrow labels by

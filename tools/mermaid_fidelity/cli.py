@@ -211,10 +211,7 @@ def cmd_capture_reference(
                 save_json(obs, tmp_cases / f"{case.id}.json")
                 status = obs.status.value
                 print(f" {status}")
-                is_flowchart = (
-                    obs.parse_result is not None
-                    and obs.parse_result.diagram_type in ("flowchart", "graph")
-                )
+                is_flowchart = case.diagram in ("flowchart", "graph")
                 if obs.status not in (ComparisonStatus.PASS, ComparisonStatus.EXTRACTOR_GAP):
                     errors += 1
                 elif obs.status == ComparisonStatus.EXTRACTOR_GAP and is_flowchart:

@@ -245,13 +245,19 @@ class TestManifestIntegration:
 
 @pytest.mark.browser
 @pytest.mark.external_reference
+@pytest.mark.usefixtures("browser_lock")
 @pytest.mark.skipif(not _HAVE_MMDC, reason="requires mmdc")
 class TestReferenceAdapter:
     @pytest.fixture(scope="class")
     def adapter(self):
         sys.path.insert(0, str(_FIDELITY))
         from adapters.reference import ReferenceAdapter
-        return ReferenceAdapter()
+        a = ReferenceAdapter()
+        yield a
+        try:
+            a.close()
+        except Exception:
+            pass
 
     @pytest.fixture(scope="class")
     def profile(self):

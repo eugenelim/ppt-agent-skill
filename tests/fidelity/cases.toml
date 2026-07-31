@@ -29,10 +29,10 @@ source = "../fixtures/flowchart-groups-complex.mmd"
 diagram = "flowchart"
 lifecycle = "active"
 tags = ["groups", "containment", "edges"]
-strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "edge-endpoints", "containment"]
+strict = ["parse", "diagram-type", "entities", "relations", "labels", "direction", "edge-endpoints"]
 scored = ["entity-centers", "entity-sizes", "canvas-aspect", "connector-paths", "text-lines"]
 ignored = ["palette", "shadow", "corner-radius", "raw-dom-structure", "raw-pixels"]
-notes = "containment enabled: reference oracle now extracted via Playwright DOM (_parse_flowchart_subgraphs) rather than the regex-only mmdc adapter."
+notes = "containment gated: NativeSvgAdapter uses synthetic IDs (_g0/_g1/_g2) while reference has named IDs (Frontend/Backend/DataLayer); enable containment strict once ID alignment lands."
 
 [[case]]
 id = "flowchart.html.entities"
