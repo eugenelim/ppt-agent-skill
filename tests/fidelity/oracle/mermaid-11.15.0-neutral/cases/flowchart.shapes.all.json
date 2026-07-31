@@ -380,7 +380,7 @@
       {
         "bend_count": 3,
         "path_length": 100.5838,
-        "relation_id": "C__D__1",
+        "relation_id": "C__D__2",
         "sampled_points": [
           [
             128.7887,
@@ -525,7 +525,7 @@
       {
         "bend_count": 3,
         "path_length": 92.8635,
-        "relation_id": "C__E__2",
+        "relation_id": "C__E__3",
         "sampled_points": [
           [
             184.8122,
@@ -670,7 +670,7 @@
       {
         "bend_count": 0,
         "path_length": 93.229,
-        "relation_id": "D__F__3",
+        "relation_id": "D__F__4",
         "sampled_points": [
           [
             77.248,
@@ -815,7 +815,7 @@
       {
         "bend_count": 0,
         "path_length": 46,
-        "relation_id": "E__G__4",
+        "relation_id": "E__G__5",
         "sampled_points": [
           [
             236.8529,
@@ -960,7 +960,7 @@
       {
         "bend_count": 0,
         "path_length": 98.8116,
-        "relation_id": "F__H__5",
+        "relation_id": "F__H__6",
         "sampled_points": [
           [
             77.248,
@@ -1105,7 +1105,7 @@
       {
         "bend_count": 0,
         "path_length": 46,
-        "relation_id": "G__I__6",
+        "relation_id": "G__I__7",
         "sampled_points": [
           [
             236.8529,
@@ -1250,7 +1250,7 @@
       {
         "bend_count": 0,
         "path_length": 59.5009,
-        "relation_id": "H__J__7",
+        "relation_id": "H__J__8",
         "sampled_points": [
           [
             77.248,
@@ -1395,7 +1395,7 @@
       {
         "bend_count": 0,
         "path_length": 46.5041,
-        "relation_id": "I__K__8",
+        "relation_id": "I__K__9",
         "sampled_points": [
           [
             236.8529,
@@ -1540,7 +1540,7 @@
       {
         "bend_count": 0,
         "path_length": 46.006,
-        "relation_id": "J__L__9",
+        "relation_id": "J__L__10",
         "sampled_points": [
           [
             77.248,
@@ -1831,90 +1831,100 @@
       {
         "arrow": null,
         "attributes": {},
-        "id": "C__D__1",
+        "id": "B__C__1",
         "kind": "edge",
         "label": "",
         "order": 1,
+        "source": "B",
+        "target": "C"
+      },
+      {
+        "arrow": null,
+        "attributes": {},
+        "id": "C__D__2",
+        "kind": "edge",
+        "label": "",
+        "order": 2,
         "source": "C",
         "target": "D"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "C__E__2",
+        "id": "C__E__3",
         "kind": "edge",
         "label": "",
-        "order": 2,
+        "order": 3,
         "source": "C",
         "target": "E"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "D__F__3",
+        "id": "D__F__4",
         "kind": "edge",
         "label": "",
-        "order": 3,
+        "order": 4,
         "source": "D",
         "target": "F"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "E__G__4",
+        "id": "E__G__5",
         "kind": "edge",
         "label": "",
-        "order": 4,
+        "order": 5,
         "source": "E",
         "target": "G"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "F__H__5",
+        "id": "F__H__6",
         "kind": "edge",
         "label": "",
-        "order": 5,
+        "order": 6,
         "source": "F",
         "target": "H"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "G__I__6",
+        "id": "G__I__7",
         "kind": "edge",
         "label": "",
-        "order": 6,
+        "order": 7,
         "source": "G",
         "target": "I"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "H__J__7",
+        "id": "H__J__8",
         "kind": "edge",
         "label": "",
-        "order": 7,
+        "order": 8,
         "source": "H",
         "target": "J"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "I__K__8",
+        "id": "I__K__9",
         "kind": "edge",
         "label": "",
-        "order": 8,
+        "order": 9,
         "source": "I",
         "target": "K"
       },
       {
         "arrow": null,
         "attributes": {},
-        "id": "J__L__9",
+        "id": "J__L__10",
         "kind": "edge",
         "label": "",
-        "order": 9,
+        "order": 10,
         "source": "J",
         "target": "L"
       }

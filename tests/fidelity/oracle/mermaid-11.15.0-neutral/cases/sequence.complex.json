@@ -24,8 +24,8 @@
     "canvas_bounds": {
       "height": 715.0,
       "width": 850.0,
-      "x": -50.0,
-      "y": -10.0
+      "x": 0.0,
+      "y": 0.0
     },
     "containment": [],
     "content_bounds": null,
@@ -57,7 +57,6 @@
     "direction": null,
     "entities": [
       {
-        "attributes": {},
         "id": "Client",
         "kind": "participant",
         "label": "Client",
@@ -66,7 +65,6 @@
         "shape": null
       },
       {
-        "attributes": {},
         "id": "AuthService",
         "kind": "participant",
         "label": "AuthService",
@@ -75,7 +73,6 @@
         "shape": null
       },
       {
-        "attributes": {},
         "id": "API",
         "kind": "participant",
         "label": "API",
@@ -84,7 +81,6 @@
         "shape": null
       },
       {
-        "attributes": {},
         "id": "DB",
         "kind": "participant",
         "label": "DB",

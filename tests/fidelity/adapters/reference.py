@@ -222,14 +222,26 @@ def _extract_semantic_from_svg(svg: str, source: str) -> SemanticDiagram:
         return SemanticDiagram(diagram_type="er", direction=None, entities=entities)
 
     if "sequencediagram" in diagram_type:
-        # Extract participants from source as fallback
-        participants = re.findall(
+        # Explicit participant/actor declarations
+        explicit = re.findall(
             r'(?:participant|actor)\s+([A-Za-z0-9_][A-Za-z0-9_ ]*?)(?:\s+as\s+|\s*\n)',
             source, re.IGNORECASE,
         )
+        # Implicit participants from message endpoints: A ->> B: text, A -> B, etc.
+        implicit: list[str] = []
+        for m in re.finditer(
+            r'([A-Za-z0-9_][A-Za-z0-9_ ]*?)\s*(?:-->>|->|->>|-->|-x|-\))\s*'
+            r'([A-Za-z0-9_][A-Za-z0-9_ ]*?)\s*:',
+            source,
+        ):
+            implicit.extend([m.group(1).strip(), m.group(2).strip()])
+        # Deduplicate preserving order; explicit declarations take priority.
+        seen: dict[str, None] = dict.fromkeys(p.strip() for p in explicit)
+        for p in implicit:
+            seen.setdefault(p, None)
         entities = [
-            Entity(id=p.strip(), kind="participant", label=p.strip(), shape=None, parent_id=None, order=i)
-            for i, p in enumerate(dict.fromkeys(participants))
+            Entity(id=p, kind="participant", label=p, shape=None, parent_id=None, order=i)
+            for i, p in enumerate(seen)
         ]
         # Messages from SVG message elements
         ordered_events: list[OrderedEvent] = []
@@ -322,7 +334,8 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
     """Extract (source, target, label) from Mermaid flowchart source.
 
     Handles: A --> B, A -->|label| B, A -- label --> B,
-             A --> B & C & D (multi-target), A & B --> C (multi-source).
+             A --> B & C & D (multi-target), A & B --> C (multi-source),
+             A --> B --> C (chained — produces two edges).
     """
     edges: list[tuple[str, str, str]] = []
 
@@ -335,40 +348,50 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
         if not any(a in stripped for a in ['-->', '-.->', '===', '==>', '---']):
             continue
 
-        arrow_span = _find_arrow_outside_brackets(stripped)
-        if arrow_span is None:
-            continue
+        # Split the line into node-segments and per-arrow labels by iterating
+        # arrows. Adjacent segments i and i+1 form one edge with labels[i].
+        segments: list[str] = []
+        labels: list[str] = []
+        remaining = stripped
+        while True:
+            arrow_span = _find_arrow_outside_brackets(remaining)
+            if arrow_span is None:
+                segments.append(remaining)
+                break
+            a_start, a_end = arrow_span
+            before = remaining[:a_start]
+            after = remaining[a_end:]
 
-        a_start, a_end = arrow_span
-        before = stripped[:a_start]
-        after = stripped[a_end:]
+            # Check for pipe label immediately after arrow
+            label = ""
+            after_stripped = after.strip()
+            if after_stripped.startswith('|'):
+                pipe_end = after_stripped.find('|', 1)
+                if pipe_end > 0:
+                    label = _strip_html(after_stripped[1:pipe_end]).strip()
+                    after = after_stripped[pipe_end + 1:]
+            # Dash-text style: A -- text --> B. Strip bracket/quote content first
+            # so node labels like A["up -- down"] don't corrupt label extraction.
+            elif '--' in before:
+                _stripped_before = re.sub(r'"[^"]*"|\[[^\]]*\]|\([^)]*\)|\{[^}]*\}', '', before)
+                if '--' in _stripped_before:
+                    m_text = re.match(r'(.+?)\s+--\s+(.+?)\s*$', before)
+                    if m_text:
+                        before = m_text.group(1)
+                        label = _strip_html(m_text.group(2)).strip()
 
-        # Check for pipe label immediately after arrow
-        label = ""
-        after_stripped = after.strip()
-        if after_stripped.startswith('|'):
-            pipe_end = after_stripped.find('|', 1)
-            if pipe_end > 0:
-                label = _strip_html(after_stripped[1:pipe_end]).strip()
-                after = after_stripped[pipe_end + 1:]
-        # Also handle dash-text style: A -- text --> B (text between double-dash
-        # before the arrow). Strip bracket/quote content first so that node labels
-        # like A["up -- down"] don't corrupt label extraction.
-        elif '--' in before:
-            _stripped_before = re.sub(r'"[^"]*"|\[[^\]]*\]|\([^)]*\)|\{[^}]*\}', '', before)
-            if '--' in _stripped_before:
-                m_text = re.match(r'(.+?)\s+--\s+(.+?)\s*$', before)
-                if m_text:
-                    before = m_text.group(1)
-                    label = _strip_html(m_text.group(2)).strip()
+            segments.append(before)
+            labels.append(label)
+            remaining = after
 
-        sources = _extract_node_ids_from_segment(before)
-        targets = _extract_node_ids_from_segment(after)
-
-        for src in sources:
-            for tgt in targets:
-                if src and tgt:
-                    edges.append((src, tgt, label))
+        for i in range(len(segments) - 1):
+            sources = _extract_node_ids_from_segment(segments[i])
+            targets = _extract_node_ids_from_segment(segments[i + 1])
+            lbl = labels[i] if i < len(labels) else ""
+            for src in sources:
+                for tgt in targets:
+                    if src and tgt:
+                        edges.append((src, tgt, lbl))
 
     return edges
 
@@ -545,6 +568,7 @@ class ReferenceAdapter:
         geometry: GeometryObservation | None = None
         status = ComparisonStatus.PASS
         reason: str | None = None
+        used_browser = False
 
         if diagram_type in ("flowchart", "graph"):
             try:
@@ -562,6 +586,7 @@ class ReferenceAdapter:
                     timezone=profile.timezone,
                     reduced_motion=profile.reduced_motion,
                 )
+                used_browser = True
                 if error_reason is not None:
                     status = ComparisonStatus.EXTRACTOR_GAP
                     reason = error_reason
@@ -581,9 +606,9 @@ class ReferenceAdapter:
             error_category=None, source_position=None,
         )
 
-        # Build env after geometry extraction so the browser (if opened for
-        # flowchart capture) has already populated chromium_revision.
-        env = _env_identity(profile, self)
+        # Build env after geometry extraction; pass used_browser so chromium_revision
+        # is only recorded for observations that actually launched the browser.
+        env = _env_identity(profile, self, used_browser=used_browser)
 
         return Observation(
             schema_version=1, case_id=case.id,
@@ -609,7 +634,11 @@ def _profile_font_family(profile: RenderProfile) -> str:
     return "trebuchet ms, verdana, arial, sans-serif"
 
 
-def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = None) -> EnvironmentIdentity:
+def _env_identity(
+    profile: RenderProfile,
+    adapter: "ReferenceAdapter | None" = None,
+    used_browser: bool = False,
+) -> EnvironmentIdentity:
     cfg_hash = ""
     if profile.mermaid_config:
         cfg_hash = hashlib.sha256(
@@ -623,9 +652,10 @@ def _env_identity(profile: RenderProfile, adapter: "ReferenceAdapter | None" = N
             bm = adapter._browser_manager
             if bm is not None:
                 pw_version = bm.playwright_version()  # importlib.metadata — no browser launch
-                # Only read chromium version if the browser is already open; calling
-                # browser_version() on a fresh manager would launch Chromium unexpectedly.
-                if bm._browser is not None:
+                # Only record chromium version when this observation actually used the browser.
+                # Checking bm._browser is not None would bleed the browser version into
+                # non-flowchart observations that run after a flowchart case opened the browser.
+                if used_browser and bm._browser is not None:
                     chromium_version = bm.browser_version()
             else:
                 from adapters.playwright_extractor import PlaywrightBrowserManager
