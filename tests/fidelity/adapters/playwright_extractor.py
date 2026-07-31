@@ -460,7 +460,7 @@ _JS_EXTRACT = """
   const cyclicPaths = {};
   for (const path of svg.querySelectorAll('path[data-id]')) {
     const dataId = path.getAttribute('data-id') || '';
-    const m = dataId.match(/^([A-Za-z0-9_]+)-cyclic-special-(\\d+|mid)$/);
+    const m = dataId.match(/^([A-Za-z0-9_][A-Za-z0-9_-]*)-cyclic-special-(\\d+|mid)$/);
     if (m) {
       const nid = m[1];
       if (!cyclicPaths[nid]) cyclicPaths[nid] = [];
