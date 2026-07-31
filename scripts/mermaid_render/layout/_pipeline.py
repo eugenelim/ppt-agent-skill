@@ -3317,7 +3317,13 @@ def _cbe_place_label(
     return best
 
 
-def _equalize_corridors(routed: "list", nodes: "dict", grp_bboxes: "dict", direction: str = "TB") -> None:
+def _equalize_corridors(
+    routed: "list",
+    nodes: "dict",
+    grp_bboxes: "dict",
+    direction: str = "TB",
+    gate_coords: "frozenset" = frozenset(),
+) -> None:
     """In-place post-processing: stagger shared horizontal exit rails and
     separate shared vertical corridors so no two routes overlap.
 
@@ -3328,6 +3334,10 @@ def _equalize_corridors(routed: "list", nodes: "dict", grp_bboxes: "dict", direc
     Pass B — vertical corridor separation: when multiple routes share the same
     vertical x channel (within 4 px) with overlapping y ranges, their x
     positions are redistributed with equal LANE_GAP spacing.
+
+    gate_coords: set of (x, y) boundary-gate waypoints (rounded to 0.1 px).
+    Routes whose waypoints include a gate coordinate are excluded from Pass A
+    and Pass B so that gate-crossing points are never displaced.
     """
     from collections import defaultdict
 
@@ -3338,12 +3348,21 @@ def _equalize_corridors(routed: "list", nodes: "dict", grp_bboxes: "dict", direc
     STAGGER = 12.0   # vertical gap between staggered horizontal rails
     LANE_GAP = 14.0  # horizontal gap between parallel vertical lanes
 
+    def _has_gate(wps: "list") -> bool:
+        if not gate_coords:
+            return False
+        return any((round(wx, 1), round(wy, 1)) in gate_coords for wx, wy in wps)
+
     # ── Pass A: stagger horizontal exit rails ────────────────────────────────
     # Group routes by (src_node_id, exit_y) when first segment is horizontal.
+    # Skip routes that pass through a gate waypoint — staggering would displace
+    # the gate crossing off its declared position.
     exit_groups: "dict" = defaultdict(list)
     for i, r in enumerate(routed):
         wps = r.get("waypoints", [])
         if len(wps) < 3:
+            continue
+        if _has_gate(wps):
             continue
         p0, p1 = wps[0], wps[1]
         if abs(p0[1] - p1[1]) < 1.0 and abs(p0[0] - p1[0]) > 8.0:
@@ -3751,10 +3770,14 @@ def _reroute_cross_boundary_edges(
         # When the A* reaches dest_top_y at a different x and slides horizontally
         # to the port, insert a turn 16px above the destination so the arrow enters
         # from above pointing straight down.
+        # Skip when a gate point sits at dest.y: the group boundary coincides with
+        # the node top, so the turn would go above the boundary (outside the group),
+        # and the trim loop would erase the gate waypoint.
         if _is_tb and len(out) >= 2:
             _pen, _lst = out[-2], out[-1]
             if (_pen[1] == _lst[1]                              # final segment horizontal
-                    and abs(_lst[1] - float(dn.y)) < 2.0):     # at destination's top face
+                    and abs(_lst[1] - float(dn.y)) < 2.0       # at destination's top face
+                    and not any(abs(_gy - _lst[1]) < 2.0 for (_, _gy) in _gate_pts)):
                 _vturn = 16.0
                 _yt = _lst[1] - _vturn
                 # Trim all trailing points at dest.y before inserting Z-turn,
@@ -3778,7 +3801,11 @@ def _reroute_cross_boundary_edges(
 
     # Equalise overlapping corridors: stagger shared horizontal rails and
     # separate shared vertical lanes so no two routes overlap.
-    _equalize_corridors(routed, nodes, grp_bboxes, direction=direction)
+    # Gate coordinates are excluded from equalization to preserve gate waypoints.
+    _all_gate_coords = frozenset(
+        (round(g.point.x, 1), round(g.point.y, 1)) for g in gates
+    )
+    _equalize_corridors(routed, nodes, grp_bboxes, direction=direction, gate_coords=_all_gate_coords)
 
     # Second pass: place labels of rerouted edges clear of every other route.
     all_segs: "list[tuple]" = []
