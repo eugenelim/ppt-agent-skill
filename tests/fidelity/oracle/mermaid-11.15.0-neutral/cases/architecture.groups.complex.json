@@ -1,11 +1,11 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-22T18:05:50.715045+00:00",
+  "capture_timestamp": "2026-07-31T21:00:47.898995+00:00",
   "case_id": "architecture.groups.complex",
   "diagnostics": [],
   "environment": {
-    "chromium_revision": "1228",
-    "css_profile_hash": null,
+    "chromium_revision": "149.0.7827.55",
+    "css_profile_hash": "",
     "device_scale_factor": 1,
     "font_info": {
       "requested": "Helvetica Neue, Helvetica, Arial, sans-serif"
@@ -14,8 +14,10 @@
     "mermaid_config_hash": "ba18222622882470",
     "mermaid_integrity": "508c39b847f0460f",
     "mermaid_version": "11.15.0",
-    "playwright_version": "bundled-in-mmdc",
+    "node_version": "v26.4.0",
+    "playwright_version": "1.61.0",
     "reduced_motion": true,
+    "renderer_chromium_revision": "Google Chrome for Testing 148.0.7778.97",
     "timezone": "UTC",
     "viewport_height": 900,
     "viewport_width": 1200
@@ -24,12 +26,12 @@
     "canvas_bounds": {
       "height": 463.4316,
       "width": 679.6112,
-      "x": -293.3056,
-      "y": -166.2158
+      "x": 0.0,
+      "y": 0.0
     },
     "containment": [],
     "content_bounds": null,
-    "coordinate_convention": "svg-top-left",
+    "coordinate_convention": "css-top-left",
     "crossing_count": null,
     "entities": [],
     "groups": [],
@@ -37,7 +39,7 @@
     "viewbox": "-293.3056182861328 -166.21580505371094 679.6112060546875 463.431640625"
   },
   "implementation": {
-    "adapter_version": "1.0.0",
+    "adapter_version": "2.0.0",
     "integrity": "508c39b847f0460f",
     "name": "mermaid-cli",
     "profile_id": "mermaid-neutral",

@@ -63,6 +63,7 @@ def _make_impl() -> ImplementationIdentity:
 def _make_env() -> EnvironmentIdentity:
     return EnvironmentIdentity(
         mermaid_version="1.0", mermaid_integrity=None,
+        node_version="0",
         playwright_version="1.0", chromium_revision="0",
         viewport_width=1200, viewport_height=900,
         device_scale_factor=1.0, locale="en-US", timezone="UTC",
@@ -242,13 +243,21 @@ class TestManifestIntegration:
 
 # ── reference adapter (requires mmdc) ─────────────────────────────────────────
 
+@pytest.mark.browser
+@pytest.mark.external_reference
+@pytest.mark.usefixtures("browser_lock")
 @pytest.mark.skipif(not _HAVE_MMDC, reason="requires mmdc")
 class TestReferenceAdapter:
     @pytest.fixture(scope="class")
     def adapter(self):
         sys.path.insert(0, str(_FIDELITY))
         from adapters.reference import ReferenceAdapter
-        return ReferenceAdapter()
+        a = ReferenceAdapter()
+        yield a
+        try:
+            a.close()
+        except Exception:
+            pass
 
     @pytest.fixture(scope="class")
     def profile(self):

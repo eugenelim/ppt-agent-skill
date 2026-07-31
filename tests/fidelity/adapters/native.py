@@ -116,6 +116,7 @@ def _env_identity(profile: RenderProfile) -> EnvironmentIdentity:
     return EnvironmentIdentity(
         mermaid_version="n/a (native renderer — no mermaid.js)",
         mermaid_integrity=None,
+        node_version="n/a",
         playwright_version=pw_version,
         chromium_revision="1228",
         viewport_width=profile.viewport_width,
