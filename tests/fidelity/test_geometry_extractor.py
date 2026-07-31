@@ -647,12 +647,13 @@ class TestRealMmdcIntegration:
 
     def _render(self, source: str) -> str:
         """Run mmdc on source, return SVG. Skips if mmdc absent; fails on render error."""
-        import shutil
         import subprocess
         import tempfile
+        import sys as _sys
         from pathlib import Path as _P
-        mmdc_path = shutil.which("mmdc") or "/opt/homebrew/bin/mmdc"
-        if not _P(mmdc_path).exists():
+        _sys.path.insert(0, str(_P(__file__).parent))
+        from adapters.reference import _MMDC_PATH  # same resolver as ReferenceAdapter
+        if not _P(_MMDC_PATH).exists():
             pytest.skip("mmdc not installed")
         with tempfile.TemporaryDirectory() as tmp:
             mmd = _P(tmp) / "d.mmd"
@@ -660,7 +661,7 @@ class TestRealMmdcIntegration:
             mmd.write_text(source, encoding="utf-8")
             try:
                 r = subprocess.run(
-                    [mmdc_path, "-i", str(mmd), "-o", str(out), "--quiet"],
+                    [_MMDC_PATH, "-i", str(mmd), "-o", str(out), "--quiet"],
                     capture_output=True, timeout=60,
                 )
             except FileNotFoundError:

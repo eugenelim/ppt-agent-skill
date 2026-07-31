@@ -143,59 +143,68 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     """
     subgraphs: list[dict] = []
     stack: list[dict] = []
-    auto_idx = 0  # counter for implicit-title subgraphs (matches mmdc's subGraphN)
+    auto_idx = 0  # increments when each group CLOSES (matches mmdc's subGraphN order)
 
-    # id [label] form: first group is the bare ID token, second is optional label
-    _sg_explicit = re.compile(
-        r'subgraph\s+([A-Za-z0-9_.\-]+)'
-        r'(?:\s*\[\s*"?([^"\]]*)"?\s*\])?'
-        r'\s*$',
-    )
     _node_id_pat = re.compile(r'^([A-Za-z0-9_]+)')
     _arrow_pat = re.compile(r'-+[-.=]*>|=[=]+>')
+
+    def _close_entry(entry: dict) -> None:
+        """Assign a deferred ID and increment the counter; backfill waiting children."""
+        nonlocal auto_idx
+        if entry["id"] is None:
+            entry["id"] = f"subGraph{auto_idx}"
+        auto_idx += 1
+        # Backfill any already-closed children whose parent was implicit at their
+        # close time (i.e. it hadn't been assigned an ID yet).
+        entry_id = entry["id"]
+        for sg in subgraphs:
+            if sg.get("_deferred_parent") is entry:
+                sg["parent"] = entry_id
+                del sg["_deferred_parent"]
 
     for line in source.splitlines():
         stripped = line.strip()
 
         if stripped == 'subgraph' or stripped.startswith('subgraph '):
-            # Capture the current counter without incrementing; Mermaid allocates
-            # subGraphN when the grammar production CLOSES (at 'end'), not when it
-            # opens. So we defer the increment to the 'end' handler below.
-            current_auto = auto_idx
-
             rest = stripped[len('subgraph'):].strip()
-            # Match: single-token id (with optional [label]) to end of string.
-            # If the match fails, rest is a multi-word implicit title.
+            # Single-token id (with optional [label]) anchored to end → explicit ID.
+            # Anything else is a multi-word implicit title; ID deferred to close.
             _id_then_end = re.match(
                 r'([A-Za-z0-9_.\-]+)(?:\s*\[\s*"?([^"\]]*)"?\s*\])?\s*$', rest
             )
             if _id_then_end:
-                sg_id = _id_then_end.group(1)
+                sg_id: str | None = _id_then_end.group(1)
                 sg_label = (_id_then_end.group(2) or sg_id).strip()
             elif rest:
-                # Multi-word title (no brackets): "subgraph My Group" → subGraphN
-                sg_id = f"subGraph{current_auto}"
+                sg_id = None  # implicit title; assigned in _close_entry
                 sg_label = rest
             else:
-                sg_id = f"subGraph{current_auto}"
-                sg_label = sg_id
+                sg_id = None
+                sg_label = ''
 
             sg_entry: dict = {"id": sg_id, "label": sg_label, "members": [], "parent": None}
-            if stack:
-                sg_entry["parent"] = stack[-1]["id"]
             stack.append(sg_entry)
             continue
 
         if stripped == 'end' and stack:
             finished = stack.pop()
+            _close_entry(finished)
+
+            # Resolve parent: if parent is on the stack with a known ID, record it now.
+            # If parent is still implicit (id=None), defer by storing a dict reference.
+            if stack:
+                parent_entry = stack[-1]
+                if parent_entry["id"] is not None:
+                    finished["parent"] = parent_entry["id"]
+                else:
+                    finished["_deferred_parent"] = parent_entry
+
             subgraphs.append(finished)
-            auto_idx += 1  # mirror Mermaid's close-order allocation
             continue
 
         if stack and stripped and not stripped.startswith(('%%', '//', 'flowchart', 'graph', 'direction')):
             # Collect all node IDs referenced on this line (node defs and edge endpoints).
             if _arrow_pat.search(stripped):
-                # Strip pipe labels (|text|) before splitting so "A -->|yes| B" → "A --> B"
                 clean = re.sub(r'\|[^|]*\|', '', stripped)
                 parts = re.split(r'-+[-.=]*>|=[=]+>|&', clean)
                 for part in parts:
@@ -211,8 +220,15 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
                     if nid not in stack[-1]["members"]:
                         stack[-1]["members"].append(nid)
 
+    # Drain unclosed subgraphs (malformed source)
     while stack:
-        subgraphs.append(stack.pop())
+        entry = stack.pop()
+        _close_entry(entry)
+        subgraphs.append(entry)
+
+    # Clean up any remaining deferred refs (shouldn't occur in valid Mermaid)
+    for sg in subgraphs:
+        sg.pop("_deferred_parent", None)
 
     return subgraphs
 
