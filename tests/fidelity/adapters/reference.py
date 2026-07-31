@@ -350,14 +350,16 @@ def _parse_flowchart_edges(source: str) -> list[tuple[str, str, str]]:
             if pipe_end > 0:
                 label = _strip_html(after_stripped[1:pipe_end]).strip()
                 after = after_stripped[pipe_end + 1:]
-        # Also handle dash-text style: A -- text --> B
-        # (text between double-dash before the arrow)
+        # Also handle dash-text style: A -- text --> B (text between double-dash
+        # before the arrow). Strip bracket/quote content first so that node labels
+        # like A["up -- down"] don't corrupt label extraction.
         elif '--' in before:
-            # Try to find inline label between -- and arrow
-            m_text = re.match(r'(.+?)\s+--\s+(.+?)\s*$', before)
-            if m_text:
-                before = m_text.group(1)
-                label = _strip_html(m_text.group(2)).strip()
+            _stripped_before = re.sub(r'"[^"]*"|\[[^\]]*\]|\([^)]*\)|\{[^}]*\}', '', before)
+            if '--' in _stripped_before:
+                m_text = re.match(r'(.+?)\s+--\s+(.+?)\s*$', before)
+                if m_text:
+                    before = m_text.group(1)
+                    label = _strip_html(m_text.group(2)).strip()
 
         sources = _extract_node_ids_from_segment(before)
         targets = _extract_node_ids_from_segment(after)
