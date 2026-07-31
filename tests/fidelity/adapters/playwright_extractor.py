@@ -157,11 +157,11 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
     for line in source.splitlines():
         stripped = line.strip()
 
-        if stripped.startswith('subgraph'):
-            # Mermaid increments its internal subGraphN counter for EVERY subgraph
-            # declaration, even ones with explicit IDs. Mirror that here.
+        if stripped == 'subgraph' or stripped.startswith('subgraph '):
+            # Capture the current counter without incrementing; Mermaid allocates
+            # subGraphN when the grammar production CLOSES (at 'end'), not when it
+            # opens. So we defer the increment to the 'end' handler below.
             current_auto = auto_idx
-            auto_idx += 1
 
             rest = stripped[len('subgraph'):].strip()
             # Match: single-token id (with optional [label]) to end of string.
@@ -189,6 +189,7 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
         if stripped == 'end' and stack:
             finished = stack.pop()
             subgraphs.append(finished)
+            auto_idx += 1  # mirror Mermaid's close-order allocation
             continue
 
         if stack and stripped and not stripped.startswith(('%%', '//', 'flowchart', 'graph', 'direction')):
@@ -367,7 +368,6 @@ _JS_EXTRACT = """
 
     // Text bbox and line count.
     let textBBox = null;
-    let textLines = 1;
     const fo = g.querySelector('foreignObject');
     if (fo) {
       const fw = parseFloat(fo.getAttribute('width') || '0');
@@ -375,19 +375,17 @@ _JS_EXTRACT = """
       if (fw > 0 && fh > 0) {
         textBBox = foBBox(fo) || svgBBox(fo);
         if (textBBox && textBBox.width <= 0) textBBox = null;
-        const brs = fo.querySelectorAll('br, p');
-        textLines = Math.max(1, brs.length);
       }
     }
     if (!textBBox) {
       const textEl = g.querySelector('text');
       if (textEl) {
         textBBox = svgBBox(textEl);
-        const tspans = textEl.querySelectorAll('tspan');
-        const ys = new Set(Array.from(tspans).map(ts => ts.getAttribute('y') || ts.getAttribute('dy')).filter(Boolean));
-        textLines = Math.max(1, ys.size || tspans.length);
       }
     }
+    // text_lines is always 1 here to match the native SVG adapter; multi-line
+    // scoring is deferred until native extraction implements line counting.
+    const textLines = 1;
 
     entities.push({entity_id: matchedId, bbox: outerBBox, text_bbox: textBBox, text_lines: textLines});
   }
@@ -795,10 +793,8 @@ def _build_observation(
     for g in groups:
         all_xs += [g.bbox.x, g.bbox.right]
         all_ys += [g.bbox.y, g.bbox.bottom]
-    for r in relations:
-        for p in r.sampled_points:
-            all_xs.append(p[0])
-            all_ys.append(p[1])
+    # Exclude relation sampled points: native adapter derives bounds from entities+groups
+    # only, so including edge waypoints here would create asymmetric normalization.
 
     content_bounds: BoundingBox | None = None
     if all_xs:
