@@ -41,9 +41,9 @@ Playwright/Chromium provenance are all shipped in the `eugene/codex-review-musca
 - [x] AC11: Shape compatibility actually compared (None vs value is caught)
 - [x] AC12: Group existence, nesting, and membership compared under `containment` strict
 - [x] AC13: Containment tuples consistently use `(child_id, parent_id)` convention
-- [x] AC14: Active reference observations contain entity/group/relation geometry — Playwright DOM extractor captures per-entity/group/relation geometry from mmdc-rendered SVGs
-- [x] AC15: Connector paths sampled — 32-point uniform sampling via `getTotalLength`/`getPointAtLength` with CTM transformation
-- [x] AC16: Scored metrics use actual measured geometry — content_bounds, text_lines, crossing_count, path_length captured per oracle
+- [~] AC14: Active reference observations contain entity/group/relation geometry — flowchart cases fully captured via Playwright DOM extractor; architecture geometry deferred (reference compare passes vacuously when reference side has no entities, by design)
+- [x] AC15: Connector paths sampled — 32-point uniform sampling via `getTotalLength`/`getPointAtLength` with CTM transformation (flowchart and self-loop cases)
+- [~] AC16: Scored metrics use actual measured geometry — reference-side relation geometry captured; native-side connector-path scoring deferred (NativeSvgAdapter emits relations=[], so connector-paths scored metric is vacuous)
 - [x] AC17: Native clipping/overlap/containment quality checks run on real SVG output
 - [x] AC18: All 13 active cases have fresh oracle observations — 24 cases recaptured with mmdc 11.15.0
 - [x] AC19: All active observations include `source_sha256`; stale oracle detected — recapture via mermaid-p3 Stage 13
@@ -56,7 +56,9 @@ Playwright/Chromium provenance are all shipped in the `eugene/codex-review-musca
 - [x] AC26: All existing tests continue to pass
 - [x] AC27: Reports do not imply planned sequence/ER cases passed
 
-All ACs are now implemented. No deferred anchors remain.
+Deferred AC anchors for follow-on work:
+- **architecture-geometry-capture**: extend Playwright extractor to architecture SVG DOM; enables AC14 for architecture cases
+- **native-connector-paths**: extract native relation paths in NativeSvgAdapter; enables AC16 connector-path scoring
 
 ## Testing Strategy
 

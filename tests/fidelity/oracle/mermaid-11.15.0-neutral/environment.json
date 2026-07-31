@@ -4,7 +4,7 @@
     "name": "mermaid-cli",
     "version": "11.15.0"
   },
-  "captured_at": "2026-07-31T19:00:25.391024+00:00",
+  "captured_at": "2026-07-31T19:25:33.158411+00:00",
   "environment": {
     "chromium_revision": "149.0.7827.55",
     "css_profile_hash": "",
@@ -16,6 +16,7 @@
     "mermaid_config_hash": "ba18222622882470",
     "mermaid_integrity": "508c39b847f0460f",
     "mermaid_version": "11.15.0",
+    "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
     "timezone": "UTC",

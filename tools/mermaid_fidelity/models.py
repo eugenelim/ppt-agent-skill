@@ -31,8 +31,9 @@ class EnvironmentIdentity:
     """
     mermaid_version: str
     mermaid_integrity: str | None   # lockfile hash or npm integrity string
+    node_version: str               # Node.js runtime used by mmdc (the renderer)
     playwright_version: str
-    chromium_revision: str
+    chromium_revision: str          # Playwright extractor Chromium (not mmdc's Puppeteer Chromium)
     viewport_width: int
     viewport_height: int
     device_scale_factor: float

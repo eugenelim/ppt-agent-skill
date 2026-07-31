@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:59:41.480359+00:00",
+  "capture_timestamp": "2026-07-31T19:24:49.713050+00:00",
   "case_id": "flowchart.groups.complex",
   "diagnostics": [],
   "environment": {
@@ -14,6 +14,7 @@
     "mermaid_config_hash": "ba18222622882470",
     "mermaid_integrity": "508c39b847f0460f",
     "mermaid_version": "11.15.0",
+    "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
     "timezone": "UTC",
@@ -80,7 +81,7 @@
           "x": 190.3828,
           "y": 198
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -96,7 +97,7 @@
           "x": 73,
           "y": 325.5
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -112,7 +113,7 @@
           "x": 564.4922,
           "y": 198
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -128,7 +129,7 @@
           "x": 285.7812,
           "y": 644.2086
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -144,7 +145,7 @@
           "x": 271.8828,
           "y": 521.6901
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -160,7 +161,7 @@
           "x": 533.0234,
           "y": 48
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -176,7 +177,7 @@
           "x": 288.0156,
           "y": 325.5
         },
-        "text_lines": 2
+        "text_lines": 1
       }
     ],
     "groups": [

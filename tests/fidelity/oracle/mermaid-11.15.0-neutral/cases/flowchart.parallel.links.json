@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:59:54.718568+00:00",
+  "capture_timestamp": "2026-07-31T19:25:03.327301+00:00",
   "case_id": "flowchart.parallel.links",
   "diagnostics": [],
   "environment": {
@@ -14,6 +14,7 @@
     "mermaid_config_hash": "ba18222622882470",
     "mermaid_integrity": "508c39b847f0460f",
     "mermaid_version": "11.15.0",
+    "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
     "timezone": "UTC",
@@ -51,7 +52,7 @@
           "x": 207.8594,
           "y": 23
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -67,7 +68,7 @@
           "x": 38,
           "y": 125.5
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -83,7 +84,7 @@
           "x": 207.4375,
           "y": 125.5
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -99,7 +100,7 @@
           "x": 377.4375,
           "y": 125.5
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -115,7 +116,7 @@
           "x": 200.0781,
           "y": 228
         },
-        "text_lines": 2
+        "text_lines": 1
       }
     ],
     "groups": [],

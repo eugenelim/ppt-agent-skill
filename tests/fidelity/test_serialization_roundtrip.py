@@ -39,6 +39,7 @@ def _make_full_observation() -> Observation:
     )
     env = EnvironmentIdentity(
         mermaid_version="11.15.0", mermaid_integrity="sha256:xyz",
+        node_version="v22.0.0",
         playwright_version="1.61.0", chromium_revision="1228",
         viewport_width=1200, viewport_height=900,
         device_scale_factor=1.0, locale="en-US", timezone="UTC",

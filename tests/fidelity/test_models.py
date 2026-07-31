@@ -86,6 +86,7 @@ class TestObservation:
         )
         env = EnvironmentIdentity(
             mermaid_version="1.0", mermaid_integrity=None,
+            node_version="0",
             playwright_version="1.0", chromium_revision="0",
             viewport_width=1200, viewport_height=900,
             device_scale_factor=1.0, locale="en-US", timezone="UTC",

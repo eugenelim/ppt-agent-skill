@@ -230,8 +230,24 @@ def _parse_flowchart_subgraphs(source: str) -> list[dict]:
 
         if stack and stripped and not stripped.startswith(('%%', '//', 'flowchart', 'graph', 'direction')):
             # Collect all node IDs referenced on this line (node defs and edge endpoints).
-            # Split on top-level semicolons first so `A --> B; C --> D` yields both A, B, C, D.
-            stmts = [s.strip() for s in stripped.split(';') if s.strip()]
+            # Split on top-level semicolons with pipe/bracket awareness so that
+            # `A -->|wait; retry| B` is not split at the semicolon inside the label.
+            _sg_stmts: list[str] = []
+            _sg_depth = 0
+            _sg_in_pipe = False
+            _sg_start = 0
+            for _sg_i, _sg_c in enumerate(stripped):
+                if _sg_c in '[({':
+                    _sg_depth += 1
+                elif _sg_c in '])}':
+                    _sg_depth = max(0, _sg_depth - 1)
+                elif _sg_c == '|' and _sg_depth == 0:
+                    _sg_in_pipe = not _sg_in_pipe
+                elif _sg_c == ';' and _sg_depth == 0 and not _sg_in_pipe:
+                    _sg_stmts.append(stripped[_sg_start:_sg_i].strip())
+                    _sg_start = _sg_i + 1
+            _sg_stmts.append(stripped[_sg_start:].strip())
+            stmts = [s for s in _sg_stmts if s]
             for stmt in stmts:
                 if _arrow_pat.search(stmt):
                     clean = re.sub(r'\|[^|]*\|', '', stmt)
@@ -448,12 +464,14 @@ _JS_EXTRACT = """
       if (brs.length > 0) {
         textLines = brs.length + 1;
       } else {
-        // CSS-wrapped: count rendered line boxes via Range client rects.
-        const innerSpan = fo.querySelector('.nodeLabel') || fo.querySelector('span');
-        if (innerSpan) {
+        // CSS-wrapped: count rendered line boxes by selecting text content of the
+        // inner <p> element. Using <p> directly (block-level) avoids the extra DOM
+        // fragment rectangles produced when selecting an inline <span> wrapper.
+        const p = fo.querySelector('p');
+        if (p) {
           try {
             const range = document.createRange();
-            range.selectNodeContents(innerSpan);
+            range.selectNodeContents(p);
             const rects = range.getClientRects();
             const tops = new Set(Array.from(rects).filter(r => r.height > 2).map(r => Math.round(r.top)));
             if (tops.size > 1) textLines = tops.size;

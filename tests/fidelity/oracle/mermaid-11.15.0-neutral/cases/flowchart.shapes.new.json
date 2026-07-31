@@ -1,6 +1,6 @@
 {
   "artifact_refs": {},
-  "capture_timestamp": "2026-07-31T18:59:59.525134+00:00",
+  "capture_timestamp": "2026-07-31T19:25:07.598961+00:00",
   "case_id": "flowchart.shapes.new",
   "diagnostics": [],
   "environment": {
@@ -14,6 +14,7 @@
     "mermaid_config_hash": "ba18222622882470",
     "mermaid_integrity": "508c39b847f0460f",
     "mermaid_version": "11.15.0",
+    "node_version": "v26.4.0",
     "playwright_version": "1.61.0",
     "reduced_motion": true,
     "timezone": "UTC",
@@ -51,7 +52,7 @@
           "x": 32.2344,
           "y": 492.3125
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -67,7 +68,7 @@
           "x": 24.875,
           "y": 103
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -83,7 +84,7 @@
           "x": 38.75,
           "y": 190.5
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -99,7 +100,7 @@
           "x": 23.7422,
           "y": 15.5
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -115,7 +116,7 @@
           "x": 42.6641,
           "y": 278
         },
-        "text_lines": 2
+        "text_lines": 1
       },
       {
         "bbox": {
@@ -131,7 +132,7 @@
           "x": 51.8203,
           "y": 365.5
         },
-        "text_lines": 2
+        "text_lines": 1
       }
     ],
     "groups": [],

@@ -98,6 +98,25 @@ def _mmdc_version() -> str:
     return v
 
 
+_NODE_VERSION_CACHE: "str | object" = _UNSET
+
+
+def _node_version() -> str:
+    global _NODE_VERSION_CACHE
+    if _NODE_VERSION_CACHE is not _UNSET:
+        return _NODE_VERSION_CACHE  # type: ignore[return-value]
+    try:
+        result = subprocess.run(
+            ["node", "--version"],
+            capture_output=True, text=True, timeout=10,
+        )
+        v = result.stdout.strip() or result.stderr.strip() or "unknown"
+    except Exception:
+        v = "unknown"
+    _NODE_VERSION_CACHE = v
+    return v
+
+
 def _mmdc_integrity() -> "str | None":
     global _MMDC_INTEGRITY_CACHE
     if _MMDC_INTEGRITY_CACHE is not _UNSET:
@@ -697,6 +716,7 @@ def _env_identity(
     return EnvironmentIdentity(
         mermaid_version=_mmdc_version(),
         mermaid_integrity=_mmdc_integrity(),
+        node_version=_node_version(),
         playwright_version=pw_version,
         chromium_revision=chromium_version,
         viewport_width=profile.viewport_width,

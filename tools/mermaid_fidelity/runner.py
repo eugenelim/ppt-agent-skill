@@ -432,6 +432,7 @@ def _deserialize_observation(raw: dict) -> Observation:
         environment=EnvironmentIdentity(
             mermaid_version=env.get("mermaid_version", ""),
             mermaid_integrity=env.get("mermaid_integrity"),
+            node_version=env.get("node_version", "unknown"),
             playwright_version=env.get("playwright_version", ""),
             chromium_revision=env.get("chromium_revision", ""),
             viewport_width=env.get("viewport_width", 1200),
