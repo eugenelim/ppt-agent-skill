@@ -389,15 +389,15 @@ class TestShapeRegistryWiring:
     """T2b: _routing.py routes diamond clipping through SHAPE_REGISTRY."""
 
     def test_diamond_clipping_uses_registry(self, monkeypatch):
-        import os
+        """Port refinement must use the SHAPE_REGISTRY (attachment API) for diamond shapes."""
         from mermaid_render.layout import shape_geometry as sg_mod
         original_sg = sg_mod.SHAPE_REGISTRY["diamond"]
         calls: list = []
 
         class TrackingDiamond:
-            def boundary_intersection(self, *args, **kwargs):
+            def attachment(self, *args, **kwargs):
                 calls.append(args)
-                return original_sg.boundary_intersection(*args, **kwargs)
+                return original_sg.attachment(*args, **kwargs)
             def __getattr__(self, name):
                 return getattr(original_sg, name)
 
@@ -407,4 +407,4 @@ class TestShapeRegistryWiring:
         from mermaid_render.layout._strategies import _compile_flowchart, RenderOptions
         _compile_flowchart("flowchart TD\n  A{Decision} --> B", None, RenderOptions())
 
-        assert len(calls) > 0, "SHAPE_REGISTRY['diamond'].boundary_intersection was never called"
+        assert len(calls) > 0, "SHAPE_REGISTRY['diamond'].attachment was never called"

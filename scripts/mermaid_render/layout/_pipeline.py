@@ -2083,11 +2083,11 @@ def _flowchart_route_new_path(
 
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
-    # Refine port positions for non-rectangular shapes using boundary_intersection.
+    # Refine port positions and outward normals for non-rectangular shapes.
     # Ports computed via _pp land on the rectangular bounding-box face; for shapes
-    # like diamond, hexagon, trapezoid etc. the actual outline differs.  Clipping
-    # each endpoint from the node centre in the port direction gives the exact
-    # intersection with the shape outline, matching the legacy _route_edges behaviour.
+    # like diamond, hexagon, trapezoid etc. the actual outline differs. Use the
+    # authoritative attachment() API to get the exact boundary point and outward
+    # normal perpendicular to the actual face (not the AABB cardinal direction).
     from ._routing import _POLY_CLIP_SHAPES  # noqa: PLC0415
     from .shape_geometry import SHAPE_REGISTRY as _SR_port  # noqa: PLC0415
     for _pc_dict in (sp, dp):
@@ -2095,15 +2095,23 @@ def _flowchart_route_new_path(
             _pn = nodes.get(_pc.node_id)
             if _pn is None or getattr(_pn, "shape", None) not in _POLY_CLIP_SHAPES:
                 continue
-            _pbx, _pby, _pbw, _pbh = _nb(_pn)
-            _pcx, _pcy = _pbx + _pbw / 2.0, _pby + _pbh / 2.0
-            _ppx, _ppy = _pc.point
-            _pdx, _pdy = _ppx - _pcx, _ppy - _pcy
-            if _pdx == 0.0 and _pdy == 0.0:
+            _sg = _SR_port.get(_pn.shape)
+            if _sg is None:
                 continue
-            _sg = _SR_port.get(_pn.shape, _SR_port["rect"])
-            _rx, _ry = _sg.boundary_intersection(_pcx, _pcy, _pbw, _pbh, _pdx, _pdy)
-            _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry))
+            _pbx, _pby, _pbw, _pbh = _nb(_pn)
+            try:
+                _att = _sg.attachment(_pc.side, _pc.normalized_offset, _pbw, _pbh)
+                _rx, _ry = _pbx + _att.point[0], _pby + _att.point[1]
+                _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry),
+                                                 outward_normal=_att.outward_normal)
+            except Exception:
+                # Fallback: use boundary_intersection for point only (legacy path)
+                _pcx, _pcy = _pbx + _pbw / 2.0, _pby + _pbh / 2.0
+                _ppx, _ppy = _pc.point
+                _pdx, _pdy = _ppx - _pcx, _ppy - _pcy
+                if _pdx != 0.0 or _pdy != 0.0:
+                    _rx, _ry = _sg.boundary_intersection(_pcx, _pcy, _pbw, _pbh, _pdx, _pdy)
+                    _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry))
 
     # Collect group border y-coordinates so local_channel_route can avoid landing
     # Z-route horizontal segments on group box top/bottom edges.
