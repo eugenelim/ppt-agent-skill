@@ -116,8 +116,9 @@ def _check_single_route(
 
     errors.extend(_check_port_on_reservation(route, reservations))
     errors.extend(_check_route_endpoints(route))
-    errors.extend(_check_axis_aligned(route))
+    errors.extend(_check_terminal_normals(route))
     errors.extend(_check_port_normals(route))
+    errors.extend(_check_orthogonal_trunk(route))
     errors.extend(_check_terminal_length(route, marker_depths))
     errors.extend(_check_dogleg(route))
     errors.extend(_check_obstacles(route, obstacles))
@@ -162,23 +163,8 @@ def _check_route_endpoints(route: RouteCandidate) -> list[ValidationError]:
     return errors
 
 
-def _check_axis_aligned(route: RouteCandidate) -> list[ValidationError]:
-    errors = []
-    pts = route.points
-    eid = route.edge_id
-    dx0, dy0 = pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]
-    if abs(dx0) >= 1e-9 and abs(dy0) >= 1e-9:
-        errors.append(ValidationError(
-            eid, "axis_aligned_terminal",
-            f"first segment ({pts[0]}→{pts[1]}) is not axis-aligned (Δx={dx0:.4g}, Δy={dy0:.4g})",
-        ))
-    dx1, dy1 = pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1]
-    if abs(dx1) >= 1e-9 and abs(dy1) >= 1e-9:
-        errors.append(ValidationError(
-            eid, "axis_aligned_terminal",
-            f"last segment ({pts[-2]}→{pts[-1]}) is not axis-aligned (Δx={dx1:.4g}, Δy={dy1:.4g})",
-        ))
-    return errors
+# Dot-product threshold for terminal-normal checks (≈ 1° tolerance).
+_NORMAL_DOT_THRESHOLD: float = 0.9998
 
 
 def _unit(dx: float, dy: float) -> tuple[float, float]:
@@ -186,30 +172,92 @@ def _unit(dx: float, dy: float) -> tuple[float, float]:
     return (dx / mag, dy / mag)
 
 
-def _check_port_normals(route: RouteCandidate) -> list[ValidationError]:
+def _check_terminal_normals(route: RouteCandidate) -> list[ValidationError]:
+    """Check that terminal segments depart/arrive along the shape's outward normal.
+
+    Replaces the old axis_aligned_terminal check. Diagonal terminal segments
+    (e.g. leaving a diamond face) are valid as long as they align with the
+    port's outward_normal within _NORMAL_DOT_THRESHOLD.
+    """
     errors = []
     pts = route.points
     eid = route.edge_id
 
-    # Source: first segment direction must agree with source outward_normal
+    # Source stub: first segment must travel along source outward_normal
     snx, sny = route.source_port.outward_normal
     if abs(snx) > 1e-12 or abs(sny) > 1e-12:
         ux, uy = _unit(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1])
-        if abs(ux - snx) > 1e-9 or abs(uy - sny) > 1e-9:
+        dot = ux * snx + uy * sny
+        if dot < _NORMAL_DOT_THRESHOLD:
             errors.append(ValidationError(
-                eid, "port_normal_source",
-                f"first segment direction ({ux:.4g},{uy:.4g}) != source outward_normal ({snx},{sny})",
+                eid, "terminal_normal_source",
+                f"first segment ({pts[0]}→{pts[1]}) dot with source normal "
+                f"({snx:.4g},{sny:.4g}) = {dot:.4g} < {_NORMAL_DOT_THRESHOLD}",
             ))
 
-    # Target: last segment direction must agree with negated target outward_normal
+    # Target stub: last segment must travel opposite target outward_normal
     tnx, tny = route.target_port.outward_normal
     if abs(tnx) > 1e-12 or abs(tny) > 1e-12:
         ux, uy = _unit(pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1])
-        neg_tnx, neg_tny = -tnx, -tny
-        if abs(ux - neg_tnx) > 1e-9 or abs(uy - neg_tny) > 1e-9:
+        # Last segment goes toward the target boundary, i.e. opposite the outward normal
+        dot = ux * (-tnx) + uy * (-tny)
+        if dot < _NORMAL_DOT_THRESHOLD:
+            errors.append(ValidationError(
+                eid, "terminal_normal_target",
+                f"last segment ({pts[-2]}→{pts[-1]}) dot with -target normal "
+                f"({-tnx:.4g},{-tny:.4g}) = {dot:.4g} < {_NORMAL_DOT_THRESHOLD}",
+            ))
+    return errors
+
+
+def _check_orthogonal_trunk(route: RouteCandidate) -> list[ValidationError]:
+    """Check that interior trunk segments (between terminal stubs) are axis-aligned."""
+    errors = []
+    pts = route.points
+    eid = route.edge_id
+    # Trunk segments are pts[1]→pts[2], ..., pts[-3]→pts[-2]
+    # (i.e. between the escape points). Requires at least 4 points.
+    for i in range(1, len(pts) - 2):
+        dx = pts[i + 1][0] - pts[i][0]
+        dy = pts[i + 1][1] - pts[i][1]
+        if abs(dx) >= 1e-9 and abs(dy) >= 1e-9:
+            errors.append(ValidationError(
+                eid, "orthogonal_trunk",
+                f"trunk segment [{i}→{i+1}] ({pts[i]}→{pts[i+1]}) is not axis-aligned "
+                f"(Δx={dx:.4g}, Δy={dy:.4g})",
+            ))
+    return errors
+
+
+def _check_port_normals(route: RouteCandidate) -> list[ValidationError]:
+    """Redundant with _check_terminal_normals but kept for back-compat.
+
+    Uses dot-product tolerance (>= _NORMAL_DOT_THRESHOLD) rather than exact equality.
+    """
+    errors = []
+    pts = route.points
+    eid = route.edge_id
+
+    snx, sny = route.source_port.outward_normal
+    if abs(snx) > 1e-12 or abs(sny) > 1e-12:
+        ux, uy = _unit(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1])
+        dot = ux * snx + uy * sny
+        if dot < _NORMAL_DOT_THRESHOLD:
+            errors.append(ValidationError(
+                eid, "port_normal_source",
+                f"first segment direction ({ux:.4g},{uy:.4g}) dot source normal "
+                f"({snx:.4g},{sny:.4g}) = {dot:.4g}",
+            ))
+
+    tnx, tny = route.target_port.outward_normal
+    if abs(tnx) > 1e-12 or abs(tny) > 1e-12:
+        ux, uy = _unit(pts[-1][0] - pts[-2][0], pts[-1][1] - pts[-2][1])
+        dot = ux * (-tnx) + uy * (-tny)
+        if dot < _NORMAL_DOT_THRESHOLD:
             errors.append(ValidationError(
                 eid, "port_normal_target",
-                f"last segment direction ({ux:.4g},{uy:.4g}) != negated target normal ({neg_tnx},{neg_tny})",
+                f"last segment direction ({ux:.4g},{uy:.4g}) dot -target normal "
+                f"({-tnx:.4g},{-tny:.4g}) = {dot:.4g}",
             ))
     return errors
 

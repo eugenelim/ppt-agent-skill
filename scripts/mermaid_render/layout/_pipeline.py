@@ -283,6 +283,29 @@ def _infer_port_side(pts: "tuple | list", at_start: bool) -> "PortSide":
     return PortSide.BOTTOM if dy > 0 else PortSide.TOP
 
 
+def _infer_port_dir(pts: "tuple | list", at_start: bool) -> "Point":
+    """Compute the normalized direction of the first (src) or last (dst) segment.
+
+    Returns the actual unit vector along the segment, which may be diagonal for
+    polygon-shape escape stubs.  Differs from _infer_port_side which rounds to
+    the nearest cardinal axis.
+    """
+    import math  # noqa: PLC0415
+    from ._geometry import Point  # noqa: PLC0415
+    if len(pts) < 2:
+        return Point(0.0, 1.0)
+    if at_start:
+        p0, p1 = pts[0], pts[1]
+    else:
+        p0, p1 = pts[-2], pts[-1]
+    dx = (p1[0] if isinstance(p1, tuple) else p1.x) - (p0[0] if isinstance(p0, tuple) else p0.x)
+    dy = (p1[1] if isinstance(p1, tuple) else p1.y) - (p0[1] if isinstance(p0, tuple) else p0.y)
+    mag = math.hypot(dx, dy)
+    if mag < 1e-9:
+        return Point(0.0, 1.0)
+    return Point(dx / mag, dy / mag)
+
+
 def _bbox_segment_exit(ix, iy, ox, oy, bbox):
     """Point where segment (inside)->(outside) crosses an axis-aligned box edge.
 
@@ -397,14 +420,10 @@ def _build_routed_edges_ir(
 
         src_side = _infer_port_side(raw_wpts or waypoints, at_start=True)
         dst_side = _infer_port_side(raw_wpts or waypoints, at_start=False)
-        src_dir = {
-            PortSide.RIGHT: Point(1.0, 0.0), PortSide.LEFT: Point(-1.0, 0.0),
-            PortSide.BOTTOM: Point(0.0, 1.0), PortSide.TOP: Point(0.0, -1.0),
-        }.get(src_side, Point(0.0, 1.0))
-        dst_dir = {
-            PortSide.RIGHT: Point(1.0, 0.0), PortSide.LEFT: Point(-1.0, 0.0),
-            PortSide.BOTTOM: Point(0.0, 1.0), PortSide.TOP: Point(0.0, -1.0),
-        }.get(dst_side, Point(0.0, -1.0))
+        # Use the actual segment direction (may be diagonal for escape stubs) rather
+        # than rounding to a cardinal axis, which would discard non-cardinal normals.
+        src_dir = _infer_port_dir(raw_wpts or waypoints, at_start=True)
+        dst_dir = _infer_port_dir(raw_wpts or waypoints, at_start=False)
 
         src_port = PortLayout(node_id=src, side=src_side, position=src_pos, direction=src_dir)
         dst_port = PortLayout(node_id=dst, side=dst_side, position=dst_pos, direction=dst_dir)
@@ -1392,6 +1411,31 @@ _SIDE_NORMALS_LOCAL: "dict[str, tuple[float, float]]" = {
     "left":   (-1.0, 0.0),
 }
 
+# Escape-stub constants: a short segment from the boundary point along the
+# outward normal to an "escape point", from which the orthogonal trunk is
+# routed.  Only applied when the outward normal is non-cardinal (i.e. the
+# port sits on a sloped polygon face such as a diamond or hexagon slope).
+_STUB_LEN: float = 20.0
+_CARDINAL_NORMAL_T: float = 0.999  # max(|nx|,|ny|) threshold for cardinal
+
+
+def _escape_stub_wrap(result, src_pc, dst_pc, src_needs: bool, dst_needs: bool):
+    """Prepend/append boundary points for non-cardinal terminal normals.
+
+    The result was routed from src_escape (or src boundary) to dst_escape
+    (or dst boundary).  This wraps it with the actual boundary points so
+    that points[0] == source_port.point and points[-1] == target_port.point,
+    and the first/last segments become the diagonal normal stubs.
+    """
+    if result is None:
+        return None
+    pts = list(result.points)
+    if src_needs:
+        pts = [src_pc.point] + pts
+    if dst_needs:
+        pts = pts + [dst_pc.point]
+    return result._replace(points=tuple(pts), source_port=src_pc, target_port=dst_pc)
+
 
 def flowchart_route_adapter(
     semantics: "FlowchartSemantics",
@@ -2083,27 +2127,35 @@ def _flowchart_route_new_path(
 
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
-    # Refine port positions for non-rectangular shapes using boundary_intersection.
+    # Refine port positions and outward normals for all registered shapes.
     # Ports computed via _pp land on the rectangular bounding-box face; for shapes
-    # like diamond, hexagon, trapezoid etc. the actual outline differs.  Clipping
-    # each endpoint from the node centre in the port direction gives the exact
-    # intersection with the shape outline, matching the legacy _route_edges behaviour.
-    from ._routing import _POLY_CLIP_SHAPES  # noqa: PLC0415
+    # like diamond, hexagon, trapezoid etc. the actual outline differs, and for
+    # curved shapes (circle, stadium, etc.) the AABB port misses the curved outline.
+    # Use the authoritative attachment() API to get the exact boundary point and
+    # outward normal perpendicular to the actual face for every registered shape.
     from .shape_geometry import SHAPE_REGISTRY as _SR_port  # noqa: PLC0415
     for _pc_dict in (sp, dp):
         for _pe_id, _pc in list(_pc_dict.items()):
             _pn = nodes.get(_pc.node_id)
-            if _pn is None or getattr(_pn, "shape", None) not in _POLY_CLIP_SHAPES:
+            if _pn is None or getattr(_pn, "shape", None) is None:
+                continue
+            _sg = _SR_port.get(_pn.shape)
+            if _sg is None:
                 continue
             _pbx, _pby, _pbw, _pbh = _nb(_pn)
-            _pcx, _pcy = _pbx + _pbw / 2.0, _pby + _pbh / 2.0
-            _ppx, _ppy = _pc.point
-            _pdx, _pdy = _ppx - _pcx, _ppy - _pcy
-            if _pdx == 0.0 and _pdy == 0.0:
-                continue
-            _sg = _SR_port.get(_pn.shape, _SR_port["rect"])
-            _rx, _ry = _sg.boundary_intersection(_pcx, _pcy, _pbw, _pbh, _pdx, _pdy)
-            _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry))
+            try:
+                _att = _sg.attachment(_pc.side, _pc.normalized_offset, _pbw, _pbh)
+                _rx, _ry = _pbx + _att.point[0], _pby + _att.point[1]
+                _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry),
+                                                 outward_normal=_att.outward_normal)
+            except Exception:
+                # Fallback: use boundary_intersection for point only (legacy path)
+                _pcx, _pcy = _pbx + _pbw / 2.0, _pby + _pbh / 2.0
+                _ppx, _ppy = _pc.point
+                _pdx, _pdy = _ppx - _pcx, _ppy - _pcy
+                if _pdx != 0.0 or _pdy != 0.0:
+                    _rx, _ry = _sg.boundary_intersection(_pcx, _pcy, _pbw, _pbh, _pdx, _pdy)
+                    _pc_dict[_pe_id] = _pc._replace(point=(_rx, _ry))
 
     # Collect group border y-coordinates so local_channel_route can avoid landing
     # Z-route horizontal segments on group box top/bottom edges.
@@ -2239,6 +2291,21 @@ def _flowchart_route_new_path(
         # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
         per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
 
+        # Escape port candidates for non-cardinal outward normals.
+        # Non-cardinal normals arise on sloped polygon faces (diamond, hexagon, etc.).
+        # Route from escape to escape so the trunk is fully orthogonal; the
+        # diagonal boundary→escape segments become the terminal stubs.
+        _snx, _sny = src_pc.outward_normal
+        _dnx, _dny = dst_pc.outward_normal
+        _src_needs_stub = max(abs(_snx), abs(_sny)) < _CARDINAL_NORMAL_T
+        _dst_needs_stub = max(abs(_dnx), abs(_dny)) < _CARDINAL_NORMAL_T
+        _src_rpc = src_pc._replace(
+            point=(src_pc.point[0] + _snx * _STUB_LEN, src_pc.point[1] + _sny * _STUB_LEN)
+        ) if _src_needs_stub else src_pc
+        _dst_rpc = dst_pc._replace(
+            point=(dst_pc.point[0] + _dnx * _STUB_LEN, dst_pc.point[1] + _dny * _STUB_LEN)
+        ) if _dst_needs_stub else dst_pc
+
         # Multi-rank forward: try local channel first.
         src_node = nodes.get(real_src_id)
         dst_node = nodes.get(real_dst_id)
@@ -2274,7 +2341,7 @@ def _flowchart_route_new_path(
                 and abs(src_node.rank - dst_node.rank) > 1):
             lb = _local_bounds_for(src_node.rank, dst_node.rank)
             if lb is not None:
-                result = local_channel_route(eid, src_pc, dst_pc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
+                result = local_channel_route(eid, _src_rpc, _dst_rpc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                 # Reject channels that land within 8px of the canvas boundary
                 if result is not None:
                     _CANVAS_MARGIN = 8.0
@@ -2285,9 +2352,12 @@ def _flowchart_route_new_path(
                         for p in _mid
                     ):
                         result = None
+                    else:
+                        result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         if result is None:
-            result = route_edge(eid, src_pc, dst_pc, per_obs, existing)
+            result = route_edge(eid, _src_rpc, _dst_rpc, per_obs, existing)
+            result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         # Last-resort: if route_edge found nothing and the nodes are far apart
         # vertically (same or adjacent DAG rank but large y-gap), the standard
@@ -2298,7 +2368,7 @@ def _flowchart_route_new_path(
             if abs(src_node.y - dst_node.y) > 400:
                 _lb2 = _local_bounds_for(src_node.rank, dst_node.rank)
                 if _lb2 is not None:
-                    result = local_channel_route(eid, src_pc, dst_pc, _lb2, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
+                    result = local_channel_route(eid, _src_rpc, _dst_rpc, _lb2, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                     if result is not None:
                         _CANVAS_MARGIN2 = 8.0
                         if any(
@@ -2307,6 +2377,8 @@ def _flowchart_route_new_path(
                             for p in result.points[1:-1]
                         ):
                             result = None
+                        else:
+                            result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         if result is not None:
             assignments[eid] = result

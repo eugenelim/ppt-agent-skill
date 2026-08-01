@@ -7,15 +7,34 @@ Each shape knows how to:
 - enumerate available port sides (available_ports)
 - report connector marker clearance (marker_clearance)
 - paint itself as SVG or HTML
+- return boundary attachment (point + outward normal) via attachment()
 """
 from __future__ import annotations
 
 import math
-from typing import List, Optional, Sequence, Tuple
+from typing import List, NamedTuple, Optional, Sequence, Tuple
 try:
     from typing import Protocol, runtime_checkable
 except ImportError:
     from typing_extensions import Protocol, runtime_checkable  # type: ignore[assignment]
+
+
+# ── Boundary attachment model ─────────────────────────────────────────────────
+
+class BoundaryAttachment(NamedTuple):
+    """Exact attachment point on a shape boundary with its outward normal.
+
+    point: (x, y) in node-local top-left-origin coordinates.
+    outward_normal: unit vector pointing away from the shape interior.
+    side: 'top'|'bottom'|'left'|'right' (the nominal face selected by the caller).
+    face_id: polygon edge index where point lies, or None for curved shapes.
+    at_corner: True when point is within epsilon of a polygon vertex.
+    """
+    point: Tuple[float, float]
+    outward_normal: Tuple[float, float]
+    side: str
+    face_id: "Optional[int]"
+    at_corner: bool
 
 
 # ── Protocol ─────────────────────────────────────────────────────────────────
@@ -105,6 +124,23 @@ class ShapeGeometry(Protocol):
 
         Direct parameterization — does NOT use center-side intersection + perpendicular shift.
         offset: 0=start, 0.5=center, 1=end along the face.
+        """
+        ...
+
+    def attachment(
+        self,
+        side: str,
+        offset: float,
+        w: float,
+        h: float,
+        *,
+        preferred_direction: "Optional[Tuple[float, float]]" = None,
+    ) -> "BoundaryAttachment":
+        """Return the authoritative boundary attachment for a port on this shape.
+
+        Combines boundary_anchor() and normal_at() into a single consistent record.
+        point is in node-local top-left-origin coordinates.
+        preferred_direction: hint used only at polygon vertices to break normal-cone ambiguity.
         """
         ...
 
@@ -469,6 +505,108 @@ def _normal_at_ellipse(px: float, py: float, a: float, b: float) -> Tuple[float,
     return nx / length, ny / length
 
 
+def _make_attachment(
+    geom: "ShapeGeometry",
+    side: str,
+    offset: float,
+    w: float,
+    h: float,
+    *,
+    preferred_direction: "Optional[Tuple[float, float]]" = None,
+) -> "BoundaryAttachment":
+    """Shared implementation of attachment() for all shapes.
+
+    Calls boundary_anchor() to get the boundary point (node-local, top-left origin),
+    converts to shape-centered coordinates for normal_at(), then builds BoundaryAttachment.
+
+    Vertex normal-cone policy (section D): at a polygon vertex, if the semantic side's
+    cardinal direction lies inside the outward normal cone of the two adjacent edges,
+    use that cardinal direction. This ensures diamond top/bottom/left/right vertices
+    depart along the canonical cardinal direction.
+    """
+    bx, by = geom.boundary_anchor(side, offset, w, h)
+    hw, hh = w / 2.0, h / 2.0
+    px_c, py_c = bx - hw, by - hh
+    nx, ny = geom.normal_at(px_c, py_c, w, h)
+
+    # Detect if point is near a polygon vertex (only for polygon shapes).
+    at_corner = False
+    face_id: Optional[int] = None
+    verts = geom.outline_path(w, h)
+    if verts is not None:
+        verts_c = [(vx - hw, vy - hh) for vx, vy in verts]
+        n_verts = len(verts_c)
+        _CORNER_EPS = 1.5  # px tolerance for "at a vertex"
+        corner_vi: Optional[int] = None
+        for vi, (vx_c, vy_c) in enumerate(verts_c):
+            if math.hypot(px_c - vx_c, py_c - vy_c) < _CORNER_EPS:
+                at_corner = True
+                face_id = vi  # vertex index
+                corner_vi = vi
+                break
+
+        if at_corner and corner_vi is not None:
+            # Vertex normal-cone policy: use cardinal if inside the admissible cone.
+            side_l = side.lower()
+            cardinal = _SIDE_DIRS.get(side_l)
+            if cardinal is not None:
+                cdx, cdy = cardinal
+                adj_normals: List[Tuple[float, float]] = []
+                for offset_idx in (-1, 0):
+                    ei = (corner_vi + offset_idx) % n_verts
+                    ax, ay = verts_c[ei]
+                    bx_v, by_v = verts_c[(ei + 1) % n_verts]
+                    ex_e, ey_e = bx_v - ax, by_v - ay
+                    edge_len = math.hypot(ex_e, ey_e)
+                    if edge_len < 1e-9:
+                        continue
+                    nx0, ny0 = ey_e / edge_len, -ex_e / edge_len
+                    mid_x, mid_y = (ax + bx_v) / 2.0, (ay + by_v) / 2.0
+                    if nx0 * mid_x + ny0 * mid_y >= 0:
+                        adj_normals.append((nx0, ny0))
+                    else:
+                        adj_normals.append((-nx0, -ny0))
+                # Cardinal inside cone ↔ positive dot with all adjacent normals
+                if adj_normals and all(cdx * anx + cdy * any_ >= -1e-9
+                                       for anx, any_ in adj_normals):
+                    nx, ny = cdx, cdy
+                elif adj_normals:
+                    # Cardinal outside cone: use the adjacent normal most aligned to
+                    # preferred_direction when provided, otherwise fall back to cardinal.
+                    if preferred_direction is not None:
+                        pdx, pdy = preferred_direction
+                        best_n = max(adj_normals, key=lambda nv: pdx * nv[0] + pdy * nv[1])
+                    else:
+                        best_n = max(adj_normals, key=lambda nv: cdx * nv[0] + cdy * nv[1])
+                    nx, ny = best_n
+
+        if not at_corner:
+            # Find nearest edge for face_id.
+            best_d = math.inf
+            for ei in range(n_verts):
+                ax, ay = verts_c[ei]
+                bx_v, by_v = verts_c[(ei + 1) % n_verts]
+                ex_e, ey_e = bx_v - ax, by_v - ay
+                edge_len_sq = ex_e * ex_e + ey_e * ey_e
+                if edge_len_sq < 1e-12:
+                    continue
+                t = ((px_c - ax) * ex_e + (py_c - ay) * ey_e) / edge_len_sq
+                tc = max(0.0, min(1.0, t))
+                foot_x, foot_y = ax + tc * ex_e, ay + tc * ey_e
+                d = math.hypot(px_c - foot_x, py_c - foot_y)
+                if d < best_d:
+                    best_d = d
+                    face_id = ei
+
+    return BoundaryAttachment(
+        point=(bx, by),
+        outward_normal=(nx, ny),
+        side=side,
+        face_id=face_id,
+        at_corner=at_corner,
+    )
+
+
 def _normal_at_polygon_verts(verts_c: List[Tuple[float, float]],
                               px: float, py: float) -> Tuple[float, float]:
     """Outward unit normal of a polygon at boundary point (px, py) in centered coords.
@@ -590,6 +728,10 @@ class RectGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         hw, hh = w / 2.0, h / 2.0
@@ -662,6 +804,10 @@ class RoundGeometry:
     def boundary_anchor(self, side: str, offset: float,
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
+
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -754,6 +900,10 @@ class StadiumGeometry:
     def boundary_anchor(self, side: str, offset: float,
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
+
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -852,6 +1002,10 @@ class DiamondGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         hw, hh = w / 2.0, h / 2.0
@@ -946,6 +1100,10 @@ class CircleGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         return _normal_at_ellipse(px, py, w / 2.0, h / 2.0)
@@ -1023,6 +1181,10 @@ class DoubleCircleGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         return _normal_at_ellipse(px, py, w / 2.0, h / 2.0)
@@ -1098,6 +1260,10 @@ class CylinderGeometry:
     def boundary_anchor(self, side: str, offset: float,
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
+
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1222,6 +1388,10 @@ class HexagonGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         hw, hh = w / 2.0, h / 2.0
@@ -1312,6 +1482,10 @@ class TrapezoidGeometry:
     def boundary_anchor(self, side: str, offset: float,
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
+
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1404,6 +1578,10 @@ class TrapezoidAltGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         hw, hh = w / 2.0, h / 2.0
@@ -1495,6 +1673,10 @@ class SubroutineGeometry:
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
 
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
+
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
         hw, hh = w / 2.0, h / 2.0
@@ -1582,6 +1764,10 @@ class FlagGeometry:
     def boundary_anchor(self, side: str, offset: float,
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
+
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1673,6 +1859,10 @@ class BarGeometry:
     def boundary_anchor(self, side: str, offset: float,
                         w: float, h: float) -> Tuple[float, float]:
         return _angle_anchor(self, side, offset, w, h)
+
+    def attachment(self, side: str, offset: float, w: float, h: float, *,
+                   preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:

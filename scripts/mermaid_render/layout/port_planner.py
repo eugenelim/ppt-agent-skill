@@ -7,6 +7,7 @@ gate apertures.
 """
 from __future__ import annotations
 
+import math
 from typing import NamedTuple, Any
 
 
@@ -111,6 +112,27 @@ class GateAperture(NamedTuple):
     half_width: float  # half-width of the allowed crossing window (px)
 
 
+class TerminalAttachment(NamedTuple):
+    """Resolved terminal geometry for one endpoint of a flowchart edge.
+
+    boundary_point: canvas-absolute point on the shape outline.
+    outward_normal: unit vector pointing away from the shape at boundary_point.
+    escape_point: canvas-absolute point outside the shape along the normal.
+    terminal_clearance: minimum px the terminal segment must occupy.
+    side: semantic side ("top" | "right" | "bottom" | "left").
+    face_id: polygon edge index (None for curved shapes, or at a corner = vertex index).
+    at_corner: True when boundary_point is within epsilon of a polygon vertex.
+    """
+
+    boundary_point: tuple[float, float]
+    outward_normal: tuple[float, float]
+    escape_point: tuple[float, float]
+    terminal_clearance: float
+    side: str
+    face_id: int | None
+    at_corner: bool
+
+
 # ── Side outward-normal lookup ────────────────────────────────────────────────
 
 _SIDE_NORMALS: dict[str, tuple[float, float]] = {
@@ -184,9 +206,10 @@ def generate_port_candidates(
     When fixed_side is set: exactly one candidate on that side.
     When fixed_side is None: preferred sides + other sides + center (five sides).
 
-    shape_geometry: optional ShapeGeometry instance; when provided, exact
-    boundary coordinates come from boundary_anchor(). Falls back to AABB.
-    boundary_anchor returns node-local (top-left origin) coords; (node_x, node_y)
+    shape_geometry: optional ShapeGeometry instance; when provided, boundary
+    coordinates and outward normals come from attachment(). Falls back to AABB
+    when shape_geometry is None or lacks the attachment() method.
+    attachment() returns node-local (top-left origin) coords; (node_x, node_y)
     is added to produce canvas-absolute point. Center candidate is always
     (node_x + w/2, node_y + h/2) regardless of shape_geometry.
     """
@@ -195,21 +218,35 @@ def generate_port_candidates(
     def _make(side: str, offset: float, penalty: float, is_fixed: bool) -> PortCandidate:
         if side == "center":
             px, py = node_x + w / 2.0, node_y + h / 2.0
-        elif shape_geometry is not None:
+            return PortCandidate(
+                edge_id=edge_id,
+                node_id=node_id,
+                side=side,
+                normalized_offset=offset,
+                point=(px, py),
+                outward_normal=(0.0, 0.0),
+                fixed_side=is_fixed,
+                preference_penalty=penalty,
+            )
+        if shape_geometry is not None:
             try:
-                lx, ly = shape_geometry.boundary_anchor(side, offset, w, h)
-                px, py = node_x + lx, node_y + ly
-            except Exception:
+                att = shape_geometry.attachment(side, offset, w, h)
+                px, py = node_x + att.point[0], node_y + att.point[1]
+                normal = att.outward_normal
+            except AttributeError:
+                # shape_geometry predates attachment() — fall back to AABB
                 px, py = _aabb_anchor_point(side, offset, node_x, node_y, w, h)
+                normal = _SIDE_NORMALS.get(side, (0.0, 0.0))
         else:
             px, py = _aabb_anchor_point(side, offset, node_x, node_y, w, h)
+            normal = _SIDE_NORMALS.get(side, (0.0, 0.0))
         return PortCandidate(
             edge_id=edge_id,
             node_id=node_id,
             side=side,
             normalized_offset=offset,
             point=(px, py),
-            outward_normal=_SIDE_NORMALS.get(side, (0.0, 0.0)),
+            outward_normal=normal,
             fixed_side=is_fixed,
             preference_penalty=penalty,
         )
@@ -225,6 +262,78 @@ def generate_port_candidates(
         candidates.append(_make(side, 0.5, _OTHER_SIDE_PENALTY, False))
     candidates.append(_make("center", 0.5, _CENTER_PENALTY, False))
     return candidates
+
+
+def build_terminal_attachment(
+    node_bounds: tuple[float, float, float, float],
+    side: str,
+    offset: float,
+    shape_geometry: Any | None = None,
+    marker_kind: str = "arrow",
+    preferred_direction: tuple[float, float] | None = None,
+    stub_length: float | None = None,
+) -> TerminalAttachment:
+    """Build a TerminalAttachment for one endpoint of a flowchart edge.
+
+    Computes the exact boundary point and outward normal via shape_geometry.attachment()
+    when available; falls back to AABB when shape_geometry is None or lacks attachment().
+    The escape_point is boundary_point + outward_normal * terminal_clearance.
+
+    node_bounds: (x, y, w, h) in canvas coordinates.
+    side: "top" | "right" | "bottom" | "left".
+    offset: 0.0–1.0 along the side.
+    shape_geometry: ShapeGeometry instance or None.
+    marker_kind: arrowhead kind, used to compute marker_clearance.
+    preferred_direction: hint for vertex normal disambiguation.
+    stub_length: override for terminal clearance (px); defaults to FAN_ESCAPE_LENGTH.
+    """
+    node_x, node_y, w, h = node_bounds
+    face_id: int | None = None
+    at_corner = False
+
+    if shape_geometry is not None:
+        try:
+            att = shape_geometry.attachment(side, offset, w, h,
+                                            preferred_direction=preferred_direction)
+            bx, by = node_x + att.point[0], node_y + att.point[1]
+            nx, ny = att.outward_normal
+            face_id = att.face_id
+            at_corner = att.at_corner
+        except AttributeError:
+            bx, by = _aabb_anchor_point(side, offset, node_x, node_y, w, h)
+            nx, ny = _SIDE_NORMALS.get(side, (0.0, -1.0))
+    else:
+        bx, by = _aabb_anchor_point(side, offset, node_x, node_y, w, h)
+        nx, ny = _SIDE_NORMALS.get(side, (0.0, -1.0))
+
+    # Normalize defensively (should already be unit, but floating-point can drift)
+    mag = math.hypot(nx, ny)
+    if mag > 1e-9:
+        nx, ny = nx / mag, ny / mag
+    else:
+        nx, ny = _SIDE_NORMALS.get(side, (0.0, -1.0))
+
+    if stub_length is not None:
+        clearance = stub_length
+    else:
+        clearance = FAN_ESCAPE_LENGTH
+        if shape_geometry is not None and marker_kind:
+            try:
+                mc = shape_geometry.marker_clearance(marker_kind)
+                clearance = max(clearance, mc)
+            except AttributeError:
+                pass
+    ex, ey = bx + nx * clearance, by + ny * clearance
+
+    return TerminalAttachment(
+        boundary_point=(bx, by),
+        outward_normal=(nx, ny),
+        escape_point=(ex, ey),
+        terminal_clearance=clearance,
+        side=side,
+        face_id=face_id,
+        at_corner=at_corner,
+    )
 
 
 def plan_straight_corridor(

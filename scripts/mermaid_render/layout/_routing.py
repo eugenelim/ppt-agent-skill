@@ -387,6 +387,33 @@ def _ensure_orthogonal(pts: list) -> list:
     return result
 
 
+def _ensure_orthogonal_trunk(pts: list) -> list:
+    """Orthogonalize only trunk segments; preserve terminal stubs at each end.
+
+    Unlike _ensure_orthogonal(), the first segment (pts[0]→pts[1]) and last
+    segment (pts[-2]→pts[-1]) are kept as-is. They may be diagonal normal stubs
+    for polygon shapes (diamonds, hexagons, etc.) where the outward normal is
+    not cardinal. Only interior segments (pts[1] through pts[-2]) are straightened.
+    """
+    if len(pts) < 4:
+        # 0–3 points: no independent trunk to orthogonalize; return unchanged.
+        return pts
+    # Orthogonalize trunk: pts[1] … pts[-2]
+    trunk = pts[1:-1]
+    result: list = [trunk[0]]
+    for i in range(1, len(trunk)):
+        px, py = result[-1]
+        cx, cy = trunk[i]
+        if px != cx and py != cy:
+            # Bend orientation: horizontal-first for last trunk segment, vertical-first otherwise.
+            if i == len(trunk) - 1:
+                result.append((cx, py))
+            else:
+                result.append((px, cy))
+        result.append((cx, cy))
+    return [pts[0]] + result + [pts[-1]]
+
+
 def _simplify_waypoints(pts: list) -> list:
     """Remove collinear intermediate waypoints."""
     if len(pts) < 3:
