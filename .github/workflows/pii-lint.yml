@@ -1,0 +1,33 @@
+name: PII lint
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pii-lint:
+    name: Scan for personal information
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.base_ref }}
+
+      - name: Scan PR diff
+        run: python3 tools/pii_lint.py --diff-range origin/${{ github.base_ref }}
+
+      - name: Scan PR title and body
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n%s' "$PR_TITLE" "$PR_BODY" > /tmp/pr-metadata.txt
+          python3 tools/pii_lint.py --pr-metadata /tmp/pr-metadata.txt
+
+      - name: Scan PR commit messages
+        run: |
+          git log --format=%B origin/${{ github.base_ref }}..HEAD > /tmp/pr-commits.txt
+          python3 tools/pii_lint.py --pr-metadata /tmp/pr-commits.txt
