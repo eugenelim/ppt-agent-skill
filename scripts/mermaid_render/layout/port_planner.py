@@ -313,7 +313,16 @@ def build_terminal_attachment(
     else:
         nx, ny = _SIDE_NORMALS.get(side, (0.0, -1.0))
 
-    clearance = stub_length if stub_length is not None else FAN_ESCAPE_LENGTH
+    if stub_length is not None:
+        clearance = stub_length
+    else:
+        clearance = FAN_ESCAPE_LENGTH
+        if shape_geometry is not None and marker_kind:
+            try:
+                mc = shape_geometry.marker_clearance(marker_kind)
+                clearance = max(clearance, mc)
+            except AttributeError:
+                pass
     ex, ey = bx + nx * clearance, by + ny * clearance
 
     return TerminalAttachment(

@@ -730,7 +730,7 @@ class RectGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -807,7 +807,7 @@ class RoundGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -903,7 +903,7 @@ class StadiumGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1004,7 +1004,7 @@ class DiamondGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1102,7 +1102,7 @@ class CircleGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1183,7 +1183,7 @@ class DoubleCircleGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1263,7 +1263,7 @@ class CylinderGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1390,7 +1390,7 @@ class HexagonGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1485,7 +1485,7 @@ class TrapezoidGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1580,7 +1580,7 @@ class TrapezoidAltGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1675,7 +1675,7 @@ class SubroutineGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1767,7 +1767,7 @@ class FlagGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:
@@ -1862,7 +1862,7 @@ class BarGeometry:
 
     def attachment(self, side: str, offset: float, w: float, h: float, *,
                    preferred_direction: Optional[Tuple[float, float]] = None) -> BoundaryAttachment:
-        return _make_attachment(self, side, offset, w, h)
+        return _make_attachment(self, side, offset, w, h, preferred_direction=preferred_direction)
 
     def normal_at(self, px: float, py: float,
                   w: float, h: float) -> Tuple[float, float]:

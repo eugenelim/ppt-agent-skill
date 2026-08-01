@@ -2108,17 +2108,17 @@ def _flowchart_route_new_path(
 
     obs_tuple: "tuple[RoutingObstacle, ...]" = tuple(obstacles)
 
-    # Refine port positions and outward normals for non-rectangular shapes.
+    # Refine port positions and outward normals for all registered shapes.
     # Ports computed via _pp land on the rectangular bounding-box face; for shapes
-    # like diamond, hexagon, trapezoid etc. the actual outline differs. Use the
-    # authoritative attachment() API to get the exact boundary point and outward
-    # normal perpendicular to the actual face (not the AABB cardinal direction).
-    from ._routing import _POLY_CLIP_SHAPES  # noqa: PLC0415
+    # like diamond, hexagon, trapezoid etc. the actual outline differs, and for
+    # curved shapes (circle, stadium, etc.) the AABB port misses the curved outline.
+    # Use the authoritative attachment() API to get the exact boundary point and
+    # outward normal perpendicular to the actual face for every registered shape.
     from .shape_geometry import SHAPE_REGISTRY as _SR_port  # noqa: PLC0415
     for _pc_dict in (sp, dp):
         for _pe_id, _pc in list(_pc_dict.items()):
             _pn = nodes.get(_pc.node_id)
-            if _pn is None or getattr(_pn, "shape", None) not in _POLY_CLIP_SHAPES:
+            if _pn is None or getattr(_pn, "shape", None) is None:
                 continue
             _sg = _SR_port.get(_pn.shape)
             if _sg is None:
