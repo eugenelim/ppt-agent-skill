@@ -157,25 +157,25 @@ def test_route_end_violation():
 
 # ── T3: AC6, AC7, AC8, AC9 ───────────────────────────────────────────────────
 
-def test_axis_aligned_first_segment_violation():
+def test_terminal_normal_source_violation():
+    # First segment is diagonal, but source normal is (1,0). Dot < 0.9998 → terminal_normal_source.
     src_port = _pc("A", 0.0, 0.0, normal=(1.0, 0.0))
     dst_port = _pc("B", 100.0, 50.0, normal=(-1.0, 0.0))
-    # Diagonal first segment → not axis-aligned
     route = RouteCandidate("e1", src_port, dst_port, ((0.0, 0.0), (100.0, 50.0)), 0, 150.0, 0, 0.0, 0.0)
     errors = validate_routes([route])
     rules = [e.rule for e in errors]
-    assert "axis_aligned_terminal" in rules
+    assert "terminal_normal_source" in rules
 
 
-def test_axis_aligned_last_segment_violation():
-    # Four-point route with diagonal last segment
+def test_terminal_normal_target_violation():
+    # Last segment is diagonal, but target normal is (-1,0). Approach dot < 0.9998 → terminal_normal_target.
     src_port = _pc("A", 0.0, 0.0, normal=(1.0, 0.0))
     dst_port = _pc("B", 200.0, 50.0, normal=(-1.0, 0.0))
     pts = ((0.0, 0.0), (100.0, 0.0), (200.0, 50.0))
     route = RouteCandidate("e1", src_port, dst_port, pts, 1, 250.0, 0, 0.0, 0.0)
     errors = validate_routes([route])
     rules = [e.rule for e in errors]
-    assert "axis_aligned_terminal" in rules
+    assert "terminal_normal_target" in rules
 
 
 def test_port_normal_source_violation():
