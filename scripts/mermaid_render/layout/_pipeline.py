@@ -283,6 +283,29 @@ def _infer_port_side(pts: "tuple | list", at_start: bool) -> "PortSide":
     return PortSide.BOTTOM if dy > 0 else PortSide.TOP
 
 
+def _infer_port_dir(pts: "tuple | list", at_start: bool) -> "Point":
+    """Compute the normalized direction of the first (src) or last (dst) segment.
+
+    Returns the actual unit vector along the segment, which may be diagonal for
+    polygon-shape escape stubs.  Differs from _infer_port_side which rounds to
+    the nearest cardinal axis.
+    """
+    import math  # noqa: PLC0415
+    from ._geometry import Point  # noqa: PLC0415
+    if len(pts) < 2:
+        return Point(0.0, 1.0)
+    if at_start:
+        p0, p1 = pts[0], pts[1]
+    else:
+        p0, p1 = pts[-2], pts[-1]
+    dx = (p1[0] if isinstance(p1, tuple) else p1.x) - (p0[0] if isinstance(p0, tuple) else p0.x)
+    dy = (p1[1] if isinstance(p1, tuple) else p1.y) - (p0[1] if isinstance(p0, tuple) else p0.y)
+    mag = math.hypot(dx, dy)
+    if mag < 1e-9:
+        return Point(0.0, 1.0)
+    return Point(dx / mag, dy / mag)
+
+
 def _bbox_segment_exit(ix, iy, ox, oy, bbox):
     """Point where segment (inside)->(outside) crosses an axis-aligned box edge.
 
@@ -397,14 +420,10 @@ def _build_routed_edges_ir(
 
         src_side = _infer_port_side(raw_wpts or waypoints, at_start=True)
         dst_side = _infer_port_side(raw_wpts or waypoints, at_start=False)
-        src_dir = {
-            PortSide.RIGHT: Point(1.0, 0.0), PortSide.LEFT: Point(-1.0, 0.0),
-            PortSide.BOTTOM: Point(0.0, 1.0), PortSide.TOP: Point(0.0, -1.0),
-        }.get(src_side, Point(0.0, 1.0))
-        dst_dir = {
-            PortSide.RIGHT: Point(1.0, 0.0), PortSide.LEFT: Point(-1.0, 0.0),
-            PortSide.BOTTOM: Point(0.0, 1.0), PortSide.TOP: Point(0.0, -1.0),
-        }.get(dst_side, Point(0.0, -1.0))
+        # Use the actual segment direction (may be diagonal for escape stubs) rather
+        # than rounding to a cardinal axis, which would discard non-cardinal normals.
+        src_dir = _infer_port_dir(raw_wpts or waypoints, at_start=True)
+        dst_dir = _infer_port_dir(raw_wpts or waypoints, at_start=False)
 
         src_port = PortLayout(node_id=src, side=src_side, position=src_pos, direction=src_dir)
         dst_port = PortLayout(node_id=dst, side=dst_side, position=dst_pos, direction=dst_dir)
