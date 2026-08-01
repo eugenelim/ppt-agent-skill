@@ -44,6 +44,34 @@ Scope each change precisely to the request.
   ticket IDs, and any proprietary engagement detail. Examples and mocks use
   clearly-fabricated neutral placeholders (`Acme`, `Program`, `example.com`).
   This applies to this file too — do not name a real client anywhere in the repo.
+
+  **Automated guards** — `tools/pii_lint.py` enforces a subset mechanically
+  (pre-commit hook scans the staged diff; commit-msg hook scans the message;
+  CI scans the full PR diff, title, body, and commit messages). What it catches:
+  non-placeholder emails, real user filesystem paths, formatted phone numbers
+  (when a phone-context keyword appears on the same line), US SSN patterns,
+  Luhn-valid credit card numbers, and any term in `~/.pii-blocklist.txt`
+  (one term per line, `#` = comment — not committed; add per-project sensitive
+  terms locally).
+
+  **One-time local setup:** `git config core.hooksPath tools/hooks`
+
+  **AI agents: actively scrub before staging** — the hook is blind to these,
+  so you must catch them yourself. Before writing or editing any file that
+  touches user-supplied content, check for and replace:
+  - Real person names (colleagues, clients, contacts) → `"a colleague"` /
+    `"Example User"`
+  - Company or client names → `"a client"` / `"example-corp"`
+  - Postal or physical addresses → `123 Example St, Example City`
+  - Unformatted phone numbers (digits only, no separators, no nearby keyword)
+  - Account numbers, reference numbers, case IDs tied to real people
+  - Narrative text that identifies a real person or organisation indirectly
+    (e.g. "the Sydney office of the Big Four firm that engaged us in Q2")
+
+  When in doubt, replace with a neutral placeholder and note the substitution
+  in the PR description. Do not ask the user to verify — scrub proactively.
+
+  Emergency bypass (audit if used): `git commit --no-verify`
 - **Keep DESIGN.md current.** Any PR that changes a visual or interaction
   aspect of the preview HTML (`scripts/html_packager.py`) must update
   `docs/product/DESIGN.md` in the same commit. See the maintenance rule there.
