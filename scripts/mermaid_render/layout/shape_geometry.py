@@ -571,8 +571,13 @@ def _make_attachment(
                                        for anx, any_ in adj_normals):
                     nx, ny = cdx, cdy
                 elif adj_normals:
-                    # Cardinal outside cone: use the adjacent normal most aligned to cardinal
-                    best_n = max(adj_normals, key=lambda nv: cdx * nv[0] + cdy * nv[1])
+                    # Cardinal outside cone: use the adjacent normal most aligned to
+                    # preferred_direction when provided, otherwise fall back to cardinal.
+                    if preferred_direction is not None:
+                        pdx, pdy = preferred_direction
+                        best_n = max(adj_normals, key=lambda nv: pdx * nv[0] + pdy * nv[1])
+                    else:
+                        best_n = max(adj_normals, key=lambda nv: cdx * nv[0] + cdy * nv[1])
                     nx, ny = best_n
 
         if not at_corner:

@@ -1392,6 +1392,31 @@ _SIDE_NORMALS_LOCAL: "dict[str, tuple[float, float]]" = {
     "left":   (-1.0, 0.0),
 }
 
+# Escape-stub constants: a short segment from the boundary point along the
+# outward normal to an "escape point", from which the orthogonal trunk is
+# routed.  Only applied when the outward normal is non-cardinal (i.e. the
+# port sits on a sloped polygon face such as a diamond or hexagon slope).
+_STUB_LEN: float = 20.0
+_CARDINAL_NORMAL_T: float = 0.999  # max(|nx|,|ny|) threshold for cardinal
+
+
+def _escape_stub_wrap(result, src_pc, dst_pc, src_needs: bool, dst_needs: bool):
+    """Prepend/append boundary points for non-cardinal terminal normals.
+
+    The result was routed from src_escape (or src boundary) to dst_escape
+    (or dst boundary).  This wraps it with the actual boundary points so
+    that points[0] == source_port.point and points[-1] == target_port.point,
+    and the first/last segments become the diagonal normal stubs.
+    """
+    if result is None:
+        return None
+    pts = list(result.points)
+    if src_needs:
+        pts = [src_pc.point] + pts
+    if dst_needs:
+        pts = pts + [dst_pc.point]
+    return result._replace(points=tuple(pts), source_port=src_pc, target_port=dst_pc)
+
 
 def flowchart_route_adapter(
     semantics: "FlowchartSemantics",
@@ -2247,6 +2272,21 @@ def _flowchart_route_new_path(
         # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
         per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
 
+        # Escape port candidates for non-cardinal outward normals.
+        # Non-cardinal normals arise on sloped polygon faces (diamond, hexagon, etc.).
+        # Route from escape to escape so the trunk is fully orthogonal; the
+        # diagonal boundary→escape segments become the terminal stubs.
+        _snx, _sny = src_pc.outward_normal
+        _dnx, _dny = dst_pc.outward_normal
+        _src_needs_stub = max(abs(_snx), abs(_sny)) < _CARDINAL_NORMAL_T
+        _dst_needs_stub = max(abs(_dnx), abs(_dny)) < _CARDINAL_NORMAL_T
+        _src_rpc = src_pc._replace(
+            point=(src_pc.point[0] + _snx * _STUB_LEN, src_pc.point[1] + _sny * _STUB_LEN)
+        ) if _src_needs_stub else src_pc
+        _dst_rpc = dst_pc._replace(
+            point=(dst_pc.point[0] + _dnx * _STUB_LEN, dst_pc.point[1] + _dny * _STUB_LEN)
+        ) if _dst_needs_stub else dst_pc
+
         # Multi-rank forward: try local channel first.
         src_node = nodes.get(real_src_id)
         dst_node = nodes.get(real_dst_id)
@@ -2282,7 +2322,7 @@ def _flowchart_route_new_path(
                 and abs(src_node.rank - dst_node.rank) > 1):
             lb = _local_bounds_for(src_node.rank, dst_node.rank)
             if lb is not None:
-                result = local_channel_route(eid, src_pc, dst_pc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
+                result = local_channel_route(eid, _src_rpc, _dst_rpc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                 # Reject channels that land within 8px of the canvas boundary
                 if result is not None:
                     _CANVAS_MARGIN = 8.0
@@ -2293,9 +2333,12 @@ def _flowchart_route_new_path(
                         for p in _mid
                     ):
                         result = None
+                    else:
+                        result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         if result is None:
-            result = route_edge(eid, src_pc, dst_pc, per_obs, existing)
+            result = route_edge(eid, _src_rpc, _dst_rpc, per_obs, existing)
+            result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         # Last-resort: if route_edge found nothing and the nodes are far apart
         # vertically (same or adjacent DAG rank but large y-gap), the standard
@@ -2306,7 +2349,7 @@ def _flowchart_route_new_path(
             if abs(src_node.y - dst_node.y) > 400:
                 _lb2 = _local_bounds_for(src_node.rank, dst_node.rank)
                 if _lb2 is not None:
-                    result = local_channel_route(eid, src_pc, dst_pc, _lb2, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
+                    result = local_channel_route(eid, _src_rpc, _dst_rpc, _lb2, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                     if result is not None:
                         _CANVAS_MARGIN2 = 8.0
                         if any(
@@ -2315,6 +2358,8 @@ def _flowchart_route_new_path(
                             for p in result.points[1:-1]
                         ):
                             result = None
+                        else:
+                            result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         if result is not None:
             assignments[eid] = result

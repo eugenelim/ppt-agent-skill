@@ -1752,7 +1752,7 @@ def _route_edges(nodes: dict[str, _Node], edges: list[_Edge], canvas_w: int,
             if len(_pts) >= 2:
                 _pts[0] = (int(x1), int(y1))
                 _pts[-1] = (int(x2), int(y2))
-                _pts = _ensure_orthogonal_trunk(_pts)
+                _pts = _ensure_orthogonal(_pts)
         _accumulate_occupied(_pts)
         if e.style.startswith("cls"):
             _pts = _shorten_cls_route(
