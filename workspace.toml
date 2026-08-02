@@ -175,6 +175,16 @@ open = [
   # Fix: update tpl-interview.md and contract_validator.py interview contract.
   # Unblock: a multi-loop spec covering prompt template changes.
   {slug = "brand-shell-interview-wiring", source = "spec/brand-shell-extraction"},
+
+  # ── flowchart-connector-attachment AC9 deferrals ──────────────────────
+  # CBE cardinal source stubs: shifting the A* start 20px along a cardinal normal
+  # can cause label-crossing regressions because the CBE sparse grid is label-unaware.
+  # Fix: add label row/column coordinates to _cbe_build_grid so A* avoids them.
+  {slug = "flowchart-connector-cbe-cardinal-stubs", source = "spec/flowchart-connector-attachment AC9"},
+  # ELK path stub attachment: ELK produces AABB-aligned waypoints without polygon-boundary
+  # geometry; adding shape-aware escape stubs requires deep ELK adapter changes.
+  # Unblock: ELK architecture geometry spec in an elkjs-enabled environment.
+  {slug = "flowchart-connector-elk-attachment", source = "spec/flowchart-connector-attachment AC9"},
 ]
 
 # ── Initiative: Mermaid Rendering Correctness Follow-on — boston-v1 ──────────

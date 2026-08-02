@@ -40,7 +40,8 @@ PortReservation(NamedTuple):
 
 RouteCandidate(NamedTuple):
     edge_id, source_port, target_port, points, bend_count, length,
-    crossing_count, shared_segment_length, cost
+    crossing_count, shared_segment_length, cost,
+    escape_indices(frozenset, default=frozenset())
 
 RoutingObstacle(NamedTuple):
     obstacle_id, kind, bounds, scope_id, title_bounds, permitted_gate_ids(frozenset)

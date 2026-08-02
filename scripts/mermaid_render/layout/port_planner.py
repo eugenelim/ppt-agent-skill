@@ -56,6 +56,10 @@ class RouteCandidate(NamedTuple):
     crossing_count: int
     shared_segment_length: float
     cost: float
+    # Indices of escape waypoints (pts[1] and/or pts[-2] when escape stubs are
+    # present). _assign_lanes skips shifting these so the stub stays collinear
+    # with the outward normal after lane separation.
+    escape_indices: frozenset = frozenset()
 
 
 class RoutingObstacle(NamedTuple):

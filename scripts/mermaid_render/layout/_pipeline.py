@@ -32,6 +32,7 @@ from ._layout import (
 from ._routing import (
     _route_edges, _node_render_w, _finalize_self_loop_offsets,
     _astar_route, _blocked_segs, _ensure_orthogonal, _label_on_longest,
+    _est_label_w, _LABEL_CHIP_H,
 )
 from ._renderer import (
     _render_legend,
@@ -90,6 +91,31 @@ def _infer_label_icons(nodes: "dict[str, _Node]") -> None:
                 break
 
 # ── compile-flowchart pipeline ───────────────────────────────────────────────
+
+
+def _seg_intersects_rect(
+    bx: float, by: float, ex: float, ey: float,
+    rx0: float, ry0: float, rx1: float, ry1: float,
+) -> bool:
+    """Liang-Barsky clip: True when segment (bx,by)→(ex,ey) overlaps the rect."""
+    dx, dy = ex - bx, ey - by
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, bx - rx0), (dx, rx1 - bx), (-dy, by - ry0), (dy, ry1 - by)):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+        elif p < 0:
+            r = q / p
+            if r > t1:
+                return False
+            t0 = max(t0, r)
+        else:
+            r = q / p
+            if r < t0:
+                return False
+            t1 = min(t1, r)
+    return t0 <= t1
+
 
 _LABEL_FS: int = 12   # edge-label / group-label font size
 _LABEL_FW: int = 400  # edge-label / group-label font weight (regular)
@@ -792,7 +818,20 @@ def _restore_gate_edges(
             # share the same initial segment (tramlines).
             "_src_port": first.get("_src_port"),
             "_dst_port": second.get("_dst_port"),
+            # Preserve outward normals so CBE escape stubs are applied on this path
+            # (inner-direction subgraph edges are split by _add_gate_nodes and rejoined
+            # here; without forwarding, CBE rerouter falls back to (0,0) and skips stubs).
+            "_src_normal": first.get("_src_normal"),
+            "_dst_normal": second.get("_dst_normal"),
         }
+        # Rebase escape indices from each half into merged waypoint index space.
+        _n_first_wps = len(list(first.get("waypoints") or []))
+        for _esc_key in ("_escape_idxs", "_cbe_escape_idxs"):
+            _merged_esc_idxs = (first.get(_esc_key) or set()) | {
+                j + _n_first_wps for j in (second.get(_esc_key) or set())
+            }
+            if _merged_esc_idxs:
+                merged[_esc_key] = _merged_esc_idxs
         to_remove.add(first_idx)
         to_remove.add(second_idx)
         to_add.append(merged)
@@ -1413,28 +1452,42 @@ _SIDE_NORMALS_LOCAL: "dict[str, tuple[float, float]]" = {
 
 # Escape-stub constants: a short segment from the boundary point along the
 # outward normal to an "escape point", from which the orthogonal trunk is
-# routed.  Only applied when the outward normal is non-cardinal (i.e. the
-# port sits on a sloped polygon face such as a diamond or hexagon slope).
+# routed.  Applied for all non-zero outward normals — cardinal shapes produce
+# collinear stubs (no visible trunk change) while polygon slopes produce the
+# characteristic diagonal departure stub.
 _STUB_LEN: float = 20.0
+# Used by the CBE rerouter to limit stubs to non-cardinal (diagonal) normals
+# only, where face-lift remapping of the boundary port can misalign a cardinal
+# stub.  Not used by the main router (which applies stubs to all normals).
 _CARDINAL_NORMAL_T: float = 0.999  # max(|nx|,|ny|) threshold for cardinal
 
 
 def _escape_stub_wrap(result, src_pc, dst_pc, src_needs: bool, dst_needs: bool):
-    """Prepend/append boundary points for non-cardinal terminal normals.
+    """Prepend/append boundary points to form terminal escape stubs.
 
     The result was routed from src_escape (or src boundary) to dst_escape
     (or dst boundary).  This wraps it with the actual boundary points so
     that points[0] == source_port.point and points[-1] == target_port.point,
-    and the first/last segments become the diagonal normal stubs.
+    and the first/last segments become the normal stubs.  The escape point
+    indices (pts[1] and/or pts[-2]) are recorded in escape_indices so that
+    _assign_lanes can skip them during lane separation.
     """
     if result is None:
         return None
     pts = list(result.points)
+    escape_idx: set = set()
     if src_needs:
         pts = [src_pc.point] + pts
+        escape_idx.add(1)
     if dst_needs:
+        escape_idx.add(len(pts) - 1)
         pts = pts + [dst_pc.point]
-    return result._replace(points=tuple(pts), source_port=src_pc, target_port=dst_pc)
+    return result._replace(
+        points=tuple(pts),
+        source_port=src_pc,
+        target_port=dst_pc,
+        escape_indices=frozenset(escape_idx),
+    )
 
 
 def flowchart_route_adapter(
@@ -1632,6 +1685,7 @@ def _assign_lanes(
     assignments: "dict",
     obstacles: "tuple",
     lane_gap: float = 12.0,
+    _reroute_fn: "object" = None,
 ) -> "dict":
     """Separate route pairs sharing a segment by shifting the later route ±lane_gap px.
 
@@ -1639,6 +1693,10 @@ def _assign_lanes(
     segment longer than 8 px.  Tries to move route j by +lane_gap first, then
     -lane_gap.  Skips the shift when the displaced segment would enter any
     NODE_INTERIOR obstacle.  Single O(n²) pass; earlier routes are unchanged.
+
+    _reroute_fn(eid, rc) -> RouteCandidate | None: optional callback invoked when
+    all interior waypoints at the shared-lane position are escape-protected (pure-stub
+    route with no movable trunk).  Returns a replacement RouteCandidate or None.
     """
     def _segs(pts: "tuple") -> "list":
         return [(pts[k], pts[k + 1]) for k in range(len(pts) - 1)]
@@ -1711,14 +1769,115 @@ def _assign_lanes(
                             nx = sx + delta
                             if _v_clear(nx, y_lo, y_hi):
                                 pts_list = list(rc_b.points)
+                                _esc = rc_b.escape_indices
+                                # Protect each escape that is on the shared channel and
+                                # its full contiguous same-x chain.  Only grow using the
+                                # escape's OWN x (not sx) so neighbors on the channel
+                                # that happen to be next to an off-channel escape are not
+                                # incorrectly shielded from the lane shift.
+                                _protected: "set[int]" = set()
+                                _npts_v = len(pts_list)
+                                for _ei in list(_esc):
+                                    _ex = pts_list[_ei][0]
+                                    if abs(_ex - sx) >= 2.0:
+                                        continue  # escape not on this channel
+                                    _protected.add(_ei)
+                                    if 2 * _ei < _npts_v - 1:
+                                        # Source escape — walk backward to protect
+                                        # the node-side boundary stub chain.
+                                        _j = _ei - 1
+                                        while _j >= 0 and abs(pts_list[_j][0] - _ex) < 2.0:
+                                            _protected.add(_j)
+                                            _j -= 1
+                                    else:
+                                        # Destination escape — walk forward to protect
+                                        # the node-side boundary stub chain.
+                                        _j = _ei + 1
+                                        while _j < _npts_v and abs(pts_list[_j][0] - _ex) < 2.0:
+                                            _protected.add(_j)
+                                            _j += 1
+                                    # The opposite side (trunk) is NOT protected;
+                                    # it is shifted to nx and a jog is inserted below.
+                                _shifted = False
                                 for _k in range(1, len(pts_list) - 1):
                                     _px, _py = pts_list[_k]
-                                    if abs(_px - sx) < 2.0:
+                                    if abs(_px - sx) < 2.0 and _k not in _protected:
                                         pts_list[_k] = (nx, _py)
-                                result[eid_b] = rc_b._replace(points=tuple(pts_list))
-                                rc_b = result[eid_b]
-                                done = True
-                                break
+                                        _shifted = True
+                                # If nothing moved and all movable points are protected
+                                # (pure-stub route with no trunk), reroute entirely.
+                                if not _shifted and _reroute_fn is not None:
+                                    _stuck = any(
+                                        abs(pts_list[_k][0] - sx) < 2.0
+                                        for _k in range(1, len(pts_list) - 1)
+                                    )
+                                    if _stuck:
+                                        _rerouted = _reroute_fn(eid_b, rc_b)
+                                        if _rerouted is not None:
+                                            _still_ov_v = any(
+                                                _axis_ov(_ax1_, _ay1_, _ax2_, _ay2_,
+                                                         _bx1_, _by1_, _bx2_, _by2_) > 8.0
+                                                for _ov_eid_v, _other_rc_v in result.items()
+                                                if _ov_eid_v != eid_b
+                                                for (_ax1_, _ay1_), (_ax2_, _ay2_) in _segs(_other_rc_v.points)
+                                                for (_bx1_, _by1_), (_bx2_, _by2_) in _segs(_rerouted.points)
+                                            )
+                                            if not _still_ov_v:
+                                                result[eid_b] = _rerouted
+                                                rc_b = result[eid_b]
+                                                done = True
+                                                break
+                                # Insert a horizontal bridge between each escape stub
+                                # and the newly-shifted trunk segment to preserve
+                                # orthogonality.  Source escapes: jog after; dest
+                                # escapes: jog before.
+                                _jog_ins_v: "list[tuple[int, tuple[float, float]]]" = []
+                                _bridge_blocked_v = False
+                                for _ei in list(_esc):
+                                    if abs(pts_list[_ei][0] - sx) >= 2.0:
+                                        continue
+                                    if 2 * _ei < len(pts_list) - 1:
+                                        # Source escape: jog after escape bridges stub→trunk.
+                                        _ni = _ei + 1
+                                        if (1 <= _ni < len(pts_list) - 1
+                                                and abs(pts_list[_ni][0] - nx) < 2.0
+                                                and abs(pts_list[_ei][1] - pts_list[_ni][1]) > 1e-9):
+                                            if _h_clear(pts_list[_ei][1],
+                                                        min(sx, nx), max(sx, nx)):
+                                                _jog_ins_v.append((_ni, (nx, pts_list[_ei][1])))
+                                                _shifted = True
+                                            else:
+                                                _bridge_blocked_v = True
+                                    else:
+                                        # Destination escape: jog before escape bridges trunk→stub.
+                                        _pi = _ei - 1
+                                        if (1 <= _pi < len(pts_list) - 1
+                                                and abs(pts_list[_pi][0] - nx) < 2.0
+                                                and abs(pts_list[_ei][1] - pts_list[_pi][1]) > 1e-9):
+                                            if _h_clear(pts_list[_ei][1],
+                                                        min(sx, nx), max(sx, nx)):
+                                                _jog_ins_v.append((_ei, (nx, pts_list[_ei][1])))
+                                                _shifted = True
+                                            else:
+                                                _bridge_blocked_v = True
+                                # A blocked bridge means the trunk was moved but can't be
+                                # orthogonally connected to its escape stub — abort this delta.
+                                if _bridge_blocked_v:
+                                    continue
+                                _jog_ins_v.sort(key=lambda _t: _t[0])
+                                for _vn, (_vji, _vjp) in enumerate(_jog_ins_v):
+                                    _vins = _vji + _vn
+                                    pts_list.insert(_vins, _vjp)
+                                    _esc = frozenset(
+                                        k + 1 if k >= _vins else k for k in _esc
+                                    )
+                                if _shifted:
+                                    result[eid_b] = rc_b._replace(
+                                        points=tuple(pts_list), escape_indices=_esc,
+                                    )
+                                    rc_b = result[eid_b]
+                                    done = True
+                                    break
                     # Horizontal shared channel: shift route-b interior waypoints in y.
                     # Use x-range filter to avoid shifting bend points outside the
                     # shared segment that would create non-orthogonal segments.
@@ -1735,7 +1894,11 @@ def _assign_lanes(
                             pts_list = list(rc_b.points)
                             # Stub path: source endpoint at y≈sy_val means the first
                             # segment is horizontal.  Inserting a stub converts L→Z.
-                            if len(pts_list) >= 3 and abs(pts_list[0][1] - sy_val) < 2.0:
+                            # Skip when index 1 is a protected escape: the stub jog would
+                            # land before the escape, making the stub→jog→escape sequence
+                            # produce a diagonal segment between the jog and the escape.
+                            if (len(pts_list) >= 3 and abs(pts_list[0][1] - sy_val) < 2.0
+                                    and 1 not in rc_b.escape_indices):
                                 sx0 = pts_list[0][0]
                                 bx_bend = pts_list[1][0]
                                 h_lo = min(sx0, bx_bend)
@@ -1745,26 +1908,173 @@ def _assign_lanes(
                                 if not _v_clear(sx0, min(sy_val, ny), max(sy_val, ny)):
                                     continue
                                 # Shift all interior points at y≈sy_val, then prepend stub.
+                                _esc = rc_b.escape_indices
+                                _lz_protected: "set[int]" = set()
+                                for _ei in list(_esc):
+                                    _ey2 = pts_list[_ei][1]
+                                    if abs(_ey2 - sy_val) >= 2.0:
+                                        continue
+                                    _lz_protected.add(_ei)
+                                    _j = _ei - 1
+                                    while _j >= 0 and abs(pts_list[_j][1] - _ey2) < 2.0:
+                                        _lz_protected.add(_j)
+                                        _j -= 1
+                                    _j = _ei + 1
+                                    while _j < len(pts_list) and abs(pts_list[_j][1] - _ey2) < 2.0:
+                                        _lz_protected.add(_j)
+                                        _j += 1
+                                _shifted = False
                                 for _k in range(1, len(pts_list) - 1):
                                     _px, _py = pts_list[_k]
-                                    if abs(_py - sy_val) < 2.0:
+                                    if abs(_py - sy_val) < 2.0 and _k not in _lz_protected:
                                         pts_list[_k] = (_px, ny)
-                                pts_list.insert(1, (sx0, ny))
-                                result[eid_b] = rc_b._replace(points=tuple(pts_list))
-                                rc_b = result[eid_b]
-                                done = True
-                                break
+                                        _shifted = True
+                                if _shifted:
+                                    pts_list.insert(1, (sx0, ny))
+                                    # Insert at index 1 shifts all escape indices >= 1 up by 1.
+                                    _shifted_esc = frozenset(k + 1 if k >= 1 else k for k in _esc)
+                                    result[eid_b] = rc_b._replace(points=tuple(pts_list), escape_indices=_shifted_esc)
+                                    rc_b = result[eid_b]
+                                    done = True
+                                    break
                             # Standard path: shared segment is interior — shift in y.
                             if not _h_clear(ny, x_lo, x_hi):
                                 continue
+                            _esc = rc_b.escape_indices
+                            # Protect each escape on the shared horizontal channel and
+                            # its full contiguous same-y chain.  Use the escape's OWN y
+                            # (not sy_val) so neighbors on the channel next to an
+                            # off-channel escape are not incorrectly protected.
+                            _h_protected: "set[int]" = set()
+                            _npts_h = len(pts_list)
+                            for _ei in list(_esc):
+                                _ey = pts_list[_ei][1]
+                                if abs(_ey - sy_val) >= 2.0:
+                                    continue  # escape not on this horizontal channel
+                                _h_protected.add(_ei)
+                                if 2 * _ei < _npts_h - 1:
+                                    # Source escape — walk backward to protect node-side.
+                                    _j = _ei - 1
+                                    while _j >= 0 and abs(pts_list[_j][1] - _ey) < 2.0:
+                                        _h_protected.add(_j)
+                                        _j -= 1
+                                else:
+                                    # Destination escape — walk forward to protect node-side.
+                                    _j = _ei + 1
+                                    while _j < _npts_h and abs(pts_list[_j][1] - _ey) < 2.0:
+                                        _h_protected.add(_j)
+                                        _j += 1
+                                # The opposite side (trunk) is NOT protected;
+                                # it is shifted to ny and a jog is inserted below.
+                            # Find the contiguous horizontal rail that overlaps
+                            # [x_lo, x_hi] and grow it outward.  Remote rails at
+                            # the same sy_val are untouched — shifting them can
+                            # create diagonal terminal segments.
+                            _in_ov = [
+                                _k for _k in range(1, len(pts_list) - 1)
+                                if abs(pts_list[_k][1] - sy_val) < 2.0
+                                and x_lo - 2.0 <= pts_list[_k][0] <= x_hi + 2.0
+                            ]
+                            _affected_rail: "set[int]" = set(_in_ov)
+                            for _anchor in list(_in_ov):
+                                _j = _anchor - 1
+                                while _j >= 1 and abs(pts_list[_j][1] - sy_val) < 2.0:
+                                    _affected_rail.add(_j)
+                                    _j -= 1
+                                _j = _anchor + 1
+                                while _j <= len(pts_list) - 2 and abs(pts_list[_j][1] - sy_val) < 2.0:
+                                    _affected_rail.add(_j)
+                                    _j += 1
+                            # Validate the full shifted rail extent, not just the
+                            # overlap interval — a node outside [x_lo, x_hi] is
+                            # also obstructed after the shift.
+                            if _affected_rail:
+                                _movable_rail = [_k for _k in _affected_rail if _k not in _h_protected]
+                                if _movable_rail:
+                                    _rail_x_lo = min(pts_list[_k][0] for _k in _movable_rail)
+                                    _rail_x_hi = max(pts_list[_k][0] for _k in _movable_rail)
+                                    if not _h_clear(ny, _rail_x_lo, _rail_x_hi):
+                                        continue
+                            _h_shifted = False
                             for _k in range(1, len(pts_list) - 1):
                                 _px, _py = pts_list[_k]
-                                if abs(_py - sy_val) < 2.0 and x_lo - 2.0 <= _px <= x_hi + 2.0:
+                                if (abs(_py - sy_val) < 2.0 and _k in _affected_rail
+                                        and _k not in _h_protected):
                                     pts_list[_k] = (_px, ny)
-                            result[eid_b] = rc_b._replace(points=tuple(pts_list))
-                            rc_b = result[eid_b]
-                            done = True
-                            break
+                                    _h_shifted = True
+                            # If nothing moved and all rail points are protected
+                            # (pure-stub route), reroute entirely via callback.
+                            if not _h_shifted and _reroute_fn is not None:
+                                _h_stuck = any(
+                                    abs(pts_list[_k][1] - sy_val) < 2.0
+                                    and _k in _affected_rail
+                                    for _k in range(1, len(pts_list) - 1)
+                                )
+                                if _h_stuck:
+                                    _rerouted_h = _reroute_fn(eid_b, rc_b)
+                                    if _rerouted_h is not None:
+                                        _still_ov_h = any(
+                                            _axis_ov(_ax1_, _ay1_, _ax2_, _ay2_,
+                                                     _bx1_, _by1_, _bx2_, _by2_) > 8.0
+                                            for _ov_eid_h, _other_rc_h in result.items()
+                                            if _ov_eid_h != eid_b
+                                            for (_ax1_, _ay1_), (_ax2_, _ay2_) in _segs(_other_rc_h.points)
+                                            for (_bx1_, _by1_), (_bx2_, _by2_) in _segs(_rerouted_h.points)
+                                        )
+                                        if not _still_ov_h:
+                                            result[eid_b] = _rerouted_h
+                                            rc_b = result[eid_b]
+                                            done = True
+                                            break
+                            # Insert a vertical jog between each escape stub and the
+                            # newly-shifted trunk to restore orthogonality.  Source
+                            # escapes: jog after; destination escapes: jog before.
+                            _jog_ins_h: "list[tuple[int, tuple[float, float]]]" = []
+                            _bridge_blocked_h = False
+                            for _ei in list(_esc):
+                                _ey_j = pts_list[_ei][1]
+                                if abs(_ey_j - sy_val) >= 2.0:
+                                    continue
+                                if 2 * _ei < len(pts_list) - 1:
+                                    # Source escape: jog after escape bridges stub→trunk.
+                                    _ni_h = _ei + 1
+                                    if (1 <= _ni_h < len(pts_list) - 1
+                                            and abs(pts_list[_ni_h][1] - ny) < 2.0
+                                            and abs(pts_list[_ei][0] - pts_list[_ni_h][0]) > 1e-9):
+                                        if _v_clear(pts_list[_ei][0],
+                                                    min(sy_val, ny), max(sy_val, ny)):
+                                            _jog_ins_h.append((_ni_h, (pts_list[_ei][0], ny)))
+                                            _h_shifted = True
+                                        else:
+                                            _bridge_blocked_h = True
+                                else:
+                                    # Destination escape: jog before escape bridges trunk→stub.
+                                    _pi_h = _ei - 1
+                                    if (1 <= _pi_h < len(pts_list) - 1
+                                            and abs(pts_list[_pi_h][1] - ny) < 2.0
+                                            and abs(pts_list[_ei][0] - pts_list[_pi_h][0]) > 1e-9):
+                                        if _v_clear(pts_list[_ei][0],
+                                                    min(sy_val, ny), max(sy_val, ny)):
+                                            _jog_ins_h.append((_ei, (pts_list[_ei][0], ny)))
+                                            _h_shifted = True
+                                        else:
+                                            _bridge_blocked_h = True
+                            if _bridge_blocked_h:
+                                continue
+                            _jog_ins_h.sort(key=lambda _t: _t[0])
+                            for _hn, (_hji, _hjp) in enumerate(_jog_ins_h):
+                                _hins = _hji + _hn
+                                pts_list.insert(_hins, _hjp)
+                                _esc = frozenset(
+                                    k + 1 if k >= _hins else k for k in _esc
+                                )
+                            if _h_shifted:
+                                result[eid_b] = rc_b._replace(
+                                    points=tuple(pts_list), escape_indices=_esc,
+                                )
+                                rc_b = result[eid_b]
+                                done = True
+                                break
                     if done:
                         break
     return result
@@ -1908,7 +2218,14 @@ def _flowchart_route_new_path(
         if abs(dx_v) < 5.0 * abs(dy_v):
             return src_face
         if _horiz:
-            return "bottom" if dy_v >= 0 else "top"
+            # LR/RL: target is not dy-dominated, so the edge is primarily horizontal.
+            # Restrict to adjacent ranks — long-range skip edges (rank gap > 1) would
+            # route straight through intermediate nodes if given a horizontal face.
+            if abs(sn.rank - dn.rank) <= 1:
+                return "right" if dx_v >= 0 else "left"
+            # Long-range: exit vertically (top/bottom) so the skip edge routes
+            # through a vertical channel clear of intermediate same-rank nodes.
+            return "top" if dy_v < 0 else "bottom"
         # TB: when target is above, exit top so the path reaches destination
         # bottom at right angles instead of a vertical segment parallel to a
         # side face.
@@ -2291,20 +2608,230 @@ def _flowchart_route_new_path(
         # Per-edge obstacles: exclude src and dst nodes (routes start on boundary)
         per_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (real_src_id, real_dst_id))
 
-        # Escape port candidates for non-cardinal outward normals.
-        # Non-cardinal normals arise on sloped polygon faces (diamond, hexagon, etc.).
-        # Route from escape to escape so the trunk is fully orthogonal; the
-        # diagonal boundary→escape segments become the terminal stubs.
+        # Escape port candidates for all non-zero outward normals.
+        # Non-cardinal normals (diamond, hexagon, etc.) produce diagonal stubs;
+        # cardinal normals produce collinear stubs (no visible trunk change) but
+        # still anchor the departure direction — route_edge can otherwise choose
+        # a horizontal-first L-route from a bottom-face port, departing sideways.
         _snx, _sny = src_pc.outward_normal
         _dnx, _dny = dst_pc.outward_normal
-        _src_needs_stub = max(abs(_snx), abs(_sny)) < _CARDINAL_NORMAL_T
-        _dst_needs_stub = max(abs(_dnx), abs(_dny)) < _CARDINAL_NORMAL_T
+        _src_needs_stub = max(abs(_snx), abs(_sny)) > 1e-9
+        _dst_needs_stub = max(abs(_dnx), abs(_dny)) > 1e-9
+        # Cap escape stubs when they genuinely approach each other and could cross.
+        # Three-way decision based on the largest non-crossing stub length:
+        #
+        #   max_nc = (gap_along_axis − 1) / approach_rate
+        #
+        #   max_nc ≥ _STUB_LEN  → no cap; normal case
+        #   per-endpoint min ≤ max_nc < _STUB_LEN → cap to max_nc; clearance met
+        #   max_nc < per-endpoint min → disable that endpoint's stub independently;
+        #     a markerless end (4 px min) can still stub when a marked end (13/15 px)
+        #     cannot — endpoints are evaluated independently, not via max().
+        #
+        # When normals oppose each other (dn·sn < 0, e.g. TB source-bottom/dest-top),
+        # the cap is computed along the src normal axis — this is exact even when ports
+        # are horizontally offset (where the Euclidean direction dilutes approach_rate).
+        # For non-opposing normals the Euclidean formula handles the edge cases.
+        _sx0, _sy0 = src_pc.point
+        _dx0, _dy0 = dst_pc.point
+        _gap_euclidean = ((_dx0 - _sx0) ** 2 + (_dy0 - _sy0) ** 2) ** 0.5
+        _stub_cap = _STUB_LEN
+        # Endpoint-specific minimum stub lengths based on which end has a marker.
+        # Destination minimum (arrowhead depth + clearance):
+        _stub_min_dst = (15.0 if (e.arrow and e.style == "thick")
+                         else 13.0 if e.arrow else 4.0)
+        # Source minimum (source marker, if any):
+        _src_has_marker = _marker_kind(e.source_marker).value != "none"
+        _stub_min_src = (15.0 if (_src_has_marker and e.style == "thick")
+                         else 13.0 if _src_has_marker else 4.0)
+        _dn_dot_sn = _dnx * _snx + _dny * _sny
+        if _dn_dot_sn < -0.99:
+            # Truly antiparallel normals (e.g. TB bottom→top): escapes close the
+            # gap along the src normal axis, which is exact even when ports are
+            # horizontally offset.  Merely obtuse normals (e.g. diamond→rect) use
+            # the Euclidean branch below — projecting a diagonal-normal gap onto the
+            # src axis gives a misleadingly small clearance and disables valid stubs.
+            _gap_along_sn = (_dx0 - _sx0) * _snx + (_dy0 - _sy0) * _sny
+            if _gap_along_sn > 0:
+                _approach_rate_sn = 1.0 - _dn_dot_sn  # ≥ 1; equals 2 for pure opposing
+                _max_nc = (_gap_along_sn - 1.0) / _approach_rate_sn
+                if _max_nc < _STUB_LEN:
+                    # Stubs can only collide when ports are perpendicularly close.
+                    # When the perpendicular separation exceeds the full stub length
+                    # the stubs diverge and the axial cap does not apply.
+                    _gap_perp_sn = abs((_dx0 - _sx0) * _sny - (_dy0 - _sy0) * _snx)
+                    if _gap_perp_sn <= _STUB_LEN:
+                        # Cap each endpoint independently: a markerless end (4 px min)
+                        # can still stub when a marked end (13/15 px) cannot.
+                        _stub_cap = _max_nc
+                        if _max_nc < _stub_min_src:
+                            _src_needs_stub = False
+                        if _max_nc < _stub_min_dst:
+                            _dst_needs_stub = False
+        elif _gap_euclidean > 1e-9:
+            # Non-opposing normals: use Euclidean approach-rate for the remaining
+            # edge cases (near-perpendicular normals don't fire this branch in practice).
+            _ux = (_dx0 - _sx0) / _gap_euclidean
+            _uy = (_dy0 - _sy0) / _gap_euclidean
+            _approach_rate = (_snx - _dnx) * _ux + (_sny - _dny) * _uy
+            if _approach_rate > 0:
+                _max_nc = (_gap_euclidean - 1.0) / _approach_rate
+                if _max_nc < _STUB_LEN:
+                    _stub_cap = _max_nc
+                    if _max_nc < _stub_min_src:
+                        _src_needs_stub = False
+                    if _max_nc < _stub_min_dst:
+                        _dst_needs_stub = False
         _src_rpc = src_pc._replace(
-            point=(src_pc.point[0] + _snx * _STUB_LEN, src_pc.point[1] + _sny * _STUB_LEN)
+            point=(src_pc.point[0] + _snx * _stub_cap, src_pc.point[1] + _sny * _stub_cap)
         ) if _src_needs_stub else src_pc
         _dst_rpc = dst_pc._replace(
-            point=(dst_pc.point[0] + _dnx * _STUB_LEN, dst_pc.point[1] + _dny * _STUB_LEN)
+            point=(dst_pc.point[0] + _dnx * _stub_cap, dst_pc.point[1] + _dny * _stub_cap)
         ) if _dst_needs_stub else dst_pc
+
+        # Snap near-aligned cardinal escape coordinates to prevent sub-4px doglegs.
+        # When both normals are on the same axis (e.g. both vertical) and the escapes
+        # differ by < 1px on the perpendicular axis (e.g. x-offset from odd-width nodes),
+        # route_edge inserts a tiny jog at the escape point.  Snap ALL four points
+        # (both escapes AND boundaries) to the same integer coordinate so stubs stay
+        # exactly on the normal axis.  Averaging to a non-integer fails the 0.9998
+        # terminal-normal contract for short capped stubs (e.g. 9.5px / 0.25px offset
+        # gives dot ≈ 0.9996) and can trigger collinear dedup into a diagonal segment.
+        # Sub-1 px escape alignment: when both normals are cardinal on the same
+        # axis and the escapes differ by < 1 px on the perpendicular axis, each
+        # escape already lies on the outward-normal ray from its own boundary
+        # (normal is (0,±1) so escape.x = boundary.x exactly), so no snap is
+        # needed.  The resulting < 1 px trunk jog between the two escape columns
+        # is absorbed by the dogleg validator's escape-chain exemption.
+
+        # Retract escape point when it lands inside a sibling obstacle
+        # (e.g. fan-out A→C escape falls on B's top edge when rankSpacing equals
+        # the stub length).  RoutingObstacle.bounds = (x, y, w, h).
+        # Before fully disabling, compute the max clearance along the normal so we
+        # can use a shorter stub rather than losing the departure-direction constraint.
+        def _shrink_stub(px, py, nx, ny, full_len, obs_list):
+            """Return max stub ≤ full_len that keeps the escape outside obs_list."""
+            best = full_len
+            # Precompute full-length endpoint so each obstacle is tested against the
+            # original (unclipped) segment, not against the already-shrunk stub.
+            _fl_x = px + nx * full_len
+            _fl_y = py + ny * full_len
+            for _ob_ in obs_list:
+                _ox_, _oy_, _ow_, _oh_ = _ob_.bounds
+                _ox1_, _oy1_ = _ox_ + _ow_, _oy_ + _oh_
+                # Use full segment check — endpoint-only misses pass-throughs where
+                # the stub enters and exits the obstacle (escape lands beyond it).
+                if not _seg_intersects_rect(px, py, _fl_x, _fl_y, _ox_, _oy_, _ox1_, _oy1_):
+                    continue
+                # Compute ray-entry distance along each axis.
+                _tx = (((_ox_ - px) / nx) if nx > 1e-9
+                       else ((_ox1_ - px) / nx) if nx < -1e-9
+                       else (0.0 if _ox_ <= px <= _ox1_ else float('inf')))
+                _ty = (((_oy_ - py) / ny) if ny > 1e-9
+                       else ((_oy1_ - py) / ny) if ny < -1e-9
+                       else (0.0 if _oy_ <= py <= _oy1_ else float('inf')))
+                _clr = max(_tx, _ty) - 1.0  # 1 px clearance before obstacle face
+                best = min(best, max(_clr, 0.0))
+            return best
+
+        if _src_needs_stub:
+            _ex, _ey = _src_rpc.point
+            _bsx, _bsy = src_pc.point  # use current (possibly snapped) boundary
+            # Use obs_tuple minus only the source node so the destination node IS
+            # included — the stub must not enter the opposite endpoint even when
+            # the two nodes are very close together.
+            # Exclude containing (ancestor) GROUP_INTERIOR obstacles: the stub exits
+            # the node boundary and necessarily crosses any enclosing subgraph's AABB,
+            # so those groups must not trigger the shrink or disable logic.
+            _stub_src_obs = [
+                _ob for _ob in obs_tuple
+                if _ob.obstacle_id != real_src_id
+                and not (_ob.kind in ("GROUP_INTERIOR", "group")
+                         and _ob.bounds[0] < _bsx < _ob.bounds[0] + _ob.bounds[2]
+                         and _ob.bounds[1] < _bsy < _ob.bounds[1] + _ob.bounds[3])
+            ]
+            if any(_seg_intersects_rect(_bsx, _bsy, _ex, _ey,
+                                        _ob.bounds[0], _ob.bounds[1],
+                                        _ob.bounds[0] + _ob.bounds[2],
+                                        _ob.bounds[1] + _ob.bounds[3])
+                   for _ob in _stub_src_obs):
+                _clr_s = _shrink_stub(_bsx, _bsy, _snx, _sny, _stub_cap, _stub_src_obs)
+                if _clr_s >= _stub_min_src:
+                    _src_rpc = src_pc._replace(point=(_bsx + _snx * _clr_s, _bsy + _sny * _clr_s))
+                else:
+                    _src_rpc = src_pc
+                    _src_needs_stub = False
+        if _dst_needs_stub:
+            _ex, _ey = _dst_rpc.point
+            _bdx, _bdy = dst_pc.point  # use current (possibly snapped) boundary
+            # Use obs_tuple minus only the destination node so the source node IS
+            # included — the stub must not enter the opposite endpoint.
+            # Same ancestor-group exclusion for the destination stub.
+            _stub_dst_obs = [
+                _ob for _ob in obs_tuple
+                if _ob.obstacle_id != real_dst_id
+                and not (_ob.kind in ("GROUP_INTERIOR", "group")
+                         and _ob.bounds[0] < _bdx < _ob.bounds[0] + _ob.bounds[2]
+                         and _ob.bounds[1] < _bdy < _ob.bounds[1] + _ob.bounds[3])
+            ]
+            if any(_seg_intersects_rect(_bdx, _bdy, _ex, _ey,
+                                        _ob.bounds[0], _ob.bounds[1],
+                                        _ob.bounds[0] + _ob.bounds[2],
+                                        _ob.bounds[1] + _ob.bounds[3])
+                   for _ob in _stub_dst_obs):
+                _clr_d = _shrink_stub(_bdx, _bdy, _dnx, _dny, _stub_cap, _stub_dst_obs)
+                if _clr_d >= _stub_min_dst:
+                    _dst_rpc = dst_pc._replace(point=(_bdx + _dnx * _clr_d, _bdy + _dny * _clr_d))
+                else:
+                    _dst_rpc = dst_pc
+                    _dst_needs_stub = False
+
+        # Endpoint-interior guard: when stubs push the routing start/end
+        # outside the source/destination, a route can loop back through the
+        # endpoint's interior (per_obs excludes src/dst so routes can start on
+        # their boundary).  Build a supplemental obstacle set; use it only if
+        # a post-route check detects an interior crossing (1px inset avoids
+        # false positives from boundary-tangent routes near adjacent nodes).
+        _ep_extra_obs: "tuple" = ()
+        _ep_aabbs: "list[tuple[float,float,float,float]]" = []
+        if _src_needs_stub or _dst_needs_stub:
+            _ep_list = [
+                _ob for _ob in obs_tuple
+                if (_src_needs_stub and _ob.obstacle_id == real_src_id
+                    or _dst_needs_stub and _ob.obstacle_id == real_dst_id)
+            ]
+            _ep_extra_obs = tuple(_ep_list)
+            for _ob in _ep_list:
+                _bx, _by, _bw, _bh = _ob.bounds
+                # Only include AABBs where the escape is outside the box.
+                # Non-rectangular shapes (diamond, circle, ellipse) have an escape
+                # outside the actual outline but inside the AABB; checking those
+                # would produce false interior-crossing detections and trigger
+                # unnecessary retries with the blocked AABB trapping A*'s goal.
+                if _ob.obstacle_id == real_src_id:
+                    _chk_x, _chk_y = _src_rpc.point
+                else:
+                    _chk_x, _chk_y = _dst_rpc.point
+                if not (_bx < _chk_x < _bx + _bw and _by < _chk_y < _by + _bh):
+                    _ep_aabbs.append((_bx, _by, _bx + _bw, _by + _bh))
+
+        def _enters_ep_interior(res: "RouteCandidate") -> bool:
+            """True if any trunk segment crosses an endpoint AABB interior."""
+            if not _ep_aabbs:
+                return False
+            _pts = res.points
+            for _ii in range(len(_pts) - 1):
+                _ax, _ay = _pts[_ii]
+                _bx_, _by_ = _pts[_ii + 1]
+                for _xlo, _ylo, _xhi, _yhi in _ep_aabbs:
+                    if _seg_intersects_rect(_ax, _ay, _bx_, _by_, _xlo + 1, _ylo + 1, _xhi - 1, _yhi - 1):
+                        return True
+            return False
+
+        def _route_avoiding_eps(route_fn, *args, **kwargs):
+            """Call route_fn with endpoint obstacles added."""
+            _obs = kwargs.pop("obstacles", per_obs)
+            return route_fn(*args, obstacles=_obs + _ep_extra_obs, **kwargs)
 
         # Multi-rank forward: try local channel first.
         src_node = nodes.get(real_src_id)
@@ -2313,19 +2840,24 @@ def _flowchart_route_new_path(
 
         if _is_backward and src_node and dst_node:
             # Backward edges in TB: route EX.right → corridor → OT.bottom.
+            # Route escape-to-escape so _escape_stub_wrap can wrap with the correct
+            # boundary stubs, giving perpendicular terminal attachment.
             # Pivot x = just right of source group boundary so the path clears
             # the group interior (avoids routing back through node rows).
-            _bsx, _bsy = src_pc.point  # EX.right
-            _bdx, _bdy = dst_pc.point  # OT.bottom center
+            _bsx_esc, _bsy_esc = _src_rpc.point  # source escape (20px right of EX.right)
+            _bdx_esc, _bdy_esc = _dst_rpc.point  # dest escape (20px below OT.bottom)
             _back_grp = src_node.group
-            _corr_x = _bsx  # fallback
+            _corr_x = _bsx_esc  # fallback
             if _back_grp and _back_grp in grp_bboxes:
                 _, _, _sg_x1, _ = grp_bboxes[_back_grp]
                 _corr_x = _sg_x1 + COL_GAP / 2.0
-            if _bsx < _corr_x < _bdx:
-                _bpts: "tuple" = ((_bsx, _bsy), (_corr_x, _bsy), (_corr_x, _bdy), (_bdx, _bdy))
+            if _bsx_esc < _corr_x < _bdx_esc:
+                _bpts: "tuple" = (
+                    (_bsx_esc, _bsy_esc), (_corr_x, _bsy_esc),
+                    (_corr_x, _bdy_esc), (_bdx_esc, _bdy_esc),
+                )
             else:
-                _bpts = ((_bsx, _bsy), (_bdx, _bsy), (_bdx, _bdy))
+                _bpts = ((_bsx_esc, _bsy_esc), (_bdx_esc, _bsy_esc), (_bdx_esc, _bdy_esc))
             _blen = sum(
                 abs(_bpts[i + 1][0] - _bpts[i][0]) + abs(_bpts[i + 1][1] - _bpts[i][1])
                 for i in range(len(_bpts) - 1)
@@ -2335,6 +2867,7 @@ def _flowchart_route_new_path(
                 points=_bpts, bend_count=len(_bpts) - 2,
                 length=_blen, crossing_count=0, shared_segment_length=0.0, cost=_blen,
             )
+            result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
         elif (not _is_backward
                 and src_node and dst_node
                 and not src_node.is_dummy and not dst_node.is_dummy
@@ -2342,6 +2875,8 @@ def _flowchart_route_new_path(
             lb = _local_bounds_for(src_node.rank, dst_node.rank)
             if lb is not None:
                 result = local_channel_route(eid, _src_rpc, _dst_rpc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
+                if result is not None and _enters_ep_interior(result):
+                    result = _route_avoiding_eps(local_channel_route, eid, _src_rpc, _dst_rpc, lb, existing, obstacles=per_obs, group_border_ys=_grp_border_ys)
                 # Reject channels that land within 8px of the canvas boundary
                 if result is not None:
                     _CANVAS_MARGIN = 8.0
@@ -2357,6 +2892,11 @@ def _flowchart_route_new_path(
 
         if result is None:
             result = route_edge(eid, _src_rpc, _dst_rpc, per_obs, existing)
+            if result is not None and _enters_ep_interior(result):
+                # Retry with tighter obstacles; if retry fails, discard the
+                # known-invalid route so later fallbacks (local_channel, stub)
+                # run rather than emitting a node-interior-crossing connector.
+                result = route_edge(eid, _src_rpc, _dst_rpc, per_obs + _ep_extra_obs, existing)
             result = _escape_stub_wrap(result, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
         # Last-resort: if route_edge found nothing and the nodes are far apart
@@ -2387,23 +2927,63 @@ def _flowchart_route_new_path(
             # of dropping the edge. The stub may cross obstacles but keeps every
             # declared edge visible and prevents hard crashes on deeply-nested
             # diagrams where the obstacle map is too congested to route around.
-            _sx, _sy = src_pc.point
-            _dx, _dy = dst_pc.point
-            _stub_len = ((_dx - _sx) ** 2 + (_dy - _sy) ** 2) ** 0.5
+            # Route between escape points (not boundaries) so _escape_stub_wrap
+            # can attach the normal-aligned boundary stubs; this satisfies AC9
+            # even in the degenerate case.
+            _fsx, _fsy = (_src_rpc.point if _src_needs_stub else src_pc.point)
+            _fdx, _fdy = (_dst_rpc.point if _dst_needs_stub else dst_pc.point)
+            _stub_len = ((_fdx - _fsx) ** 2 + (_fdy - _fsy) ** 2) ** 0.5
             warnings.warn(
                 f"edge {eid!r} ({real_src_id} → {real_dst_id}): routing exhausted; "
                 "using straight-line stub",
                 stacklevel=2,
             )
-            assignments[eid] = RouteCandidate(
+            _fb_pts = tuple(_ensure_orthogonal([(_fsx, _fsy), (_fdx, _fdy)]))
+            _fb = RouteCandidate(
                 edge_id=eid, source_port=src_pc, target_port=dst_pc,
-                points=((_sx, _sy), (_dx, _dy)),
+                points=_fb_pts,
                 bend_count=0, length=_stub_len,
                 crossing_count=0, shared_segment_length=0.0, cost=_stub_len,
             )
+            assignments[eid] = _escape_stub_wrap(_fb, src_pc, dst_pc, _src_needs_stub, _dst_needs_stub)
 
     # Separate parallel routes that share a segment into adjacent lanes.
-    assignments = _assign_lanes(assignments, obs_tuple)
+    # Reroute callback: when all waypoints in the shared lane are escape-protected
+    # (pure-stub route, no trunk to shift), fall back to a fresh route_edge call
+    # so the edge takes a different path rather than silently overlapping.
+    def _lane_stuck_reroute(eid: str, rc: "RouteCandidate") -> "RouteCandidate | None":
+        _src_id = rc.source_port.node_id
+        _dst_id = rc.target_port.node_id
+        _re_obs = tuple(ob for ob in obs_tuple if ob.obstacle_id not in (_src_id, _dst_id))
+        _re_existing = tuple(v for k, v in assignments.items() if k != eid)
+        # Route between the escape points (not boundaries) so _escape_stub_wrap
+        # can re-attach the stubs and preserve attachment for non-cardinal normals.
+        _rpts = rc.points
+        _rn = len(_rpts)
+        _esc_s = sorted(rc.escape_indices) if rc.escape_indices else []
+        _snx_r, _sny_r = rc.source_port.outward_normal
+        _dnx_r, _dny_r = rc.target_port.outward_normal
+        # The midpoint heuristic (2*i < _rn) misclassifies 3-point routes: index 1
+        # is equidistant from both endpoints, so position alone cannot tell source
+        # from dest.  Use outward-normal alignment: a source escape means pts[0]→pts[1]
+        # aligns with the source outward normal; a dest escape means pts[-1]→pts[-2]
+        # aligns with the dest outward normal.
+        _s_esc_dot = (_snx_r * (_rpts[1][0] - _rpts[0][0])
+                      + _sny_r * (_rpts[1][1] - _rpts[0][1]))
+        _d_esc_dot = (_dnx_r * (_rpts[-2][0] - _rpts[-1][0])
+                      + _dny_r * (_rpts[-2][1] - _rpts[-1][1]))
+        _src_stub = bool(_esc_s and _esc_s[0] == 1 and _s_esc_dot > 1e-9)
+        _dst_stub = bool(_esc_s and _esc_s[-1] == _rn - 2 and _d_esc_dot > 1e-9)
+        _src_port = rc.source_port._replace(point=_rpts[1]) if _src_stub else rc.source_port
+        _dst_port = rc.target_port._replace(point=_rpts[-2]) if _dst_stub else rc.target_port
+        _rr = route_edge(eid, _src_port, _dst_port, _re_obs, _re_existing)
+        if _rr is None:
+            return None
+        if _src_stub or _dst_stub:
+            return _escape_stub_wrap(_rr, rc.source_port, rc.target_port, _src_stub, _dst_stub)
+        return _rr
+
+    assignments = _assign_lanes(assignments, obs_tuple, _reroute_fn=_lane_stuck_reroute)
 
     # Convert RouteCandidate assignments to route dicts; prepend pre-built self-loop dicts
     routed_dicts: "list[dict]" = list(self_loop_dicts)
@@ -2424,17 +3004,42 @@ def _flowchart_route_new_path(
         _pts = list(rc.points)
         # Collapse intermediate collinear waypoints so straight segments render
         # as two endpoints rather than a series of grid-snapped intermediates.
+        # A point is only removed when it lies strictly between its neighbours on
+        # the non-shared axis — reversal/overshoot escapes must be preserved.
         if len(_pts) > 2:
+            _esc_set = rc.escape_indices  # frozenset of indices into rc.points = _pts
             _cd: "list[tuple]" = [_pts[0]]
             for _ci in range(1, len(_pts) - 1):
+                # Always preserve escape waypoints: a near-cardinal normal can
+                # produce an escape that appears collinear but must be kept so
+                # the terminal dot-product check passes (≥ 0.9998 required).
+                if _ci in _esc_set:
+                    _cd.append(_pts[_ci])
+                    continue
                 _pp, _cp, _np_ = _cd[-1], _pts[_ci], _pts[_ci + 1]
-                if not (
-                    (abs(_pp[0] - _cp[0]) < 0.5 and abs(_cp[0] - _np_[0]) < 0.5) or
-                    (abs(_pp[1] - _cp[1]) < 0.5 and abs(_cp[1] - _np_[1]) < 0.5)
-                ):
+                _coll_x = abs(_pp[0] - _cp[0]) < 1e-9 and abs(_cp[0] - _np_[0]) < 1e-9
+                _coll_y = abs(_pp[1] - _cp[1]) < 1e-9 and abs(_cp[1] - _np_[1]) < 1e-9
+                if _coll_x:
+                    _coll_x = (min(_pp[1], _np_[1]) - 0.5 <= _cp[1]
+                               <= max(_pp[1], _np_[1]) + 0.5)
+                if _coll_y:
+                    _coll_y = (min(_pp[0], _np_[0]) - 0.5 <= _cp[0]
+                               <= max(_pp[0], _np_[0]) + 0.5)
+                if not (_coll_x or _coll_y):
                     _cd.append(_cp)
             _cd.append(_pts[-1])
             _pts = _cd
+        # Recompute escape indices against the simplified list by coordinate match.
+        # The original rc.escape_indices reference rc.points positions; collinear
+        # dedup may have removed waypoints, invalidating those positions in _pts.
+        _esc_raw_coords = {
+            (round(rc.points[_i][0], 1), round(rc.points[_i][1], 1))
+            for _i in rc.escape_indices
+        }
+        _esc_idxs_recomputed = {
+            _i for _i, _p in enumerate(_pts)
+            if (round(_p[0], 1), round(_p[1], 1)) in _esc_raw_coords
+        }
         if e.label and len(_pts) >= 2:
             _real_src = e.orig_src or e.src
             _real_dst = e.orig_dst or e.dst
@@ -2469,6 +3074,14 @@ def _flowchart_route_new_path(
             # so that each edge exits from its own assigned port rather than a shared face centre.
             "_src_port": rc.source_port.point,
             "_dst_port": rc.target_port.point,
+            # Outward normals: CBE rerouter uses these to compute escape stubs for
+            # non-cardinal normals (diamond/hexagon fan-out edges crossing group boundaries).
+            "_src_normal": rc.source_port.outward_normal,
+            "_dst_normal": rc.target_port.outward_normal,
+            # Escape indices recomputed against simplified _pts by coordinate match
+            # (rc.escape_indices reference rc.points positions which collinear dedup
+            # may have invalidated).
+            "_escape_idxs": _esc_idxs_recomputed,
         })
 
     return RouteBatch(routed=tuple(routed_dicts), failures=tuple(failures_list))
@@ -3336,6 +3949,10 @@ def _cbe_boundary_crossings(
     A crossing is a segment whose endpoints straddle the interior/exterior of
     ``bbox``; each result is ``(segment_index, x, y)`` with the point snapped onto
     the rectangle edge that was crossed. Order follows the polyline direction.
+
+    Tests all four rectangle edges parametrically and picks the valid crossing
+    (smallest t ∈ [0,1] with the intersection on the edge), which correctly
+    handles near-vertical segments that cross a vertical side.
     """
     x0, y0, x1, y1 = bbox
 
@@ -3347,12 +3964,30 @@ def _cbe_boundary_crossings(
         a, b = poly[i], poly[i + 1]
         if _inside(a) == _inside(b):
             continue
-        if a[0] == b[0]:  # vertical segment → crosses a horizontal edge
-            yb = y0 if abs(a[1] - y0) + abs(b[1] - y0) <= abs(a[1] - y1) + abs(b[1] - y1) else y1
-            res.append((i, float(a[0]), float(yb)))
-        else:             # horizontal segment → crosses a vertical edge
-            xb = x0 if abs(a[0] - x0) + abs(b[0] - x0) <= abs(a[0] - x1) + abs(b[0] - x1) else x1
-            res.append((i, float(xb), float(a[1])))
+        ax, ay = a
+        bx, by = b
+        dx_s = bx - ax
+        dy_s = by - ay
+        _cross: "tuple[float, float] | None" = None
+        _cross_t = float("inf")
+        if abs(dx_s) > 1e-9:
+            for _xb in (x0, x1):
+                _t = (_xb - ax) / dx_s
+                if -1e-6 <= _t <= 1 + 1e-6:
+                    _yc = ay + _t * dy_s
+                    if y0 - 1e-6 <= _yc <= y1 + 1e-6 and _t < _cross_t:
+                        _cross_t = _t
+                        _cross = (_xb, min(y1, max(y0, _yc)))
+        if abs(dy_s) > 1e-9:
+            for _yb in (y0, y1):
+                _t = (_yb - ay) / dy_s
+                if -1e-6 <= _t <= 1 + 1e-6:
+                    _xc = ax + _t * dx_s
+                    if x0 - 1e-6 <= _xc <= x1 + 1e-6 and _t < _cross_t:
+                        _cross_t = _t
+                        _cross = (min(x1, max(x0, _xc)), _yb)
+        if _cross is not None:
+            res.append((i, _cross[0], _cross[1]))
     return res
 
 
@@ -3429,12 +4064,24 @@ def _equalize_corridors(
     # Group routes by (src_node_id, exit_y) when first segment is horizontal.
     # Skip routes that pass through a gate waypoint — staggering would displace
     # the gate crossing off its declared position.
+    # Skip routes with an escape at index 1 — the first segment IS the source
+    # escape stub (boundary → escape along the outward normal); inserting a
+    # vertical stagger before the escape breaks the terminal-normal contract.
     exit_groups: "dict" = defaultdict(list)
     for i, r in enumerate(routed):
         wps = r.get("waypoints", [])
         if len(wps) < 3:
             continue
         if _has_gate(wps):
+            continue
+        # For CBE-rerouted routes use only _cbe_escape_idxs; the main router
+        # stubs every non-zero normal so _escape_idxs often has index 1 even
+        # for cardinal CBE sources that have no escape.
+        _r_cbe_flag = r.get("_cbe_rerouted")
+        _r_esc_guard = (r.get("_cbe_escape_idxs") or set()) if _r_cbe_flag else (
+            (r.get("_escape_idxs") or set()) | (r.get("_cbe_escape_idxs") or set())
+        )
+        if 1 in _r_esc_guard:
             continue
         p0, p1 = wps[0], wps[1]
         if abs(p0[1] - p1[1]) < 1.0 and abs(p0[0] - p1[0]) > 8.0:
@@ -3470,9 +4117,29 @@ def _equalize_corridors(
                 if p != deduped[-1]:
                     deduped.append(p)
             r["waypoints"] = deduped
+            # Reindex escape indices: stub insertion shifts points on the exit
+            # rail from exit_y → new_y; coordinate-match against deduped so
+            # Pass B and downstream terminal validation see correct escape positions.
+            for _esc_key in ("_escape_idxs", "_cbe_escape_idxs"):
+                _old_esc = r.get(_esc_key)
+                if not _old_esc:
+                    continue
+                _new_esc_coords: "set[tuple]" = set()
+                for _ej in _old_esc:
+                    if _ej < len(wps):
+                        _ex, _ey = wps[_ej]
+                        if abs(_ey - exit_y) < 1.0:
+                            _ey = new_y
+                        _new_esc_coords.add((round(_ex, 1), round(_ey, 1)))
+                r[_esc_key] = {
+                    _di for _di, _dp in enumerate(deduped)
+                    if (round(_dp[0], 1), round(_dp[1], 1)) in _new_esc_coords
+                }
 
     # ── Pass B: separate shared vertical corridors ───────────────────────────
     # Collect all vertical segments (x constant, y varying > 20 px).
+    # Gate routes ARE included — their non-gate segments still need separation.
+    # Gate-coordinate waypoints are protected from shifting in the inner loop.
     vert_segs: "list" = []  # (route_idx, x, y_lo, y_hi)
     for i, r in enumerate(routed):
         wps = r.get("waypoints", [])
@@ -3529,9 +4196,88 @@ def _equalize_corridors(
             for (route_idx, old_x, y_lo, y_hi), new_x in zip(unique, new_xs):
                 r = routed[route_idx]
                 wps = list(r["waypoints"])
+                # For CBE-rerouted routes, _escape_idxs references the old (pre-A*)
+                # waypoints; unioning them with the new _cbe_escape_idxs would protect
+                # the wrong positions.  Only union for non-CBE routes.
+                if r.get("_cbe_rerouted"):
+                    _esc_idxs = r.get("_cbe_escape_idxs") or set()
+                else:
+                    _esc_idxs = (r.get("_cbe_escape_idxs") or set()) | (r.get("_escape_idxs") or set())
+                # Protect: (a) boundary endpoints (always — cardinal CBE routes
+                # record no escape indices so _esc_idxs may be empty; endpoints
+                # must never be displaced off the shape outline), (b) each escape
+                # on the old_x channel and its full contiguous same-x chain, and
+                # (c) gate-coordinate waypoints that must stay on their declared
+                # BoundaryGate.point.
+                _last = len(wps) - 1
+                _protected: "set[int]" = set(_esc_idxs)
+                _protected.add(0)
+                _protected.add(_last)
+                # Protect the one immediate terminal-adjacent waypoint (index 1 /
+                # index n-2) when it shares the endpoint's x.  A full chain-grow
+                # would lock gate corridors; a single neighbor prevents the diagonal
+                # terminal segment that arises when no escape index is recorded
+                # (cardinal CBE source/destination).
+                for _ep_idx, _ep_dir in ((0, 1), (_last, -1)):
+                    _ep_x = wps[_ep_idx][0]
+                    _adj = _ep_idx + _ep_dir
+                    if 0 <= _adj <= _last and abs(wps[_adj][0] - _ep_x) < 2.0:
+                        _protected.add(_adj)
+                for _ei in list(_esc_idxs):
+                    if _ei >= len(wps):
+                        continue
+                    _ex = wps[_ei][0]
+                    for _j in range(_ei - 1, -1, -1):
+                        if abs(wps[_j][0] - _ex) < 2.0:
+                            _protected.add(_j)
+                        else:
+                            break
+                    for _j in range(_ei + 1, len(wps)):
+                        if abs(wps[_j][0] - _ex) < 2.0:
+                            _protected.add(_j)
+                        else:
+                            break
+                if gate_coords:
+                    for _gi, _gp in enumerate(wps):
+                        if (round(_gp[0], 1), round(_gp[1], 1)) in gate_coords:
+                            _protected.add(_gi)
+                            # Grow the collinear chain so no neighbor of the gate
+                            # waypoint is shifted off the corridor.
+                            _gx = _gp[0]
+                            for _j in range(_gi - 1, -1, -1):
+                                if abs(wps[_j][0] - _gx) < 2.0:
+                                    _protected.add(_j)
+                                else:
+                                    break
+                            for _j in range(_gi + 1, len(wps)):
+                                if abs(wps[_j][0] - _gx) < 2.0:
+                                    _protected.add(_j)
+                                else:
+                                    break
                 for ki, p in enumerate(wps):
+                    if ki in _protected:
+                        continue
                     if abs(p[0] - old_x) < 2.0 and y_lo - 2.0 <= p[1] <= y_hi + 2.0:
                         wps[ki] = (new_x, p[1])
+                # Insert orthogonal jogs where a protected old-x waypoint is adjacent
+                # to a shifted new-x waypoint, preventing diagonal terminal segments.
+                if abs(old_x - new_x) > 2.0:
+                    _jogs_ins: "list[tuple[int, tuple]]" = []
+                    for _ji in range(len(wps) - 1):
+                        _ax, _ay = wps[_ji]
+                        _bx, _by = wps[_ji + 1]
+                        if abs(_ax - old_x) < 2.0 and abs(_bx - new_x) < 2.0:
+                            _jogs_ins.append((_ji + 1, (new_x, _ay)))
+                        elif abs(_ax - new_x) < 2.0 and abs(_bx - old_x) < 2.0:
+                            _jogs_ins.append((_ji + 1, (new_x, _by)))
+                    for _jog_n, (_ji_ins, _jp) in enumerate(_jogs_ins):
+                        _ins = _ji_ins + _jog_n
+                        wps.insert(_ins, _jp)
+                        for _esc_key in ("_escape_idxs", "_cbe_escape_idxs"):
+                            _e = r.get(_esc_key)
+                            if _e:
+                                r[_esc_key] = {_ej + 1 if _ej >= _ins else _ej
+                                               for _ej in _e}
                 r["waypoints"] = wps
 
 
@@ -3583,6 +4329,11 @@ def _reroute_cross_boundary_edges(
     # running parallel to an existing one on the same row or column.
     _cbe_done_hsegs: "list[tuple[float, float, float]]" = []  # (y, x_min, x_max)
     _cbe_done_vsegs: "list[tuple[float, float, float]]" = []  # (x, y_min, y_max)
+    # Escape-row reservations that must never be exempted by exclude_ys. When
+    # multiple CBE edges share the same destination face, their _b_route[1]
+    # values are identical and would be in exclude_ys — exempting them from
+    # _cbe_done_hsegs occupancy. Reservations in this list skip the exclusion.
+    _cbe_escape_reserved: "list[tuple[float, float, float]]" = []  # (y, x_min, x_max)
 
     def _build_occupied(
         gx: "list[int]", gy: "list[int]",
@@ -3603,6 +4354,7 @@ def _reroute_cross_boundary_edges(
         remain free; without this, a tightly spaced port-pair (e.g. SY.bottom=1144
         and BD.top=1148, one grid step apart) can be blocked by a previous edge's
         congestion zone and the A* routes backward to escape it.
+        Note: _cbe_escape_reserved rows are always occupied and ignore exclude_ys.
         """
         # Grid indices for the current edge's port rows — never occupy these.
         _excl: "set[int]" = set()
@@ -3620,7 +4372,50 @@ def _reroute_cross_boundary_edges(
                 if 0 <= byi < len(gy) and byi not in _excl:
                     for xi in range(min(xi0, xi1), max(xi0, xi1)):
                         occ.add((xi, byi, xi + 1, byi))
+        # Escape-row reservations: always honored, even when row matches exclude_ys.
+        for (hy, hx0, hx1) in _cbe_escape_reserved:
+            yi = min(range(len(gy)), key=lambda i: abs(gy[i] - hy))
+            xi0 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx0))
+            xi1 = min(range(len(gx)), key=lambda i: abs(gx[i] - hx1))
+            for dyi in range(-2, 3):
+                byi = yi + dyi
+                if 0 <= byi < len(gy):
+                    for xi in range(min(xi0, xi1), max(xi0, xi1)):
+                        occ.add((xi, byi, xi + 1, byi))
         return occ
+
+    # Precompute label bounding boxes for the escape-blocked guard below.
+    # CBE A* obstacles do not include edge labels; escape stubs can land inside a
+    # label chip from an already-placed route (e.g. cardinal source stub for UI→API
+    # landing inside the UI→Cache chip).  lx/ly from the route dict: lx is the chip's
+    # left edge; ly is the chip's BOTTOM edge (CSS translateY(-100%) shifts it up).
+    # Tagged with edge_id so each iteration can exclude its own (stale) label chip.
+    _cbe_label_rects_tagged: "list[tuple[str, float, float, float, float]]" = []
+    for _r2 in routed:
+        # Exclude CBE candidates (cross-boundary, non-backward) — their labels are
+        # repositioned after rerouting, so their pre-reroute chip positions are stale.
+        # Determine eligibility by scope (same check as the reroute loop below) rather
+        # than by _cbe_rerouted, which is not set yet when this snapshot is built.
+        _r2_sn2 = nodes.get(_r2.get("src"))
+        _r2_dn2 = nodes.get(_r2.get("dst"))
+        if (_r2_sn2 is not None and _r2_dn2 is not None
+                and not (_r2_sn2.is_dummy or _r2_dn2.is_dummy)):
+            _r2_sg2 = _r2_sn2.group if _r2_sn2.group in grp_bboxes else None
+            _r2_dg2 = _r2_dn2.group if _r2_dn2.group in grp_bboxes else None
+            if (_r2_sn2.group != _r2_dn2.group
+                    and not (_r2_sg2 is None and _r2_dg2 is None)
+                    and not _r2.get("_is_backward")):
+                continue
+        _r2_eid = _r2.get("edge_id") or ""
+        _r2_lbl = (_r2.get("label") or "").strip()
+        _r2_lx, _r2_ly = _r2.get("lx"), _r2.get("ly")
+        if _r2_lbl and _r2_lx is not None and _r2_ly is not None:
+            _r2_w = float(_est_label_w(_r2_lbl))
+            _cbe_label_rects_tagged.append((
+                _r2_eid,
+                float(_r2_lx), float(_r2_ly) - float(_LABEL_CHIP_H),
+                float(_r2_lx) + _r2_w, float(_r2_ly),
+            ))
 
     for r in routed:
         s = r.get("src")
@@ -3639,6 +4434,15 @@ def _reroute_cross_boundary_edges(
             continue
         if r.get("_is_backward"):
             continue
+        # Build per-edge label rects, excluding this edge's own pre-reroute chip.
+        # The pre-reroute position is stale and will be replaced at the end of this
+        # iteration; using it as a stub obstacle incorrectly blocks the current edge.
+        _cur_r_eid = r.get("edge_id") or ""
+        _cbe_label_rects: "list[tuple[float, float, float, float]]" = [
+            (x0, y0, x1, y1)
+            for (_eid2, x0, y0, x1, y1) in _cbe_label_rects_tagged
+            if _eid2 != _cur_r_eid
+        ]
 
         scx = sn.x + _node_render_w(sn) / 2.0
         scy = sn.y + _node_render_h(sn) / 2.0
@@ -3739,11 +4543,392 @@ def _reroute_cross_boundary_edges(
             (-_cs, canvas_h - _cs, canvas_w + _cs, canvas_h + _cs),  # bottom edge strip
         ])
 
-        gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b], canvas_w, canvas_h)
-        blocked = _blocked_segs(gx, gy, obstacles)
-        occupied = _build_occupied(gx, gy, exclude_ys=(a[1], b[1]))
-        path = _astar_route(int(a[0]), int(a[1]), int(b[0]), int(b[1]), gx, gy, blocked, occupied=occupied or None)
+        # Escape stubs for non-cardinal normals (diamond/hexagon fan-out).
+        # Route the trunk escape-to-escape so the A* path is fully axis-aligned;
+        # wrap with boundary stubs afterward.  Restricted to non-cardinal normals
+        # (< _CARDINAL_NORMAL_T) because face-lift remapping of a/b can produce a
+        # cardinal port with a different normal than _src_normal/_dst_normal.
+        # Guard: if a/b was remapped (differs from the stored fanned port) the
+        # stored normal no longer matches the live endpoint — clear it so no stub
+        # is computed for the wrong face.
+        _sp_normal: "tuple[float, float]" = r.get("_src_normal") or (0.0, 0.0)
+        _dp_normal: "tuple[float, float]" = r.get("_dst_normal") or (0.0, 0.0)
+        _sp_pt_orig = r.get("_src_port")
+        _dp_pt_orig = r.get("_dst_port")
+        if _sp_pt_orig and (abs(a[0] - float(_sp_pt_orig[0])) > 2.0 or abs(a[1] - float(_sp_pt_orig[1])) > 2.0):
+            # a was remapped; derive the outward normal from which face of the source
+            # node a now sits on rather than zeroing (zeroing disables source stubs).
+            if s in node_rects:
+                _sr_x0, _sr_y0, _sr_x1, _sr_y1 = node_rects[s]
+                if abs(a[0] - _sr_x0) < 2.0:
+                    _sp_normal = (-1.0, 0.0)
+                elif abs(a[0] - _sr_x1) < 2.0:
+                    _sp_normal = (1.0, 0.0)
+                elif abs(a[1] - _sr_y0) < 2.0:
+                    _sp_normal = (0.0, -1.0)
+                elif abs(a[1] - _sr_y1) < 2.0:
+                    _sp_normal = (0.0, 1.0)
+                else:
+                    _sp_normal = (0.0, 0.0)
+            else:
+                _sp_normal = (0.0, 0.0)
+        if _dp_pt_orig and (abs(b[0] - float(_dp_pt_orig[0])) > 2.0 or abs(b[1] - float(_dp_pt_orig[1])) > 2.0):
+            # b was remapped; derive the outward normal from which face of the dest
+            # node b now sits on rather than zeroing (zeroing omits dest from blocked_obs).
+            if d in node_rects:
+                _dr_x0, _dr_y0, _dr_x1, _dr_y1 = node_rects[d]
+                if abs(b[0] - _dr_x0) < 2.0:
+                    _dp_normal = (-1.0, 0.0)
+                elif abs(b[0] - _dr_x1) < 2.0:
+                    _dp_normal = (1.0, 0.0)
+                elif abs(b[1] - _dr_y0) < 2.0:
+                    _dp_normal = (0.0, -1.0)
+                elif abs(b[1] - _dr_y1) < 2.0:
+                    _dp_normal = (0.0, 1.0)
+                else:
+                    _dp_normal = (0.0, 0.0)
+            else:
+                _dp_normal = (0.0, 0.0)
+        _snorm_mag = max(abs(_sp_normal[0]), abs(_sp_normal[1]))
+        _dnorm_mag = max(abs(_dp_normal[0]), abs(_dp_normal[1]))
+        # Escape stubs: source non-cardinal only (see note below); destination all non-zero.
+        # obstacles format in CBE: (x0, y0, x1, y1) — left/top/right/bottom.
+        # _cbe_in_obs checks both node/group obstacles and precomputed label chip rects.
+        def _cbe_in_obs(px: float, py: float) -> bool:
+            for _x0, _y0, _x1, _y1 in obstacles:
+                if _x0 <= px <= _x1 and _y0 <= py <= _y1:
+                    return True
+            for _x0, _y0, _x1, _y1 in _cbe_label_rects:
+                if _x0 <= px <= _x1 and _y0 <= py <= _y1:
+                    return True
+            return False
+
+        def _cbe_stub_blocked(bx: float, by: float, ex: float, ey: float) -> bool:
+            """True if the stub segment (bx,by)→(ex,ey) crosses any obstacle or label."""
+            if _cbe_in_obs(ex, ey):
+                return True
+            mx, my = (bx + ex) / 2.0, (by + ey) / 2.0
+            if _cbe_in_obs(mx, my):
+                return True
+            for _x0, _y0, _x1, _y1 in obstacles:
+                if _seg_intersects_rect(bx, by, ex, ey, _x0, _y0, _x1, _y1):
+                    return True
+            for _x0, _y0, _x1, _y1 in _cbe_label_rects:
+                if _seg_intersects_rect(bx, by, ex, ey, _x0, _y0, _x1, _y1):
+                    return True
+            return False
+
+        # Source: non-cardinal normals only.  Cardinal source stubs shift the A* start
+        # 20 px along the outward normal; the CBE grid is label-unaware, so A* can choose
+        # a crossing path even when the escape itself is outside the label rect.
+        # Deferred: would require adding label y-rows to _cbe_build_grid so A* avoids them.
+        # Use terminal-normal tolerance (0.9998) so near-cardinal normals like
+        # (0.9995, 0.032) still get a stub — _CARDINAL_NORMAL_T (0.999) is too
+        # loose and produces A* terminals whose dot product falls below 0.9998.
+        _cbe_src_needs_stub = 1e-9 < _snorm_mag < 0.9998
+        _cbe_dst_needs_stub = _dnorm_mag > 1e-9
+        # Cap stubs when opposing normals are close enough to invert escape points —
+        # same three-way logic as the main router: disable if < 4 px, cap otherwise.
+        _cbe_stub_len = _STUB_LEN
+        if _cbe_src_needs_stub or _cbe_dst_needs_stub:
+            _snx_c, _sny_c = _sp_normal
+            _dnx_c, _dny_c = _dp_normal
+            _dn_dot_sn_c = _dnx_c * _snx_c + _dny_c * _sny_c
+            _cbe_ah_dst = r.get("ah")
+            _cbe_src_mk = r.get("source_marker")
+            _cbe_ah_src = (_cbe_src_mk is not None
+                           and _marker_kind(_cbe_src_mk).value != "none")
+            _cbe_stub_min_dst = (15.0 if (_cbe_ah_dst and r.get("style") == "thick")
+                                 else 13.0 if _cbe_ah_dst else 4.0)
+            _cbe_stub_min_src = (15.0 if (_cbe_ah_src and r.get("style") == "thick")
+                                 else 13.0 if _cbe_ah_src else 4.0)
+            if _dn_dot_sn_c < -0.99 and _cbe_src_needs_stub and _cbe_dst_needs_stub:
+                _gap_sn = (b[0] - a[0]) * _snx_c + (b[1] - a[1]) * _sny_c
+                if _gap_sn > 0:
+                    _rate_c = 1.0 - _dn_dot_sn_c
+                    _max_nc_c = (_gap_sn - 1.0) / _rate_c
+                    if _max_nc_c < _STUB_LEN:
+                        # Same perpendicular-gap guard as main router: stubs with large
+                        # perpendicular separation cannot collide, so skip the cap.
+                        _gap_perp_c = abs((b[0] - a[0]) * _sny_c - (b[1] - a[1]) * _snx_c)
+                        if _gap_perp_c <= _STUB_LEN:
+                            _cbe_stub_len = _max_nc_c
+                            if _max_nc_c < _cbe_stub_min_src:
+                                _cbe_src_needs_stub = False
+                            if _max_nc_c < _cbe_stub_min_dst:
+                                _cbe_dst_needs_stub = False
+            elif _cbe_src_needs_stub and _cbe_dst_needs_stub:
+                # Non-antiparallel approaching normals (e.g. diamond→top-face):
+                # apply Euclidean approach-rate cap so full stubs don't overshoot.
+                _gx_c = b[0] - a[0]
+                _gy_c = b[1] - a[1]
+                _geo_c = (_gx_c ** 2 + _gy_c ** 2) ** 0.5
+                if _geo_c > 1e-9:
+                    _ux_c = _gx_c / _geo_c
+                    _uy_c = _gy_c / _geo_c
+                    _rate_c2 = (_snx_c - _dnx_c) * _ux_c + (_sny_c - _dny_c) * _uy_c
+                    if _rate_c2 > 0:
+                        _max_nc_c2 = (_geo_c - 1.0) / _rate_c2
+                        if _max_nc_c2 < _STUB_LEN:
+                            _cbe_stub_len = _max_nc_c2
+                            if _max_nc_c2 < _cbe_stub_min_src:
+                                _cbe_src_needs_stub = False
+                            if _max_nc_c2 < _cbe_stub_min_dst:
+                                _cbe_dst_needs_stub = False
+            elif _cbe_dst_needs_stub and not _cbe_src_needs_stub:
+                # One-sided: only dst stub (cardinal src normal, no src escape).
+                # Cap the dst stub so it doesn't overshoot past the source boundary.
+                # Use a marker-aware minimum: arrow edges need ~13px clearance.
+                _gap_dst_only = (a[0] - b[0]) * _dnx_c + (a[1] - b[1]) * _dny_c
+                if 0 < _gap_dst_only < _STUB_LEN:
+                    _max_nc_c = _gap_dst_only - 1.0
+                    # Ports far apart perpendicular to the dst normal cannot collide;
+                    # only cap when perpendicular separation is within stub range.
+                    _gap_perp_dst = abs((a[0] - b[0]) * _dny_c - (a[1] - b[1]) * _dnx_c)
+                    if _gap_perp_dst <= _STUB_LEN:
+                        if _max_nc_c >= _cbe_stub_min_dst:
+                            _cbe_stub_len = _max_nc_c
+                        else:
+                            _cbe_dst_needs_stub = False
+        _a_route: "tuple[float, float]" = (
+            (a[0] + _sp_normal[0] * _cbe_stub_len, a[1] + _sp_normal[1] * _cbe_stub_len)
+            if _cbe_src_needs_stub else a
+        )
+        _b_route: "tuple[float, float]" = (
+            (b[0] + _dp_normal[0] * _cbe_stub_len, b[1] + _dp_normal[1] * _cbe_stub_len)
+            if _cbe_dst_needs_stub else b
+        )
+        # Retract escapes that land inside obstacles — avoids A* starting from a
+        # blocked cell (producing no path) or from inside an edge-label band.
+        if _cbe_src_needs_stub and _cbe_stub_blocked(a[0], a[1], _a_route[0], _a_route[1]):
+            _a_route = a
+            _cbe_src_needs_stub = False
+        if _cbe_dst_needs_stub and _cbe_stub_blocked(b[0], b[1], _b_route[0], _b_route[1]):
+            _b_route = b
+            _cbe_dst_needs_stub = False
+
+        gx, gy = _cbe_build_grid(nodes, grp_bboxes, [a, b, _a_route, _b_route], canvas_w, canvas_h)
+        # When a destination stub is used, _b_route is the A* goal and lies
+        # outside the destination node's polygon. Add the node's AABB to the
+        # blocked obstacle list so the trunk cannot route through d's interior.
+        # Guard: for non-vertex polygon ports the escape can land inside the AABB
+        # even though it is outside the actual shape; in that case blocking the
+        # AABB would trap the goal, so only add when _b_route is outside the AABB.
+        _blocked_obs = obstacles
+        _BCLEAR = 4
+        _cbe_dst_b_inside_aabb = False
+        if _cbe_dst_needs_stub and d in node_rects:
+            _dx0, _dy0, _dx1, _dy1 = node_rects[d]
+            # Always add the destination AABB to prevent A* from routing through
+            # the polygon interior.  For non-vertex polygon ports the escape can
+            # land inside the AABB (outside the actual polygon boundary); we punch
+            # an aperture around the goal cell after building blocked so A* can
+            # still reach it without traversing the AABB's interior.
+            _blocked_obs = obstacles + [(_dx0 - _BCLEAR, _dy0 - _BCLEAR,
+                                         _dx1 + _BCLEAR, _dy1 + _BCLEAR)]
+            _cbe_dst_b_inside_aabb = _dx0 < _b_route[0] < _dx1 and _dy0 < _b_route[1] < _dy1
+        # Block source AABB to prevent A* from routing back through the source.
+        # Non-cardinal source (stub needed): inflate AABB, punch aperture when
+        # the source escape is inside.  Cardinal source: raw AABB only — the
+        # boundary strip is clear via _blocked_segs' 4 px interior clearance.
+        _cbe_src_a_inside_aabb = False
+        if s in node_rects:
+            _sx0, _sy0, _sx1, _sy1 = node_rects[s]
+            _a_strictly_inside = _sx0 < a[0] < _sx1 and _sy0 < a[1] < _sy1
+            if _cbe_src_needs_stub:
+                _blocked_obs = _blocked_obs + [(_sx0 - _BCLEAR, _sy0 - _BCLEAR,
+                                                _sx1 + _BCLEAR, _sy1 + _BCLEAR)]
+                _cbe_src_a_inside_aabb = (_sx0 < _a_route[0] < _sx1
+                                          and _sy0 < _a_route[1] < _sy1)
+            elif not _a_strictly_inside:
+                _blocked_obs = _blocked_obs + [(_sx0, _sy0, _sx1, _sy1)]
+        blocked = _blocked_segs(gx, gy, _blocked_obs)
+        # Aperture: when the destination escape landed inside the AABB (non-vertex
+        # polygon port, escape is outside the polygon but inside its bounding box),
+        # the AABB obstacle above traps A*'s goal.  Un-block cells immediately
+        # around the goal so A* can reach it; the rest of the AABB interior stays
+        # blocked, preventing routes from traversing the polygon's actual interior.
+        if _cbe_dst_b_inside_aabb:
+            _gxi = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _b_route[0]))
+            _gyi = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _b_route[1]))
+            # Open only the approach-direction edges so A* cannot enter the goal
+            # through the polygon interior (e.g. from the inward side of the AABB).
+            # Use the port's outward normal when known — peer displacement can point
+            # inward for non-cardinal polygon faces, opening the wrong side.
+            if abs(_dp_normal[0]) > 1e-9 or abs(_dp_normal[1]) > 1e-9:
+                _app_dx, _app_dy = _dp_normal
+            else:
+                _app_dx = _a_route[0] - _b_route[0]
+                _app_dy = _a_route[1] - _b_route[1]
+            if abs(_app_dx) >= abs(_app_dy):
+                if _app_dx > 0:  # source is to the right — open rightward to AABB right boundary
+                    _aabb_r = _dx1 + _BCLEAR
+                    _ci_out = next((ci for ci in range(_gxi, len(gx)) if gx[ci] >= _aabb_r),
+                                   len(gx) - 1)
+                    for _ci in range(_gxi, _ci_out):
+                        blocked.discard((_ci, _gyi, _ci + 1, _gyi))
+                else:             # source is to the left — open leftward to AABB left boundary
+                    _aabb_l = _dx0 - _BCLEAR
+                    _ci_out = next((ci for ci in range(_gxi, -1, -1) if gx[ci] <= _aabb_l), 0)
+                    for _ci in range(_ci_out, _gxi):
+                        blocked.discard((_ci, _gyi, _ci + 1, _gyi))
+            else:
+                if _app_dy > 0:  # source is below — open downward to AABB bottom boundary
+                    _aabb_b = _dy1 + _BCLEAR
+                    _ri_out = next((ri for ri in range(_gyi, len(gy)) if gy[ri] >= _aabb_b),
+                                   len(gy) - 1)
+                    for _ri in range(_gyi, _ri_out):
+                        blocked.discard((_gxi, _ri, _gxi, _ri + 1))
+                else:             # source is above — open upward to AABB top boundary
+                    _aabb_t = _dy0 - _BCLEAR
+                    _ri_out = next((ri for ri in range(_gyi, -1, -1) if gy[ri] <= _aabb_t), 0)
+                    for _ri in range(_ri_out, _gyi):
+                        blocked.discard((_gxi, _ri, _gxi, _ri + 1))
+        # Aperture: source-side, analogous to the destination handling above.
+        if _cbe_src_a_inside_aabb:
+            _sxi = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _a_route[0]))
+            _syi = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _a_route[1]))
+            if abs(_sp_normal[0]) > 1e-9 or abs(_sp_normal[1]) > 1e-9:
+                _src_app_dx, _src_app_dy = _sp_normal
+            else:
+                _src_app_dx = _b_route[0] - _a_route[0]
+                _src_app_dy = _b_route[1] - _a_route[1]
+            if abs(_src_app_dx) >= abs(_src_app_dy):
+                if _src_app_dx > 0:  # destination to the right — open rightward to AABB right
+                    _saabb_r = _sx1 + _BCLEAR
+                    _sci_out = next((ci for ci in range(_sxi, len(gx)) if gx[ci] >= _saabb_r),
+                                    len(gx) - 1)
+                    for _ci in range(_sxi, _sci_out):
+                        blocked.discard((_ci, _syi, _ci + 1, _syi))
+                else:                # destination to the left — open leftward to AABB left
+                    _saabb_l = _sx0 - _BCLEAR
+                    _sci_out = next((ci for ci in range(_sxi, -1, -1) if gx[ci] <= _saabb_l), 0)
+                    for _ci in range(_sci_out, _sxi):
+                        blocked.discard((_ci, _syi, _ci + 1, _syi))
+            else:
+                if _src_app_dy > 0:  # destination is below — open downward to AABB bottom
+                    _saabb_b = _sy1 + _BCLEAR
+                    _sri_out = next((ri for ri in range(_syi, len(gy)) if gy[ri] >= _saabb_b),
+                                    len(gy) - 1)
+                    for _ri in range(_syi, _sri_out):
+                        blocked.discard((_sxi, _ri, _sxi, _ri + 1))
+                else:                # destination is above — open upward to AABB top
+                    _saabb_t = _sy0 - _BCLEAR
+                    _sri_out = next((ri for ri in range(_syi, -1, -1) if gy[ri] <= _saabb_t), 0)
+                    for _ri in range(_sri_out, _syi):
+                        blocked.discard((_sxi, _ri, _sxi, _ri + 1))
+        # Hard-block reserved CBE horizontal corridors from already-routed edges
+        # (only the exact row; soft-cost ±2-row zone in occupied is not enough to
+        # prevent A* from reusing them when detours are costlier).
+        # Source row: exclude entirely so A* can exit from the source terminal.
+        # Destination row: exempt only cells within the destination aperture zone
+        # (the cells already discarded by blocked.discard() above); cells outside
+        # the aperture on the destination's y-row must be hard-blocked to prevent
+        # two edges sharing the same approach corridor when they enter the same face.
+        _excl_ys_c = (_a_route[1],)
+        if _cbe_dst_needs_stub and d in node_rects:
+            _dst_apt_x_lo = node_rects[d][0] - _BCLEAR
+            _dst_apt_x_hi = node_rects[d][2] + _BCLEAR
+        else:
+            _dst_apt_x_lo = _b_route[0] - _BCLEAR
+            _dst_apt_x_hi = _b_route[0] + _BCLEAR
+        for (_hy, _hx0, _hx1) in _cbe_done_hsegs:
+            if any(abs(_hy - _ey) < 2.0 for _ey in _excl_ys_c):
+                continue
+            _byi = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _hy))
+            if abs(gy[_byi] - _hy) > 2.0:
+                continue  # no grid row within 2 px — skip to avoid blocking wrong row
+            _bxi0 = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _hx0))
+            _bxi1 = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _hx1))
+            _is_dst_y = abs(_hy - _b_route[1]) < 2.0
+            for _bxi in range(min(_bxi0, _bxi1), max(_bxi0, _bxi1)):
+                if _is_dst_y and _dst_apt_x_lo <= gx[_bxi] <= _dst_apt_x_hi:
+                    continue  # within destination aperture; don't re-block
+                blocked.add((_bxi, _byi, _bxi + 1, _byi))
+        _excl_xs_c = (_a_route[0], _b_route[0])
+        for (_vx, _vy0, _vy1) in _cbe_done_vsegs:
+            if any(abs(_vx - _ex) < 2.0 for _ex in _excl_xs_c):
+                continue
+            _bxi = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _vx))
+            if abs(gx[_bxi] - _vx) > 2.0:
+                continue
+            _byi0 = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _vy0))
+            _byi1 = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _vy1))
+            for _byi in range(min(_byi0, _byi1), max(_byi0, _byi1)):
+                blocked.add((_bxi, _byi, _bxi, _byi + 1))
+        occupied = _build_occupied(gx, gy, exclude_ys=(_a_route[1], _b_route[1]))
+        path = _astar_route(int(_a_route[0]), int(_a_route[1]), int(_b_route[0]), int(_b_route[1]), gx, gy, blocked, occupied=occupied or None)
+        # Reject A* paths that cross unrelated sibling nodes — the source escape
+        # can fall within _blocked_segs' 4 px boundary tolerance of a nearby
+        # sibling AABB, allowing a corridor through its rounded caps.
+        _guard_hits: "list[tuple[float, float, float, float]]" = []
+        if path and len(path) >= 2:
+            for _pi in range(len(path) - 1):
+                _px, _py = path[_pi]
+                _qx, _qy = path[_pi + 1]
+                for _nid, (_rx0, _ry0, _rx1, _ry1) in node_rects.items():
+                    if _nid in (s, d):
+                        continue
+                    if _py == _qy:
+                        if _ry0 < _py < _ry1 and min(_px, _qx) < _rx1 and max(_px, _qx) > _rx0:
+                            _guard_hits.append((_rx0, _ry0, _rx1, _ry1))
+                            path = None
+                            break
+                    elif _px == _qx:
+                        if _rx0 < _px < _rx1 and min(_py, _qy) < _ry1 and max(_py, _qy) > _ry0:
+                            _guard_hits.append((_rx0, _ry0, _rx1, _ry1))
+                            path = None
+                            break
+                if path is None:
+                    break
+        # Retry once: add each guard-flagged node's grid cells to blocked (no CLEAR
+        # strip) so A* must detour around the sibling entirely, then re-run.
+        # _blocked_segs only blocks interior cells beyond CLEAR px from the boundary,
+        # which can still allow a path to graze the node's AABB interior.
+        if path is None and _guard_hits:
+            for _gh in _guard_hits:
+                _gh_x0, _gh_y0, _gh_x1, _gh_y1 = _gh
+                _gh_xi0 = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _gh_x0))
+                _gh_xi1 = min(range(len(gx)), key=lambda _i: abs(gx[_i] - _gh_x1))
+                _gh_yi0 = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _gh_y0))
+                _gh_yi1 = min(range(len(gy)), key=lambda _i: abs(gy[_i] - _gh_y1))
+                for _gxi in range(min(_gh_xi0, _gh_xi1), max(_gh_xi0, _gh_xi1)):
+                    for _gyi in range(min(_gh_yi0, _gh_yi1), max(_gh_yi0, _gh_yi1)):
+                        blocked.add((_gxi, _gyi, _gxi + 1, _gyi))
+                        blocked.add((_gxi, _gyi, _gxi, _gyi + 1))
+            path = _astar_route(int(_a_route[0]), int(_a_route[1]),
+                                int(_b_route[0]), int(_b_route[1]),
+                                gx, gy, blocked, occupied=occupied or None)
+            # Re-validate the retry path; if it still crosses a sibling, reject it.
+            if path and len(path) >= 2:
+                for _pi in range(len(path) - 1):
+                    _px, _py = path[_pi]
+                    _qx, _qy = path[_pi + 1]
+                    for _nid, (_rx0, _ry0, _rx1, _ry1) in node_rects.items():
+                        if _nid in (s, d):
+                            continue
+                        if _py == _qy:
+                            if _ry0 < _py < _ry1 and min(_px, _qx) < _rx1 and max(_px, _qx) > _rx0:
+                                path = None
+                                break
+                        elif _px == _qx:
+                            if _rx0 < _px < _rx1 and min(_py, _qy) < _ry1 and max(_py, _qy) > _ry0:
+                                path = None
+                                break
+                    if path is None:
+                        break
         if not path or len(path) < 2:
+            # A* could not improve the route; restore label to the obstacle snapshot
+            # so subsequent CBE edges don't route stubs through this unchanged chip.
+            _fail_lbl = (r.get("label") or "").strip()
+            _fail_lx, _fail_ly = r.get("lx"), r.get("ly")
+            if _fail_lbl and _fail_lx is not None and _fail_ly is not None:
+                _fail_w = float(_est_label_w(_fail_lbl))
+                _cbe_label_rects_tagged.append((
+                    _cur_r_eid,
+                    float(_fail_lx), float(_fail_ly) - float(_LABEL_CHIP_H),
+                    float(_fail_lx) + _fail_w, float(_fail_ly),
+                ))
             continue  # keep the original route if A* cannot improve it
 
         # Record significant segments so subsequent routes avoid running alongside them.
@@ -3754,18 +4939,83 @@ def _reroute_cross_boundary_edges(
                 _cbe_done_hsegs.append((float(_py), float(min(_px, _qx)), float(max(_px, _qx))))
             elif _px == _qx and abs(_qy - _py) > 20:
                 _cbe_done_vsegs.append((float(_px), float(min(_py, _qy)), float(max(_py, _qy))))
+        # Record escape y-rows so subsequent routes choose a different row.
+        # Must use _cbe_escape_reserved (not _cbe_done_hsegs) so the reservation
+        # is honored even when the same y appears in the next edge's exclude_ys.
+        # Also add the approach row to _cbe_done_hsegs for hard-blocking so later
+        # CBE edges cannot route alongside the destination approach segment.
+        if _cbe_dst_needs_stub:
+            _cbe_escape_reserved.append((
+                float(_b_route[1]),
+                float(_b_route[0]) - float(_STUB_LEN),
+                float(_b_route[0]) + float(_STUB_LEN),
+            ))
+            # Reserve only the actual final horizontal approach segment so
+            # subsequent CBE edges are not blocked from corridors never used.
+            if len(path) >= 2:
+                _lp_x, _lp_y = path[-2]
+                _lq_x, _lq_y = path[-1]
+                if _lp_y == _lq_y:  # final segment is horizontal — reserve its row
+                    _cbe_done_hsegs.append((
+                        float(_lq_y),
+                        float(min(_lp_x, _lq_x)) - _STUB_LEN,
+                        float(max(_lp_x, _lq_x)) + _STUB_LEN,
+                    ))
 
         poly = [(float(x), float(y)) for x, y in path]
-        poly[0] = (float(a[0]), float(a[1]))
-        poly[-1] = (float(b[0]), float(b[1]))
-        # A* snaps the endpoints to grid rows/columns; substituting the exact node
-        # faces back can leave the first/last segment diagonal, so re-orthogonalize
-        # (same invariant the main router enforces) before deriving gates.
+        # Capture the original A* integer endpoints BEFORE overwriting.
+        _a_orig = poly[0]
+        _b_orig = poly[-1]
+        poly[0] = (float(_a_route[0]), float(_a_route[1]))
+        poly[-1] = (float(_b_route[0]), float(_b_route[1]))
+        # A* snaps endpoints to integer grid rows/columns via int() truncation.
+        # For non-cardinal escapes the float coords can be up to ~1 px away from
+        # the nearest integer, producing a subpixel dogleg after _ensure_orthogonal.
+        # Skip the snap when a stub will restore the float escape later: keeping the
+        # float here lets _ensure_orthogonal orthogonalize directly from the float
+        # escape, so the second re-orthogonalization on the trunk is a no-op and no
+        # sub-4px bridge segment is introduced.
+        # Re-orthogonalize before deriving gates.
         poly = _ensure_orthogonal(poly)
         out = [poly[0]]
         for p in poly[1:]:
             if (round(p[0], 2), round(p[1], 2)) != (round(out[-1][0], 2), round(out[-1][1], 2)):
                 out.append(p)
+        # Wrap trunk with boundary stubs: prepend/append the raw boundary port so
+        # the stub segment (boundary → escape) appears in the final waypoints.
+        # The trunk endpoints were snapped to integer (_a_int / _b_int) for
+        # _ensure_orthogonal; restore the original float escape coordinates here
+        # so the stub direction aligns with the outward normal.  Replacing (not
+        # inserting) keeps the structure [a, _a_route, trunk..., _b_route, b]
+        # so the validator's pts[0]→pts[1] and pts[-2]→pts[-1] terminal checks
+        # see the correct on-normal stub segments.
+        _cbe_src_esc_coords: "tuple[float, float] | None" = None
+        _cbe_dst_esc_coords: "tuple[float, float] | None" = None
+        if _cbe_src_needs_stub:
+            _cbe_src_esc_coords = (float(_a_route[0]), float(_a_route[1]))
+            out[0] = _cbe_src_esc_coords  # restore float escape as trunk start
+            out = [(float(a[0]), float(a[1]))] + out
+        if _cbe_dst_needs_stub:
+            _cbe_dst_esc_coords = (float(_b_route[0]), float(_b_route[1]))
+            out[-1] = _cbe_dst_esc_coords  # restore float escape as trunk end
+            out = out + [(float(b[0]), float(b[1]))]
+        # Re-orthogonalize the trunk after float escape restoration.
+        # The integer-snapped A* endpoints were replaced by float escapes that can
+        # differ in both axes, making the first or last trunk segment diagonal.
+        # Re-running _ensure_orthogonal on the trunk (between the boundary stubs)
+        # inserts the minimal axis-aligned bend needed to restore the contract.
+        if _cbe_src_needs_stub or _cbe_dst_needs_stub:
+            _t0 = 1 if _cbe_src_needs_stub else 0
+            _t1 = len(out) - 1 if _cbe_dst_needs_stub else len(out)
+            _trunk = out[_t0:_t1]
+            _trunk = _ensure_orthogonal(_trunk)
+            out = out[:_t0] + _trunk + out[_t1:]
+            # Refresh escape coords after orthogonalization: the endpoint may have
+            # shifted if _ensure_orthogonal added an intermediate bend.
+            if _cbe_src_needs_stub:
+                _cbe_src_esc_coords = (float(out[1][0]), float(out[1][1]))
+            if _cbe_dst_needs_stub:
+                _cbe_dst_esc_coords = (float(out[-2][0]), float(out[-2][1]))
 
         eid = r.get("edge_id") or f"{s}->{d}"
         # Pick the boundary crossing per endpoint group (EXIT = last time the route
@@ -3812,21 +5062,53 @@ def _reroute_cross_boundary_edges(
         # Remove intermediate collinear waypoints introduced by the grid or
         # orthogonaliser.  Gate points must be preserved as exact waypoints
         # because test_gate_is_route_waypoint requires a waypoint within 1 px.
+        # A point is only "collinear" if it is strictly between its neighbours
+        # on the non-shared axis — reversal/overshoot points (e.g. a destination
+        # escape that was appended past the boundary port) must be kept.
         _gate_pts = {
             (round(_gpt[0], 1), round(_gpt[1], 1))
             for _, _gpt, _, _ in inserts
         }
+        _cbe_esc_pts: "set[tuple[float, float]]" = set()
+        if _cbe_src_esc_coords is not None:
+            _cbe_esc_pts.add((round(_cbe_src_esc_coords[0], 1), round(_cbe_src_esc_coords[1], 1)))
+        if _cbe_dst_esc_coords is not None:
+            _cbe_esc_pts.add((round(_cbe_dst_esc_coords[0], 1), round(_cbe_dst_esc_coords[1], 1)))
         _deduped: "list[tuple[float, float]]" = [out[0]]
         for _ci in range(1, len(out) - 1):
             _pp, _cp, _np = _deduped[-1], out[_ci], out[_ci + 1]
-            _col_x = abs(_pp[0] - _cp[0]) < 0.5 and abs(_cp[0] - _np[0]) < 0.5
-            _col_y = abs(_pp[1] - _cp[1]) < 0.5 and abs(_cp[1] - _np[1]) < 0.5
-            _is_gate = (round(_cp[0], 1), round(_cp[1], 1)) in _gate_pts
-            if not (_col_x or _col_y) or _is_gate:
+            _col_x = abs(_pp[0] - _cp[0]) < 1e-9 and abs(_cp[0] - _np[0]) < 1e-9
+            _col_y = abs(_pp[1] - _cp[1]) < 1e-9 and abs(_cp[1] - _np[1]) < 1e-9
+            # Only drop a collinear point when it lies between its neighbours on
+            # the orthogonal axis (not a reversal/overshoot, which must be kept).
+            if _col_x:
+                _col_x = (min(_pp[1], _np[1]) - 0.5 <= _cp[1]
+                          <= max(_pp[1], _np[1]) + 0.5)
+            if _col_y:
+                _col_y = (min(_pp[0], _np[0]) - 0.5 <= _cp[0]
+                          <= max(_pp[0], _np[0]) + 0.5)
+            _cp_key = (round(_cp[0], 1), round(_cp[1], 1))
+            _is_gate = _cp_key in _gate_pts
+            _is_esc = _cp_key in _cbe_esc_pts
+            if not (_col_x or _col_y) or _is_gate or _is_esc:
                 _deduped.append(_cp)
         if out:
             _deduped.append(out[-1])
         out = _deduped
+
+        # Derive escape indices from final waypoint list; gate insertions and collinear
+        # dedup may have shifted the initial indices, so search by coordinate proximity.
+        _cbe_esc_idxs: "set[int]" = set()
+        if _cbe_src_esc_coords is not None:
+            for _fi, _fp in enumerate(out):
+                if abs(_fp[0] - _cbe_src_esc_coords[0]) < 0.5 and abs(_fp[1] - _cbe_src_esc_coords[1]) < 0.5:
+                    _cbe_esc_idxs.add(_fi)
+                    break
+        if _cbe_dst_esc_coords is not None:
+            for _fi in range(len(out) - 1, -1, -1):
+                if abs(out[_fi][0] - _cbe_dst_esc_coords[0]) < 0.5 and abs(out[_fi][1] - _cbe_dst_esc_coords[1]) < 0.5:
+                    _cbe_esc_idxs.add(_fi)
+                    break
 
         # Collapse tiny horizontal first segment in TB: a small grid-snap jog
         # (< 32px) at the source makes the arrowhead point sideways. Move the
@@ -3862,6 +5144,8 @@ def _reroute_cross_boundary_edges(
 
         r["waypoints"] = [(float(x), float(y)) for x, y in out]
         r["_cbe_rerouted"] = True
+        if _cbe_esc_idxs:
+            r["_cbe_escape_idxs"] = _cbe_esc_idxs
 
         # Scope tagging (harness compound-gate validator + AC11 in-pipeline check).
         r["source_scope"] = sn.group if sg else ""
@@ -3877,7 +5161,108 @@ def _reroute_cross_boundary_edges(
     _all_gate_coords = frozenset(
         (round(g.point.x, 1), round(g.point.y, 1)) for g in gates
     )
+    _pre_equalize_wps = {r.get("edge_id"): list(r.get("waypoints") or []) for r in routed}
     _equalize_corridors(routed, nodes, grp_bboxes, direction=direction, gate_coords=_all_gate_coords)
+    # Revert any route whose waypoints now intersect a non-src/non-dst node interior.
+    for _r in routed:
+        _wps = _r.get("waypoints") or []
+        _eid = _r.get("edge_id")
+        _pre = _pre_equalize_wps.get(_eid)
+        if _pre is None or _wps == _pre:
+            continue
+        _sid = _r.get("semantic_source_id") or _r.get("routing_source_id", "")
+        _did = _r.get("semantic_target_id") or _r.get("routing_target_id", "")
+        _crosses = False
+        for _wi in range(len(_wps) - 1):
+            _ax, _ay = _wps[_wi]
+            _bx, _by = _wps[_wi + 1]
+            for _nid, (_rx0, _ry0, _rx1, _ry1) in node_rects.items():
+                if _nid in (_sid, _did):
+                    continue
+                if _ay == _by:  # horizontal segment
+                    if _ry0 < _ay < _ry1 and min(_ax, _bx) < _rx1 and max(_ax, _bx) > _rx0:
+                        _crosses = True
+                        break
+                elif _ax == _bx:  # vertical segment
+                    if _rx0 < _ax < _rx1 and min(_ay, _by) < _ry1 and max(_ay, _by) > _ry0:
+                        _crosses = True
+                        break
+            if _crosses:
+                break
+        if _crosses:
+            # Before reverting, try the opposite equalization direction to avoid
+            # recreating the lane overlap that equalization was designed to fix.
+            _alt_wps = None
+            if len(_wps) == len(_pre):
+                _sdx_list = [
+                    _wps[_wi][0] - _pre[_wi][0]
+                    for _wi in range(1, len(_wps) - 1)
+                    if abs(_wps[_wi][0] - _pre[_wi][0]) > 1.0
+                ]
+                if _sdx_list and all(abs(_d - _sdx_list[0]) < 1.0 for _d in _sdx_list):
+                    _sdx = _sdx_list[0]
+                    _alt = [
+                        (_pre[_wi][0] - _sdx, _pre[_wi][1])
+                        if abs(_wps[_wi][0] - _pre[_wi][0]) > 1.0 else _pre[_wi]
+                        for _wi in range(len(_pre))
+                    ]
+                    _alt_crosses = False
+                    for _wi2 in range(len(_alt) - 1):
+                        _ax2, _ay2 = _alt[_wi2]
+                        _bx2, _by2 = _alt[_wi2 + 1]
+                        for _nid2, (_rx0, _ry0, _rx1, _ry1) in node_rects.items():
+                            if _nid2 in (_sid, _did):
+                                continue
+                            if _ay2 == _by2:
+                                if (_ry0 < _ay2 < _ry1
+                                        and min(_ax2, _bx2) < _rx1
+                                        and max(_ax2, _bx2) > _rx0):
+                                    _alt_crosses = True
+                                    break
+                            elif _ax2 == _bx2:
+                                if (_rx0 < _ax2 < _rx1
+                                        and min(_ay2, _by2) < _ry1
+                                        and max(_ay2, _by2) > _ry0):
+                                    _alt_crosses = True
+                                    break
+                        if _alt_crosses:
+                            break
+                    if not _alt_crosses:
+                        # Verify the opposite lane isn't already occupied by
+                        # another route's vertical segments — accepting it would
+                        # recreate the lane-sharing the equalization was designed
+                        # to fix.
+                        _alt_overlap = False
+                        for _r2 in routed:
+                            if _r2 is _r:
+                                continue
+                            _wps2 = _r2.get("waypoints") or []
+                            for _wi2 in range(len(_wps2) - 1):
+                                _ax2, _ay2 = _wps2[_wi2]
+                                _bx2, _by2 = _wps2[_wi2 + 1]
+                                if abs(_ax2 - _bx2) >= 1.0:
+                                    continue  # horizontal — skip
+                                for _wi3 in range(len(_alt) - 1):
+                                    _ax3, _ay3 = _alt[_wi3]
+                                    _bx3, _by3 = _alt[_wi3 + 1]
+                                    if abs(_ax3 - _bx3) >= 1.0:
+                                        continue  # not vertical
+                                    if abs(_ax2 - _ax3) >= 2.0:
+                                        continue  # different x lane
+                                    _s3lo = min(_ay3, _by3)
+                                    _s3hi = max(_ay3, _by3)
+                                    _s2lo = min(_ay2, _by2)
+                                    _s2hi = max(_ay2, _by2)
+                                    if _s3lo < _s2hi and _s3hi > _s2lo:
+                                        _alt_overlap = True
+                                        break
+                                if _alt_overlap:
+                                    break
+                            if _alt_overlap:
+                                break
+                        if not _alt_overlap:
+                            _alt_wps = _alt
+            _r["waypoints"] = _alt_wps if _alt_wps is not None else list(_pre)
 
     # Second pass: place labels of rerouted edges clear of every other route.
     all_segs: "list[tuple]" = []
@@ -3906,5 +5291,7 @@ def _reroute_cross_boundary_edges(
         r.pop("_cbe_rerouted", None)
         r.pop("_src_port", None)
         r.pop("_dst_port", None)
+        r.pop("_src_normal", None)
+        r.pop("_dst_normal", None)
 
     return tuple(gates)

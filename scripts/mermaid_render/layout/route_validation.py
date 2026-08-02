@@ -294,14 +294,31 @@ def _check_dogleg(route: RouteCandidate) -> list[ValidationError]:
     errors = []
     pts = route.points
     n = len(pts)
-    # Intermediate segments: indices 1..n-3 (both terminals exempt); requires ≥ 4 waypoints
+    esc = route.escape_indices or frozenset()
+    # Intermediate segments: indices 1..n-3 (both terminals exempt); requires ≥ 4 waypoints.
+    # Sub-4px segments adjacent to escape indices are geometrically correct (float boundary
+    # coords for non-cardinal normals produce bridges of this size); longer escape-adjacent
+    # segments are NOT exempt — they may still be cardinal doglegs.
+    # 1-hop extension: cardinal opposing ports with < 1 px perpendicular offset produce a
+    # tiny trunk jog sandwiched between two escape-adjacent segments; gated on segment length.
     for i in range(1, n - 2):
         seg_len = math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1])
-        if seg_len < 4.0:
-            errors.append(ValidationError(
-                route.edge_id, "dogleg_too_short",
-                f"intermediate segment [{i}→{i+1}] length {seg_len:.4g} < 4 px",
-            ))
+        if seg_len >= 4.0:
+            continue
+        if (i in esc or (i + 1) in esc) and 0.0 < seg_len < 1.0:
+            continue
+        if (i - 1) in esc:
+            if (math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) < 1.0
+                    and 0.0 < seg_len < 1.0):
+                continue
+        if (i + 2) in esc and (i + 2) < n:
+            if (math.hypot(pts[i + 2][0] - pts[i + 1][0], pts[i + 2][1] - pts[i + 1][1]) < 1.0
+                    and 0.0 < seg_len < 1.0):
+                continue
+        errors.append(ValidationError(
+            route.edge_id, "dogleg_too_short",
+            f"intermediate segment [{i}→{i+1}] length {seg_len:.4g} < 4 px",
+        ))
     return errors
 
 
