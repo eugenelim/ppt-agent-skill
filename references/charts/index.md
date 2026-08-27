@@ -1,31 +1,33 @@
-# 图表系统索引（18 种 / 3 层级）
+# 图表系统索引（20 种 / 3 层级）
 
 > 所有图表纯 HTML/CSS/SVG 实现，**禁止引入 ECharts 等运行时**（破坏 svg2pptx 管线）。所有图表遵守 [pipeline-compat.md](../pipeline-compat.md) 防偏移规则（SVG 内不写 `<text>`，标签用 HTML div 叠加）。
 
 ---
 
-## 1. 18 种图表全景
+## 1. 20 种图表全景
 
-| # | 图表 | 层级 | 文件 | 何时用 |
-|---|------|------|------|-------|
-| 1 | 进度条 (Progress Bar) | 基础 | [basic.md](basic.md) | 单一百分比 / 完成度 |
-| 2 | 对比柱 (Compare Bar) | 基础 | [basic.md](basic.md) | 两项对比 |
-| 3 | 环形图 (Ring Chart) | 基础 | [basic.md](basic.md) | 百分比 + 中心 KPI |
-| 4 | 迷你折线 (Sparkline) | 基础 | [basic.md](basic.md) | 趋势方向 |
-| 5 | 点阵图 (Waffle Chart) | 基础 | [basic.md](basic.md) | 比例直觉化（10×10）|
-| 6 | KPI 指标卡 | 基础 | [basic.md](basic.md) | 大数字 + 趋势箭头 |
-| 7 | 指标行 (Metric Row) | 基础 | [basic.md](basic.md) | 多指标垂直堆叠 |
-| 8 | 评分指示器 (Rating) | 基础 | [basic.md](basic.md) | 5 分制 / 半星 |
-| 9 | 雷达图 (Radar) | 进阶 | [advanced.md](advanced.md) | 多维度对比（5-8 维）|
-| 10 | 时间线 (Timeline) | 进阶 | [advanced.md](advanced.md) | 历史 / 路线图 / 流程 |
-| 11 | 漏斗图 (Funnel) | 进阶 | [advanced.md](advanced.md) | 转化率 / 流失分析 |
-| 12 | 仪表盘 (Gauge) | 进阶 | [advanced.md](advanced.md) | KPI 评级 / 健康度 |
-| 13 | 多组对比柱 (Grouped Bar) | 进阶 | [advanced.md](advanced.md) | 多类别 × 多组对比 |
-| 14 | 简单地理 (Simple Map) | 进阶 | [advanced.md](advanced.md) | 城市点 / 区域分布 |
-| 15 | 世界地图 choropleth | 复杂 | [complex.md](complex.md) | 全球数据可视化 |
-| 16 | 关系网络 (Network) | 复杂 | [complex.md](complex.md) | 节点 + 连线（静态力导向） |
-| 17 | 桑基图 (Sankey) | 复杂 | [complex.md](complex.md) | 流量 / 转化路径 |
-| 18 | 热力日历 (Heatmap Calendar) | 复杂 | [complex.md](complex.md) | 365 天数据密度 |
+| # | chart_type | 图表 | 层级 | 文件 | 何时用 |
+|---|------------|------|------|------|-------|
+| 1 | `progress_bar` | 进度条 | 基础 | [basic.md](basic.md) | 单一百分比 / 完成度 |
+| 2 | `comparison_bar` | 对比柱 | 基础 | [basic.md](basic.md) | 两项对比 |
+| 3 | `ring` | 环形图 | 基础 | [basic.md](basic.md) | 百分比 + 中心 KPI |
+| 4 | `sparkline` | 迷你折线 | 基础 | [basic.md](basic.md) | 趋势方向 |
+| 5 | `waffle` | 点阵图 | 基础 | [basic.md](basic.md) | 比例直觉化（10×10）|
+| 6 | `kpi` | KPI 指标卡 | 基础 | [basic.md](basic.md) | 大数字 + 趋势箭头 |
+| 7 | `metric_row` | 指标行 | 基础 | [basic.md](basic.md) | 多指标垂直堆叠 |
+| 8 | `rating` | 评分指示器 | 基础 | [basic.md](basic.md) | 5 分制 / 半星 |
+| 9 | `radar` | 雷达图 | 进阶 | [advanced.md](advanced.md) | 多维度对比（5-8 维）|
+| 10 | `timeline` | 时间线 | 进阶 | [advanced.md](advanced.md) | 历史 / 路线图 / 流程 |
+| 11 | `funnel` | 漏斗图 | 进阶 | [advanced.md](advanced.md) | 转化率 / 流失分析 |
+| 12 | `gauge` | 仪表盘 | 进阶 | [advanced.md](advanced.md) | KPI 评级 / 健康度 |
+| 13 | `grouped_bar` | 多组对比柱 | 进阶 | [advanced.md](advanced.md) | 多类别 × 多组对比 |
+| 14 | `stacked_bar` | 堆叠条形图 | 进阶 | [advanced.md](advanced.md) | 构成占比 × 多类别 |
+| 15 | `simple_map` | 简单地理 | 进阶 | [advanced.md](advanced.md) | 城市点 / 区域分布 |
+| 16 | `world_choropleth` | 世界地图 choropleth | 复杂 | [complex.md](complex.md) | 全球数据可视化 |
+| 17 | `network_graph` | 关系网络 | 复杂 | [complex.md](complex.md) | 节点 + 连线（静态力导向） |
+| 18 | `sankey_flow` | 桑基图 | 复杂 | [complex.md](complex.md) | 流量 / 转化路径 |
+| 19 | `heatmap_calendar` | 热力日历 | 复杂 | [complex.md](complex.md) | 365 天数据密度 |
+| 20 | `treemap` | 矩形树图 | 复杂 | [complex.md](complex.md) | 层级构成 / 面积占比 |
 
 ---
 
@@ -37,6 +39,7 @@
 |---------|---------|------|
 | 单一百分比 | 进度条 / 环形图 | KPI 指标卡 |
 | 两项对比 | 对比柱 | 多组对比柱 |
+| 多类别构成 | 堆叠条形图 | 矩形树图 |
 | 3-8 个并列指标 | KPI 卡组 / 指标行 | 雷达图 |
 | 多维度评估 | 雷达图 | 评分指示器 |
 | 时间趋势 | 迷你折线 | 时间线 |
@@ -48,6 +51,7 @@
 | 关系网络（如组织架构）| 关系网络 | — |
 | 复杂流量分析 | 桑基图 | 漏斗图 |
 | 连续日期数据 | 热力日历 | 迷你折线 |
+| 层级占比 | 矩形树图 | 堆叠条形图 |
 
 ---
 

@@ -84,12 +84,9 @@ architecture-beta
   when it cannot honor a port-side constraint.
 - [x] AC7: All five services (`lb`, `api`, `db`, `cache`, `queue`) exist in the layout.
 - [x] AC8: All five services are inside the Cloud Platform group.
-- [ ] AC9 (deferred: arch-elk-edge-interior-crossing): No edge crosses a service
-  interior; Cloud Platform title band is clear. Holds on the Python fallback
-  (validated clean by the segment-aware validators); the ELK path has a
-  pre-existing `api→cache` route that clips `queue`'s interior for this fixture.
-  Fixing it requires changing ELK's architecture edge routing, which this spec's
-  Never/Out-of-scope constraints forbid ("do not redesign the successful ELK path").
+- [x] AC9: No edge crosses a service interior and the Cloud Platform title band
+  is clear on both the Python fallback and real-ELK lanes, enforced by the
+  segment-aware validators.
 - [x] AC10: Each relation has a stable `edge_id` in both ELK and fallback lanes.
 - [x] AC11: `faithful_mermaid=True` output contains no synchronous or service-boundary
   legend.
@@ -100,6 +97,12 @@ architecture-beta
 
 ## Deviations
 
+- **ELK fixed-port face inset remains deferred.** The hard AC9 obstruction gate is
+  clean and no longer shares the retired interior-crossing anchor. Separate ELK-only
+  endpoint checks can still place fixed-side ports about 12 px inside their own visual
+  node face; this is tracked by `arch-elk-fixed-port-face-inset`. It does not reopen
+  AC9 because `validate_segment_obstruction` checks unrelated obstructions, not exact
+  endpoint-on-face placement.
 - **`compile_architecture` return type unified to `ArchitectureDiagramLayout`.**
   The prior `mermaid-architecture-metadata-preservation` spec returned a
   `FinalizedLayout` directly on the ELK success path. That conflicts with the
@@ -116,14 +119,6 @@ architecture-beta
   tracked by backlog anchor `arch-elk-roundtrip-lossy`. The prior spec's
   conformance tests (`tests/test_architecture_conformance.py`) were updated to
   assert their invariants on `arch_to_finalized(compile_architecture(...))`.
-- **AC9 ELK-path interior crossing deferred** (see AC9 above), anchor
-  `arch-elk-edge-interior-crossing`. The same anchor covers the pre-existing
-  ELK-only architecture geometry test failures (`test_arch_port_acceptance`
-  edge-face inset, `test_no_edge_waypoint_inside_service`,
-  `test_arch_compiled_model::TestBiRelEdge::test_birel_with_label`): ELK's port
-  positions sit ~12px inside the visual node face. These fail only when elkjs is
-  installed and are unchanged by this item (proven: zero new FAILED-set drift vs
-  a pristine `origin/main` worktree with the same elkjs).
 
 ## Testing Strategy
 

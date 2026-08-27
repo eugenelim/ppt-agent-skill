@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chart_registry import VALID_CHART_TYPES, chart_recipe_file
 # resource_registry removed in v4 refactor; resource lookup inlined below
 from workflow_versions import (
     PLANNING_CONTINUITY_VERSION,
@@ -111,10 +112,6 @@ VALID_IMAGE_POLICIES = {"flexible", "support_only", "decorate_only"}
 VALID_DECORATION_BUDGETS = {"generous", "medium", "low", "minimal"}
 VALID_OVERFLOW_STRATEGIES = {
     "rebalance_layout", "tighten_budget", "table_or_microchart", "rollback_planning",
-}
-VALID_CHART_TYPES = {
-    "kpi", "metric_row", "sparkline", "comparison_bar", "ring", "stacked_bar",
-    "timeline", "funnel", "radar", "treemap", "waffle", "progress_bar", "rating",
 }
 VALID_IMAGE_USAGES = {
     "hero-background", "inline-illustration", "icon-accent", "data-visualization-bg",
@@ -306,36 +303,6 @@ _GROUP_DIRS = {
     "principle_refs": "principles",
 }
 
-# chart_type values (normalized: lowercase, hyphens) -> grouped recipe file stem.
-# Sources: references/charts/{basic,advanced,complex}.md chart_id columns.
-# Allows resource_exists to resolve a chart_type entry in chart_refs to its
-# containing recipe file instead of looking for a per-chart-type file that
-# doesn't exist.
-_CHART_TYPE_TO_FILE: dict[str, str] = {
-    # basic.md
-    "progress-bar": "basic",
-    "comparison-bar": "basic",
-    "ring": "basic",
-    "sparkline": "basic",
-    "waffle": "basic",
-    "kpi": "basic",
-    "metric-row": "basic",
-    "rating": "basic",
-    # advanced.md
-    "radar": "advanced",
-    "timeline": "advanced",
-    "funnel": "advanced",
-    "gauge": "advanced",
-    "grouped-bar": "advanced",
-    "simple-map": "advanced",
-    # complex.md
-    "world-choropleth": "complex",
-    "network-graph": "complex",
-    "sankey-flow": "complex",
-    "heatmap-calendar": "complex",
-}
-
-
 def resource_exists(refs_dir: Path, group: str, value: str) -> bool:
     if not value:
         return True
@@ -353,8 +320,7 @@ def resource_exists(refs_dir: Path, group: str, value: str) -> bool:
     # grouped recipe files (basic/advanced/complex).  Check the grouped file
     # rather than trying to find a per-chart-type file that doesn't exist.
     if group == "chart_refs":
-        normalized_type = raw.lower().replace("_", "-")
-        recipe_file = _CHART_TYPE_TO_FILE.get(normalized_type)
+        recipe_file = chart_recipe_file(raw)
         if recipe_file is not None:
             return (refs_dir / subdir / f"{recipe_file}.md").exists()
     # Try exact filename first, then with .md extension

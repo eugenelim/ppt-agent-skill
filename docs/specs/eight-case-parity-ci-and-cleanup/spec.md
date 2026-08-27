@@ -90,20 +90,11 @@ unnecessary by items 1–5.
 
 ## Deviations
 
-- **Architecture ELK interior-crossing reconciliation.** The hard-failure list
-  includes "route segment crossing an unrelated node interior." On the
-  architecture ELK path the `architecture-complex` `api→cache` route clips
-  `queue`'s interior — a KNOWN defect deferred in item 5 (backlog anchor
-  `arch-elk-edge-interior-crossing`), which forbids redesigning the successful
-  ELK path. To keep the ELK-required lane from spuriously failing the hard gate
-  WITHOUT weakening it, `tests/test_eight_case_ci_gates.py` reconciles as follows:
-  the fabricated node-interior gate (`test_ci_fails_on_segment_crossing_unrelated_node`)
-  stays a hard assertion; the architecture Python-fallback lane
-  (`test_architecture_fallback_geometry_gate_clean`) asserts fully clean; and the
-  live architecture ELK geometry lane (`test_architecture_elk_geometry_gate_known_deferred`)
-  is a narrowly-scoped `xfail` tied to `arch-elk-edge-interior-crossing`. No flowchart
-  fixture gate is weakened. This is a deferred *defect*, not a deferred AC — AC2's
-  coverage requirement is met by the fabricated gate.
+- **Architecture ELK interior-crossing gate.** The hard-failure list includes
+  "route segment crossing an unrelated node interior." The fabricated negative
+  control, architecture Python-fallback lane, and live architecture ELK lane are
+  all normal hard assertions. The former strict XPASS alarm was promoted after
+  the real-ELK geometry became clean.
 - **AC5 cleanup scoped to the item-3-replaced code only.** The removed
   "post-global-placement group correction" is the unconditional inner-direction
   fixup `_layout._apply_inner_direction_positions` — proven dead (no production
@@ -121,8 +112,10 @@ unnecessary by items 1–5.
   full-tier FAILED set is **byte-identical** between this branch and a pristine
   `origin/main` worktree on the *same* backend (WITH elkjs: identical 50-failure
   set; WITHOUT elkjs: 0 failures on both). These are the same elkjs-only failures
-  item 5 documented; they are out of scope (item 5 froze the ELK path) and covered
-  conceptually alongside `arch-elk-edge-interior-crossing`.
+  item 5 documented; they remain out of scope because item 5 froze the ELK path.
+  The architecture fixed-port endpoint inset is tracked separately by
+  `arch-elk-fixed-port-face-inset`; it is not covered by the now-hard obstruction
+  assertion.
 - **Carry-forward maintainability items** from the item 4–5 post-merge reviews were
   folded in as code cross-references + backlog anchors (`renderer-two-paths-faithful-resolver`,
   `arch-elk-roundtrip-lossy`, `arch-dual-edge-id-desync`) rather than behavior changes,

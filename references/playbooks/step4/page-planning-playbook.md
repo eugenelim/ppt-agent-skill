@@ -153,7 +153,7 @@ page_template  : cover toc section section-marker reference end
 > - `usage` ∈ `hero-background` `inline-illustration` `icon-accent` `data-visualization-bg`
 > - `placement` ∈ `full-bleed` `left-half` `right-half` `card-bg` `inline`
 >
-> 有图表时：把 `chart: null` 改为 `"chart": {"chart_type": "<枚举值>"}`。`chart_type` 闭集（**下划线命名**）：`kpi` `metric_row` `sparkline` `comparison_bar` `ring` `stacked_bar` `timeline` `funnel` `radar` `treemap` `waffle` `progress_bar` `rating`。
+> 有图表时：把 `chart: null` 改为 `"chart": {"chart_type": "<枚举值>"}`。`chart_type` 闭集（**下划线命名**）：`progress_bar` `comparison_bar` `ring` `sparkline` `waffle` `kpi` `metric_row` `rating` `radar` `timeline` `funnel` `gauge` `grouped_bar` `stacked_bar` `simple_map` `world_choropleth` `network_graph` `sankey_flow` `heatmap_calendar` `treemap`。
 >
 > **多卡片页的两条组合硬规则**（照抄骨架最容易违反）：① 每页**恰好 1 张** `role:anchor` 卡，其余为 `support`/`context`——0 张或 ≥2 张 anchor 都报 ERROR；② `content` 页只要有 ≥2 张卡，就必须用**至少 2 种不同的 `card_style`**（别把每张都设成 `elevated`）。
 
@@ -442,7 +442,7 @@ page_template  : cover toc section section-marker reference end
 - `cards[].role`：`anchor` / `support` / `context`。**每页恰好 1 张 `anchor`**（缺失或多于 1 张都报 ERROR）。
 - `cards[].card_style`：`accent` / `elevated` / `filled` / `outline` / `glass` / `transparent`。**`content` 页有 ≥2 张卡时，必须出现 ≥2 种不同的 `card_style`**（不能全同一种）。
 - `cards[].card_type`：`text` / `data` / `list` / `process` / `tag_cloud` / `data_highlight` / `timeline` / `diagram` / `quote` / `comparison` / `people` / `image_hero` / `matrix_chart`
-- `cards[].chart.chart_type`（若有图表）：`kpi` / `metric_row` / `sparkline` / `comparison_bar` / `ring` / `stacked_bar` / `timeline` / `funnel` / `radar` / `treemap` / `waffle` / `progress_bar` / `rating`
+- `cards[].chart.chart_type`（若有图表）：`progress_bar` / `comparison_bar` / `ring` / `sparkline` / `waffle` / `kpi` / `metric_row` / `rating` / `radar` / `timeline` / `funnel` / `gauge` / `grouped_bar` / `stacked_bar` / `simple_map` / `world_choropleth` / `network_graph` / `sankey_flow` / `heatmap_calendar` / `treemap`
 - `cards[].image.usage`（`needed=true` 时）：`hero-background` / `inline-illustration` / `icon-accent` / `data-visualization-bg`
 - `cards[].image.placement`（`needed=true` 时）：`full-bleed` / `left-half` / `right-half` / `card-bg` / `inline`
 - `cards[].body` 必须是**字符串数组**，不要写成单个字符串

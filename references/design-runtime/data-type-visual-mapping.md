@@ -15,15 +15,15 @@
 | 数据类型 | 推荐 card_type | 推荐布局 | CSS 实现参考 | 适用页面类型 |
 |---------|---------------|---------|-------------|------------|
 | `data_tables` | `data` / `comparison` | symmetric / three-column | 标准 `<table>` + 斑马纹 + 高亮行 | evidence / comparison |
-| `metrics` | `data_highlight` | hero-top / primary-secondary | `charts/kpi.md` `charts/metric-row.md` | cover / evidence / close |
+| `metrics` | `data_highlight` | hero-top / primary-secondary | `charts/basic.md` 中的 `kpi` / `metric_row` | cover / evidence / close |
 | `kv_pairs` | `data` / `list` | symmetric / primary-secondary | 标签+值两列布局，标签半透明 | setup / evidence |
 | `matrix_data` | `matrix_chart` | single-focus / primary-secondary | `blocks/matrix-chart.md` 2x2 grid | comparison / framework |
-| `funnel_data` | `data` | single-focus / primary-secondary | `charts/funnel.md` 梯形递减 | process / evidence |
-| `pie_data` | `data` | primary-secondary | `charts/ring.md` 环形图 + 图例 | evidence / comparison |
-| `trend_series` | `data` | primary-secondary / hero-top | `charts/sparkline.md` 折线 + 标注 | evidence / close |
+| `funnel_data` | `data` | single-focus / primary-secondary | `charts/advanced.md` 中的 `funnel` | process / evidence |
+| `pie_data` | `data` | primary-secondary | `charts/basic.md` 中的 `ring` + 图例 | evidence / comparison |
+| `trend_series` | `data` | primary-secondary / hero-top | `charts/basic.md` 中的 `sparkline` | evidence / close |
 | `ranked_list` | `list` / `data_highlight` | l-shape / asymmetric | 排名编号 + 渐变条 + 数值 | evidence / comparison |
-| `score_card` | `data` | single-focus | `charts/radar.md` 雷达图 | evidence / comparison |
-| `distribution_data` | `data` | primary-secondary | `charts/stacked-bar.md` 堆叠柱状 | evidence |
+| `score_card` | `data` | single-focus | `charts/advanced.md` 中的 `radar` | evidence / comparison |
+| `distribution_data` | `data` | primary-secondary | `charts/advanced.md` 中的 `stacked_bar` | evidence |
 
 ## 商业分析类
 
@@ -31,7 +31,7 @@
 |---------|---------------|---------|-------------|------------|
 | `swot` | `matrix_chart` | single-focus | 2x2 彩色网格，每象限独立色 | framework / comparison |
 | `pricing_plans` | `comparison` | symmetric / three-column | 卡片并列 + 推荐高亮 + 勾选列表 | comparison / close |
-| `cost_breakdown` | `data` | primary-secondary | `charts/stacked-bar.md` + `charts/ring.md` 占比 | evidence / process |
+| `cost_breakdown` | `data` | primary-secondary | `charts/advanced.md` 中的 `stacked_bar` 或 `charts/basic.md` 中的 `ring` | evidence / process |
 | `competitive_matrix` | `comparison` / `matrix_chart` | single-focus / symmetric | 多列对比表 + 评分色块 | comparison |
 | `value_chain` | `process` | l-shape / waterfall | 箭头链 + 每段 value_add 标注 | framework / process |
 
@@ -47,7 +47,7 @@
 
 | 数据类型 | 推荐 card_type | 推荐布局 | CSS 实现参考 | 适用页面类型 |
 |---------|---------------|---------|-------------|------------|
-| `timelines` | `timeline` | l-shape / waterfall | `blocks/timeline.md` `charts/timeline.md` | process / evidence |
+| `timelines` | `timeline` | l-shape / waterfall | `blocks/timeline.md` 或 `charts/advanced.md` 中的 `timeline` | process / evidence |
 | `process_flows` | `process` | l-shape / waterfall | 步骤编号 + 连接线 + warning 高亮 | process / framework |
 | `parallel_items` | `list` / `data` | symmetric / three-column | 并列卡片 + icon + 统一字号 | evidence / setup |
 | `hierarchies` | `diagram` | single-focus / t-shape | `blocks/diagram.md` 嵌套缩进 / 树形 | framework |
@@ -62,10 +62,10 @@
 | 数据类型 | 推荐 card_type | 推荐布局 | CSS 实现参考 | 适用页面类型 |
 |---------|---------------|---------|-------------|------------|
 | `definitions` | `text` | primary-secondary | 术语加粗 + 解释正文 + 分割线 | setup / evidence |
-| `milestone_results` | `data_highlight` | hero-top / symmetric | `charts/kpi.md` 大数字 + 成就描述 | close / cta |
+| `milestone_results` | `data_highlight` | hero-top / symmetric | `charts/basic.md` 中的 `kpi` + 成就描述 | close / cta |
 | `user_testimonials` | `quote` / `people` | asymmetric / primary-secondary | `blocks/quote.md` `blocks/people.md` | evidence / close |
 | `faq_pairs` | `list` / `text` | l-shape / symmetric | Q 加粗 + A 缩进 + 折叠展开 | setup / evidence |
-| `number_highlights` | `data_highlight` | hero-top / single-focus | `charts/kpi.md` 超大字号 + 单位 + 上下文 | cover / close / evidence |
+| `number_highlights` | `data_highlight` | hero-top / single-focus | `charts/basic.md` 中的 `kpi` + 单位 + 上下文 | cover / close / evidence |
 | `story_arc` | `timeline` / `text` | waterfall / l-shape | 三幕式横向流 + 情绪标注 | setup / evidence |
 | `expert_quotes` | `quote` | primary-secondary / asymmetric | `blocks/quote.md` + 头像 + 机构 | evidence / setup |
 | `checklist` | `list` | l-shape / symmetric | 勾选框 + 完成状态色 | process / close |
@@ -84,7 +84,7 @@
 
 | 数据类型 | 推荐 card_type | 推荐布局 | CSS 实现参考 | 适用页面类型 |
 |---------|---------------|---------|-------------|------------|
-| `progress_tracker` | `data` / `list` | l-shape / symmetric | `charts/progress-bar.md` 进度条 + 状态色 | process / close |
+| `progress_tracker` | `data` / `list` | l-shape / symmetric | `charts/basic.md` 中的 `progress_bar` + 状态色 | process / close |
 | `gantt_data` | `timeline` | waterfall / single-focus | 横向条状 + 时间刻度 + 依赖线 | process / framework |
 | `status_dashboard` | `data` / `list` | mixed-grid | 分类标签 + 状态色块(绿/黄/红) | process / close |
 | `action_items` | `list` | l-shape / symmetric | 任务 + 负责人标签 + 截止日 | close / cta |

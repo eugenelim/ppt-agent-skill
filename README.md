@@ -67,7 +67,7 @@
 |------|------|
 | **6 步 Pipeline** | 需求调研 → 资料搜集 → 大纲策划 → 策划稿 → HTML 设计稿 → 后处理（SVG + PPTX）|
 | **30 种世界级风格** | 5 板块覆盖：暗色专业 9 / 浅色高级 10 / 活力鲜明 4 / 东方文化 3 / 自然复古 4 |
-| **18 种数据可视化** | 基础 8 + 进阶 6（雷达/时间线/漏斗/仪表盘）+ ECharts 级 4（世界地图/关系网络/桑基/热力日历）|
+| **20 种数据可视化** | 基础 8 + 进阶 7（含堆叠条形图）+ ECharts 级 5（含矩形树图）|
 | **Bento Grid 布局** | 7 种卡片式灵活布局，内容驱动版式 |
 | **世界级排版** | 7 级字号阶梯 · 字距铁律 · tabular-nums · OpenType 特性 · serif italic 混排 · 字体栈三层降级 |
 | **智能配图** | AI 生成配图 + 5 种视觉融入技法（渐隐融合/色调蒙版/氛围底图等）|
@@ -200,13 +200,13 @@ hero 拼图统一取封面：
 | `retro_70s` | Wes Anderson / 70s 海报 | 独立咖啡 / 唱片 / 复古 |
 | `gov_authority` | 人民日报 / 国宴 | 党政 / 重大会议 / 严肃汇报 |
 
-## 📈 18 种数据可视化
+## 📈 20 种数据可视化
 
 | 层级 | 数量 | 图表 | 文件 |
 |------|------|------|------|
 | **基础** | 8 | 进度条 · 对比柱 · 环形图 · 迷你折线 · 点阵图 · KPI 卡 · 指标行 · 评分 | [`charts/basic.md`](references/charts/basic.md) |
-| **进阶** | 6 | 雷达图 · 时间线 · 漏斗图 · 仪表盘 · 多组对比柱 · 简单地理 | [`charts/advanced.md`](references/charts/advanced.md) |
-| **ECharts 级** | 4 | 世界地图 choropleth · 关系网络 · 桑基图 · 热力日历 | [`charts/complex.md`](references/charts/complex.md) |
+| **进阶** | 7 | 雷达图 · 时间线 · 漏斗图 · 仪表盘 · 多组对比柱 · 堆叠条形图 · 简单地理 | [`charts/advanced.md`](references/charts/advanced.md) |
+| **ECharts 级** | 5 | 世界地图 choropleth · 关系网络 · 桑基图 · 热力日历 · 矩形树图 | [`charts/complex.md`](references/charts/complex.md) |
 
 全部纯 HTML/CSS/SVG 实现，**无 JS 运行时**（保证 svg2pptx 管线兼容）。所有图表自动适配 30 风格的 CSS 变量。
 
@@ -273,11 +273,11 @@ ppt-agent-skill/
 │   │   ├── vibrant.md            # 4 活力鲜明
 │   │   ├── cultural.md           # 3 东方文化
 │   │   └── natural.md            # 4 自然/复古
-│   ├── charts/                   # 18 种图表
+│   ├── charts/                   # 20 种图表
 │   │   ├── index.md              # 决策矩阵
 │   │   ├── basic.md              # 8 种基础
-│   │   ├── advanced.md           # 6 种进阶
-│   │   └── complex.md            # 4 种 ECharts 级
+│   │   ├── advanced.md           # 7 种进阶
+│   │   └── complex.md            # 5 种 ECharts 级
 │   └── principles/
 │       └── failure-modes.md      # 8 种 failure modes + 修复顺序
 ├── scripts/                      # 后处理 + 工具（adopter-facing）

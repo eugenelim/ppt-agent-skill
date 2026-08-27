@@ -1,6 +1,6 @@
-# 进阶图表（6 种）
+# 进阶图表（7 种）
 
-> 本文件覆盖 6 种 NEW 进阶图表。**所有模板均符合 [pipeline-compat.md](../pipeline-compat.md)**：SVG 内零 `<text>`、所有标签 HTML 叠加、所有数字 `tabular-nums`、所有颜色用 CSS 变量。
+> 本文件覆盖 7 种进阶图表。**所有模板均符合 [pipeline-compat.md](../pipeline-compat.md)**：SVG 内零 `<text>`、所有标签 HTML 叠加、所有数字 `tabular-nums`、所有颜色用 CSS 变量。
 >
 > 复制即用。每个模板都内置假数据，只需替换数据即可。
 
@@ -15,7 +15,8 @@
 | 3 | 漏斗图 | `funnel` | 转化率 / 流失分析 |
 | 4 | 仪表盘 | `gauge` | KPI 评级 / 健康度 |
 | 5 | 多组对比柱 | `grouped_bar` | 多类别 × 多组对比 |
-| 6 | 简单地理 | `simple_map` | 城市点 / 区域分布 |
+| 6 | 堆叠条形图 | `stacked_bar` | 构成占比 × 多类别对比 |
+| 7 | 简单地理 | `simple_map` | 城市点 / 区域分布 |
 
 ---
 
@@ -654,7 +655,70 @@ height% = (value / max) * 100
 
 ---
 
-## 6. 简单地理 (simple_map)
+## 6. 堆叠条形图 (stacked_bar)
+
+**何时用**：比较 2-6 个类别的组成结构；每一行代表整体，色段代表组成。需要比较绝对总量时改用 `grouped_bar`，类别只有一个时改用 `ring` 或 `waffle`。
+
+**数据格式**：
+
+```json
+{
+  "unit": "%",
+  "categories": [
+    {"name": "企业客户", "segments": [
+      {"name": "核心产品", "value": 52},
+      {"name": "增值服务", "value": 31},
+      {"name": "其他", "value": 17}
+    ]},
+    {"name": "中小客户", "segments": [
+      {"name": "核心产品", "value": 38},
+      {"name": "增值服务", "value": 42},
+      {"name": "其他", "value": 20}
+    ]}
+  ]
+}
+```
+
+**HTML 模板**（100% 堆叠；宽度已由数据预计算）：
+
+```html
+<div class="chart-stacked-bar" style="width:720px; font-family:var(--body-font);">
+  <div style="display:flex; justify-content:flex-end; gap:20px; margin-bottom:14px; color:var(--text-secondary); font-size:11px;">
+    <span><i style="display:inline-block; width:9px; height:9px; margin-right:5px; background:var(--accent-1);"></i>核心产品</span>
+    <span><i style="display:inline-block; width:9px; height:9px; margin-right:5px; background:var(--accent-2);"></i>增值服务</span>
+    <span><i style="display:inline-block; width:9px; height:9px; margin-right:5px; background:var(--accent-3);"></i>其他</span>
+  </div>
+
+  <div style="display:grid; grid-template-columns:110px 1fr; align-items:center; gap:10px 14px;">
+    <div style="font-size:12px; font-weight:650; color:var(--text-primary);">企业客户</div>
+    <div style="display:flex; height:34px; overflow:hidden; border-radius:6px; background:var(--card-bg-from);">
+      <div style="width:52%; display:flex; align-items:center; justify-content:center; background:var(--accent-1); color:var(--bg-primary); font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;">52%</div>
+      <div style="width:31%; display:flex; align-items:center; justify-content:center; background:var(--accent-2); color:var(--text-primary); font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;">31%</div>
+      <div style="width:17%; display:flex; align-items:center; justify-content:center; background:var(--accent-3); color:var(--text-primary); font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;">17%</div>
+    </div>
+
+    <div style="font-size:12px; font-weight:650; color:var(--text-primary);">中小客户</div>
+    <div style="display:flex; height:34px; overflow:hidden; border-radius:6px; background:var(--card-bg-from);">
+      <div style="width:38%; display:flex; align-items:center; justify-content:center; background:var(--accent-1); color:var(--bg-primary); font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;">38%</div>
+      <div style="width:42%; display:flex; align-items:center; justify-content:center; background:var(--accent-2); color:var(--text-primary); font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;">42%</div>
+      <div style="width:20%; display:flex; align-items:center; justify-content:center; background:var(--accent-3); color:var(--text-primary); font-size:11px; font-weight:700; font-variant-numeric:tabular-nums;">20%</div>
+    </div>
+  </div>
+</div>
+```
+
+**自检**：
+
+- [ ] 每行 segment `value` 总和为 100；非百分比数据先离线归一化
+- [ ] 类别 2-6 行、色段 2-5 个；更多类别改用表格或 small multiples
+- [ ] 同一 segment 在所有行保持相同顺序和 CSS 变量
+- [ ] 小于 12% 的色段把标签移到条外或只在图例显示
+- [ ] 数字开 `tabular-nums`；颜色只用 CSS 变量
+- [ ] 不用 SVG `<text>`、JavaScript、渐变遮罩或运行时宽度计算
+
+---
+
+## 7. 简单地理 (simple_map)
 
 **何时用**：5-12 个城市点 / 区域强调，配合一句洞察（如"覆盖 9 个一线城市"）。需精确边界 / choropleth 改用「世界地图 choropleth」（complex.md）。
 
@@ -917,4 +981,4 @@ height% = (value / max) * 100
 
 ---
 
-> 见 [basic.md](basic.md)（8 种基础图表）和 [complex.md](complex.md)（4 种复杂图表）。
+> 见 [basic.md](basic.md)（8 种基础图表）和 [complex.md](complex.md)（5 种复杂图表）。
