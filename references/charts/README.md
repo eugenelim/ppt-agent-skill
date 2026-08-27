@@ -12,19 +12,20 @@
 
 | 数据特征 | 推荐图表 | 视觉灵魂 | 文件 |
 |---------|---------|---------|------|
-| 百分比/完成度 | 进度条 | 一目了然的"已到哪里" | `progress-bar.md` |
-| 百分比/完成度 | 环形图 | 圆弧的饱满度直观传达"占比" | `ring.md` |
-| 两项对比 | 对比柱 | 高低差异的即时感知 | `comparison-bar.md` |
-| 时间趋势 | 迷你折线图 | 一条线讲完整个故事 | `sparkline.md` |
-| 比例直觉化 | 点阵图 | "100个格子里有多少个亮着" | `waffle.md` |
-| 核心 KPI | KPI 指标卡 | 大数字 + 趋势箭头 = 最有冲击力的组合 | `kpi.md` |
-| 多指标并排 | 指标行 | 横向信息流，适合快速扫视 | `metric-row.md` |
-| 评级/评分 | 评分指示器 | 星级/分数的直觉化 | `rating.md` |
-| 多维度对比 | 雷达图 | 多角形的"饱满度"传达综合实力 | `radar.md` |
-| 多分类占比 | 堆叠条形图 | 一根柱子里的"成分分析" | `stacked-bar.md` |
-| 层级占比 | 矩形树图 | 面积大小 = 重要性大小 | `treemap.md` |
-| 历史/里程碑 | 时间轴 | 事件的流动轨迹 | `timeline.md` |
-| 转化流程 | 漏斗图 | 逐层收窄的"流失可视化" | `funnel.md` |
+| 百分比/完成度 | 进度条 / 环形图 | 一眼看出已完成与剩余 | [`basic.md`](basic.md) |
+| 两项对比 | 对比柱 | 高低差异的即时感知 | [`basic.md`](basic.md) |
+| 时间趋势 | 迷你折线图 | 一条线讲完整个故事 | [`basic.md`](basic.md) |
+| 比例直觉化 | 点阵图 | 100 格中的亮起比例 | [`basic.md`](basic.md) |
+| 核心 KPI / 多指标 | KPI 卡 / 指标行 | 大数字与横向信息流 | [`basic.md`](basic.md) |
+| 评级/评分 | 评分指示器 / 仪表盘 | 等级与健康度的直觉化 | [`basic.md`](basic.md) / [`advanced.md`](advanced.md) |
+| 多维度对比 | 雷达图 | 多角形饱满度传达综合实力 | [`advanced.md`](advanced.md) |
+| 多类别数值 | 多组对比柱 | 同类别内的系列差异 | [`advanced.md`](advanced.md) |
+| 多分类占比 | 堆叠条形图 | 一根柱子里的成分分析 | [`advanced.md`](advanced.md) |
+| 历史/转化 | 时间线 / 漏斗图 | 事件推进或逐层流失 | [`advanced.md`](advanced.md) |
+| 城市/区域分布 | 简单地理 / 世界地图 | 空间分布和区域强弱 | [`advanced.md`](advanced.md) / [`complex.md`](complex.md) |
+| 层级占比 | 矩形树图 | 面积大小代表贡献 | [`complex.md`](complex.md) |
+| 关系与流量 | 关系网络 / 桑基图 | 节点联系或流量去向 | [`complex.md`](complex.md) |
+| 日期密度 | 热力日历 | 连续日期上的强弱模式 | [`complex.md`](complex.md) |
 
 ## 灵动法则
 
@@ -38,7 +39,7 @@
 - 图表容器必须有明确的 `height`（防溢出），但高度值应该根据所在卡片的空间灵活调整，而非永远 80px
 
 ### 图表文件提供什么
-- **结构骨架型**（ring/kpi/sparkline/comparison-bar/waffle/metric-row/rating/progress-bar）：提供 SVG/HTML 结构参考代码（因为 SVG 计算公式需要精确），但其中的尺寸、数据、颜色都是**占位示例**，必须根据实际数据重新适配
-- **设计原理型**（funnel/stacked-bar/timeline/treemap/radar）：只描述结构原理和灵动指引，不提供代码，LLM 基于原理自主构建
-- 所有图表都附有**视觉灵魂描述**和**灵动指引**，引导 LLM 理解每种图表的叙事角色
+- 20 种受支持图表都在 `basic.md`、`advanced.md`、`complex.md` 中提供 paste-ready HTML/CSS/SVG 模板
+- 模板数据和几何是占位示例，必须按真实数据离线计算后替换
+- 所有图表都附有使用条件、数据格式和管线安全自检
 - 绝对不要原样复制粘贴 demo 数据

@@ -19,6 +19,7 @@ docs/specs/<feature>/
 
 | Spec | Status | Constrained by | Notes |
 | --- | --- | --- | --- |
+| [`consulting-grade-deck-contract`](consulting-grade-deck-contract/spec.md) | Draft | RFC-0001, RFC-0002 | Route-aware title reuse through existing `title`; warning-first numeric sourcing; explicit Story → Evidence → Design passes; functional-template inventory |
 | [`mermaid-current-head-comparison-baseline`](mermaid-current-head-comparison-baseline/spec.md) | Draft | none | Provenance-locked gallery (15 fixtures) with per-renderer backend, git SHA, and fidelity/editorial lanes; hard-fail on silent ELK fallback |
 | [`mermaid-non-vacuous-oracle`](mermaid-non-vacuous-oracle/spec.md) | Draft | none | Remove vacuous comparison passes; fixture minimum-count manifest; checks_run > 0 required for any pass status; arrow/cardinality in semantic multiset |
 | [`elk-finalized-layout-roundtrip`](elk-finalized-layout-roundtrip/spec.md) | Draft | none | Lossless LayoutGraph → FinalizedLayout round trip via elk_adapter: ports, line_style, markers, labels, junction points, LayoutMetadata |
@@ -45,6 +46,7 @@ docs/specs/<feature>/
 
 | Spec | Status | Constrained by | Notes |
 | --- | --- | --- | --- |
+| [`chart-registry-lockstep`](chart-registry-lockstep/spec.md) | Shipped | none | One 20-type registry shared by validator and loader; recipe-backed stacked bar and treemap; published selectors locked to grouped recipe indexes |
 | [`audience-type-routing`](audience-type-routing/spec.md) | Shipped | RFC-0002 | Two derived outline fields (`受众层级` 4-tier, `消费模式` 3-mode) + Phase 2 checks #22–#26 + enriched `core_audience` interview, orthogonal to RFC-0001 `叙事范式`; raises `smoke_skill.py` interview caps to 11000/13000 (5th file; deviation recorded in spec scope note) |
 | [`slide-intent-review`](slide-intent-review/spec.md) | Shipped | none | Deterministic, no-LLM slide-intent worksheet (muted `schematic_blueprint` chrome) rendered from `planning/*.json` into `runtime/proof/` for cheap staleness/structure review before the bespoke render, plus a Step 4.5 Review-vs-Render consent gate |
 | [`reference-runbook-archetype`](reference-runbook-archetype/spec.md) | Shipped | none | Outline engine honors the `reference_runbook` narrative archetype: `论证策略` enum + archetype-branched density/skeleton rules in both validators, persuasive decks unchanged |

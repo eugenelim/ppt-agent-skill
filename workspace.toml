@@ -289,3 +289,46 @@ active = []
 shipped = [
   "docs/specs/flowchart-routing-closure",
 ]
+
+# ── Initiative: Native PowerPoint Charts — native-powerpoint-charts-v1 ──────
+#
+# Future capability: editable Office chart objects backed by embedded workbook
+# data. This is intentionally separate from the current HTML/SVG chart lane.
+
+["ini-006"]
+name = "Native PowerPoint Charts"
+milestone = "native-powerpoint-charts-v1"
+status = "active"
+
+["ini-006".work]
+queue = []
+active = []
+shipped = []
+
+["ini-006".shaping_queue]
+active = []
+backlog = [
+  {slug = "native-powerpoint-charts", type = "shape"},
+]
+
+# ── Initiative: Data-to-Charts and Complex Visualization — data-to-charts-v1
+#
+# Future capability: accept raw CSV/XLSX or supplied data points, normalize and
+# validate them, then select and produce simple through complex charts. The
+# current registry-lockstep repair is its bounded foundation, not the pipeline.
+
+["ini-007"]
+name = "Data-to-Charts and Complex Visualization"
+milestone = "data-to-charts-v1"
+status = "active"
+
+["ini-007".work]
+queue = []
+active = []
+shipped = ["spec/chart-registry-lockstep"]
+
+["ini-007".shaping_queue]
+active = []
+backlog = [
+  {slug = "data-to-charts-pipeline", type = "shape"},
+]

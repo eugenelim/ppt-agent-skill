@@ -67,7 +67,7 @@ Each style mirrors the actual production typography of world-class brands (**not
 |---------|-------------|
 | **6-Step Pipeline** | Interview → Research → Outline → Planning → HTML Design → Post-process (SVG + PPTX) |
 | **30 World-Class Styles** | 5 categories: Dark Professional 9 / Light Premium 10 / Vibrant 4 / Cultural Oriental 3 / Natural Retro 4 |
-| **18 Data Visualizations** | 8 basic + 6 advanced (radar/timeline/funnel/gauge) + 4 ECharts-grade (world map/network/Sankey/heatmap calendar) |
+| **20 Data Visualizations** | 8 basic + 7 advanced (including stacked bar) + 5 ECharts-grade (including treemap) |
 | **Bento Grid Layouts** | 7 flexible card layouts driven by content, not templates |
 | **World-Class Typography** | 7-level scale · letter-spacing rules · tabular-nums · OpenType features · serif italic mixing · 3-tier font fallback |
 | **Smart Illustrations** | AI-generated images with 5 visual fusion techniques (fade/tinted overlay/ambient bg/etc.) |
@@ -198,13 +198,13 @@ Five categories cover all typical commercial scenarios. Every mock is a real 128
 | `retro_70s` | Wes Anderson / 70s posters | Indie cafes / Vinyl / Retro brands |
 | `gov_authority` | People's Daily / State banquets | Governmental / Major conferences |
 
-## 📈 18 Data Visualizations
+## 📈 20 Data Visualizations
 
 | Tier | Count | Charts | File |
 |------|-------|--------|------|
 | **Basic** | 8 | Progress bar · Compare bar · Ring chart · Sparkline · Waffle · KPI card · Metric row · Rating | [`charts/basic.md`](references/charts/basic.md) |
-| **Advanced** | 6 | Radar · Timeline · Funnel · Gauge · Grouped bar · Simple map | [`charts/advanced.md`](references/charts/advanced.md) |
-| **ECharts-grade** | 4 | World choropleth · Network graph · Sankey · Heatmap calendar | [`charts/complex.md`](references/charts/complex.md) |
+| **Advanced** | 7 | Radar · Timeline · Funnel · Gauge · Grouped bar · Stacked bar · Simple map | [`charts/advanced.md`](references/charts/advanced.md) |
+| **ECharts-grade** | 5 | World choropleth · Network graph · Sankey · Heatmap calendar · Treemap | [`charts/complex.md`](references/charts/complex.md) |
 
 All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipeline). All charts auto-adapt to the 30 styles via CSS variables.
 

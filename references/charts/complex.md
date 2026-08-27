@@ -1,6 +1,6 @@
-# 复杂图表 (Complex Charts) — 4 种 ECharts 级可视化
+# 复杂图表 (Complex Charts) — 5 种 ECharts 级可视化
 
-> 本文档收录 4 种**世界级复杂图表**：世界地图 choropleth、关系网络、桑基图、热力日历。这些是 ECharts、D3、Datawrapper 的招牌图，但本项目要求**纯 SVG/HTML/CSS 实现，禁止 JavaScript 运行时**——以保持 `html2svg → svg2pptx` 管线零偏移。
+> 本文档收录 5 种**世界级复杂图表**：世界地图 choropleth、关系网络、桑基图、热力日历、矩形树图。这些是 ECharts、D3、Datawrapper 的招牌图，但本项目要求**纯 SVG/HTML/CSS 实现，禁止 JavaScript 运行时**——以保持 `html2svg → svg2pptx` 管线零偏移。
 >
 > 复杂度通过**手工预算的几何 + SVG path + 大量 HTML 绝对定位标签**达成。每张图都是一次性数据快照（static），不支持交互/动画。
 >
@@ -20,14 +20,15 @@
 
 | # | 图表 | chart_id | 何时用 |
 |---|------|---------|-------|
-| 15 | 世界地图 choropleth | `world_choropleth` | 全球数据可视化（按国家上色） |
-| 16 | 关系网络 | `network_graph` | 节点 + 连线（组织架构 / 知识图谱） |
-| 17 | 桑基图 | `sankey_flow` | 流量 / 转化路径 / 预算分配 |
-| 18 | 热力日历 | `heatmap_calendar` | 365 天数据密度（贡献度 / DAU 历史） |
+| 16 | 世界地图 choropleth | `world_choropleth` | 全球数据可视化（按国家上色） |
+| 17 | 关系网络 | `network_graph` | 节点 + 连线（组织架构 / 知识图谱） |
+| 18 | 桑基图 | `sankey_flow` | 流量 / 转化路径 / 预算分配 |
+| 19 | 热力日历 | `heatmap_calendar` | 365 天数据密度（贡献度 / DAU 历史） |
+| 20 | 矩形树图 | `treemap` | 层级构成 / 面积占比 |
 
 ---
 
-## 15. 世界地图 choropleth (`world_choropleth`)
+## 16. 世界地图 choropleth (`world_choropleth`)
 
 **何时用**：
 
@@ -221,7 +222,7 @@
 
 ---
 
-## 16. 关系网络 (`network_graph`)
+## 17. 关系网络 (`network_graph`)
 
 **何时用**：
 
@@ -372,7 +373,7 @@
 
 ---
 
-## 17. 桑基图 (`sankey_flow`)
+## 18. 桑基图 (`sankey_flow`)
 
 **何时用**：
 
@@ -549,7 +550,7 @@
 
 ---
 
-## 18. 热力日历 (`heatmap_calendar`)
+## 19. 热力日历 (`heatmap_calendar`)
 
 **何时用**：
 
@@ -781,6 +782,71 @@
 
 ---
 
+## 20. 矩形树图 (`treemap`)
+
+**何时用**：展示层级数据中各分支对整体的面积贡献，例如收入结构、成本池、产品组合或容量分配。只有单层且类别少于 6 个时优先用 `stacked_bar`；需要精确比较相近数值时改用 `comparison_bar`。
+
+**数据格式**：
+
+```json
+{
+  "name": "年度收入",
+  "total": 100,
+  "unit": "%",
+  "children": [
+    {"name": "平台", "value": 42, "children": [
+      {"name": "订阅", "value": 27},
+      {"name": "用量", "value": 15}
+    ]},
+    {"name": "服务", "value": 28},
+    {"name": "数据", "value": 18},
+    {"name": "其他", "value": 12}
+  ]
+}
+```
+
+**HTML 模板**（矩形位置和面积已离线计算；总面积 = 100%）：
+
+```html
+<div class="chart-treemap" style="position:relative; width:720px; height:360px; overflow:hidden; border:1px solid var(--card-border); border-radius:10px; background:var(--card-bg-from); font-family:var(--body-font);">
+  <div style="position:absolute; left:0; top:0; width:42%; height:100%; padding:16px; border-right:3px solid var(--bg-primary); background:var(--accent-1); box-sizing:border-box;">
+    <div style="font-size:13px; font-weight:750; color:var(--bg-primary);">平台</div>
+    <div style="margin-top:4px; font-family:var(--display-font, var(--body-font)); font-size:28px; font-weight:750; color:var(--bg-primary); font-variant-numeric:tabular-nums;">42%</div>
+    <div style="position:absolute; left:14px; right:14px; bottom:14px; height:58px; display:flex; gap:3px;">
+      <div style="width:64.3%; padding:8px; background:var(--card-bg-from); color:var(--text-primary); box-sizing:border-box; font-size:11px;">订阅 <strong style="font-variant-numeric:tabular-nums;">27</strong></div>
+      <div style="width:35.7%; padding:8px; background:var(--card-bg-to); color:var(--text-primary); box-sizing:border-box; font-size:11px;">用量 <strong style="font-variant-numeric:tabular-nums;">15</strong></div>
+    </div>
+  </div>
+
+  <div style="position:absolute; left:42%; top:0; width:28%; height:100%; padding:16px; border-right:3px solid var(--bg-primary); background:var(--accent-2); box-sizing:border-box;">
+    <div style="font-size:13px; font-weight:750; color:var(--text-primary);">服务</div>
+    <div style="margin-top:4px; font-family:var(--display-font, var(--body-font)); font-size:28px; font-weight:750; color:var(--text-primary); font-variant-numeric:tabular-nums;">28%</div>
+  </div>
+
+  <div style="position:absolute; left:70%; top:0; width:30%; height:60%; padding:16px; border-bottom:3px solid var(--bg-primary); background:var(--accent-3); box-sizing:border-box;">
+    <div style="font-size:13px; font-weight:750; color:var(--text-primary);">数据</div>
+    <div style="margin-top:4px; font-family:var(--display-font, var(--body-font)); font-size:24px; font-weight:750; color:var(--text-primary); font-variant-numeric:tabular-nums;">18%</div>
+  </div>
+
+  <div style="position:absolute; left:70%; top:60%; width:30%; height:40%; padding:14px 16px; background:var(--card-bg-to); box-sizing:border-box;">
+    <div style="font-size:12px; font-weight:750; color:var(--text-primary);">其他</div>
+    <div style="margin-top:2px; font-family:var(--display-font, var(--body-font)); font-size:21px; font-weight:750; color:var(--text-primary); font-variant-numeric:tabular-nums;">12%</div>
+  </div>
+</div>
+```
+
+**自检**：
+
+- [ ] 叶节点 value 总和等于 total；矩形面积与 value 占比一致
+- [ ] 坐标和尺寸在生成 HTML 前离线计算，模板不运行布局算法
+- [ ] 最小矩形宽高都能容纳标签；否则只保留颜色并用旁侧图例标注
+- [ ] 层级最多 2 层、叶节点建议 4-12 个；更复杂时拆成多页
+- [ ] 内层矩形面积按父节点局部总量归一化
+- [ ] 数字开 `tabular-nums`；颜色只用 CSS 变量
+- [ ] SVG 内无 `<text>`，且不含 JavaScript、`conic-gradient`、mask 或滤镜
+
+---
+
 ## 共同实施清单
 
 生成任何复杂图表前，请对照：
@@ -801,5 +867,6 @@
 | 手工预算 network 坐标 | 节点 > 12 / 边 > 20 | Python `networkx.spring_layout()` 离线计算坐标 |
 | 4 列桑基手工 path | 5+ 列 / 流条数 > 25 | Python `sankey_layout.py` 自动计算 path d 值 |
 | 371 cell 嵌套 grid | 数据动态 / 多年 | Jinja 模板循环生成 371 div |
+| 预计算矩形树图 | 叶节点 > 12 / 层级 > 2 | Python squarify 离线计算矩形后内联 HTML |
 
 每条升级路径都**不引入运行时 JS**——离线计算 + 模板生成 = 管线兼容。

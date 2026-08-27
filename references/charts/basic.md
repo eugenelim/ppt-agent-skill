@@ -16,14 +16,16 @@
 
 ## 目录
 
-1. [进度条 Progress Bar](#1-进度条-progress-bar) — 单一百分比 / 完成度
-2. [对比柱 Compare Bar](#2-对比柱-compare-bar) — 两项或多项对比（最多 6 条）
-3. [环形图 Ring Chart](#3-环形图-ring-chart) — 百分比 + 中心 KPI（最多 3 环）
-4. [迷你折线 Sparkline](#4-迷你折线-sparkline) — 趋势方向（120×40px 嵌入式）
-5. [点阵图 Waffle Chart](#5-点阵图-waffle-chart) — 比例直觉化（10×10 = 100 格）
-6. [KPI 指标卡 KPI Card](#6-kpi-指标卡-kpi-card) — 大数字 + 趋势箭头 + 同比
-7. [指标行 Metric Row](#7-指标行-metric-row) — 多指标垂直堆叠（3-6 行）
-8. [评分指示器 Rating](#8-评分指示器-rating) — 5 分制（含半星）
+| # | 图表 | chart_id | 何时用 |
+|---|------|----------|-------|
+| 1 | 进度条 | `progress_bar` | 单一百分比 / 完成度 |
+| 2 | 对比柱 | `comparison_bar` | 两项或多项对比（最多 6 条） |
+| 3 | 环形图 | `ring` | 百分比 + 中心 KPI（最多 3 环） |
+| 4 | 迷你折线 | `sparkline` | 趋势方向（120×40px 嵌入式） |
+| 5 | 点阵图 | `waffle` | 比例直觉化（10×10 = 100 格） |
+| 6 | KPI 指标卡 | `kpi` | 大数字 + 趋势箭头 + 同比 |
+| 7 | 指标行 | `metric_row` | 多指标垂直堆叠（3-6 行） |
+| 8 | 评分指示器 | `rating` | 5 分制（含半星） |
 
 ---
 
@@ -159,7 +161,7 @@
 
 ---
 
-## 2. 对比柱 (compare_bar)
+## 2. 对比柱 (comparison_bar)
 
 **何时用**：2-6 项分类指标的对比（如 "Q1 / Q2 / Q3 / Q4 营收"、"标准版 / Pro / Max 续航"、"竞品 A / B / C 市占"）。超过 6 条时用「指标行」或「多组对比柱（advanced）」。
 
@@ -167,7 +169,7 @@
 
 ```json
 {
-  "type": "compare_bar",
+  "type": "comparison_bar",
   "direction": "vertical",
   "items": [
     { "label": "标准版", "value": 668, "unit": "km" },
@@ -314,7 +316,7 @@
 
 ---
 
-## 3. 环形图 (ring_chart)
+## 3. 环形图 (ring)
 
 **何时用**：单百分比配合中心 KPI（如 "缓存命中率 75%"、"目标达成 92%"）。环形图比进度条更适合作为页面焦点元素。多环嵌套（最多 3 环）适合展示分层指标（如 "总目标 / 主推产品 / 重点客户"）。
 
@@ -322,7 +324,7 @@
 
 ```json
 {
-  "type": "ring_chart",
+  "type": "ring",
   "rings": [
     { "value": 75, "label": "缓存命中", "color": "accent-1" }
   ],
@@ -549,7 +551,7 @@
 
 ---
 
-## 5. 点阵图 (waffle_chart)
+## 5. 点阵图 (waffle)
 
 **何时用**：把抽象百分比变成「100 颗格子里有 N 颗亮起」的直觉感受（如 "每 100 个用户中 87 个会复购"、"100 户家庭里 23 户已配置太阳能"）。比环形图更易被非数据背景的人理解。
 
@@ -557,7 +559,7 @@
 
 ```json
 {
-  "type": "waffle_chart",
+  "type": "waffle",
   "value": 87,
   "label": "用户复购率",
   "categories": [
@@ -731,7 +733,7 @@
 
 ---
 
-## 6. KPI 指标卡 (kpi_card)
+## 6. KPI 指标卡 (kpi)
 
 **何时用**：单个核心指标的高对比度展示（如季度营收、DAU、转化率）。大数字 + 同比箭头 + 可选 sparkline = 5 秒内传达完整结论。多张组合时用「指标行」或 `card_type=data` 卡组。
 
@@ -739,7 +741,7 @@
 
 ```json
 {
-  "type": "kpi_card",
+  "type": "kpi",
   "value": "¥ 2.84B",
   "label": "Q1 2026 营收",
   "delta": { "direction": "up", "percent": 23.7, "vs": "vs Q4 2025" },

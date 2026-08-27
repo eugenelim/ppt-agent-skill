@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from chart_registry import CHART_TYPE_TO_FILE, chart_recipe_file
 
 # ── Field-to-directory routing table ────────────────────────────────────────
 # Planning JSON field -> resource directory -> match logic
@@ -63,32 +64,6 @@ REF_FIELD_ROUTES = {
     "block_refs": "blocks",
     "chart_refs": "charts",
     "principle_refs": "principles",
-}
-
-# Chart type values in planning JSON map to grouped recipe files (not per-type files).
-# Mirrors the same mapping in planning_validator.py.
-_CHART_TYPE_TO_FILE: dict[str, str] = {
-    # basic.md (8 types)
-    "progress-bar": "basic",
-    "comparison-bar": "basic",
-    "ring": "basic",
-    "sparkline": "basic",
-    "waffle": "basic",
-    "kpi": "basic",
-    "metric-row": "basic",
-    "rating": "basic",
-    # advanced.md (6 types)
-    "grouped-bar": "advanced",
-    "stacked-bar": "advanced",
-    "line-chart": "advanced",
-    "area-chart": "advanced",
-    "scatter-plot": "advanced",
-    "bubble-chart": "advanced",
-    # complex.md (4 types)
-    "sankey": "complex",
-    "treemap": "complex",
-    "heatmap": "complex",
-    "radar": "complex",
 }
 
 # Categories to scan for menu
@@ -341,8 +316,7 @@ def resolve_resources(refs_dir: Path, planning_path: Path) -> str:
         for ref_id in sorted(ref_ids):
             # For chart refs, map chart_type values to grouped recipe files
             if directory == "charts":
-                normalized = ref_id.lower().replace("_", "-")
-                recipe_file = _CHART_TYPE_TO_FILE.get(normalized)
+                recipe_file = chart_recipe_file(ref_id)
                 if recipe_file is not None:
                     candidates = [dir_path / f"{recipe_file}.md"]
                 else:
