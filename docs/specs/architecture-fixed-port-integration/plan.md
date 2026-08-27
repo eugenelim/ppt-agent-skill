@@ -2,6 +2,9 @@
 
 **Status:** Done
 
+Follow-up mode: full (the hard CI gate is a governance surface; no production
+renderer behavior changes).
+
 ## Pre-mortem
 
 **Assumption trio:**
@@ -137,3 +140,24 @@ Verification: TDD
 - Audit the architecture HTML/SVG painter for any legend injection.
 - Gate legend rendering on `faithful_mermaid=False` only.
 - Add assertions to the canonical runner for both faithful and editorial variants.
+
+---
+
+### Task 6: Promote the repaired ELK geometry lane to a hard CI gate
+Depends on: Task 4
+Verification: TDD + goal-based check
+
+**Tests:**
+- The real-ELK `architecture-complex` geometry test remains green without an
+  `xfail` marker and fails normally on any segment obstruction.
+- `python3 -m pytest -m eight_case --timeout=120 -q` exits zero in the
+  elkjs-enabled lane.
+
+**Approach:**
+- Remove the strict `xfail` and rename the test to describe the hard contract.
+- Mark AC9 complete and replace stale deferred-defect documentation with the
+  now-enforced behavior.
+- Remove the resolved ELK interior-crossing backlog item.
+
+**Done when:** the former XPASS is a passing hard assertion and every direct
+reference to the retired backlog anchor is gone.

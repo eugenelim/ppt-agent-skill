@@ -119,18 +119,6 @@ open = [
   # needs the same on-segment check wired into the conformance tests.
   {slug = "flowchart-diamond-endpoint-on-segment"},
 
-  # ── architecture-fixed-port-integration deferred sub-check (ini-003 item 5) ──
-  # spec/architecture-fixed-port-integration AC9: on the ELK path the api→cache
-  # route clips queue's interior for the architecture-complex fixture, and ELK's
-  # fixed-side port positions sit ~12px inside the visual node face (surfaces the
-  # pre-existing test_arch_port_acceptance / test_no_edge_waypoint_inside_service
-  # / TestBiRelEdge::test_birel_with_label failures that only appear when elkjs is
-  # installed). Holds on the Python fallback (segment-aware validators clean).
-  # Fixing requires ELK-side architecture edge-routing + port-snapping work, which
-  # the spec forbids ("do not redesign the successful ELK path"). Unblock: a follow-on
-  # ELK-architecture-geometry spec in an elkjs-enabled environment.
-  {slug = "arch-elk-edge-interior-crossing", source = "spec/architecture-fixed-port-integration AC9"},
-
     # ── Forwarding entries — absorbed into ini-002/boston-v1 ─────────────────
   # These slugs remain here only to satisfy (deferred: <slug>) references in shipped
   # specs (immutable bodies). Implementation is tracked in docs/specs/mmdc-browser-geometry-capture
@@ -160,6 +148,11 @@ open = [
   # ::test_fallback_duplicate_pair_keeps_per_edge_sides. Fix: single authoritative
   # edge_id keyed source in the ELK route→spec mapping.
   {slug = "arch-dual-edge-id-desync", source = "review/architecture-fixed-port-integration"},
+  # Real-ELK fixed-side endpoints can sit about 12 px inside their own visual node
+  # face. This affects exact endpoint/port-face checks and is distinct from the hard
+  # segment-obstruction gate, which checks crossings through unrelated nodes.
+  # Unblock: verify and fix exact port snapping under the real locked elkjs runtime.
+  {slug = "arch-elk-fixed-port-face-inset", source = "spec/architecture-fixed-port-integration deviation"},
   # AC5 cleanup was scoped to the dead inner-direction fixup only. The Python
   # Sugiyama-fallback group-correction helpers (_push_nonmembers_out_of_groups_lr,
   # _separate_groups, _compute_group_bboxes) are RETAINED — they remain load-bearing

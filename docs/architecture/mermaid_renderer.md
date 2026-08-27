@@ -215,12 +215,9 @@ acceptance bar does not perturb the production render path. It is *segment-aware
   spec-listed hard-failure condition; exercised by
   `tests/test_eight_case_ci_gates.py`.
 
-**Known deferred defect.** On the ELK path the `architecture-complex`
-`api→cache` route clips `queue`'s interior (backlog anchor
-`arch-elk-edge-interior-crossing`). Item 5 forbids redesigning the successful
-ELK path, so the architecture ELK geometry gate is a narrowly-scoped `xfail`
-tied to that anchor; the architecture Python-fallback lane and all flowchart
-fixtures stay hard gates.
+**Architecture geometry gate.** Both the real-ELK and Python-fallback
+`architecture-complex` lanes are hard-gated against route segments crossing an
+unrelated node interior, group interior, title band, or edge-label rectangle.
 
 ## Text Measurement
 

@@ -6,18 +6,12 @@ fabricates the minimal pathological scenario and asserts the corresponding
 gate *bites* (returns violations / raises). Where a real fixture is cheap to
 compile, a positive control confirms the gate does not false-positive.
 
-Architecture ELK interior-crossing reconciliation
--------------------------------------------------
+Architecture ELK interior-crossing gate
+---------------------------------------
 The spec's hard list includes "route segment crossing an unrelated node
-interior". Item 5 DEFERRED exactly this on the architecture ELK path for
-``architecture-complex`` (the ``api→cache`` route clips ``queue``'s interior),
-tracked by backlog anchor ``arch-elk-edge-interior-crossing``; item 5 forbids
-redesigning the successful ELK path. To keep the ELK-required lane from
-spuriously failing the hard gate WITHOUT weakening it for flowchart fixtures,
-the live architecture ELK lane below is a narrowly-scoped ``xfail`` tied to
-that anchor, while the architecture Python-fallback lane asserts clean and the
-fabricated node-interior gate (``test_ci_fails_on_segment_crossing_unrelated_node``)
-stays a hard assertion.
+interior". Both the real-ELK and Python-fallback ``architecture-complex``
+lanes enforce that contract directly, alongside the fabricated negative control
+(``test_ci_fails_on_segment_crossing_unrelated_node``).
 
 Coordinate convention: css-top-left (origin top-left, y increases downward).
 """
@@ -342,7 +336,7 @@ def test_ci_fails_on_nondeterministic_output():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Architecture ELK interior-crossing reconciliation (see module docstring)
+# Architecture ELK interior-crossing gates (see module docstring)
 # ═══════════════════════════════════════════════════════════════════════════
 
 def test_architecture_fallback_geometry_gate_clean(monkeypatch):
@@ -356,31 +350,12 @@ def test_architecture_fallback_geometry_gate_clean(monkeypatch):
 
 
 @pytest.mark.requires_elk
-@pytest.mark.xfail(
-    reason="arch-elk-edge-interior-crossing (backlog): on the ELK path the "
-    "api->cache route clips queue's interior for architecture-complex. Item 5 "
-    "forbids redesigning the successful ELK path; deferred to a follow-on "
-    "ELK-architecture-geometry spec. Narrowly scoped so the ELK-required lane "
-    "does not spuriously fail the hard gate; the flowchart node-interior gate "
-    "(test_ci_fails_on_segment_crossing_unrelated_node) stays hard. strict=True "
-    "so an XPASS ALARMS when the defect is fixed, prompting promotion to a hard gate.",
-    strict=True,
-)
-def test_architecture_elk_geometry_gate_known_deferred():
-    """AC2 reconciliation: the segment-obstruction gate over the REAL
-    architecture-complex ELK geometry currently reports the known deferred
-    interior crossing.
-
-    The ELK precondition is asserted via ``skip`` (NOT part of the xfail
-    expectation), so only the interior-crossing assertion below is expected to
-    fail — a wrong backend or an ELK error skips rather than masquerading as the
-    expected failure.
-    """
+def test_architecture_elk_geometry_gate_clean():
+    """The real-ELK architecture lane must pass the segment-obstruction gate."""
     arch = compile_architecture(_src("architecture-complex"))
     if arch.backend != "elk-js":
-        pytest.skip("real ELK backend not engaged (precondition, not the deferred defect)")
+        pytest.skip("real ELK backend not engaged")
     layout = translate_layout_to_positive(arch_to_finalized(arch))
-    # Expected-to-fail (strict): the known api->cache interior crossing.
     assert validate_segment_obstruction(layout) == []
 
 

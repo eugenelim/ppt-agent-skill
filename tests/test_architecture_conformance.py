@@ -766,10 +766,8 @@ class TestFaithfulModeGuard:
 
 class TestArchitectureValidationAssertions:
     """Item-5 AC7/AC8/AC9 — service existence, group containment, and clean
-    routing. Containment/existence hold on both backends; the no-interior-
-    crossing assertion is validated on the Python fallback (the ELK path has a
-    pre-existing api→cache/queue crossing tracked under
-    arch-elk-edge-interior-crossing — see spec Deviations)."""
+    routing. This class covers the Python fallback; the real-ELK obstruction
+    contract is a hard gate in ``test_eight_case_ci_gates.py``."""
 
     def _fallback_finalized(self):
         with patch("mermaid_render.layout.elk_adapter.layout_with_elk",
