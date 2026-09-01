@@ -23,7 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- (nothing yet)
+- English is now the primary README. `README.md` is the English edition and the
+  Chinese edition moved to `README_ZH.md`; each links to the other. Bookmarks
+  pointing at the old `README_EN.md` will no longer resolve.
 
 ### Deprecated
 
@@ -35,7 +37,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- (nothing yet)
+- The chart count shown in both READMEs is now 20 everywhere. The hero badge
+  and architecture table still said 18 after stacked bar and treemap were
+  added, and the English and Chinese file trees disagreed with each other.
+- The `Architecture` link in each README's top navigation now scrolls to the
+  right section instead of doing nothing.
+- Both README file trees now show the logo, banner and hero images under
+  `docs/assets/`, which is where they actually live.
 
 ### Security
 
