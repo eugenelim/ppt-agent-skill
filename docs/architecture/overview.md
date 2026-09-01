@@ -17,7 +17,7 @@ PPTX). It is **not** a deployed service — it is a set of Markdown instructions
 .
 ├── SKILL.md              # the skill itself — the 6-step pipeline + entry points (Python is invoked from here)
 ├── AGENTS.md             # canonical agent context (CLAUDE.md is a symlink)
-├── README.md / README_EN.md  # human-facing intro + 26-style preview gallery
+├── README.md / README_ZH.md  # human-facing intro + 26-style preview gallery
 ├── ATTRIBUTIONS.md       # third-party credits
 ├── scripts/              # ALL executable code — 18 Python scripts (see scripts/README.md)
 ├── references/           # declarative resource library (data, not logic) the skill routes into prompts
@@ -32,13 +32,13 @@ PPTX). It is **not** a deployed service — it is a set of Markdown instructions
 │   ├── prompts/          # prompt templates (also prompts.md)
 │   ├── pipeline-compat.md # CSS prohibition list that keeps HTML safely convertible to SVG
 │   └── *.md              # typography, bento-grid, style-system, method, cli-cheatsheet
-├── assets/               # logo, hero images, architecture diagram
 ├── ppt-output/           # runtime output: one <deck-slug>/ per deck + tooling siblings (gitignored except style-gallery/)
 ├── tests/                # smoke-results/ (gitignored run artifacts)
 ├── docs/
 │   ├── CHARTER.md        # mission, scope, principles
 │   ├── CONVENTIONS.md    # how we work
 │   ├── architecture/     # this directory — overview.md (map) + reference.md (golden path)
+│   ├── assets/           # logo, hero images, architecture diagram
 │   ├── specs/            # feature specs and plans
 │   ├── adr/ · rfc/       # decisions (frozen) and proposals (governance)
 │   ├── product/          # roadmap, changelog
