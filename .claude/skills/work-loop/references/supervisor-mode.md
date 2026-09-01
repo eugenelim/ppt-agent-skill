@@ -1,5 +1,11 @@
 # Supervisor mode — procedure
 
+> **Phase 1:** `dispatch-decision`, `worktree {add, record, list, merge, cleanup, preflight}`,
+> and `auto-parallel` are **disabled** — those verbs exit non-zero. The parallel
+> fan-out path in this document is unavailable until Phase 2. Run tasks
+> sequentially; use `loop-cohort schedule <spec-dir> --expect-run-id "$run_id"` for
+> topological order.
+
 **Default is sequential.** Supervisor mode computes the plan's full
 `Depends on:` DAG (`loop-cohort schedule <spec-dir>`) and runs tasks in
 **topological order, single-agent, on every adapter** — it does *not*
@@ -65,17 +71,20 @@ Throughout this procedure, **"task-id order" means numeric where IDs
 look like `T1`, `T2`, … ; lexicographic otherwise.** The `loop-cohort`
 tool sorts by the same rule when merging.
 
-The parallel-dispatch discipline (one-message-one-Agent-call-per-target,
-barrier-wait, treat harness-level non-returns as failures, merge results
-in your own context) is the same as for REVIEW fan-out and lives in
-the parent `SKILL.md` body. References to "the parallel-dispatch
-discipline" below mean that section.
+The [parallel-dispatch discipline](#parallel-dispatch-discipline) is the same
+as for REVIEW fan-out. References to it below mean that section.
 
 Every state mutation — worktree creation, report persistence, status
 updates, merges, cleanup — is owned by the `loop-cohort` tool at
 `../scripts/loop-cohort.py`. The tool guarantees the match-first /
 write-second / state-update-last ordering and atomic JSON writes; do
 not edit `state.json` or invoke `git worktree` directly.
+
+> **Phase 2 only.** The procedure below describes the parallel dispatch path,
+> which is unavailable in Phase 1. The verbs `dispatch-decision`, `worktree`,
+> and `auto-parallel` all exit non-zero in Phase 1 — run tasks sequentially
+> using the topological order from `loop-cohort schedule`. This section is
+> retained as the Phase 2 specification target.
 
 ## The procedure
 
@@ -103,8 +112,9 @@ not edit `state.json` or invoke `git worktree` directly.
    `{task_id, branch, path, status: "in-progress", report_path: null}`
    entry to `state.json.worktrees`, atomically.
 
-2. **Dispatch implementers in parallel** per the parallel-dispatch
-   discipline (see parent SKILL body). Each brief includes: the task
+2. **Dispatch implementers in parallel** per the
+   [parallel-dispatch discipline](#parallel-dispatch-discipline) below.
+   Each brief includes: the task
    ID, the plan-task body, the worktree path, paths to the spec +
    plan, and an explicit **bundled-fixes authorization line** —
    "Bundled fixes authorized per the carve-out in `work-loop/SKILL.md`
@@ -130,7 +140,8 @@ not edit `state.json` or invoke `git worktree` directly.
       unvalidated name.
    2. Copies the report verbatim to
       `docs/specs/<feature>/notes/implementer-<task-id>-<iteration>.md`,
-      where `<iteration>` is the current `state.json.iteration_count`.
+      where `<iteration>` is the current `state.json.implementation_retry_count`
+      (Phase-1 field; Phase-2 may introduce a dedicated counter).
       On a fresh loop the value is `0`, so the first attempt lands as
       `…-0.md`; subsequent re-plans see the counter bumped (see step 4
       below) so reports never overwrite one another.
@@ -148,7 +159,7 @@ not edit `state.json` or invoke `git worktree` directly.
    not merge. Surface the failed-task list (with `report_path`
    pointers), then return to PLAN and revise the offending task. The
    next supervisor pass's `worktree record` call (or `review record`
-   on the surrounding loop) will bump `iteration_count`, so report
+   on the surrounding loop) will bump `implementation_retry_count`, so report
    filenames won't collide. Do not redispatch the same implementer on
    the same task — the assumption that produced the failure is what
    needs revising, not the attempt.
@@ -191,6 +202,38 @@ not edit `state.json` or invoke `git worktree` directly.
 7. **Run gates yourself** (next phase in the parent SKILL). The
    implementers' gate results were advisory; the gates of record run
    in the primary against the merged state.
+
+## Parallel-dispatch discipline
+
+Both EXECUTE fan-out (supervisor mode) and REVIEW fan-out share these rules:
+
+- Issue all subagent invocations in a single message (one Agent use per target).
+  Do not call sequentially.
+- Barrier-wait: don't issue follow-on Agent calls until every subagent in the
+  round has returned.
+- Timeout, tool error, or missing report = `failed` for that target. Same as
+  substantive failure; don't retry silently.
+- EXECUTE fan-out: merge implementer results in your own context. REVIEW
+  fan-out: persist each raw report, classify it with `review raw-classify`,
+  adjudicate by path every one that is not footer-free `clean`, and merge only the
+  sustained main-loop results; never read N raw reviewer reports into the
+  controller to aggregate them. Persistence is unconditional — a fan-out round
+  where every reviewer returned clean still leaves one artifact per reviewer.
+
+## Phase 1 supervisor procedure
+
+Read `loop-cohort status docs/specs/<feature> --json` for
+`current_wave_index` and `schedule_waves[current_wave_index]` to get the active
+task set. (`schedule` runs once during the G-plan sequence and persists the
+wave list; re-calling it resets `current_wave_index` to 0, erasing prior `wave
+advance` progress.) Execute sequentially — **parallel fan-out
+(`dispatch-decision`, `worktree`, `auto-parallel`) is disabled in Phase 1**;
+those verbs exit non-zero. After all wave tasks are done, fire `wave-complete`
+before proceeding to GATES:
+
+```
+python '<skill-dir>/scripts/loop-engine.py' transition docs/specs/<feature> wave-complete
+```
 
 ## Single-agent fallback
 

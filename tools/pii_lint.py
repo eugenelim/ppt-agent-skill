@@ -33,6 +33,9 @@ ALLOWED_EMAIL_DOMAINS = frozenset(
         "example.org",
         "example.net",
         "example.io",
+        # RFC 6761 reserved TLD — never resolvable, used in agent-pack
+        # eval fixtures for synthetic prompt-injection URLs.
+        "example.test",
         "users.noreply.github.com",
     }
 )

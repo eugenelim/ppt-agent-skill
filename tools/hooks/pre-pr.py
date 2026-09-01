@@ -9,12 +9,17 @@ a PR — the same way regardless of which agent tool you use:
     python tools/hooks/pre-pr.py
 
 What it runs:
+  - ``lint-knowledge.py`` over ``docs/knowledge/patterns.jsonl`` — the
+    knowledge base the work-loop's Capture-learnings step appends to. The
+    file is yours and the gate that validates it ships with it, so there is
+    nothing to wire. Skipped cleanly when the file is absent.
   - ``loop-cohort.py check <spec-dir>`` for each ``docs/specs/*/state.json``,
     in ``--phase implement`` and ``--phase review`` — the work-loop's
     iteration/stasis caps. The script ships with the work-loop skill; this
     hook finds it under whichever skills directory your agent tool installed
-    into (``.claude/``, ``.agents/``, ``.kiro/`` …). Skipped cleanly when
-    there are no active specs (or the work-loop isn't installed).
+    into (``.claude/``, ``.agents/``, ``.kiro/`` …) — same for
+    ``lint-knowledge.py`` above. Skipped cleanly when there are no active
+    specs (or the work-loop isn't installed).
 
 It deliberately runs **none** of the source project's own artifact linters —
 those enforce that project's conventions on its own tree and
@@ -27,10 +32,15 @@ a hard failure.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+# Windows cp1252 guard — reconfigure stdout/stderr to UTF-8 before any print.
+sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 
 # The work-loop skill ships with `core` but lands under different roots
@@ -44,12 +54,12 @@ _SKILL_ROOTS = (
 )
 
 
-def _find_loop_cohort() -> Path | None:
-    """Locate the work-loop's ``loop-cohort.py`` under whichever adapter skill
-    root it was installed into. Returns ``None`` when the work-loop isn't
-    present (caps check is then skipped, not failed)."""
+def _find_work_loop_script(name: str) -> Path | None:
+    """Locate one of the work-loop's ``scripts/`` under whichever adapter skill
+    root the pack was installed into. Returns ``None`` when the work-loop isn't
+    present (the dependent check is then skipped, not failed)."""
     for root in _SKILL_ROOTS:
-        candidate = Path(root) / "work-loop" / "scripts" / "loop-cohort.py"
+        candidate = Path(root) / "work-loop" / "scripts" / name
         if candidate.is_file():
             return candidate
     return None
@@ -76,7 +86,9 @@ def _run(label: str, argv: list[str]) -> None:
     fresh adopter tree that hasn't wired a given gate yet doesn't hard-crash.
     """
     try:
-        result = subprocess.run(argv, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            argv, capture_output=True, text=True, encoding="utf-8", check=False
+        )
     except FileNotFoundError:
         # To stderr (not stdout) so a *wired-but-mistyped* tool is visually
         # distinct from a passing check and doesn't scroll past as a ✓.
@@ -98,8 +110,27 @@ def main() -> int:
 
     py = sys.executable  # use the parent interpreter for child scripts
 
+    # --- Knowledge-base gate (ships with `core`) -----------------------------
+    # `docs/knowledge/patterns.jsonl` is seeded into your repo and appended to
+    # by the work-loop's Capture-learnings step, so the gate that validates it
+    # ships too — nothing to wire by hand.
+    knowledge_file = Path("docs/knowledge/patterns.jsonl")
+    lint_knowledge = _find_work_loop_script("lint-knowledge.py")
+    if not knowledge_file.is_file():
+        print("pre-pr: (no docs/knowledge/patterns.jsonl — skipping knowledge lint)")
+    elif lint_knowledge is None:
+        # stderr, not stdout: the knowledge base exists but nothing checked it.
+        # A ✓-shaped line on stdout would scroll past as if it had been gated.
+        print(
+            "pre-pr: — lint-knowledge.py not found under any known skills root "
+            "— docs/knowledge/patterns.jsonl was NOT checked",
+            file=sys.stderr,
+        )
+    else:
+        _run("knowledge lint", [py, str(lint_knowledge)])
+
     # --- Work-loop caps gate (ships with `core`) -----------------------------
-    loop_cohort = _find_loop_cohort()
+    loop_cohort = _find_work_loop_script("loop-cohort.py")
     state_files = sorted(Path("docs/specs").glob("*/state.json"))
     if loop_cohort is None:
         print("pre-pr: — loop-cohort.py not found — skipping work-loop caps check")
@@ -108,10 +139,30 @@ def main() -> int:
     else:
         for state in state_files:
             spec_dir = state.parent
+            # Run check --phase review only when the FSM is in CODE-REVIEW.
+            # In CODE-IMPLEMENTATION the agent may legitimately have
+            # review_retry_count == max_review_retries while pursuing a clean
+            # pass; the cap guards only the findings-remain edge, not the
+            # clean path. In CODE-HUMAN-GATE/DONE the review phase is complete.
+            review_phase_active = True
+            engine_state_path = spec_dir / "engine-state.json"
+            if engine_state_path.is_file():
+                try:
+                    es = json.loads(engine_state_path.read_text(encoding="utf-8"))
+                    if es.get("state") != "CODE-REVIEW":
+                        review_phase_active = False
+                except (OSError, ValueError, KeyError):
+                    pass  # unreadable engine-state → conservative: check anyway
             for phase in ("implement", "review"):
+                if phase == "review" and not review_phase_active:
+                    print(  # FSM not in CODE-REVIEW; cap check doesn't apply
+                        f"pre-pr: — loop-cohort check {spec_dir}"
+                        " (review) skipped (FSM not CODE-REVIEW)"
+                    )
+                    continue
                 result = subprocess.run(
                     [py, str(loop_cohort), "check", str(spec_dir), "--phase", phase],
-                    capture_output=True, text=True, check=False,
+                    capture_output=True, text=True, encoding="utf-8", check=False,
                 )
                 if result.returncode != 0:
                     if result.stdout:
