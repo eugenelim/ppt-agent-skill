@@ -1,19 +1,26 @@
 # Plan: <feature name>
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting <!-- Drafting | Executing | Done -->
+- **Status:** Drafting <!-- Drafting | Approved | Executing | Done -->
+- **Repository anchors:** <task-relevant architecture/convention source;
+  one or two analogous production implementations; corresponding tests or
+  construction path; named uncertainty/deviation — or `none — non-structural`>
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
-> document is allowed to change as you learn. When it changes substantially
-> (a different approach, not just a re-ordering), note why in the changelog
-> at the bottom.
+> document is allowed to change as you learn — while its Status is `Drafting`
+> or `Executing`. When it changes substantially (a different approach, not just
+> a re-ordering), note why in the changelog at the bottom. Once it is `Done`
+> and the spec is `Shipped`, the directory freezes as a unit
+> (or the adopter repository's equivalent document-lifecycle guidance).
 
-<!-- **Light-mode lean fill.** For low-risk work running the `work-loop`
-skill's light mode, only Approach + a short Tasks list are required.
-**Constraints**, **Risks**, **Changelog**, and the whole `## Design (LLD)`
-section are optional — keep them only if they earn their place. Any risk
-trigger (see the `work-loop` skill) escalates to full mode, where every
-section is filled. -->
+<!-- Existing plans without this field remain valid. Treat its absence as a
+named assurance gap during structural review, not a universal lint failure. -->
+
+<!-- **Durable-plan fill.** This template is the implementation and verification
+strategy for a durable delivery slice. Fill Approach, Constraints, Risks,
+Design, Tasks, and Changelog to the depth the durable work requires. Its sibling
+spec is the durable behavior contract. Eligible direct-light work does not
+create this artifact. -->
 
 ## Approach
 
@@ -57,6 +64,30 @@ that verify it live here.
 **Manual verification:** <list, or "none">
 -->
 
+## Durable-output map
+
+<!--
+This section maps each task to the spec's Durable Outputs table so closeout can
+verify planned output, implementation evidence, and closeout evidence without
+copying requirements into a second record.
+
+For each output, name:
+
+- planned output
+- implementing task(s)
+- implementation evidence
+- closeout evidence
+- unresolved destination or freshness blocker, if any
+
+If the plan's Design (LLD) contains a non-inferable design fact, map it to its
+semantic owner here. Mechanically evident details may stay with code, types,
+docstrings, and tests; one-off construction order may remain delivery residue.
+-->
+
+| Durable output | Tasks | Implementation evidence | Closeout evidence |
+| --- | --- | --- | --- |
+| <semantic role / destination> | <Tn> | <test, build, guide, contract, or review artifact> | <what close-work verifies> |
+
 ## Design (LLD)
 
 The low-level design — the *how*, below the Approach and above the per-task
@@ -69,10 +100,10 @@ anchored to something verifiable.
 
 Stack-neutral by construction: these are the *kinds* of design decision every
 build makes, never a framework. Name your actual stack *inside* each sub-section
-— derived from `docs/architecture/reference.md` when that file is present (use
-its components, stereotypes, and standards by name), otherwise from the
-established repo (lockfiles, build files, imports) or elicited when unclear. The
-headings themselves stay universal.
+from the repository's mapped architecture and convention sources. If none are
+usable, use manifests/build files and, for structural work, one or two analogous
+production implementations with their tests or construction path; elicit any
+unresolved load-bearing choice. The headings themselves stay universal.
 
 <!-- Shape → sub-sections (a guide, not a gate):
   ui          → decomposition, state & control flow, behavior & rules, quality attributes
@@ -141,6 +172,19 @@ with separate commits when the change is non-trivial.
 or `none`. Don't omit the field; "obvious from order" is the failure mode
 that hides serial-by-default thinking. `none` is a valid and common answer.
 
+Planning is sufficient when the plan supplies an observable contract, owner,
+boundaries, ordering, discovery predicates where a seam is not grounded,
+required outcomes, and verification modes adequate to begin safely. It need
+not settle a helper name, symbol, fixture-internal detail, or complete edge-case
+matrix before implementation. Such questions are build-time guidance unless
+their absence makes the plan unable to start or verify the contract.
+
+Keep observable behavior in `spec.md`. Use an exact path or symbol here only
+when repository evidence grounds it. For an implementation-discovered callable
+seam, record `no stub (implementation-discovered)` and its discovery predicate,
+constraint, required outcome, and verification mode; do not invent a helper,
+fixture, module, path, or symbol.
+
 **`Depends on:` grammar** (so the supervisor-mode scheduler —
 `loop-cohort schedule` — can read it). The field is a comma-separated list of:
 local task IDs (`T1`, `T1a`), ranges (`T1-T6`), or a **cross-spec marker**
@@ -176,6 +220,9 @@ could pick it up and complete it without follow-up questions:
 - <test 1 — behaviour, edge case, or property; reference the Acceptance
   Criterion from spec.md this step verifies, if any>
 - <test 2>
+<!-- For an already-grounded callable seam or coherent TDD task family, include
+     one compilable red contract-surface assertion (`stub: true`). It need not
+     encode the finished edge-case matrix. -->
 
 **Approach:**
 - <step 1>

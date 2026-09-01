@@ -8,7 +8,8 @@ every adapter's `.../skills/work-loop/scripts/`, the same way the sibling
 can also run as a fail-closed **CI gate** where a PR event and Python both
 exist. It no-ops gracefully where Python is absent.
 
-What it does — it generalizes `receive-brief`'s `lint-brief-coverage.py` (which
+What it does — it generalizes `author-delivery-brief continue`'s
+`lint-brief-coverage.py` (which
 checks the single brief↔spec edge in one repo) to the full nine-layer product
 chain **across repositories**:
 
@@ -88,6 +89,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Windows cp1252 guard — reconfigure stdout/stderr to UTF-8 before any print.
+sys.stdout.reconfigure(encoding="utf-8", errors="strict")
+sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+
 try:  # py311+ stdlib; degrade where a layout config exists but tomllib doesn't.
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover - py<3.11
@@ -120,7 +125,7 @@ KNOWN_SCHEMA_VERSIONS = frozenset({"0.1"})
 # The ONLY home for literal artifact-path segments. Every base location is
 # resolved through `resolve_base()` (config → these defaults → discover by
 # marker); no discovery logic elsewhere may name a path literal (the no-
-# hardcoded-path NFR, AC1/AC2; the self-test greps this block's exclusivity).
+# hardcoded-path NFR; the self-test greps this block's exclusivity).
 # Each layer: realization, default base (path segments under the root), and the
 # layout-config key (`agentbundle-layout.toml`, tier 1).
 #
@@ -137,7 +142,8 @@ _DEFAULT_BASES = {
     "component":   ("packages",),
 }
 # Discovery-side anchor artifacts (not chain layers themselves): a brief stands
-# in for a spec's discovery parent (the `receive-brief` brief↔spec edge this
+# in for a spec's discovery parent (the `author-delivery-brief continue`
+# brief↔spec edge this
 # generalizes); a sidecar materializes the whole edge set; a rollup carries the
 # cross-repo component rows. Presence of ANY anchor (or a populated chain layer)
 # is what activates the chain check — absent all, the lint no-ops.
@@ -180,11 +186,12 @@ _SERVICE_RE = field_re("Service")
 
 def _is_placeholder(value: str) -> bool:
     """True for an unset/template value — empty, `none`, an HTML comment, or a
-    bare angle-bracket placeholder (`<slug>`). Mirrors lint-brief-coverage.py."""
+    bare angle-bracket placeholder (`<slug>`). Punctuation is tolerated after
+    `none` because `_first` checks the normalized leading token."""
     v = value.strip()
     return (
         not v
-        or v.lower() == "none"
+        or v.lower().rstrip(".,;:") == "none"
         or v.startswith("<!--")
         or (v.startswith("<") and v.endswith(">"))
     )
@@ -217,6 +224,15 @@ def load_layout(root: Path) -> dict:
         return {}
     for cfg in (root / "agentbundle-layout.toml",
                 Path.home() / ".agentbundle" / "agentbundle-layout.toml"):
+        # Confine the root-relative candidate only: a symlink planted at
+        # `<root>/agentbundle-layout.toml` in an untrusted tree would otherwise
+        # be followed. The user-scope candidate is deliberately outside `root`
+        # and is operator-owned, so it is exempt by design, not by oversight.
+        if cfg.parent == root:
+            canonical = _confined_file(cfg, root)
+            if canonical is None:
+                continue
+            cfg = canonical
         text = _read(cfg)  # stat-size-guarded; None if absent/oversized/unreadable
         if text is None:
             continue
@@ -241,19 +257,24 @@ def resolve_base(layer: str, root: Path, layout: dict) -> tuple[Path | None, str
     """
     configured = layout.get(layer)
     if isinstance(configured, str) and configured.strip():
-        p = (root / configured).resolve()
-        if not _within(p, root):
+        p = _confined_path(root / configured, root)
+        if p is None:
             return None, f"layout base for '{layer}' escapes root — ignored"
         return (p if p.is_dir() else None), None
 
-    default = root / Path(*_DEFAULT_BASES[layer])
-    if default.is_dir() and _within(default, root):
+    default = _confined_path(root / Path(*_DEFAULT_BASES[layer]), root)
+    if default is not None and default.is_dir():
         return default, None
 
     # Tier 3: discover by marker. Only reached when the default is absent — the
     # common case is "this layer is simply unpopulated", so a miss is not an
     # error. A bounded search keeps it from walking vendored trees.
-    candidates = _discover_layer_dirs(root, layer)
+    # `_confined` completes the control here: on Windows `os.path.islink()` is
+    # False for NTFS junctions, so `_iter_dirs`' `followlinks=False` does not
+    # stop `os.walk` descending one, and a discovered candidate can resolve
+    # outside `root`. Every downstream read is `_confined` already, so this is
+    # the one asymmetry rather than an exploit path — closed for consistency.
+    candidates = _confined(_discover_layer_dirs(root, layer), root)
     if not candidates:
         return None, None
     if len(candidates) > 1:
@@ -268,9 +289,21 @@ def _iter_dirs(root: Path):
     import os
     skip = {".git", "node_modules", ".venv", "venv", "__pycache__", "dist",
             ".worktrees", ".agents", ".claude", ".cursor", ".gemini"}
-    for dirpath, dirnames, _ in os.walk(root, followlinks=False):
-        dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
-        yield Path(dirpath)
+    canonical_root = root.resolve()
+    for dirpath, dirnames, _ in os.walk(canonical_root, followlinks=False):
+        current = _confined_path(Path(dirpath), canonical_root)
+        if current is None:
+            dirnames[:] = []
+            continue
+        kept: list[str] = []
+        for name in dirnames:
+            if name in skip or name.startswith("."):
+                continue
+            child = _confined_path(Path(dirpath) / name, canonical_root)
+            if child is not None and child.is_dir():
+                kept.append(name)
+        dirnames[:] = kept
+        yield current
 
 
 def _discover_layer_dirs(root: Path, layer: str) -> list[Path]:
@@ -305,7 +338,7 @@ class Graph:
         self.dangling: list[str] = []             # malformed / missing-local edges
         # Nodes whose up- / down-edge is *dangling* (asserted but broken). The
         # break is reported once, as a dangling violation — such a node is NOT
-        # also an orphan in that direction (AC9: one break, never two classes).
+        # also an orphan in that direction (one break, never two classes).
         self.dangling_out: set[str] = set()
         self.dangling_in: set[str] = set()
         self.notes: list[str] = []                # informational degradations
@@ -338,24 +371,43 @@ def _within(path: Path, root: Path) -> bool:
     confinement check that keeps every read inside `--root`. A hostile
     `agentbundle-layout.toml` value (`../../../etc`) or a symlinked artifact dir
     cannot redirect a read outside the tree (`root` is pre-resolved in `main`)."""
+    return _confined_path(path, root) is not None
+
+
+def _confined_path(path: Path, root: Path) -> Path | None:
+    """Return the canonical path only when it remains below ``root``."""
     try:
-        return path.resolve().is_relative_to(root)
+        resolved = path.resolve()
+        resolved.relative_to(root)
+        return resolved
     except (OSError, ValueError, RuntimeError):
-        return False
+        return None
 
 
 def _confined(paths, root: Path) -> list[Path]:
     """Globbed / iterated paths filtered to those confined within `root` — a
     `pathlib.glob` follows symlinked dirs (unlike `os.walk(followlinks=False)`),
     so each result is re-checked before it is read."""
-    return [p for p in paths if _within(p, root)]
+    confined: list[Path] = []
+    for path in paths:
+        canonical = _confined_path(path, root)
+        if canonical is not None:
+            confined.append(canonical)
+    return confined
+
+
+def _confined_file(path: Path, root: Path) -> Path | None:
+    """Return a canonical in-root regular-file candidate, else ``None``."""
+    canonical = _confined_path(path, root)
+    return canonical if canonical is not None and canonical.is_file() else None
 
 
 def _first(text: str, pat: re.Pattern[str]) -> str | None:
     for line in text.splitlines():
         m = pat.search(line)
-        if m and not _is_placeholder(m.group(1)):
-            return _token(m.group(1))
+        if m:
+            value = _token(m.group(1))
+            return None if _is_placeholder(value) else value
     return None
 
 
@@ -381,14 +433,14 @@ def recognize_specs(base: Path, root: Path, g: Graph) -> dict[str, Path]:
 def recognize_components(base: Path, root: Path, g: Graph) -> None:
     """File-backed `component` nodes: an immediate sub-directory of the
     components base carrying a `catalog-info.yaml` (the Backstage canonical
-    marker, AC1) is a component, identified by its `kind:namespace/name`. A
+    marker) is a component, identified by its `kind:namespace/name`. A
     sub-directory with no `catalog-info.yaml` is *not yet catalogued* — a
     polyglot `packages/` tree's build-tooling / config dirs are deliberately
     not flagged as chain components."""
     for child in sorted(_confined(base.iterdir(), root)):
         if not child.is_dir() or child.name.startswith("_"):
             continue
-        if (child / "catalog-info.yaml").is_file():
+        if _confined_file(child / "catalog-info.yaml", root) is not None:
             g.add(_component_id(child, root), "component")
 
 
@@ -397,8 +449,8 @@ def _component_id(component_dir: Path, root: Path) -> str:
     `component:<dirname>` (a stdlib-only, line-based read — no YAML dep). The
     `catalog-info.yaml` read is confined: a symlink pointing outside `--root` is
     not followed (completing the `_confined` guard for this nested read)."""
-    cat = component_dir / "catalog-info.yaml"
-    text = _read(cat) if (cat.is_file() and _within(cat, root)) else None
+    cat = _confined_file(component_dir / "catalog-info.yaml", root)
+    text = _read(cat) if cat is not None else None
     if text:
         kind = name = namespace = None
         for line in text.splitlines():
@@ -461,7 +513,11 @@ def recognize_contracts(base: Path, root: Path, g: Graph) -> None:
         if not _within(d, root):
             continue
         for p in sorted(_confined(d.glob("*"), root)):
-            if not p.is_file() or p.name.startswith("_") or p.suffix not in {".md", ".yaml", ".yml", ".json"}:
+            if (
+                not p.is_file()
+                or p.name.startswith("_")
+                or p.suffix not in {".md", ".yaml", ".yml", ".json"}
+            ):
                 continue
             stem = p.stem
             m = re.match(r"(.+?)[.@]v?(\d+)$", stem)
@@ -583,7 +639,7 @@ def resolve_endpoint(target: str, local_ids: set[str],
     # O(N log N)-per-miss scan is intentional at chain scale (hundreds of nodes,
     # not thousands); a suffix index is the move only if a monorepo outgrows it.
     for nid in sorted(local_ids):
-        if nid.endswith(f":{target}") or nid.endswith(f"/{target}"):
+        if nid.endswith((f":{target}", f"/{target}")):
             return "local", False, nid
     if target in rollup:
         return "satisfied-by-reference", rollup[target], target
@@ -606,18 +662,17 @@ def discover_sidecar(root: Path, layout: dict) -> Path | None:
     `**/_state/traceability.json` (bounded). Never a single hardcoded path."""
     configured = layout.get("sidecar")
     if isinstance(configured, str) and configured.strip():
-        p = (root / configured).resolve()
-        return p if (p.is_file() and _within(p, root)) else None
-    default = root / Path(*_SIDECAR_DEFAULT_BASE)
-    if default.is_dir() and _within(default, root):
+        return _confined_file(root / configured, root)
+    default = _confined_path(root / Path(*_SIDECAR_DEFAULT_BASE), root)
+    if default is not None and default.is_dir():
         for d in _iter_dirs(default):
-            cand = d / Path(*_SIDECAR_RELPATH)
-            if cand.is_file() and _within(cand, root):
+            cand = _confined_file(d / Path(*_SIDECAR_RELPATH), root)
+            if cand is not None:
                 return cand
     for d in _iter_dirs(root):
         if d.name == "_state":
-            cand = d / "traceability.json"
-            if cand.is_file() and _within(cand, root):
+            cand = _confined_file(d / "traceability.json", root)
+            if cand is not None:
                 return cand
     return None
 
@@ -679,7 +734,7 @@ def _find_cycles(g: Graph) -> list[str]:
             adj.setdefault(a, []).append(b)
 
     WHITE, GREY, BLACK = 0, 1, 2
-    color: dict[str, int] = {n: WHITE for n in g.nodes}
+    color: dict[str, int] = dict.fromkeys(g.nodes, WHITE)
     seen_cycle: set[frozenset[str]] = set()
 
     for start in list(g.nodes):
@@ -687,7 +742,7 @@ def _find_cycles(g: Graph) -> list[str]:
             continue
         color[start] = GREY
         path = [start]
-        stack: list[tuple[str, "object"]] = [(start, iter(adj.get(start, ())))]
+        stack: list[tuple[str, object]] = [(start, iter(adj.get(start, ())))]
         while stack:
             node, it = stack[-1]
             descended = False
@@ -740,7 +795,8 @@ def classify_standalone(g: Graph, briefs_present: bool) -> list[tuple[str, str, 
     orphan, `component` never a forward orphan.
 
     `briefs_present` makes the brief the spec's producer layer (the
-    receive-brief brief↔spec edge): a spec with no producer is then a backward
+    author-delivery-brief continue brief↔spec edge): a spec with no producer is
+    then a backward
     orphan even when no CHAIN producer layer is populated above it. Returns
     (id, kind, reason)."""
     has_in = {to for _, to in g.edges}
@@ -922,17 +978,17 @@ def _anchor_base(root: Path, layout: dict, key: str,
                  default: tuple[str, ...]) -> tuple[Path | None, str | None]:
     configured = layout.get(key)
     if isinstance(configured, str) and configured.strip():
-        p = (root / configured).resolve()
-        return (p if (p.is_dir() and _within(p, root)) else None), None
-    p = root / Path(*default)
-    return (p if (p.is_dir() and _within(p, root)) else None), None
+        p = _confined_path(root / configured, root)
+        return (p if p is not None and p.is_dir() else None), None
+    p = _confined_path(root / Path(*default), root)
+    return (p if p is not None and p.is_dir() else None), None
 
 
 def _has_briefs(root: Path, layout: dict) -> bool:
     base, _ = _anchor_base(root, layout, "briefs", _BRIEFS_BASE)
     if base is None:
         return False
-    return any(not p.name.startswith("_") for p in base.glob("*.md"))
+    return any(not p.name.startswith("_") for p in _confined(base.glob("*.md"), root))
 
 
 def build_standalone(root: Path, layout: dict, g: Graph,
@@ -953,7 +1009,8 @@ def build_standalone(root: Path, layout: dict, g: Graph,
         spec_paths = recognize_specs(bases["spec"], root, g)
     if "component" in bases:
         recognize_components(bases["component"], root, g)
-    # Briefs are the discovery anchor a spec back-links (the receive-brief
+    # Briefs are the discovery anchor a spec back-links (the
+    # author-delivery-brief continue
     # brief↔spec edge this generalizes) — registered as producer-anchor nodes
     # (kind 'brief', outside CHAIN, so never orphan-checked themselves).
     brief_paths: dict[str, Path] = {}
@@ -1013,7 +1070,7 @@ def _wire_up(g: Graph, *, consumer: str, candidates: list[str],
              local_ids: set[str], rollup: dict[str, bool]) -> None:
     """Wire a node's producer (up) edge from its candidate up-pointers.
 
-    The two questions the candidates answer are independent (AC9):
+    The two questions the candidates answer are independent:
     - **Is a producer asserted?** (the orphan question) The candidates are
       *alternatives* — the first that resolves (local / satisfied-by-reference /
       unresolvable) wins and gives the consumer an in-edge, so a valid `Brief:`
@@ -1053,7 +1110,7 @@ def _wire(g: Graph, *, origin: str, target: str, local_ids: set[str],
     state. `origin` is a local producer naming a consumer `target` (a spec's
     forward `Component:`). A `dangling` target (missing local-shaped) is recorded
     as a hard violation against `origin` and `origin` is flagged `dangling_out`
-    (so it is not *also* a forward orphan — AC9: one break, one class); a
+    (so it is not *also* a forward orphan — one break, one class); a
     reference endpoint is registered as an external node so the edge has an end
     and `origin` counts as connected."""
     state, pinned, resolved = resolve_endpoint(target, local_ids, rollup)
@@ -1127,7 +1184,7 @@ def check(root: Path, strict: bool) -> tuple[list[str], list[str], int]:
 
     # Root→leaf reachability (sidecar-authoritative mode only). The reported set is
     # additive: stranded nodes minus the presence orphans and dangling-edge sources
-    # already reported, so a single break is one class, never two (AC9). Its own
+    # already reported, so a single break is one class, never two. Its own
     # degradations are notes; it never crashes or fails the whole lint.
     unreachable: list[tuple[str, str, str]] = []
     soft_unresolved: list[tuple[str, str, str]] = []
@@ -1136,7 +1193,7 @@ def check(root: Path, strict: bool) -> tuple[list[str], list[str], int]:
         g.notes.extend(rnotes)
         orphan_ids = {nid for nid, _, _ in orphans}
         dangling_set = set(sidecar_dangling(g))
-        # One break, one class (AC9): a node adjacent to a dangling edge — whether
+        # One break, one class: a node adjacent to a dangling edge — whether
         # the edge's source (its target is missing) or its consumer (its producer
         # is missing) — is already surfaced by that DANGLING violation, so it is not
         # also reported as UNREACHABLE.
@@ -1194,9 +1251,7 @@ def check(root: Path, strict: bool) -> tuple[list[str], list[str], int]:
         hard.append(f"CYCLE — {c}")
 
     exit_hint = 0
-    if hard:
-        exit_hint = 1
-    elif (orphans or unreachable) and strict:
+    if hard or (orphans or unreachable) and strict:
         exit_hint = 1
     return out, hard, exit_hint
 
@@ -1213,6 +1268,40 @@ def _drift_check(root: Path, layout: dict, sidecar_g: Graph) -> list[str]:
     loc = {nid for nid, k in derived.nodes.items() if k == "spec"}
     return [f"{missing} present on disk but absent from sidecar"
             for missing in sorted(loc - side)]
+
+
+def _validated_root(candidate: Path | None) -> Path:
+    """Resolve the CLI-supplied scan root, or fall back to `_repo_root()`.
+
+    The normalise-then-check is deliberately kept *in one function, adjacent to
+    the argv read*. Taint analysers recognise that shape; they do not follow
+    the `_within()` / `_confined()` confinement applied to every path derived
+    from this root, because that check is interprocedural and expressed as a
+    comprehension filter. Same pattern as `_loop_guards.check_artifact_status`.
+
+    This normalises and asserts directory-ness; it deliberately does **not**
+    confine the root to a fixed prefix. `--root` *is* the caller-supplied scan
+    scope of a repo linter (see the module docstring), so restricting which
+    directory may be scanned would break the tool's purpose. The security
+    control remains `_within()`: every path *derived* from this root is
+    re-checked against it before being read.
+    """
+    raw = candidate if candidate is not None else _repo_root()
+    # `_within()` in the sibling script already catches this trio; resolve()
+    # raises ValueError on an embedded null and OSError on a Windows reserved
+    # name, neither of which is an OSError-only case. Letting them through
+    # would produce the traceback this function exists to replace.
+    try:
+        root = raw.resolve()
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise SystemExit(
+            f"lint-traceability: --root is not a usable path: {raw!r} ({exc})"
+        ) from exc
+    if not root.exists():
+        raise SystemExit(f"lint-traceability: --root does not exist: {root}")
+    if not root.is_dir():
+        raise SystemExit(f"lint-traceability: --root is not a directory: {root}")
+    return root
 
 
 def _repo_root() -> Path:
@@ -1242,7 +1331,7 @@ def main(argv: list[str] | None = None) -> int:
              "dangling edges and cycles exit 1 in every mode.",
     )
     args = parser.parse_args(argv)
-    root = (args.root.resolve() if args.root else _repo_root()).resolve()
+    root = _validated_root(args.root)
 
     try:
         out, hard, exit_hint = check(root, args.strict)
