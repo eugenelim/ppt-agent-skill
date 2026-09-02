@@ -3,19 +3,19 @@
 
   <h1>PPT Agent Skill</h1>
 
-  <p><strong>世界级 AI 演示文稿生成系统</strong> · 把一句话变成 PPT 设计公司级别的成品</p>
+  <p><strong>World-class AI presentation generator</strong> · One sentence in, design-agency-quality deck out</p>
 
   <p>
-    <a href="README_EN.md">English</a> ·
-    <a href="#-快速开始">快速开始</a> ·
-    <a href="#-30-风格预览画廊">风格画廊</a> ·
-    <a href="#-工作流">工作流</a> ·
-    <a href="#-架构">架构</a>
+    <a href="README_ZH.md">中文文档</a> ·
+    <a href="#-quick-start">Quick Start</a> ·
+    <a href="#-style-gallery-30-styles">Gallery</a> ·
+    <a href="#-workflow">Workflow</a> ·
+    <a href="#-system-architecture">Architecture</a>
   </p>
 
   <p>
     <img src="https://img.shields.io/badge/styles-30-22D3EE?style=for-the-badge&labelColor=050b1f" alt="30 Styles" />
-    <img src="https://img.shields.io/badge/charts-18-6366f1?style=for-the-badge&labelColor=050b1f" alt="18 Charts" />
+    <img src="https://img.shields.io/badge/charts-20-6366f1?style=for-the-badge&labelColor=050b1f" alt="20 Charts" />
     <img src="https://img.shields.io/badge/categories-5-FF9500?style=for-the-badge&labelColor=050b1f" alt="5 Categories" />
     <img src="https://img.shields.io/badge/pipeline-6_steps-22c55e?style=for-the-badge&labelColor=050b1f" alt="6-step Pipeline" />
   </p>
@@ -39,7 +39,7 @@
   </p>
 
   <p>
-    <strong>对标</strong>
+    <strong>Benchmarked against</strong>
     <code>Linear</code> · <code>Anthropic</code> · <code>Stripe</code> · <code>Apple</code> · <code>NYT Magazine</code> · <code>Tom Ford</code> · <code>Pitch</code> · <code>Mercury</code> · <code>Vercel</code>
   </p>
 </div>
@@ -47,290 +47,280 @@
 ---
 
 <div align="center">
-  <img src="docs/assets/hero-all.png" alt="30 风格预览" width="100%" />
-  <p><sub>30 个世界级风格 · 5 板块覆盖所有商业场景 · 真实 1280×720 标杆 mock</sub></p>
+  <img src="docs/assets/hero-all.png" alt="30 Style Preview Gallery" width="100%" />
+  <p><sub>30 world-class styles across 5 categories · Real 1280×720 reference mocks</sub></p>
 </div>
 
 ---
 
-## 💡 这是什么？
+## 💡 What is this?
 
-一个 **Claude Code Skill**，模拟万元/页 PPT 设计公司的完整工作流，把一句话变成专业级演示文稿（HTML + 可编辑矢量 PPTX）。
+A **Claude Code Skill** that simulates the complete workflow of a $1,000+/page PPT design agency, turning a single sentence into a professional deck (HTML + editable vector PPTX).
 
-不是"给个大纲套模板"，而是**先调研后生成 / 内容驱动版式 / 全局风格一致 / 真实数据填充**的完整管线。
+Not "outline-into-template" — a full pipeline of **research-first generation / content-driven layouts / global style consistency / real-data filling**.
 
-每个风格的视觉水准对标实际世界级品牌的官网/产品页排版做法（**不是参考截图，是参考实际 CSS 实现**）：字距铁律 / tabular-nums / OpenType 特性 / serif italic 混排 / 字体栈三层降级。
+Each style mirrors the actual production typography of world-class brands (**not from screenshots — from reading their live CSS**): letter-spacing rules, tabular-nums, OpenType features, sans + serif italic mixing, three-tier font fallback chains.
 
-## 🎨 核心特性
+## 🎨 Key Features
 
-| 特性 | 说明 |
-|------|------|
-| **6 步 Pipeline** | 需求调研 → 资料搜集 → 大纲策划 → 策划稿 → HTML 设计稿 → 后处理（SVG + PPTX）|
-| **30 种世界级风格** | 5 板块覆盖：暗色专业 9 / 浅色高级 10 / 活力鲜明 4 / 东方文化 3 / 自然复古 4 |
-| **20 种数据可视化** | 基础 8 + 进阶 7（含堆叠条形图）+ ECharts 级 5（含矩形树图）|
-| **Bento Grid 布局** | 7 种卡片式灵活布局，内容驱动版式 |
-| **世界级排版** | 7 级字号阶梯 · 字距铁律 · tabular-nums · OpenType 特性 · serif italic 混排 · 字体栈三层降级 |
-| **智能配图** | AI 生成配图 + 5 种视觉融入技法（渐隐融合/色调蒙版/氛围底图等）|
-| **失败模式目录** | 8 种 failure modes（underfill / decorative_substitution 等）+ 修复顺序铁律 |
-| **跨页叙事** | 密度交替节奏 / 章节色彩递进 / 封面-结尾呼应 / 渐进揭示 |
-| **风格预览画廊** | `gallery.py` 一键生成 30 风格卡片墙索引页，每风格封面 + 详情双版可切换 |
-| **Smoke 测试** | `smoke_test.py` 校验风格 JSON / pipeline 兼容 / 排版铁律 / 端到端管线 |
-| **PPTX 兼容** | HTML → SVG → PPTX 管线，PPT 365 中右键"转换为形状"全部可编辑 |
+| Feature | Description |
+|---------|-------------|
+| **6-Step Pipeline** | Interview → Research → Outline → Planning → HTML Design → Post-process (SVG + PPTX) |
+| **30 World-Class Styles** | 5 categories: Dark Professional 9 / Light Premium 10 / Vibrant 4 / Cultural Oriental 3 / Natural Retro 4 |
+| **20 Data Visualizations** | 8 basic + 7 advanced (including stacked bar) + 5 ECharts-grade (including treemap) |
+| **Bento Grid Layouts** | 7 flexible card layouts driven by content, not templates |
+| **World-Class Typography** | 7-level scale · letter-spacing rules · tabular-nums · OpenType features · serif italic mixing · 3-tier font fallback |
+| **Smart Illustrations** | AI-generated images with 5 visual fusion techniques (fade/tinted overlay/ambient bg/etc.) |
+| **Failure Modes Catalog** | 8 failure modes (underfill / decorative_substitution / etc.) + repair-order rules |
+| **Cross-page Narrative** | Density alternation · chapter color progression · cover-ending visual echo |
+| **Style Preview Gallery** | `gallery.py` one-shot generates a 30-style card-wall index |
+| **Smoke Testing** | `smoke_test.py` validates JSON / pipeline-compat / typography / e2e pipeline |
+| **PPTX Compatible** | HTML → SVG → PPTX pipeline; right-click "Convert to Shape" in PPT 365 for full editing |
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-**作为 Claude Code Skill 调用**（推荐）：
+**Use as a Claude Code Skill** (recommended):
 
 ```
-你：帮我做一个关于 X 的 PPT
+You: Make a presentation about X
   ↓
-Agent 提问调研需求（等你回复 7 题）
+Agent asks 7 interview questions (waits for your answers)
   ↓
-自动搜索资料 → 生成大纲 → 策划稿 → 策划评审
+Auto-research → outline → planning draft → plan review
   ↓
-【默认先交付策划并停下；你说「出图 / 渲染」后才逐页设计 HTML】
+[Plan-first by default: the plan is delivered and the run stops here;
+ say "render / make the slides" and only then is per-page HTML designed]
   ↓
-（出图后按需）后处理：HTML → SVG → PPTX
+(on request, after rendering) Post-process: HTML → SVG → PPTX
   ↓
-全部产物保存到 ppt-output/<deck 名>/（每个 PPT 一个目录）
+All artifacts saved to ppt-output/<deck-name>/ (one folder per deck)
 ```
 
-**触发示例**：
+**Trigger examples**:
 
-| 场景 | 说法 |
-|------|------|
-| 纯主题 | `做一个关于 X 的 PPT` / `做一个 Y 的演示` |
-| 带素材 | `把这篇文档做成 PPT` / `用这份报告做 slides` |
-| 带要求 | `做 15 页暗黑科技风的 AI 安全汇报材料` |
-| 隐式触发 | `我要给老板汇报 Y` / `做个培训课件` / `做路演 deck` |
+| Scenario | What to say |
+|----------|-------------|
+| Topic only | `Make a PPT about X` / `Create a presentation on Y` |
+| With source | `Turn this document into slides` / `Make a deck from this report` |
+| With requirements | `15-page dark-tech style AI safety presentation` |
+| Implicit | `I need to present to my boss about Y` / `Make training materials` |
 
-**环境依赖**：
+**Requirements**:
 
 ```bash
-# Python 依赖（含 Playwright）
+# Python deps (includes Playwright)
 pip install -r requirements.txt
 
-# 一次性 Chromium 配置（Playwright 管理，无需系统 Node.js）
+# One-time Chromium provisioning (managed by Playwright, no system Node.js required)
 playwright install chromium
 ```
 
-## 🎨 30 风格预览画廊
+## 🎨 Style Gallery (30 styles)
 
-5 个板块，覆盖所有典型商业场景。每个风格都附**两版**真实 1280×720 设计稿 ——
-**封面**（`<id>.cover.html`，标题/身份页）+ **详情**（`<id>.html`，内容/数据页）；
-画廊索引页每张卡片有 **Cover / Detail** 切换，顶部还有全局「Show: Covers / Details」开关，
-hero 拼图统一取封面：
+Five categories cover all typical commercial scenarios. Every mock is a real 1280×720 design:
 
-### 暗色专业（9 风格 · `references/styles/dark.md`）
+### Dark Professional (9 styles · `references/styles/dark.md`)
 
 <div align="center">
-  <img src="docs/assets/hero-dark-professional.png" alt="暗色专业 9 风格" width="100%" />
+  <img src="docs/assets/hero-dark-professional.png" alt="9 Dark Professional Styles" width="100%" />
 </div>
 
-> Linear / Apple Hardware / Tom Ford / Cyberpunk 2077 / Y2K / Magnum 等品牌的实际排版做法
+> Linear / Apple Hardware / Tom Ford / Cyberpunk 2077 / Y2K / Magnum etc.
 
-| ID | 灵感 | 适用场景 |
-|----|------|---------|
-| `dark_tech` | Linear.app | AI / SaaS / 开发者工具 |
-| `xiaomi_orange` | Apple Keynote 硬件版 | 硬件 / IoT / 汽车发布 |
-| `luxury_purple` | Tom Ford | 奢侈品 / 高端品牌 |
-| `nocturne_violet` | Linear 紫光版 | 设计师 SaaS / 创业产品 |
-| `cyberpunk_neon` | Cyberpunk 2077 | 电竞 / 游戏 / Web3 |
-| `chrome_y2k` | Y2K / Vaporwave | Web3 / 千禧年复古 |
-| `noir_film` | Magnum / 黑白纪录片 | 纪录片 / 影像艺术 / 摄影 |
-| `graphite_gold` | 高端咨询战略简报 | 咨询 / 战略汇报 / 董事会简报 |
-| `graphite_violet` | 工程交付演讲（深夜作战室） | 工程交付 / 三相位 roadmap / 工具平台简报 |
+| ID | Inspiration | Best for |
+|----|-------------|----------|
+| `dark_tech` | Linear.app | AI / SaaS / Developer tools |
+| `xiaomi_orange` | Apple Keynote (hardware) | Hardware / IoT / Auto launches |
+| `luxury_purple` | Tom Ford | Luxury / High-end branding |
+| `nocturne_violet` | Linear (purple variant) | Designer SaaS / Startup launches |
+| `cyberpunk_neon` | Cyberpunk 2077 | Gaming / Esports / Web3 |
+| `chrome_y2k` | Y2K / Vaporwave | Web3 / Millennial retro |
+| `noir_film` | Magnum / B&W documentary | Documentary / Photography / Editorial |
+| `graphite_gold` | High-end consulting strategy brief | Consulting / Strategy reports / Board briefings |
+| `graphite_violet` | Engineering-delivery talk (late-night war room) | Eng/tech delivery talks / Three-phase roadmaps / Dev-led dark decks |
 
-### 浅色高级（10 风格 · `references/styles/light.md`）
+### Light Premium (10 styles · `references/styles/light.md`)
 
 <div align="center">
-  <img src="docs/assets/hero-light-premium.png" alt="浅色高级 10 风格" width="100%" />
+  <img src="docs/assets/hero-light-premium.png" alt="10 Light Premium Styles" width="100%" />
 </div>
 
-> Apple / Anthropic / NYT Magazine / iOS 26 / Mayo Clinic / Suisse Int'l / 婚礼请柬
+> Apple / Anthropic / NYT Magazine / iOS 26 / Mayo Clinic / Suisse Int'l / Wedding invitations
 
-| ID | 灵感 | 适用场景 |
-|----|------|---------|
-| `blue_white` | Apple 企业页面 | 企业 SaaS / 培训 / 金融医疗 |
-| `fresh_green` | Aesop | 护肤 / 养生 / 食品 / 美妆 |
-| `minimal_gray` | NYT Magazine | 学术 / 法务 / 咨询 / 白皮书 |
-| `mocha_editorial` | Anthropic / Pantone 2025 | AI 安全研究 / 出版 |
-| `medical_pulse` | Mayo Clinic | 医疗 / 医药 / 健康保险 |
-| `earth_concrete` | Suisse Int'l | 建筑 / 工业 / 咖啡品牌 |
-| `champagne_gold` | 婚礼请柬 | 婚庆 / 宴会 / 颁奖典礼 |
-| `liquid_glass` | iOS 26 / visionOS | XR / AR / 苹果生态发布 |
-| `editorial_paper` | 研究实验室出版物 / 温润学术手记 | 学术研究 / 出版 / 白皮书 |
-| `schematic_blueprint` | 工程交付 Runbook / 技术白皮书 | 工程交付 / 技术文档 / Runbook |
+| ID | Inspiration | Best for |
+|----|-------------|----------|
+| `blue_white` | Apple enterprise pages | Enterprise SaaS / Training / Healthcare-finance |
+| `fresh_green` | Aesop | Skincare / Wellness / Food / Beauty |
+| `minimal_gray` | NYT Magazine | Academic / Legal / Consulting / Whitepapers |
+| `mocha_editorial` | Anthropic / Pantone 2025 | AI safety research / Publishing |
+| `medical_pulse` | Mayo Clinic | Medical / Pharma / Insurance |
+| `earth_concrete` | Suisse Int'l | Architecture / Industrial / Coffee branding |
+| `champagne_gold` | Wedding invitations | Weddings / Galas / Award ceremonies |
+| `liquid_glass` | iOS 26 / visionOS | XR / AR / Apple ecosystem launches |
+| `editorial_paper` | Research lab publications / warm academic notes | Academic research / Publishing / Whitepapers |
+| `schematic_blueprint` | Engineering-delivery runbook / technical whitepaper | Engineering delivery / Technical docs / Runbooks |
 
-### 活力鲜明（4 风格 · `references/styles/vibrant.md`）
+### Vibrant (4 styles · `references/styles/vibrant.md`)
 
 <div align="center">
-  <img src="docs/assets/hero-vibrant.png" alt="活力鲜明 4 风格" width="100%" />
+  <img src="docs/assets/hero-vibrant.png" alt="4 Vibrant Styles" width="100%" />
 </div>
 
-| ID | 灵感 | 适用场景 |
-|----|------|---------|
-| `vibrant_rainbow` | Stripe Sessions | 营销 / 创作者 / 大会 |
-| `kindergarten_pop` | 高质量儿童绘本 | 儿童教育 / 启蒙 / 亲子 |
-| `bauhaus_block` | Bauhaus / Swiss Design | 教育 / 创意品牌 / 独立设计 |
-| `candy_pastel` | Ladurée 糖果店 | 甜品 / 烘焙 / 零食 |
+| ID | Inspiration | Best for |
+|----|-------------|----------|
+| `vibrant_rainbow` | Stripe Sessions | Marketing / Creators / Conferences |
+| `kindergarten_pop` | High-quality children's books | Children's education / Kids learning |
+| `bauhaus_block` | Bauhaus / Swiss Design | Education / Creative brands / Indie design |
+| `candy_pastel` | Ladurée patisserie | Sweets / Bakery / Snacks |
 
-### 东方文化（3 风格 · `references/styles/cultural.md`）
+### Cultural Oriental (3 styles · `references/styles/cultural.md`)
 
 <div align="center">
-  <img src="docs/assets/hero-cultural-oriental.png" alt="东方文化 3 风格" width="80%" />
+  <img src="docs/assets/hero-cultural-oriental.png" alt="3 Cultural Oriental Styles" width="80%" />
 </div>
 
-| ID | 灵感 | 适用场景 |
-|----|------|---------|
-| `royal_red` | 北京冬奥开幕式 | 中国风 / 政务 / 文化 |
-| `sakura_wabi` | 日本侘寂 | 日系 / 茶道 / 民宿 |
-| `ink_jade` | 新中式国潮 | 茶饮 / 古风文创 / 独立书店 |
+| ID | Inspiration | Best for |
+|----|-------------|----------|
+| `royal_red` | Beijing 2022 Opening Ceremony | Chinese cultural / Governmental / Heritage |
+| `sakura_wabi` | Japanese wabi-sabi | Japanese brands / Tea ceremony / Ryokan |
+| `ink_jade` | New Chinese guochao | Tea drinks / Heritage cultural / Indie bookstores |
 
-### 自然/复古（4 风格 · `references/styles/natural.md`）
+### Natural / Retro (4 styles · `references/styles/natural.md`)
 
 <div align="center">
-  <img src="docs/assets/hero-natural-retro.png" alt="自然/复古 4 风格" width="100%" />
+  <img src="docs/assets/hero-natural-retro.png" alt="4 Natural / Retro Styles" width="100%" />
 </div>
 
-| ID | 灵感 | 适用场景 |
-|----|------|---------|
-| `botanic_forest` | Patagonia / Nat Geo | 户外 / 可持续 / 林产 |
-| `safari_savanna` | National Geographic | 旅行 / 探险 / 纪录片 |
-| `retro_70s` | Wes Anderson / 70s 海报 | 独立咖啡 / 唱片 / 复古 |
-| `gov_authority` | 人民日报 / 国宴 | 党政 / 重大会议 / 严肃汇报 |
+| ID | Inspiration | Best for |
+|----|-------------|----------|
+| `botanic_forest` | Patagonia / Nat Geo | Outdoor / Sustainability / Forestry |
+| `safari_savanna` | National Geographic | Travel / Adventure / Documentary |
+| `retro_70s` | Wes Anderson / 70s posters | Indie cafes / Vinyl / Retro brands |
+| `gov_authority` | People's Daily / State banquets | Governmental / Major conferences |
 
-## 📈 20 种数据可视化
+## 📈 20 Data Visualizations
 
-| 层级 | 数量 | 图表 | 文件 |
-|------|------|------|------|
-| **基础** | 8 | 进度条 · 对比柱 · 环形图 · 迷你折线 · 点阵图 · KPI 卡 · 指标行 · 评分 | [`charts/basic.md`](references/charts/basic.md) |
-| **进阶** | 7 | 雷达图 · 时间线 · 漏斗图 · 仪表盘 · 多组对比柱 · 堆叠条形图 · 简单地理 | [`charts/advanced.md`](references/charts/advanced.md) |
-| **ECharts 级** | 5 | 世界地图 choropleth · 关系网络 · 桑基图 · 热力日历 · 矩形树图 | [`charts/complex.md`](references/charts/complex.md) |
+| Tier | Count | Charts | File |
+|------|-------|--------|------|
+| **Basic** | 8 | Progress bar · Compare bar · Ring chart · Sparkline · Waffle · KPI card · Metric row · Rating | [`charts/basic.md`](references/charts/basic.md) |
+| **Advanced** | 7 | Radar · Timeline · Funnel · Gauge · Grouped bar · Stacked bar · Simple map | [`charts/advanced.md`](references/charts/advanced.md) |
+| **ECharts-grade** | 5 | World choropleth · Network graph · Sankey · Heatmap calendar · Treemap | [`charts/complex.md`](references/charts/complex.md) |
 
-全部纯 HTML/CSS/SVG 实现，**无 JS 运行时**（保证 svg2pptx 管线兼容）。所有图表自动适配 30 风格的 CSS 变量。
+All implemented in pure HTML/CSS/SVG, **no JS runtime** (preserves svg2pptx pipeline). All charts auto-adapt to the 30 styles via CSS variables.
 
-## 🔧 工作流
+## 🔧 Workflow
 
 ```
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│  Step 1      │  │  Step 2      │  │  Step 3      │  │  Step 4      │  │  Step 5      │  │  Step 6      │
-│  需求调研    │→ │  资料搜集    │→ │  大纲策划    │→ │  策划稿      │→ │  风格+设计稿 │→ │  后处理      │
-│              │  │              │  │              │  │              │  │              │  │              │
-│  7 题三层    │  │  3-15 查询   │  │  金字塔原理  │  │  Bento Grid  │  │  30 风格选 1 │  │  HTML→SVG    │
-│  递进访谈    │  │  自适应      │  │  + 自检      │  │  策划卡      │  │  + 智能配图  │  │  →PPTX       │
-└──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
-   STOP 等回复                                            默认先交付策划停下    按需出图           按需出图
+┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐
+│  Step 1    │  │  Step 2    │  │  Step 3    │  │  Step 4    │  │  Step 5    │  │  Step 6    │
+│  Interview │→ │  Research  │→ │  Outline   │→ │  Planning  │→ │  Style+    │→ │  Post-     │
+│            │  │            │  │            │  │            │  │  Design    │  │  process   │
+│  7-Q deep  │  │  3-15 srch │  │  Pyramid + │  │  Bento     │  │  30 styles │  │  HTML→SVG  │
+│  interview │  │  adaptive  │  │  self-test │  │  cards     │  │  + images  │  │  →PPTX     │
+└────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘  └────────────┘
+   STOP wait                                       Plan-first stop  On request       On request
 ```
 
-详细流程见 [`SKILL.md`](SKILL.md)。
+Detailed flow in [`SKILL.md`](SKILL.md).
 
-## 🏗 系统架构
+## 🏗 System Architecture
 
 <div align="center">
-  <img src="docs/assets/architecture.png" alt="系统架构图" width="100%" />
-  <p><sub>3 层架构：用户入口 / 6 步 Pipeline / 输出产物 · 5 大 Reference Library 注入到各步</sub></p>
+  <img src="docs/assets/architecture.png" alt="System Architecture" width="100%" />
+  <p><sub>3-tier architecture: User Entry / 6-Step Pipeline / Output Artifacts · 5 Reference Libraries injected at each step</sub></p>
 </div>
 
-**3 层架构**：
+**3 tiers**:
 
-- **TIER 1 · 入口** — 用户一句话 prompt 触发 [SKILL.md](SKILL.md)（Agent 入口主流程指令）；引用 `references/` 下的所有规则文件
-- **TIER 2 · 6 步 Pipeline** — 每步独立 STEP，前后用 JSON 合同传递；每步可见使用的 reference 文件
-- **TIER 3 · 输出** — 4 种最终产物：翻页 HTML / 矢量 SVG / 可编辑 PPTX / 风格预览画廊
+- **TIER 1 · Entry** — User prompt triggers [SKILL.md](SKILL.md) (Agent entry); pulls from all `references/` rule files
+- **TIER 2 · 6-Step Pipeline** — Each step is independent, JSON contracts between steps; each step shows which references it uses
+- **TIER 3 · Outputs** — 4 final artifacts: paginated HTML / vector SVG / editable PPTX / style preview gallery
 
-**Reference Library**（注入到各步）：
+**Reference Library** (injected at each step):
 
-| 模块 | 数量 | 位置 |
-|------|------|------|
-| 📐 Style Library | 30 风格 | `references/styles/` (5 板块) |
-| 📊 Chart Library | 18 图表 | `references/charts/` (3 层级) |
-| 🔤 Typography | 14 铁律 | `references/typography.md` |
-| ⚠ Failure Modes | 8 模式 | `references/principles/failure-modes.md` |
-| 🎨 Bento Grid | 7 布局 | `references/bento-grid.md` |
+| Module | Count | Location |
+|--------|-------|----------|
+| 📐 Style Library | 30 styles | `references/styles/` (5 categories) |
+| 📊 Chart Library | 20 charts | `references/charts/` (3 tiers) |
+| 🔤 Typography | 14 rules | `references/typography.md` |
+| ⚠ Failure Modes | 8 modes | `references/principles/failure-modes.md` |
+| 🎨 Bento Grid | 7 layouts | `references/bento-grid.md` |
 
-## 📂 文件树
+## 📂 File Tree
 
 ```
 ppt-agent-skill/
-├── SKILL.md                      # 主工作流指令（Agent 入口）
-├── README.md / README_EN.md      # 本文件 / English
-├── assets/                       # 视觉资产
+├── SKILL.md                      # Main workflow instructions (Agent entry point)
+├── README.md / README_ZH.md      # English / Chinese docs
+├── docs/assets/                  # Visual assets
 │   ├── logo.svg                  # Logo
-│   ├── banner.svg                # README 横幅
-│   ├── hero-all.png              # 30 风格全景拼图
-│   └── hero-<category>.png       # 5 板块单独拼图
-├── references/                   # Skill 引用文档
-│   ├── prompts.md                # 5 套 Prompt 模板（调研/大纲/策划/设计/备注）
-│   ├── typography.md             # 世界级排版铁律 14 条
-│   ├── bento-grid.md             # 7 种布局规格 + 卡片类型
-│   ├── pipeline-compat.md        # HTML→SVG→PPTX 管线兼容规则
-│   ├── method.md                 # 核心方法论
-│   ├── style-system.md           # 引导文件（兼容旧引用）
-│   ├── styles/                   # 30 风格按 5 板块分目录
-│   │   ├── index.md              # 索引 + 决策矩阵 + JSON Schema
-│   │   ├── dark.md               # 9 暗色专业
-│   │   ├── light.md              # 10 浅色高级
-│   │   ├── vibrant.md            # 4 活力鲜明
-│   │   ├── cultural.md           # 3 东方文化
-│   │   └── natural.md            # 4 自然/复古
-│   ├── charts/                   # 20 种图表
-│   │   ├── index.md              # 决策矩阵
-│   │   ├── basic.md              # 8 种基础
-│   │   ├── advanced.md           # 7 种进阶
-│   │   └── complex.md            # 5 种 ECharts 级
+│   ├── banner.svg                # README banner
+│   ├── hero-all.png              # 30-style overview composite
+│   └── hero-<category>.png       # Per-category composites
+├── references/                   # Skill reference docs
+│   ├── prompts.md                # 5 prompt templates
+│   ├── typography.md             # 14 world-class typography rules
+│   ├── bento-grid.md             # 7 layouts + card types
+│   ├── pipeline-compat.md        # HTML→SVG→PPTX compatibility rules
+│   ├── method.md                 # Core methodology
+│   ├── style-system.md           # Redirect file (legacy compat)
+│   ├── styles/                   # 30 styles by 5 categories
+│   │   ├── index.md, dark.md, light.md, vibrant.md, cultural.md, natural.md
+│   ├── charts/                   # 20 chart types
+│   │   ├── index.md, basic.md, advanced.md, complex.md
 │   └── principles/
-│       └── failure-modes.md      # 8 种 failure modes + 修复顺序
-├── scripts/                      # 后处理 + 工具（adopter-facing）
-│   ├── html_packager.py          # 多页 HTML → 翻页预览
-│   ├── html2svg.py               # HTML → SVG（dom-to-svg, 文字可编辑）
-│   ├── svg2pptx.py               # SVG → PPTX（OOXML 原生）
-│   └── gallery.py                # 生成 30 风格预览画廊 + 截图
-├── tools/                        # 维护工具（非 adopter payload）
-│   ├── smoke_test.py             # 端到端测试 + pipeline-compat 扫描
-│   ├── check_skill.py            # 文档/代码合同漂移检查
-│   └── build_hero.py             # 生成 README hero 拼图
-├── ppt-output/                   # 运行时：每个 PPT 一个 <deck 名>/ 目录（gitignore）
-│   └── style-gallery/            # 30 个 1280×720 mock + 30 PNG + index.html（工具产物，与 deck 平级）
-├── docs/superpowers/specs/       # 设计文档归档
-└── tests/smoke-results/          # 测试报告归档
+│       └── failure-modes.md      # 8 failure modes + repair order
+├── scripts/                      # Post-processing + tools (adopter-facing)
+│   ├── html_packager.py          # Multi-page HTML → paginated preview
+│   ├── html2svg.py               # HTML → SVG (dom-to-svg, editable text)
+│   ├── svg2pptx.py               # SVG → PPTX (OOXML native)
+│   └── gallery.py                # Generate 30-style preview gallery + screenshots
+├── tools/                        # Maintainer tools (not part of adopter payload)
+│   ├── smoke_test.py             # E2E test + pipeline-compat scan
+│   ├── check_skill.py            # Doc/code contract-drift check
+│   └── build_hero.py             # Generate README hero composites
+├── ppt-output/                   # runtime: one <deck-name>/ folder per deck (gitignored)
+│   └── style-gallery/            # 30 mocks + 30 PNGs + index.html (tooling sibling, not a deck)
+├── docs/superpowers/specs/       # Design docs
+└── tests/smoke-results/          # Test reports
 ```
 
-## 🧪 质量保证
+## 🧪 Quality Assurance
 
 ```bash
-# 风格 JSON 校验 + pipeline-compat 扫描 + 排版自检（30 风格）
+# JSON validation + pipeline-compat scan + typography self-check (30 styles)
 python3 tools/smoke_test.py --phase 1
 # → 52 pass / 0 fail / 0 warn
 
-# 端到端管线（HTML→SVG→PPTX，3 风格代表性测试）
+# End-to-end pipeline (HTML→SVG→PPTX, 3 representative styles)
 python3 tools/smoke_test.py --phase 5
-# → 6 pass / 0 fail（preview.html + svg/*.svg + presentation.pptx 三种产物全部生成）
+# → 6 pass / 0 fail (preview.html + svg/*.svg + presentation.pptx all generated)
 ```
 
-## 🌟 世界级标杆参照系
+## 🌟 World-Class Benchmarks
 
-排版做法参考的实际品牌（**不是看截图模仿，是阅读其官网 CSS**）：
+Typography practices borrowed from real brand websites (**not by mimicking screenshots — by reading their live CSS**):
 
-| 类别 | 品牌 | 学到了什么 |
-|------|------|-----------|
-| 暗色 SaaS | [Linear](https://linear.app) | Inter Tight 紧凑字距 + 紫色辉光 + serif italic 关键词混排 |
-| AI 编辑器 | [Anthropic](https://anthropic.com) | Mocha Mousse 米色 + Source Serif italic + 砖红强调线 |
-| 渐变高级感 | [Stripe](https://stripe.com) | 多层 linear-gradient + 玻璃球（多层 radial-gradient + 内阴影）|
-| 极简白 | [Apple](https://apple.com) | SF Pro 字体栈 + 大留白 + 内框线条 |
-| 全息镭射 | [OpenAI](https://openai.com) | 纯黑底 + 全息球 + 极简留白 |
-| 极致黑白 | [Vercel](https://vercel.com) | Geist Sans + 几何分割 + monospace 终端语义 |
-| 杂志感 | NYT Magazine | masthead + 巨型 serif + 三栏分栏 + 首字下沉 |
-| 演示工具 | [Pitch](https://pitch.com) | 大胆排版 + 全屏色块 + 拼贴感 |
-| 金融 serif | [Mercury](https://mercury.com) | SangBleu serif 大标题 + 极简金融感 |
-| 浏览器渐变 | [Arc](https://arc.net) | 渐变彩色 + 圆角图标 + 创意拼贴 |
-| 时尚奢华 | Tom Ford | Didot italic + 黑金 + 居中对称 + 0.65em 字距 |
-| 友好编辑器 | [Notion](https://notion.so) | Lyon Display + 米白 + emoji 系统 |
+| Category | Brand | What we learned |
+|----------|-------|-----------------|
+| Dark SaaS | [Linear](https://linear.app) | Inter Tight tight tracking + violet glow + serif italic keyword mixing |
+| AI editorial | [Anthropic](https://anthropic.com) | Mocha Mousse beige + Source Serif italic + brick-red accent line |
+| Vibrant gradient | [Stripe](https://stripe.com) | Multi-layer linear-gradient + glass orbs (multi-layer radial-gradient + inner shadow) |
+| Minimal white | [Apple](https://apple.com) | SF Pro font stack + generous whitespace + inner frame lines |
+| Iridescent | [OpenAI](https://openai.com) | Pure black + holographic orb + minimal whitespace |
+| Black & white extreme | [Vercel](https://vercel.com) | Geist Sans + geometric splits + monospace terminal semantics |
+| Magazine | NYT Magazine | Masthead + giant serif + 3-column body + drop cap |
+| Presentation tool | [Pitch](https://pitch.com) | Bold typography + full-bleed color + collage feel |
+| Financial serif | [Mercury](https://mercury.com) | SangBleu serif title + minimal financial feel |
+| Browser gradient | [Arc](https://arc.net) | Gradient color + rounded icons + creative collage |
+| Fashion luxury | Tom Ford | Didot italic + black gold + centered symmetry + 0.65em tracking |
+| Friendly editor | [Notion](https://notion.so) | Lyon Display + cream white + emoji system |
 
-## 📄 设计文档
+## 📄 Design Docs
 
-完整的世界级重做设计文档：[`docs/superpowers/specs/2026-05-10-world-class-redesign-design.md`](docs/superpowers/specs/2026-05-10-world-class-redesign-design.md)
+Full world-class redesign spec: [`docs/superpowers/specs/2026-05-10-world-class-redesign-design.md`](docs/superpowers/specs/2026-05-10-world-class-redesign-design.md)
 
-包含：目标与动机 / 30 风格列表 / JSON Schema 升级 / 字体栈策略 / 排版铁律 / 图表系统设计 / 风格预览画廊 / 文件组织架构 / 向后兼容保证 / 5 阶段实施路线 / 成功标准 / 决策日志。
+Contains: goals & motivation / 30 style list / JSON schema upgrade / font stack strategy / typography rules / chart system design / preview gallery / file org / backward compat / 5-phase implementation / success criteria / decision log.
 
 ## ⭐ Star History
 
@@ -342,19 +332,19 @@ python3 tools/smoke_test.py --phase 5
       <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=eugenelim/ppt-agent-skill&type=Date&theme=dark" width="100%" />
     </picture>
   </a>
-  <p><sub>实时生成 · 由 <a href="https://star-history.com">star-history.com</a> 提供 · 自动适配深色/浅色主题</sub></p>
+  <p><sub>Real-time · powered by <a href="https://star-history.com">star-history.com</a> · auto-adapts to dark/light theme</sub></p>
 </div>
 
-## 🤝 贡献
+## 🤝 Contributing
 
-欢迎提 Issue / PR：
-- **新增风格**：在对应 `references/styles/<category>.md` 追加 JSON 定义 + 在 `ppt-output/style-gallery/<id>.html` 写 1280×720 mock
-- **新增图表**：在 `references/charts/<level>.md` 追加 HTML 模板
-- **改进文档**：欢迎 typo 修复、用法说明补充
+PRs welcome:
+- **New styles**: append JSON to `references/styles/<category>.md` + 1280×720 mock at `ppt-output/style-gallery/<id>.html`
+- **New charts**: append HTML template to `references/charts/<level>.md`
+- **Doc improvements**: typo fixes, usage clarifications
 
-提交前跑一下 `python3 tools/smoke_test.py` 确保通过。
+Run `python3 tools/smoke_test.py` before submitting.
 
-## 📜 许可证
+## 📜 License
 
 [MIT](LICENSE)
 
